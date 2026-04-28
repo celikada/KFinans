@@ -10,7 +10,8 @@ _EARN_URL = f"{_BASE}/v1/user-earn"
 _TICKERS_URL = f"{_BASE}/v1/tickers"
 _CLIENT_ID = "coretech9"
 _SCOPE = "openid profile email offline_access"
-_EARN_INCLUDE = {"Earn", "Completed"}
+_EARN_INCLUDE = {"Earn", "Redemption"}  # Completed = zaten spot'a aktarılmış, çift sayılmaması için hariç
+_STABLECOIN_USD = {"USDT": Decimal("1"), "USDC": Decimal("1"), "BUSD": Decimal("1"), "DAI": Decimal("1")}
 
 
 class ICrypexService(BaseIntegration):
@@ -40,11 +41,40 @@ class ICrypexService(BaseIntegration):
             raise ValueError(f"iCrypex oturum açılamadı (HTTP {resp.status_code}): {resp.text[:200]}")
         return resp.json()["access_token"]
 
+    def _parse_spot(self, data) -> dict[str, dict]:
+        items = data if isinstance(data, list) else data.get("content", [])
+        balances: dict[str, dict] = {}
+        for item in items:
+            symbol = str(item.get("asset", "")).strip().upper()
+            total = Decimal(str(item.get("total", 0) or 0))
+            available = Decimal(str(item.get("available", total) or total))
+            if symbol and total > 0:
+                balances[symbol] = {"liquid": available, "staked": total - available}
+        return balances
+
+    def _apply_earn(self, balances: dict[str, dict], earn_data: list) -> None:
+        for item in earn_data:
+            if item.get("status") not in _EARN_INCLUDE:
+                continue
+            symbol = str(item.get("assetSymbol", "")).strip().upper()
+            locked = Decimal(str(item.get("quantity", 0) or 0)) + Decimal(str(item.get("rewardQuantity", 0) or 0))
+            if not symbol or locked <= 0:
+                continue
+            if symbol in balances:
+                balances[symbol]["staked"] += locked
+            else:
+                balances[symbol] = {"liquid": Decimal(0), "staked": locked}
+
+    def _price(self, symbol: str, tickers: dict) -> Decimal:
+        if symbol in _STABLECOIN_USD:
+            return _STABLECOIN_USD[symbol]
+        ticker = tickers.get(f"{symbol}USDT", {})
+        return Decimal(str(ticker.get("last", 0) or 0))
+
     async def fetch(self) -> list[AssetData]:
         async with httpx.AsyncClient(timeout=20) as client:
             token = await self._get_access_token(client)
             auth = {"Authorization": f"Bearer {token}", "x-client": "web"}
-
             spot_resp, earn_resp, ticker_resp = await asyncio.gather(
                 client.get(_SPOT_URL, headers=auth),
                 client.get(_EARN_URL, headers=auth),
@@ -54,53 +84,23 @@ class ICrypexService(BaseIntegration):
             ticker_resp.raise_for_status()
 
         tickers = {t["symbol"]: t for t in ticker_resp.json()}
-
-        # Spot bakiyeler: symbol -> {liquid, staked}
-        balances: dict[str, dict] = {}
-        spot_data = spot_resp.json()
-        spot_items = spot_data if isinstance(spot_data, list) else spot_data.get("content", [])
-        for item in spot_items:
-            symbol = str(item.get("asset", "")).strip().upper()
-            total = Decimal(str(item.get("total", 0) or 0))
-            available = Decimal(str(item.get("available", total) or total))
-            if not symbol or total <= 0:
-                continue
-            balances[symbol] = {"liquid": available, "staked": total - available}
-
-        # Earn bakiyeler: anapara + birikmiş faiz → staked_quantity
+        balances = self._parse_spot(spot_resp.json())
         if earn_resp.status_code == 200:
-            for item in earn_resp.json():
-                if item.get("status") not in _EARN_INCLUDE:
-                    continue
-                symbol = str(item.get("assetSymbol", "")).strip().upper()
-                principal = Decimal(str(item.get("quantity", 0) or 0))
-                reward = Decimal(str(item.get("rewardQuantity", 0) or 0))
-                locked = principal + reward
-                if not symbol or locked <= 0:
-                    continue
-                if symbol in balances:
-                    balances[symbol]["staked"] += locked
-                else:
-                    balances[symbol] = {"liquid": Decimal(0), "staked": locked}
+            self._apply_earn(balances, earn_resp.json())
 
-        assets = []
-        for symbol, bal in balances.items():
-            ticker_key = f"{symbol}USDT"
-            price_usd = Decimal(0)
-            if ticker_key in tickers:
-                price_usd = Decimal(str(tickers[ticker_key].get("last", 0) or 0))
-
-            assets.append(AssetData(
-                symbol=symbol,
-                name=symbol,
+        return [
+            AssetData(
+                symbol=sym,
+                name=sym,
                 provider="icrypex",
                 asset_type="crypto",
                 source_type="exchange",
                 liquid_quantity=bal["liquid"],
                 staked_quantity=bal["staked"],
-                unit_price_usd=price_usd,
-            ))
-        return assets
+                unit_price_usd=self._price(sym, tickers),
+            )
+            for sym, bal in balances.items()
+        ]
 
     async def health_check(self) -> bool:
         try:
