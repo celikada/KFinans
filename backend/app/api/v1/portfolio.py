@@ -8,10 +8,15 @@ from sqlalchemy import select, desc, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
+from app.core.security import decrypt_secret
+from app.models.integration import Integration
 from app.models.portfolio import PortfolioSnapshot
 from app.models.tefas import TefasHolding as TefasHoldingModel
 from app.models.user import User
 from app.schemas.portfolio import SnapshotOut, PortfolioChanges, PortfolioBreakdown, StakingPosition
+from app.services.aggregator import fetch_usd_to_tl
+from app.services.exchange.binance import BinanceService
+from app.services.exchange.icrypex import ICrypexService
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -255,6 +260,64 @@ async def tefas_preview(
             total_value_tl=a.liquid_quantity * a.unit_price_tl,
         )
         for a in assets
+    ]
+
+
+class CryptoPositionOut(BaseModel):
+    provider: str
+    symbol: str
+    liquid_quantity: Decimal
+    staked_quantity: Decimal
+    unit_price_usd: Decimal
+    unit_price_tl: Decimal
+    total_value_tl: Decimal
+
+
+@router.get("/crypto", response_model=list[CryptoPositionOut])
+async def get_crypto_positions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Integration).where(
+            Integration.user_id == current_user.id,
+            Integration.provider.in_(["binance", "icrypex"]),
+            Integration.is_active.is_(True),
+        )
+    )
+    integrations = result.scalars().all()
+    if not integrations:
+        return []
+
+    usd_tl = await fetch_usd_to_tl()
+    all_assets = []
+
+    for intg in integrations:
+        try:
+            api_key = decrypt_secret(intg.encrypted_key)
+            if intg.provider == "binance":
+                api_secret = decrypt_secret(intg.encrypted_secret) if intg.encrypted_secret else ""
+                svc = BinanceService(api_key, api_secret)
+            else:
+                svc = ICrypexService(api_key)
+            assets = await svc.fetch()
+            all_assets.extend(assets)
+        except Exception:
+            pass
+
+    return [
+        CryptoPositionOut(
+            provider=a.provider,
+            symbol=a.symbol,
+            liquid_quantity=a.liquid_quantity,
+            staked_quantity=a.staked_quantity,
+            unit_price_usd=a.unit_price_usd,
+            unit_price_tl=(a.unit_price_usd * usd_tl).quantize(Decimal("0.01")),
+            total_value_tl=(
+                (a.liquid_quantity + a.staked_quantity) * a.unit_price_usd * usd_tl
+            ).quantize(Decimal("0.01")),
+        )
+        for a in all_assets
     ]
 
 

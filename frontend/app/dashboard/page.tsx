@@ -60,13 +60,16 @@ export default function DashboardPage() {
             )}
           </button>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-50 cursor-not-allowed">
-            <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center mb-4">
+          <button
+            onClick={() => router.push("/dashboard/crypto")}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-orange-100 transition-all group"
+          >
+            <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-100 transition-colors">
               <span className="text-xl">₿</span>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">Kripto</h3>
-            <p className="text-sm text-gray-400">Binance & iCrypex — yakında</p>
-          </div>
+            <p className="text-sm text-gray-400">Binance & iCrypex</p>
+          </button>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-50 cursor-not-allowed">
             <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center mb-4">
