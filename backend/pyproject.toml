@@ -24,6 +24,7 @@ dependencies = [
     "apscheduler>=3.10",
     "anthropic>=0.40",
     "python-multipart",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

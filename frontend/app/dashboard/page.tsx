@@ -1,12 +1,28 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+
+function fmtTL(val: number) {
+  return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [tefasTotal, setTefasTotal] = useState<number | null>(null);
+  const [tefasFundCount, setTefasFundCount] = useState(0);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) router.replace("/login");
+    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
+
+    api.getTefasHoldings().then((holdings) => {
+      if (!holdings.length) return;
+      setTefasFundCount(holdings.length);
+      api.tefasPreview(holdings).then((positions) => {
+        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        setTefasTotal(total);
+      }).catch(() => {});
+    }).catch(() => {});
   }, [router]);
 
   function logout() {
@@ -35,7 +51,13 @@ export default function DashboardPage() {
               <span className="text-xl">📈</span>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">TEFAS Fonları</h3>
-            <p className="text-sm text-gray-400">Yatırım fonu fiyatlarını canlı görüntüle</p>
+            {tefasTotal !== null ? (
+              <p className="text-sm font-semibold text-blue-600">{fmtTL(tefasTotal)} ₺</p>
+            ) : tefasFundCount > 0 ? (
+              <p className="text-sm text-gray-400">{tefasFundCount} fon · yükleniyor...</p>
+            ) : (
+              <p className="text-sm text-gray-400">Yatırım fonu fiyatlarını canlı görüntüle</p>
+            )}
           </button>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-50 cursor-not-allowed">

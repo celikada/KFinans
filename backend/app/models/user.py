@@ -20,3 +20,4 @@ class User(Base):
     wallet_addresses: Mapped[list["WalletAddress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     portfolio_snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     investment_advice: Mapped[list["InvestmentAdvice"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    tefas_holdings: Mapped[list["TefasHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")

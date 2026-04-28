@@ -1,182 +1,166 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 1.1  
-**Tarih:** 2026-04-27  
-**Durum:** Tasarım aşaması
+**Versiyon:** 2.0  
+**Tarih:** 2026-04-28  
+**Durum:** Aktif geliştirme
 
 ---
 
-## 1. Genel Bakış
+## 1. Platform Vizyonu
 
-KFinans, kişisel finansı tek ekranda yöneten iki fazlı bir uygulamadır.
+KFinans, kişisel finansı tek ekranda yöneten çok kiracılı (multi-tenant) bir SaaS platformudur. Android (Play Store) ve web üzerinden erişilebilir; temel özellikler ücretsiz, gelişmiş özellikler kredi sistemiyle ücretlendirilir.
 
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
-| Faz 1 | Yatırım takibi, haftalık değişim, AI tavsiye | Öncelikli |
-| Faz 2 | Harcama takibi, kategori analizi, bütçe | Planlı |
+| Faz 1 | Yatırım takibi, TEFAS, Excel import/export | ✅ Aktif |
+| Faz 2 | Harcama takibi, bütçe, banka ekstresi | Planlı |
+| Faz 3 | Android app (Flutter), Play Store | Planlı |
+| Faz 4 | Kredi/token sistemi, ödeme entegrasyonu | Planlı |
 
 ---
 
-## 2. Faz 1 — Yatırım Takibi
+## 2. Hedef Kitle & İş Modeli
 
-### 2.1 Veri Kaynakları
+### 2.1 Kullanıcı Tipleri
 
-İki farklı entegrasyon türü vardır: **Exchange** (API key ile) ve **Blockchain** (public adres ile).
+| Tip | Özellikler | Fiyat |
+|-----|-----------|-------|
+| Ücretsiz | TEFAS takip, manuel varlık, temel portföy, Excel import/export | — |
+| Kredi Paketi | AI tavsiye, kripto entegrasyonu, blockchain sorgu, gelişmiş analiz | Kredi başına |
 
-#### Exchange Entegrasyonları
+### 2.2 Kredi Gerektiren İşlemler
 
-| Kaynak | Yöntem | Kütüphane | Zorluk |
-|--------|--------|-----------|--------|
-| Binance | REST API (API key + secret) | CCXT | Düşük |
-| iCrypex | REST API (API key + secret) | CCXT | Düşük |
-| TEFAS | Web scraping / HTML parse | httpx + BS4 | Orta |
-| BES | Manuel giriş (Faz 1) / Scraping (Faz 2) | — | Düşük (manuel) |
+| İşlem | Kredi Maliyeti |
+|-------|---------------|
+| AI portföy tavsiyesi (orta vade) | 5 kredi |
+| AI portföy tavsiyesi (uzun vade) | 10 kredi |
+| Kripto senkronizasyonu (Binance/iCrypex) | 1 kredi / çekim |
+| Blockchain bakiye sorgusu | 1 kredi / sorgu |
+| Gelişmiş harcama analizi (Claude) | 3 kredi |
 
-#### Blockchain Entegrasyonları (Ledger + DeFi)
+### 2.3 Kredi Paketleri (iyzico / Stripe)
 
-Ledger bir donanım cüzdanı olduğundan kendi API'si yoktur. Varlıklar ilgili blockchain üzerinde yaşar; **public cüzdan adresi** yeterlidir — özel anahtar asla sisteme girmez.
-
-| Kaynak | Zincir | Yöntem | Kütüphane | Zorluk |
-|--------|--------|--------|-----------|--------|
-| Sonic Labs | Sonic (EVM) | RPC + SFC staking contract | web3.py | Orta |
-| Core.app | Avalanche P-Chain | Avalanche REST API | httpx | Orta |
-| Core.app | Avalanche C-Chain | EVM RPC | web3.py | Düşük |
-| Ledger / Genel | Ethereum | EVM RPC + Etherscan API | web3.py + httpx | Düşük |
-
-**Sonic Staking Detayı:**
-- Sonic SFC (Special Fee Contract) üzerinden S token stake
-- `getStake(delegator, validatorId)` → stake miktarı
-- `pendingRewards(delegator, validatorId)` → birikmiş ödül
-- RPC: `https://rpc.soniclabs.com`
-
-**Avalanche Staking Detayı:**
-- P-Chain staking `platform.getStake` API ile sorgulanır
-- Endpoint: `POST https://api.avax.network/ext/bc/P`
-- P-Chain adresi (P-avax1...) ve C-Chain adresi (0x...) ayrıdır
-- C-Chain bakiyesi web3.py ile standart EVM sorgusu
-
-### 2.2 Temel Özellikler
-
-- Her kaynaktan portföy verisi çekme (exchange + blockchain)
-- Stake edilmiş varlıkları liquid bakiyeden ayrı gösterme
-- Bekleyen staking ödüllerini (pending rewards) ayrıca takip etme
-- Tüm varlıkları TL'ye normalize etme (anlık kur: Binance veya TCMB)
-- Her Pazar 23:00'de otomatik haftalık snapshot alma
-- Hafta-üstü-hafta (WoW) ve ay-üstü-ay (MoM) değişim hesaplama
-- Portföy dağılımı (kripto / staked kripto / fon / BES yüzdesi)
-- Claude API ile orta (3-12 ay) ve uzun (1-3 yıl) vade tavsiye üretimi
+| Paket | Kredi | Fiyat |
+|-------|-------|-------|
+| Başlangıç | 50 | 29 ₺ |
+| Standart | 150 | 69 ₺ |
+| Profesyonel | 500 | 199 ₺ |
 
 ---
 
-## 3. Faz 2 — Harcama Takibi
+## 3. Veri Kaynakları
 
-### 3.1 Temel Özellikler
+### 3.1 Fon & Yatırım
 
-- Manuel harcama girişi (tutar, kategori, tarih, not)
-- Özelleştirilebilir kategori yönetimi (kira, market, ulaşım vb.)
-- Aylık/yıllık harcama özeti
-- Kategori bazlı kırılım ve trend analizi
-- Bütçe limiti tanımlama ve limit aşım uyarısı
-- Claude API ile harcama alışkanlığı analizi ve tasarruf önerileri
+| Kaynak | Yöntem | Durum |
+|--------|--------|-------|
+| TEFAS | `POST /api/fund-returns/export` (JSON) | ✅ Tamamlandı |
+| Manuel varlık (GO3 vb.) | Kullanıcı girişi | ✅ Tamamlandı |
+| BES | Manuel giriş (Faz 2) | Planlı |
 
-### 3.2 İlerleyen Alt Fazlar
+### 3.2 Kripto Exchange
 
-- Banka ekstresi import (CSV/Excel parse)
-- Tekrarlayan ödeme tespiti (abonelikler)
-- Harcama/yatırım dengesi analizi (her iki fazı birleştirir)
+| Kaynak | Yöntem | Kütüphane |
+|--------|--------|-----------|
+| Binance | REST API (API key + secret) | CCXT |
+| iCrypex Global | REST API (`Bearer` token) | httpx (özel) |
+
+### 3.3 Blockchain (Ledger / DeFi)
+
+| Kaynak | Zincir | Yöntem | Kütüphane |
+|--------|--------|--------|-----------|
+| Sonic Labs | Sonic (EVM) | RPC + SFC staking contract | web3.py |
+| Core.app | Avalanche P-Chain | Avalanche REST API | httpx |
+| Core.app | Avalanche C-Chain | EVM RPC | web3.py |
+| Ledger | Ethereum | EVM RPC + Etherscan | web3.py |
+
+> Blockchain entegrasyonlarında özel anahtar **asla** sisteme girmez; yalnızca public adres kullanılır.
 
 ---
 
 ## 4. Sistem Mimarisi
 
+### 4.1 Genel Bakış
+
 ```
-┌──────────────────────────────────────────────────────┐
-│                   Next.js Frontend                   │
-│                                                      │
-│  ── Faz 1 Ekranları ──────────────────────────────  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │ Portföy  │  │ Haftalık │  │ Staking Paneli   │   │
-│  │Dashboard │  │ Değişim  │  │ (S / AVAX ödül)  │   │
-│  └──────────┘  └──────────┘  └──────────────────┘   │
-│  ┌──────────────────────────────────────────────┐    │
-│  │         Yatırım Tavsiye Paneli               │    │
-│  │   (orta vade / uzun vade — Claude çıktısı)   │    │
-│  └──────────────────────────────────────────────┘    │
-│                                                      │
-│  ── Faz 2 Ekranları ──────────────────────────────  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │ Harcama  │  │ Kategori │  │  Bütçe Takibi    │   │
-│  │ Girişi   │  │ Yönetimi │  │  (limit/durum)   │   │
-│  └──────────┘  └──────────┘  └──────────────────┘   │
-│  ┌──────────────────────────────────────────────┐    │
-│  │       Harcama Analiz Dashboard'u             │    │
-│  │  Aylık trend / Kategori pasta grafik /       │    │
-│  │  Claude tasarruf önerileri                   │    │
-│  └──────────────────────────────────────────────┘    │
-│  ┌──────────────────────────────────────────────┐    │
-│  │    Yatırım ↔ Harcama Denge Ekranı (2c)       │    │
-│  │  Toplam gelir tahmini / tasarruf oranı /     │    │
-│  │  yatırıma aktarılabilir tutar                │    │
-│  └──────────────────────────────────────────────┘    │
-└───────────────────────┬──────────────────────────────┘
-                        │ HTTPS / REST
-┌───────────────────────▼──────────────────────────────┐
-│              FastAPI Backend (Modüler)               │
-│                                                      │
-│  ┌──────────────────────────────────────────────┐   │
-│  │                  API Layer                   │   │
-│  │  /api/v1/portfolio   /api/v1/wallets         │   │
-│  │  /api/v1/advice      /api/v1/expenses        │   │
-│  └────────────────────┬─────────────────────────┘   │
-│                       │                              │
-│  ┌────────────────────▼─────────────────────────┐   │
-│  │               Service Layer                  │   │
-│  │                                              │   │
-│  │  ── Exchange Servisleri ──────────────────   │   │
-│  │  ┌─────────┐  ┌─────────┐  ┌──────────┐    │   │
-│  │  │ Binance │  │ iCrypex │  │  TEFAS   │    │   │
-│  │  │ (CCXT)  │  │ (CCXT)  │  │(scraping)│    │   │
-│  │  └────┬────┘  └────┬────┘  └────┬─────┘    │   │
-│  │       │            │            │           │   │
-│  │  ── Blockchain Servisleri ────────────────  │   │
-│  │  ┌──────────┐  ┌──────────────────────┐    │   │
-│  │  │  Sonic   │  │      Avalanche       │    │   │
-│  │  │ Service  │  │      Service         │    │   │
-│  │  │(web3.py) │  │(P-Chain + C-Chain)   │    │   │
-│  │  │SFC stake │  │platform.getStake     │    │   │
-│  │  └────┬─────┘  └──────────┬───────────┘    │   │
-│  │       │                   │                 │   │
-│  │       └─────────┬─────────┘                 │   │
-│  │                 │                            │   │
-│  │        ┌────────▼────────┐                  │   │
-│  │        │   Aggregator    │                  │   │
-│  │        │    Service      │                  │   │
-│  │        │ TL normalize    │                  │   │
-│  │        │ stake ayrımı    │                  │   │
-│  │        └────────┬────────┘                  │   │
-│  │                 │                            │   │
-│  │       ┌─────────▼──────┐                    │   │
-│  │       │ Advisor Service│                    │   │
-│  │       │  (Claude API)  │                    │   │
-│  │       └────────────────┘                    │   │
-│  │                                              │   │
-│  │  ┌──────────────────────────────────────┐   │   │
-│  │  │         Expense Service (Faz 2)      │   │   │
-│  │  └──────────────────────────────────────┘   │   │
-│  └──────────────────────────────────────────────┘   │
-│                                                      │
-│  ┌──────────────────────────────────────────────┐   │
-│  │  APScheduler — Pazar 23:00 haftalık snapshot │   │
-│  └──────────────────────────────────────────────┘   │
-└───────────────────────┬──────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────┐
-│                    PostgreSQL                        │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│              İstemci Katmanı                             │
+│                                                          │
+│   ┌─────────────────┐        ┌──────────────────────┐   │
+│   │  Next.js Web    │        │  Flutter Android App │   │
+│   │  (localhost/    │        │  (Play Store)        │   │
+│   │   nginx)        │        │                      │   │
+│   └────────┬────────┘        └──────────┬───────────┘   │
+└────────────┼──────────────────────────── ┼───────────────┘
+             │ HTTPS / REST                │
+┌────────────▼─────────────────────────────▼───────────────┐
+│                Kubernetes Cluster                        │
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Ingress (nginx-ingress)               │    │
+│  │   api.kfinans.app → backend-svc                 │    │
+│  │   app.kfinans.app → frontend-svc                │    │
+│  └──────────────────┬──────────────────────────────┘    │
+│                     │                                    │
+│  ┌──────────────────▼──────────────────────────────┐    │
+│  │  backend Deployment (FastAPI + uvicorn)          │    │
+│  │  replicas: 2                                     │    │
+│  │  image: kfinans/backend:latest                   │    │
+│  └──────────────────┬──────────────────────────────┘    │
+│                     │                                    │
+│  ┌──────────────────▼──────────────────────────────┐    │
+│  │  PostgreSQL StatefulSet (bitnami/postgresql)     │    │
+│  │  namespace: kfinans                              │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │  frontend Deployment (Next.js)                   │    │
+│  │  replicas: 2                                     │    │
+│  └─────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────┘
 ```
 
-**Neden modüler monolit?**
-Kişisel uygulama ölçeğinde mikroservis karmaşıklığı gereksizdir. Modüler yapı ileride servis ayırımını kolaylaştırır ama tek process olarak çalışır.
+### 4.2 Backend İç Yapısı (Modüler Monolit)
+
+```
+FastAPI Backend
+│
+├── api/v1/
+│   ├── auth.py          (login, register, refresh, verify-email)
+│   ├── portfolio.py     (TEFAS holdings, export, import, preview)
+│   ├── integrations.py  (Binance, iCrypex API key yönetimi)
+│   ├── wallets.py       (blockchain adres yönetimi)
+│   ├── advice.py        (AI tavsiye — kredi gerektiren)
+│   ├── credits.py       (bakiye, satın alma, kullanım geçmişi)
+│   └── expenses.py      (Faz 2)
+│
+├── services/
+│   ├── exchange/
+│   │   ├── base.py
+│   │   ├── binance.py
+│   │   └── icrypex.py
+│   ├── blockchain/
+│   │   ├── sonic.py
+│   │   ├── avalanche.py
+│   │   └── ethereum.py
+│   ├── tefas.py
+│   ├── aggregator.py
+│   └── advisor.py       (Claude API — kredi kontrolü ile)
+│
+├── models/
+│   ├── user.py          (+ credit_balance, email_verified)
+│   ├── tefas.py         (tefas_holdings)
+│   ├── integration.py
+│   ├── portfolio.py
+│   ├── credit.py        (credit_transactions)
+│   └── advice.py
+│
+└── scheduler.py         (APScheduler — Pazar 23:00)
+```
+
+### 4.3 Neden Modüler Monolit?
+
+Mevcut ölçekte mikroservis karmaşıklığı (service mesh, distributed tracing, inter-service auth) gereksizdir. Modüler yapı ileride servis ayırımını kolaylaştırır. Kubernetes üzerinde 3 Deployment (frontend, backend, postgres) ile tüm cloud avantajları (scaling, health check, rolling update, secret management) elde edilir.
 
 ---
 
@@ -186,47 +170,70 @@ Kişisel uygulama ölçeğinde mikroservis karmaşıklığı gereksizdir. Modül
 
 ```sql
 users
-  id            UUID PK
-  email         TEXT UNIQUE
-  password_hash TEXT
-  risk_profile  ENUM('conservative','balanced','aggressive')
-  created_at    TIMESTAMPTZ
+  id                UUID PK
+  email             TEXT UNIQUE
+  password_hash     TEXT
+  risk_profile      ENUM('conservative','balanced','aggressive')
+  credit_balance    INT DEFAULT 0
+  email_verified    BOOLEAN DEFAULT FALSE
+  verify_token      TEXT
+  created_at        TIMESTAMPTZ
 ```
 
-### 5.2 Entegrasyon Kimlik Bilgileri (Exchange)
+### 5.2 Kredi İşlemleri
 
 ```sql
--- Binance, iCrypex gibi API key gerektiren kaynaklar
+credit_transactions
+  id           UUID PK
+  user_id      UUID FK → users
+  amount       INT              -- pozitif: yükleme, negatif: kullanım
+  reason       TEXT             -- 'purchase', 'ai_advice_medium', 'crypto_sync' vb.
+  reference_id TEXT             -- ödeme sağlayıcı işlem ID (iyzico/Stripe)
+  created_at   TIMESTAMPTZ
+```
+
+### 5.3 TEFAS Holdingleri
+
+```sql
+tefas_holdings
+  id       SERIAL PK
+  user_id  UUID FK → users (CASCADE DELETE)
+  code     VARCHAR(10)      -- 'GO3', 'TI2' vb.
+  quantity NUMERIC(18,6)
+  name     TEXT
+```
+
+### 5.4 Entegrasyon Kimlik Bilgileri
+
+```sql
 integrations
   id               UUID PK
   user_id          UUID FK → users
-  provider         ENUM('binance','icrypex','tefas','bes')
-  encrypted_key    TEXT        -- Fernet ile şifreli
-  encrypted_secret TEXT        -- Fernet ile şifreli
+  provider         ENUM('binance','icrypex')
+  encrypted_key    TEXT        -- Fernet şifreli
+  encrypted_secret TEXT        -- Fernet şifreli
   is_active        BOOLEAN
   last_synced_at   TIMESTAMPTZ
   created_at       TIMESTAMPTZ
 ```
 
-### 5.3 Blockchain Cüzdan Adresleri (Ledger / DeFi)
+### 5.5 Blockchain Cüzdan Adresleri
 
 ```sql
--- Public adresler — özel anahtar asla saklanmaz
 wallet_addresses
   id         UUID PK
   user_id    UUID FK → users
   chain      ENUM('ethereum','sonic','avalanche_c','avalanche_p')
-  address    TEXT        -- 0x... (EVM) veya P-avax1... (Avalanche P-Chain)
-  label      TEXT        -- "Ledger Ana Cüzdan", "Ledger 2. Cüzdan" vb.
+  address    TEXT
+  label      TEXT
   is_active  BOOLEAN
   created_at TIMESTAMPTZ
   UNIQUE(user_id, chain, address)
 ```
 
-### 5.4 Portföy Snapshot
+### 5.6 Portföy Snapshot
 
 ```sql
--- Haftalık portföy anlık görüntüsü
 portfolio_snapshots
   id              UUID PK
   user_id         UUID FK → users
@@ -235,25 +242,24 @@ portfolio_snapshots
   created_at      TIMESTAMPTZ
   UNIQUE(user_id, snapshot_date)
 
--- Snapshot içindeki her varlık pozisyonu
 asset_positions
-  id                  UUID PK
-  snapshot_id         UUID FK → portfolio_snapshots
-  source_type         ENUM('exchange','blockchain')
-  provider            TEXT        -- 'binance','icrypex','sonic','avalanche','tefas','bes'
-  asset_type          ENUM('crypto','staked_crypto','fund','pension','cash')
-  symbol              TEXT        -- 'BTC', 'S', 'AVAX', 'YFAS.MF'
-  name                TEXT        -- "Bitcoin", "Sonic", "Avalanche"
-  liquid_quantity     NUMERIC(28,8)   -- Serbest miktar
-  staked_quantity     NUMERIC(28,8)   -- Stake edilmiş miktar
-  pending_rewards     NUMERIC(28,8)   -- Birikmiş staking ödülü
-  unit_price_tl       NUMERIC(18,4)
-  total_value_tl      NUMERIC(18,2)   -- (liquid + staked + rewards) × fiyat
-  weight_pct          NUMERIC(5,2)
-  wallet_address_id   UUID FK → wallet_addresses  -- blockchain için
+  id                UUID PK
+  snapshot_id       UUID FK → portfolio_snapshots
+  source_type       ENUM('exchange','blockchain','fund','manual')
+  provider          TEXT
+  asset_type        ENUM('crypto','staked_crypto','fund','pension','cash','manual')
+  symbol            TEXT
+  name              TEXT
+  liquid_quantity   NUMERIC(28,8)
+  staked_quantity   NUMERIC(28,8)
+  pending_rewards   NUMERIC(28,8)
+  unit_price_tl     NUMERIC(18,4)
+  total_value_tl    NUMERIC(18,2)
+  weight_pct        NUMERIC(5,2)
+  wallet_address_id UUID FK → wallet_addresses
 ```
 
-### 5.5 Yatırım Tavsiyeleri
+### 5.7 Yatırım Tavsiyeleri
 
 ```sql
 investment_advice
@@ -262,19 +268,20 @@ investment_advice
   snapshot_id       UUID FK → portfolio_snapshots
   horizon           ENUM('medium','long')
   content           TEXT
+  credits_used      INT
   prompt_tokens     INT
   completion_tokens INT
   generated_at      TIMESTAMPTZ
 ```
 
-### 5.6 Harcamalar (Faz 2)
+### 5.8 Harcamalar (Faz 2)
 
 ```sql
 expense_categories
   id         UUID PK
   user_id    UUID FK → users
   name       TEXT
-  color      TEXT              -- Hex (#FF5733)
+  color      TEXT
   budget_tl  NUMERIC(12,2)
   is_default BOOLEAN
 
@@ -282,24 +289,12 @@ expenses
   id           UUID PK
   user_id      UUID FK → users
   category_id  UUID FK → expense_categories
-  amount       NUMERIC(12,2)
-  currency     TEXT DEFAULT 'TRY'
   amount_tl    NUMERIC(12,2)
   description  TEXT
   expense_date DATE
   source       ENUM('manual','bank_import')
   is_recurring BOOLEAN DEFAULT FALSE
   created_at   TIMESTAMPTZ
-
-expense_summaries
-  id           UUID PK
-  user_id      UUID FK → users
-  period_start DATE
-  period_end   DATE
-  total_tl     NUMERIC(12,2)
-  breakdown    JSONB
-  ai_analysis  TEXT
-  generated_at TIMESTAMPTZ
 ```
 
 ---
@@ -308,236 +303,392 @@ expense_summaries
 
 ### 6.1 Auth
 ```
+POST   /api/v1/auth/register
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
+GET    /api/v1/auth/verify-email?token=...
+POST   /api/v1/auth/forgot-password
+POST   /api/v1/auth/reset-password
 ```
 
-### 6.2 Exchange Entegrasyonları
+### 6.2 Krediler
+```
+GET    /api/v1/credits                  -- bakiye + işlem geçmişi
+POST   /api/v1/credits/checkout         -- iyzico/Stripe ödeme başlat
+POST   /api/v1/credits/webhook          -- ödeme sağlayıcı callback
+```
+
+### 6.3 TEFAS Portföy
+```
+GET    /api/v1/portfolio/tefas/holdings
+PUT    /api/v1/portfolio/tefas/holdings
+GET    /api/v1/portfolio/tefas/export   -- xlsx indir
+POST   /api/v1/portfolio/tefas/import   -- xlsx yükle
+POST   /api/v1/portfolio/tefas/preview  -- canlı fiyat
+```
+
+### 6.4 Exchange Entegrasyonları (kredi gerekli)
 ```
 GET    /api/v1/integrations
 POST   /api/v1/integrations/{provider}
 DELETE /api/v1/integrations/{provider}
-POST   /api/v1/integrations/sync
+POST   /api/v1/integrations/sync        -- 1 kredi / çekim
 ```
 
-### 6.3 Blockchain Cüzdanlar
+### 6.5 Blockchain Cüzdanlar (kredi gerekli)
 ```
-GET    /api/v1/wallets                  -- Kayıtlı adresler
-POST   /api/v1/wallets                  -- Adres ekle {chain, address, label}
-DELETE /api/v1/wallets/{id}             -- Adres kaldır
-POST   /api/v1/wallets/sync             -- Manuel zincir sorgusu
-```
-
-### 6.4 Portföy
-```
-GET    /api/v1/portfolio                -- Güncel portföy (son snapshot)
-GET    /api/v1/portfolio/history        -- Haftalık tarihsel veriler
-GET    /api/v1/portfolio/changes        -- WoW / MoM değişimler
-GET    /api/v1/portfolio/breakdown      -- Varlık sınıfı + staking dağılımı
-GET    /api/v1/portfolio/staking        -- Tüm staking pozisyonları + ödüller
+GET    /api/v1/wallets
+POST   /api/v1/wallets
+DELETE /api/v1/wallets/{id}
+POST   /api/v1/wallets/sync             -- 1 kredi / sorgu
 ```
 
-### 6.5 Tavsiye
+### 6.6 Portföy & Tavsiye
 ```
+GET    /api/v1/portfolio
+GET    /api/v1/portfolio/history
+GET    /api/v1/portfolio/changes
+GET    /api/v1/portfolio/breakdown
+POST   /api/v1/advice/generate          -- 5-10 kredi
 GET    /api/v1/advice
-POST   /api/v1/advice/generate
 ```
 
-### 6.6 Harcamalar (Faz 2)
+### 6.7 Harcamalar (Faz 2)
 ```
-GET    /api/v1/expenses
-POST   /api/v1/expenses
-PUT    /api/v1/expenses/{id}
-DELETE /api/v1/expenses/{id}
-POST   /api/v1/expenses/import
-
-GET    /api/v1/expenses/categories
-POST   /api/v1/expenses/categories
-
-GET    /api/v1/expenses/analysis
-POST   /api/v1/expenses/analysis/generate
+GET/POST        /api/v1/expenses
+PUT/DELETE      /api/v1/expenses/{id}
+POST            /api/v1/expenses/import
+GET/POST        /api/v1/expenses/categories
+GET             /api/v1/expenses/analysis
+POST            /api/v1/expenses/analysis/generate   -- 3 kredi
 ```
 
 ---
 
-## 7. Blockchain Servis Detayları
+## 7. Kubernetes Deployment
 
-### 7.1 Sonic Service
+### 7.1 Namespace & Mevcut Durum
 
-```python
-# Akış
-# 1. web3.py ile Sonic RPC'ye bağlan
-# 2. SFC contract'ını yükle (ABI + adres)
-# 3. Kullanıcının tüm validator'larını sorgula
-# 4. Her validator için getStake() + pendingRewards() çağır
-# 5. Liquid S bakiyesini eth_getBalance ile al
-
-RPC_URL      = "https://rpc.soniclabs.com"
-# SFC contract adresi Sonic dokümantasyonundan doğrulanmalı
+```
+namespace: kfinans
+mevcut:    postgres StatefulSet (bitnami/postgresql) ✅
+eklenecek: backend Deployment + Service
+           frontend Deployment + Service
+           nginx Ingress
+           Secrets (DATABASE_URL, SECRET_KEY, FERNET_KEY vb.)
 ```
 
-### 7.2 Avalanche Service
+### 7.2 Manifest Yapısı
 
-```python
-# P-Chain staking (AVAX delegasyon/validasyon)
-POST https://api.avax.network/ext/bc/P
-{
-  "jsonrpc": "2.0",
-  "method": "platform.getStake",
-  "params": {"addresses": ["P-avax1..."], "encoding": "hex"},
-  "id": 1
-}
-# Yanıt: staked (nAVAX), stakedOutputs
-
-# C-Chain bakiye (liquid AVAX)
-# web3.py — RPC: https://api.avax.network/ext/bc/C/rpc
+```
+k8s/
+├── namespace.yaml
+├── secrets.yaml           (kubectl create secret — git'e girmez)
+├── postgres/
+│   └── values.yaml        (Helm override — mevcut)
+├── backend/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── configmap.yaml
+├── frontend/
+│   ├── deployment.yaml
+│   └── service.yaml
+└── ingress.yaml
 ```
 
-### 7.3 Desteklenen Zincirler (Ledger için)
+### 7.3 Backend Deployment Özeti
 
-| Zincir | RPC | Sorgu Yöntemi |
-|--------|-----|---------------|
-| Ethereum | Infura/Alchemy | web3.py — eth_getBalance |
-| Sonic | rpc.soniclabs.com | web3.py + SFC contract |
-| Avalanche C | api.avax.network/ext/bc/C/rpc | web3.py |
-| Avalanche P | api.avax.network/ext/bc/P | httpx (REST) |
+```yaml
+replicas: 2
+image: kfinans/backend:{{ git-sha }}
+resources:
+  requests: { cpu: 250m, memory: 256Mi }
+  limits:   { cpu: 500m, memory: 512Mi }
+livenessProbe:  GET /health
+readinessProbe: GET /health
+envFrom: secretRef kfinans-secrets
+```
+
+### 7.4 CI/CD Akışı (GitHub Actions)
+
+```
+push → main
+  ├── test (pytest)
+  ├── docker build & push (ghcr.io)
+  └── kubectl rollout (image tag = git sha)
+```
 
 ---
 
-## 8. AI Tavsiye Motoru
+## 8. Test Stratejisi
 
-### 8.1 Portföy Tavsiyesi Prompt Yapısı
+### 8.1 Test Piramidi
 
 ```
-Sistem: Deneyimli bir portföy danışmanısın.
-        Türk yatırımcısı için gerçekçi, uygulanabilir tavsiyeler üretiyorsun.
-
-Kullanıcı bağlamı:
-- Risk profili: {risk_profile}
-- Portföy toplam değeri: {total_value_tl} TL
-- Dağılım: Kripto %{crypto_pct} (stake %{staked_pct}), Fon %{fund_pct}, BES %{bes_pct}
-- Staking pozisyonları: S {s_staked} adet ({s_apy}% APY), AVAX {avax_staked} adet ({avax_apy}% APY)
-- Birikmiş staking ödülleri: {pending_rewards_tl} TL
-- Haftalık değişim: {wow_change_pct}%
-- Aylık değişim: {mom_change_pct}%
-- En iyi performer: {top_asset}
-- En kötü performer: {worst_asset}
-
-[{horizon} vade için tavsiye üret]
+          ┌──────────┐
+          │   E2E    │  az sayıda, kritik akışlar
+          ├──────────┤
+          │Integration│ API endpoint testleri (gerçek DB)
+          ├──────────┤
+          │   Unit   │  service & helper fonksiyonları
+          └──────────┘
 ```
 
-### 8.2 Claude API Ayarları
+### 8.2 Backend Test Yapısı
 
-- Model: `claude-sonnet-4-6`
-- Prompt caching: sistem prompt cache'lenir
-- Max tokens: 1024
-- Yanıt formatı: Yapılandırılmış Markdown
+```
+backend/tests/
+├── conftest.py            (async engine, test DB, client fixture)
+├── unit/
+│   ├── test_tefas.py      (fiyat hesaplama, export/import)
+│   ├── test_aggregator.py (TL normalize, staking ayrımı)
+│   └── test_credits.py    (bakiye kontrol, deduction)
+├── integration/
+│   ├── test_auth.py       (register, login, refresh)
+│   ├── test_portfolio.py  (holdings CRUD, export, import)
+│   └── test_advice.py     (kredi kontrolü, AI çağrısı mock)
+└── e2e/
+    └── test_tefas_flow.py (login → holding kaydet → fiyat çek → export)
+```
+
+### 8.3 Test Araçları & Kurallar
+
+| Araç | Kullanım |
+|------|---------|
+| pytest + pytest-asyncio | Ana test koşucusu |
+| httpx AsyncClient | FastAPI endpoint testleri |
+| pytest-postgresql / testcontainers | Gerçek PostgreSQL (mock yok) |
+| respx | Dış HTTP çağrılarını mock'la (TEFAS, iyzico) |
+| pytest-cov | Kod kapsama — hedef %80+ |
+
+**Kurallar:**
+- DB asla mock'lanmaz — her test gerçek PostgreSQL'e karşı çalışır
+- Dış HTTP (TEFAS, blockchain RPC, ödeme API) `respx` ile mock'lanır
+- Her PR'da testler geçmeden merge yapılamaz (CI zorunlu)
+
+### 8.4 Frontend Test Yapısı
+
+```
+frontend/
+├── __tests__/
+│   ├── api.test.ts        (api.ts fonksiyonları)
+│   └── components/
+│       └── tefas-page.test.tsx
+```
+
+| Araç | Kullanım |
+|------|---------|
+| Jest + React Testing Library | Bileşen testleri |
+| msw (Mock Service Worker) | API mock |
 
 ---
 
-## 9. Güvenlik
+## 9. Git Flow
+
+### 9.1 Branch Yapısı
+
+```
+main          ← production (korumalı, doğrudan push yasak)
+develop       ← aktif geliştirme birleştirme noktası
+│
+├── feature/tefas-holdings      (tamamlandı → develop'a merge)
+├── feature/excel-import-export (tamamlandı → develop'a merge)
+├── feature/kubernetes-deploy   (aktif)
+├── feature/user-register       (planlanıyor)
+├── feature/credit-system       (planlanıyor)
+│
+├── release/1.0.0               (develop → main hazırlık)
+└── hotfix/kritik-bug-adi       (main'den dallanır, main + develop'a merge)
+```
+
+### 9.2 Kurallar
+
+| Kural | Detay |
+|-------|-------|
+| `main` korumalı | Doğrudan push yasak; yalnızca PR ile merge |
+| PR zorunluluğu | Tüm mergelar PR üzerinden, en az 1 approval |
+| CI zorunlu | Testler geçmeden merge yapılamaz |
+| Commit mesajları | Türkçe, imperative: "Kredi sistemi ekle" |
+| Feature branch ömrü | Merge sonrası silinir |
+| Release tag | `v{major}.{minor}.{patch}` semantic versioning |
+
+### 9.3 Tipik Geliştirme Akışı
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b feature/yeni-ozellik
+
+# geliştir, test et
+git add ...
+git commit -m "Özellik: açıklama"
+git push origin feature/yeni-ozellik
+
+# GitHub'da PR aç: feature → develop
+# CI geçer → review → merge → branch silinir
+```
+
+### 9.4 Release Akışı
+
+```bash
+git checkout -b release/1.0.0 develop
+# son düzeltmeler, versiyon bump
+git checkout main && git merge release/1.0.0
+git tag -a v1.0.0 -m "İlk public sürüm"
+git checkout develop && git merge release/1.0.0
+git branch -d release/1.0.0
+```
+
+---
+
+## 10. Güvenlik
 
 | Konu | Çözüm |
 |------|-------|
-| Exchange API key | Fernet şifreleme, master key `.env`'de |
+| Exchange API key | Fernet şifreleme, master key Kubernetes Secret'ta |
 | Blockchain adres | Public key — şifrelemeye gerek yok |
 | Özel anahtar | **Asla sisteme girmez** |
 | Kullanıcı şifresi | bcrypt hash |
-| Oturum | JWT (access 15dk, refresh 7 gün) |
-| HTTPS | Nginx reverse proxy (prod) |
+| JWT | access 8sa (geliştirme) / 15dk (prod), refresh 7 gün |
+| HTTPS | Kubernetes Ingress + cert-manager (Let's Encrypt) |
+| Secrets | Kubernetes Secrets (git'e asla girmez) |
+| Kredi işlemi | İdempotency key ile çift ödeme koruması |
+| Rate limiting | Nginx Ingress rate limit annotation |
 
 ---
 
-## 10. Geliştirme Fazları
+## 11. AI Tavsiye Motoru
 
-### Faz 1a — Temel Altyapı
-- [ ] FastAPI proje iskeleti
-- [ ] PostgreSQL + Alembic
-- [ ] JWT auth
-- [ ] `BaseIntegration` soyut sınıfı (exchange + blockchain için ayrı base)
+### 11.1 Claude API Ayarları
 
-### Faz 1b — Exchange Entegrasyonları
-- [ ] Binance (CCXT)
-- [ ] iCrypex (CCXT)
-- [ ] TEFAS (scraping)
-- [ ] BES manuel giriş
+- Model: `claude-sonnet-4-6`
+- Prompt caching: sistem prompt cache'lenir (maliyet optimizasyonu)
+- Max tokens: 1024
+- Yanıt formatı: Yapılandırılmış Markdown
 
-### Faz 1c — Blockchain Entegrasyonları
-- [ ] `wallet_addresses` tablosu + endpoint
-- [ ] Sonic Service (web3.py + SFC)
-- [ ] Avalanche Service (P-Chain + C-Chain)
-- [ ] Ethereum bakiye sorgusu
+### 11.2 Kredi Kontrolü Akışı
 
-### Faz 1d — Portföy & Tavsiye
-- [ ] Aggregator (TL normalize, staking ayrımı)
-- [ ] APScheduler haftalık snapshot
-- [ ] WoW / MoM değişim hesaplama
-- [ ] Staking dashboard verileri
-- [ ] Claude API tavsiye
-
-### Faz 1e — Frontend (Yatırım)
-- [ ] Next.js dashboard — portföy özet kartları
-- [ ] Staking pozisyon kartları (S stake, AVAX stake, pending rewards)
-- [ ] Haftalık değişim grafikleri (Recharts — line chart)
-- [ ] Varlık dağılımı (pasta grafik: kripto / staked / fon / BES)
-- [ ] Yatırım tavsiye paneli (orta + uzun vade, Claude çıktısı)
-
-### Faz 2a — Harcama Backend
-- [ ] Harcama modelleri + CRUD endpointler
-- [ ] Kategori yönetimi (varsayılan kategorilerle başlar)
-- [ ] Aylık özet hesaplama servisi
-
-### Faz 2a — Harcama Frontend
-- [ ] Harcama giriş formu (tutar, kategori, tarih, not)
-- [ ] Harcama listesi + filtreleme (tarih aralığı, kategori)
-- [ ] Kategori yönetim ekranı (renk, bütçe limiti)
-
-### Faz 2b — Analiz Backend
-- [ ] Bütçe limit kontrol + uyarı mekanizması
-- [ ] Claude harcama analizi entegrasyonu
-
-### Faz 2b — Analiz Frontend
-- [ ] Harcama analiz dashboard'u
-  - Aylık toplam + geçen ay karşılaştırması
-  - Kategori bazlı pasta/bar grafik (Recharts)
-  - Aylık trend çizgi grafik
-- [ ] Bütçe durum göstergeleri (progress bar — limit/harcanan)
-- [ ] Claude tasarruf önerileri paneli
-
-### Faz 2c — Gelişmiş Backend
-- [ ] Banka ekstresi CSV import + otomatik kategori eşleştirme
-- [ ] Tekrarlayan ödeme tespiti algoritması
-
-### Faz 2c — Gelişmiş Frontend
-- [ ] CSV import ekranı (sürükle-bırak)
-- [ ] Tekrarlayan ödemeler listesi
-- [ ] Yatırım ↔ Harcama denge ekranı
-  - Aylık net tasarruf = gelir − harcama
-  - Yatırıma aktarılabilir tutar önerisi
-  - Portföy büyüme simülasyonu
+```
+POST /api/v1/advice/generate
+  1. Kullanıcı kredi bakiyesini kontrol et
+  2. Yetersizse 402 Payment Required dön
+  3. Claude API çağrısını yap
+  4. Başarılıysa credit_transactions'a negatif kayıt ekle
+  5. users.credit_balance güncelle
+  6. Tavsiyeyi kaydet ve dön
+```
 
 ---
 
-## 11. Teknoloji Bağımlılıkları
+## 12. Mobile (Flutter — Faz 3)
+
+### 12.1 Mimari
+
+- **Flutter** (Android öncelikli, iOS hazır)
+- Mevcut FastAPI backend'i değişmez — aynı REST API
+- JWT token'ı `flutter_secure_storage` ile güvenli saklanır
+- Offline-first değil — internet bağlantısı gerekli
+
+### 12.2 Ekranlar
+
+| Ekran | Açıklama |
+|-------|---------|
+| Giriş / Kayıt | JWT auth |
+| Dashboard | Portföy toplam değeri, varlık kartları |
+| TEFAS | Holding listesi, canlı fiyatlar |
+| Tavsiye | AI önerileri (kredi ile) |
+| Kredi | Bakiye, paket satın alma (iyzico in-app) |
+| Ayarlar | Profil, risk profili, API key yönetimi |
+
+---
+
+## 13. Teknoloji Bağımlılıkları
+
+### 13.1 Backend
 
 ```toml
-[project.dependencies]
-fastapi = ">=0.115"
-uvicorn = {extras = ["standard"]}
-sqlalchemy = {extras = ["asyncio"]}
-alembic = "*"
-asyncpg = "*"
-pydantic-settings = "*"
-python-jose = "*"
-passlib = {extras = ["bcrypt"]}
-cryptography = "*"         # Fernet (exchange API key şifreleme)
-ccxt = "*"                 # Binance, iCrypex
-web3 = "*"                 # Sonic, Avalanche C-Chain, Ethereum
-httpx = "*"                # Avalanche P-Chain API, TEFAS scraping
-beautifulsoup4 = "*"
-apscheduler = "*"
-anthropic = "*"
-
-[project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio", "httpx", "ruff"]
+fastapi, uvicorn, sqlalchemy[asyncio], alembic, asyncpg
+pydantic-settings, pydantic[email]
+python-jose[cryptography], bcrypt, cryptography
+ccxt, web3, httpx, beautifulsoup4
+apscheduler, anthropic
+python-multipart, openpyxl
 ```
+
+### 13.2 Frontend (Web)
+
+```json
+next.js, react, tailwindcss, typescript
+```
+
+### 13.3 Mobile
+
+```yaml
+flutter, http, flutter_secure_storage, provider/riverpod
+```
+
+### 13.4 Altyapı
+
+```
+Kubernetes (Docker Desktop / cloud)
+Helm (bitnami/postgresql)
+nginx-ingress, cert-manager
+GitHub Actions (CI/CD)
+ghcr.io (container registry)
+```
+
+---
+
+## 14. Geliştirme Fazları & Durum
+
+### ✅ Tamamlanan
+
+- FastAPI iskeleti, PostgreSQL + Alembic, JWT auth
+- TEFAS fiyat çekme (export API)
+- TEFAS holding kaydet/yükle (DB)
+- Excel import/export (openpyxl)
+- Next.js dashboard, login, TEFAS sayfası
+
+### 🔄 Sıradaki (Öncelik Sırası)
+
+#### Kubernetes Deploy
+- [ ] Backend Dockerfile
+- [ ] Frontend Dockerfile
+- [ ] k8s/backend manifests (Deployment, Service)
+- [ ] k8s/frontend manifests
+- [ ] k8s/ingress.yaml
+- [ ] GitHub Actions CI pipeline
+
+#### Test Altyapısı
+- [ ] pytest conftest (async DB, test client)
+- [ ] Unit testler (TEFAS, aggregator)
+- [ ] Integration testler (auth, portfolio endpoints)
+- [ ] Frontend Jest setup
+
+#### Git Flow Kurulumu
+- [ ] `develop` branch oluştur
+- [ ] `main` branch koruması (GitHub branch protection)
+- [ ] PR template ekle
+
+#### Kullanıcı Yönetimi (SaaS hazırlığı)
+- [ ] `POST /auth/register` endpoint
+- [ ] E-posta doğrulama (SMTP / Resend)
+- [ ] Şifre sıfırlama akışı
+- [ ] `credit_balance` users tablosuna ekle (migration)
+
+#### Kredi Sistemi
+- [ ] `credit_transactions` tablosu (migration)
+- [ ] `GET/POST /credits` endpointleri
+- [ ] iyzico ödeme entegrasyonu (sandbox)
+- [ ] Kredi kontrolü middleware (advisor.py)
+
+#### Faz 2 — Harcama Takibi
+- [ ] Harcama modelleri + migration
+- [ ] CRUD endpointler
+- [ ] Frontend harcama ekranları
+
+#### Faz 3 — Flutter Mobile
+- [ ] Proje kurulumu
+- [ ] Auth akışı
+- [ ] TEFAS ekranı
+- [ ] Play Store yayını
