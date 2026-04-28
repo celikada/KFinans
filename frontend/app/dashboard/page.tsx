@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import Image from "next/image";
+import { api, clearAuth } from "@/lib/api";
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -13,7 +14,6 @@ export default function DashboardPage() {
   const [tefasFundCount, setTefasFundCount] = useState(0);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
 
     api.getTefasHoldings().then((holdings) => {
       if (!holdings.length) return;
@@ -26,14 +26,14 @@ export default function DashboardPage() {
   }, [router]);
 
   function logout() {
-    localStorage.removeItem("access_token");
+    clearAuth();
     router.push("/login");
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">KFinans</h1>
+      <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between">
+        <Image src="/images/kfinans-logo.png" alt="KFinans" width={80} height={85} />
         <button onClick={logout} className="text-sm text-gray-400 hover:text-gray-600">
           Çıkış
         </button>
@@ -85,6 +85,12 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      <footer className="mt-auto py-4 flex justify-center items-center gap-2">
+        <span className="text-xs text-gray-300">Bir</span>
+        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={64} height={22} />
+        <span className="text-xs text-gray-300">ürünüdür</span>
+      </footer>
     </div>
   );
 }

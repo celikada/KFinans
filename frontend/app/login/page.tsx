@@ -1,7 +1,8 @@
 "use client";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import Image from "next/image";
+import { api, setAuth } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await api.login(email, password);
-      localStorage.setItem("access_token", data.access_token);
+      setAuth(data.access_token);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Giriş başarısız");
@@ -26,10 +27,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">KFinans</h1>
-        <p className="text-sm text-gray-500 mb-8">Portföyünüze giriş yapın</p>
+        <div className="flex justify-center mb-6">
+          <Image src="/images/kfinans-logo.png" alt="KFinans" width={140} height={148} priority />
+        </div>
+        <p className="text-sm text-gray-500 mb-8 text-center">Portföyünüze giriş yapın</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -67,6 +70,12 @@ export default function LoginPage() {
             {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
           </button>
         </form>
+      </div>
+
+      <div className="mt-8 flex flex-col items-center gap-2">
+        <p className="text-xs text-gray-400">Bir</p>
+        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={90} height={30} />
+        <p className="text-xs text-gray-400">ürünüdür</p>
       </div>
     </div>
   );

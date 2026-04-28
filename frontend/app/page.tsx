@@ -1,12 +1,4 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
+// Middleware tarafından yönetilir → /login veya /dashboard
 export default function Home() {
-  const router = useRouter();
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    router.replace(token ? "/dashboard" : "/login");
-  }, [router]);
   return null;
 }
