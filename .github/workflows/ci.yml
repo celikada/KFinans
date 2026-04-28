@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, "feature/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend-lint:
+    name: Backend — Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ruff
+        working-directory: backend
+      - run: ruff check .
+        working-directory: backend
+
+  backend-test:
+    name: Backend — Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kfinans
+          POSTGRES_PASSWORD: kfinans_test
+          POSTGRES_DB: kfinans_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://kfinans:kfinans_test@localhost:5432/kfinans_test
+      SECRET_KEY: test-secret-key-for-ci
+      FERNET_KEY: ${{ secrets.CI_FERNET_KEY }}
+      ANTHROPIC_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+        working-directory: backend
+      - run: alembic upgrade head
+        working-directory: backend
+      - run: pytest tests/ -v --tb=short
+        working-directory: backend
+
+  frontend-lint:
+    name: Frontend — Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend

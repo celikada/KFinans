@@ -1,0 +1,21 @@
+# Mevcut PostgreSQL Helm kurulumu için override değerleri
+# helm upgrade --install postgres bitnami/postgresql -n kfinans -f k8s/postgres/values.yaml
+
+auth:
+  username: kfinans
+  database: kfinans
+  # password: Kubernetes Secret'tan okunur (existingSecret)
+  existingSecret: kfinans-pg-secret
+  secretKeys:
+    userPasswordKey: password
+
+primary:
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

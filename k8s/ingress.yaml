@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kfinans-ingress
+  namespace: kfinans
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod  # domain alındığında aktifleştir
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.kfinans.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-svc
+                port:
+                  number: 8000
+    - host: app.kfinans.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-svc
+                port:
+                  number: 3000
+  # tls:                               # domain alındığında aktifleştir
+  #   - hosts: [api.kfinans.app, app.kfinans.app]
+  #     secretName: kfinans-tls
