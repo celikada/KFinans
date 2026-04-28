@@ -12,9 +12,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const [tefasTotal, setTefasTotal] = useState<number | null>(null);
   const [tefasFundCount, setTefasFundCount] = useState(0);
+  const [cryptoTotal, setCryptoTotal] = useState<number | null>(null);
+  const [cryptoLoading, setCryptoLoading] = useState(false);
 
   useEffect(() => {
-
     api.getTefasHoldings().then((holdings) => {
       if (!holdings.length) return;
       setTefasFundCount(holdings.length);
@@ -23,6 +24,17 @@ export default function DashboardPage() {
         setTefasTotal(total);
       }).catch(() => {});
     }).catch(() => {});
+
+    setCryptoLoading(true);
+    api.getIntegrations().then((integrations) => {
+      const hasCrypto = integrations.some((i) => i.provider === "binance" || i.provider === "icrypex");
+      if (!hasCrypto) { setCryptoLoading(false); return; }
+      api.getCryptoPositions().then(({ positions }) => {
+        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        setCryptoTotal(total);
+      }).catch(() => {}).finally(() => setCryptoLoading(false));
+    }).catch(() => setCryptoLoading(false));
   }, [router]);
 
   function logout() {
@@ -68,7 +80,13 @@ export default function DashboardPage() {
               <span className="text-xl">₿</span>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">Kripto</h3>
-            <p className="text-sm text-gray-400">Binance & iCrypex</p>
+            {cryptoTotal !== null ? (
+              <p className="text-sm font-semibold text-orange-500">{fmtTL(cryptoTotal)} ₺</p>
+            ) : cryptoLoading ? (
+              <p className="text-sm text-gray-400">yükleniyor...</p>
+            ) : (
+              <p className="text-sm text-gray-400">Binance & iCrypex</p>
+            )}
           </button>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-50 cursor-not-allowed">
