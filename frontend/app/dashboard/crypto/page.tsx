@@ -54,8 +54,14 @@ export default function CryptoPage() {
     setLoadingPositions(true);
     setPosError("");
     try {
-      const data = await api.getCryptoPositions();
-      setPositions(data.filter((p) => parseFloat(p.total_value_tl) > 0.01));
+      const { positions, errors } = await api.getCryptoPositions();
+      setPositions(positions.filter((p) => parseFloat(p.total_value_tl) > 0.01));
+      if (Object.keys(errors).length > 0) {
+        const msgs = Object.entries(errors)
+          .map(([provider, err]) => `${PROVIDER_LABELS[provider] ?? provider}: ${err}`)
+          .join(" | ");
+        setPosError(msgs);
+      }
     } catch (err) {
       setPosError(err instanceof Error ? err.message : "Pozisyonlar alınamadı");
     } finally {
@@ -65,8 +71,8 @@ export default function CryptoPage() {
 
   async function handleAddIntegration(e: React.FormEvent) {
     e.preventDefault();
-    if (!apiKey.trim()) { setFormError("API Key zorunludur"); return; }
-    if (provider === "binance" && !apiSecret.trim()) { setFormError("Binance için API Secret zorunludur"); return; }
+    if (!apiKey.trim()) { setFormError(provider === "icrypex" ? "E-posta zorunludur" : "API Key zorunludur"); return; }
+    if (!apiSecret.trim()) { setFormError(provider === "icrypex" ? "Şifre zorunludur" : "API Secret zorunludur"); return; }
     setSaving(true);
     setFormError("");
     try {
@@ -158,19 +164,18 @@ export default function CryptoPage() {
                 <option value="icrypex">iCrypex</option>
               </select>
               <input
-                placeholder="API Key"
+                placeholder={provider === "icrypex" ? "E-posta" : "API Key"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}
+                className={`flex-1 min-w-0 ${provider === "icrypex" ? "" : "font-mono"} text-xs ${INPUT_CLS}`}
               />
-              {provider === "binance" && (
-                <input
-                  placeholder="API Secret"
-                  value={apiSecret}
-                  onChange={(e) => setApiSecret(e.target.value)}
-                  className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}
-                />
-              )}
+              <input
+                placeholder={provider === "icrypex" ? "Şifre" : "API Secret"}
+                type={provider === "icrypex" ? "password" : "text"}
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                className={`flex-1 min-w-0 ${provider === "icrypex" ? "" : "font-mono"} text-xs ${INPUT_CLS}`}
+              />
             </div>
             {formError && (
               <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{formError}</p>
