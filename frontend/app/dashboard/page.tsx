@@ -26,15 +26,12 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     setCryptoLoading(true);
-    api.getIntegrations().then((integrations) => {
-      const hasCrypto = integrations.some((i) => i.provider === "binance" || i.provider === "icrypex");
-      if (!hasCrypto) { setCryptoLoading(false); return; }
-      api.getCryptoPositions().then(({ positions }) => {
-        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
-        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
-        setCryptoTotal(total);
-      }).catch(() => {}).finally(() => setCryptoLoading(false));
-    }).catch(() => setCryptoLoading(false));
+    api.getCryptoPositions().then(({ positions }) => {
+      const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+      if (filtered.length === 0) return;
+      const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+      setCryptoTotal(total);
+    }).catch(() => {}).finally(() => setCryptoLoading(false));
   }, [router]);
 
   function logout() {
