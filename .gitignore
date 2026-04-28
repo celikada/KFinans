@@ -1,0 +1,20 @@
+# Backend
+backend/.env
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+backend/.venv/
+backend/venv/
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/.env*.local
+
+# Genel
+.DS_Store
+*.log
