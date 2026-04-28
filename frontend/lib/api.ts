@@ -4,6 +4,16 @@ function getToken() {
   return typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
 }
 
+export function setAuth(token: string) {
+  localStorage.setItem("access_token", token);
+  document.cookie = `access_token=${token}; path=/; SameSite=Strict`;
+}
+
+export function clearAuth() {
+  localStorage.removeItem("access_token");
+  document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
@@ -15,6 +25,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      clearAuth();
+      window.location.replace("/login");
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? res.statusText);
   }

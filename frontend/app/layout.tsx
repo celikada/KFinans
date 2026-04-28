@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KFinans",
   description: "Kişisel yatırım portföyü",
+  icons: { icon: "/images/kfinans-logo.png" },
 };
 
 export default function RootLayout({
