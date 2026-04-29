@@ -43,6 +43,15 @@ export default function CryptoPage() {
   const [removing, setRemoving] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"value" | "name" | "amount">("value");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(new Set());
+
+  function toggleProvider(prov: string) {
+    setHiddenProviders((prev) => {
+      const next = new Set(prev);
+      next.has(prov) ? next.delete(prov) : next.add(prov);
+      return next;
+    });
+  }
 
   function toggleSort(col: "value" | "name" | "amount") {
     if (sortBy === col) {
@@ -114,7 +123,8 @@ export default function CryptoPage() {
     }
   }
 
-  const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+  const visiblePositions = positions.filter((p) => !hiddenProviders.has(p.provider));
+  const totalTL = visiblePositions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -236,14 +246,30 @@ export default function CryptoPage() {
 
           return (
             <>
-              {byProvider.length > 1 && (
+              {byProvider.length > 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 flex-wrap">
-                  {byProvider.map(([prov, total]) => (
-                    <div key={prov} className="flex-1 min-w-[140px] bg-gray-50 rounded-xl px-4 py-3">
-                      <p className="text-xs text-gray-400 mb-1">{PROVIDER_LABELS[prov] ?? prov}</p>
-                      <p className="text-sm font-bold text-gray-900">{fmtTL(total)} ₺</p>
-                    </div>
-                  ))}
+                  {byProvider.map(([prov, total]) => {
+                    const hidden = hiddenProviders.has(prov);
+                    return (
+                      <button
+                        key={prov}
+                        onClick={() => toggleProvider(prov)}
+                        className={`flex-1 min-w-[140px] rounded-xl px-4 py-3 text-left transition-all border ${
+                          hidden
+                            ? "bg-gray-50 border-gray-100 opacity-40"
+                            : "bg-gray-50 border-gray-200 hover:border-blue-200"
+                        }`}
+                      >
+                        <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+                          {PROVIDER_LABELS[prov] ?? prov}
+                          <span className="ml-auto text-gray-300">{hidden ? "gizli" : "✓"}</span>
+                        </p>
+                        <p className={`text-sm font-bold ${hidden ? "text-gray-400" : "text-gray-900"}`}>
+                          {fmtTL(total)} ₺
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -273,7 +299,7 @@ export default function CryptoPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {[...positions]
+                {[...visiblePositions]
                   .sort((a, b) => {
                     const dir = sortDir === "desc" ? -1 : 1;
                     if (sortBy === "name") return dir * a.symbol.localeCompare(b.symbol);
