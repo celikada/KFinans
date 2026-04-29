@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.0
-**Tarih:** 2026-04-29
-**Durum:** Aktif geliştirme
+**Versiyon:** 3.1
+**Tarih:** 2026-04-30
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 başlıyor
 **Üretici:** Mayotek
 
 ---
@@ -160,23 +160,43 @@ Kubernetes Ingress (nginx)
 
 ---
 
-## 7. Güncel Durum (2026-04-29)
+## 7. Güncel Durum (2026-04-30)
 
-### ✅ Tamamlanan
-- Backend iskeleti, JWT auth, slowapi rate limiting, /health endpoint
-- TEFAS, kripto (Binance/BinanceTR/iCrypex), blockchain (Sonic/Avalanche/Ethereum), hisse (Yahoo)
+### ✅ Faz 1 Tamamlandı
+- Backend iskeleti, JWT auth, slowapi rate limiting (login 10/dk, register 5/dk, refresh 30/dk), `/health` endpoint
+- TEFAS, kripto (Binance/BinanceTR/iCrypex), blockchain (Sonic/Avalanche/Ethereum), hisse (Yahoo Finance)
 - Excel import/export tüm varlık türleri için
 - Frontend dashboard, login, kripto/wallets/stocks sayfaları
 - Docker Compose dev ortamı (Kubernetes port-forward watchdog kaldırıldı)
-- Kubernetes manifest'leri ve CI/CD pipeline
-- Test stratejisi (unit + integration); coverage henüz %20 — genişletilmeli
-- 11 domain expert agent (.claude/agents/) tanımlandı
+- CI/CD: 4 ayrı workflow — `ci-backend`, `ci-frontend`, `e2e`, `security`
+- **Test paketi: 89 backend + 3 frontend Vitest + 5 Playwright E2E senaryosu**
+  - Unit: security (22), aggregator (22), GBp dönüşümü (7), TEFAS (6)
+  - Integration: auth (7), portfolio (8), IDOR (7), integrations (5), wallets (5)
+  - E2E: login redirect, dashboard akışı (Playwright)
+- 11 domain expert ajanı (`.claude/agents/`) — backend, frontend, dba, devops, security, test, architect, finance, doc, ai, compliance
+- 9 odaklı doküman (`docs/`)
+- Migration durumu güncel: `users` lifecycle kolonları (email_verified, verify_token, deleted_at, credit_balance), `investment_advice.credits_used`, performans index'leri
 
-### 🔄 Sıradaki Öncelikler
-- KVKK uyum dokümanları (gizlilik politikası, aydınlatma metni)
-- Test coverage'ı %70+'a çıkarma
-- Kullanıcı kayıt sayfası + e-posta doğrulama
-- Haftalık snapshot job'ının implement edilmesi (scheduler.py boş)
-- Kredi sistemi tabloları + iyzico sandbox entegrasyonu
+### 🐛 Faz 1'de Düzeltilen Bug'lar
+- **GBp dönüşüm hatası** — UK hisseleri için GBP/USD kuru zinciri (`api/v1/stocks.py::convert_to_tl`)
+- **Duplicate wallet 500 → 409** — `IntegrityError` doğru HTTP koduyla yakalanıyor
+- **Pydantic v2 uyumsuzluk** — `class Config` → `model_config` (kısmi)
+- **Service katmanı logger eksikliği** — 9 servise module-level `logger` eklendi
+
+### 🔄 Faz 2 Sıradaki Öncelikler
+- Kullanıcı kayıt frontend sayfası + e-posta doğrulama akışı (Resend/SES)
+- Haftalık snapshot job'ının implement edilmesi (`scheduler.py` boş)
+- TCMB API USD/TRY fallback (sabit kur yerine)
+- BES manuel giriş ekranı
+- Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
+- KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
+- Test coverage %30 → %50 hedefi
+
+### 📋 Faz 3 Planlananlar
+- Kredi sistemi tam implementasyonu + iyzico sandbox
+- KVKK endpoint'leri (`/me/data-export`, `/me/account` soft delete)
+- `audit_logs` tablosu
+- Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
+- Background job kuyruğu (Celery/RQ)
 
 > Detaylı yol haritası ve TODO'lar her alt dokümanın sonundadır.

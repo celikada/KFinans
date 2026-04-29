@@ -215,32 +215,45 @@ Sayfalar arası paylaşım yok; her sayfa kendi API'sini çağırıyor.
 
 ---
 
-## 9. Test Stratejisi
+## 9. Test Stratejisi (Kuruldu — 2026-04-30)
 
-### Mevcut: ❌ Hiç Yok
-Frontend testleri henüz yazılmamış.
+### Araçlar (Aktif)
+- **Vitest 2.1** + jsdom + V8 coverage (%30 threshold)
+- **@testing-library/react** + jest-dom + user-event
+- **@playwright/test** (Chromium, CI'da retry x2)
+- **MSW 2.6** (kurulu, henüz kullanılmadı)
 
-### Plan
-- **Vitest** + React Testing Library (Jest yerine — Vite ekosistemi daha hızlı)
-- **MSW** (Mock Service Worker) — API mock
-- **Playwright** — E2E (login → kripto görüntüleme akışı)
-
+### Mevcut Test Dosyaları
 ```
-__tests__/
-├── unit/
-│   ├── api.test.ts                # lib/api.ts fonksiyonları
-│   └── hooks/
-│       └── useCryptoPositions.test.tsx
-├── components/
-│   ├── CryptoPositionTable.test.tsx
-│   └── LoginForm.test.tsx
-└── e2e/
-    └── login-flow.spec.ts
+frontend/
+├── vitest.config.ts             # ✅ jsdom + coverage gate
+├── vitest.setup.ts              # ✅ jest-dom + cleanup
+├── playwright.config.ts         # ✅ Chromium projects
+├── __tests__/
+│   └── api.test.ts              # ✅ setAuth/clearAuth — 3 test
+└── playwright/
+    ├── login.spec.ts            # ✅ Token redirect — 3 senaryo
+    └── dashboard.spec.ts        # ✅ Register + login akışı — 2 senaryo
+```
+
+### npm Scripts
+```bash
+npm test              # Vitest run (CI)
+npm run test:watch    # Watch mode
+npm run test:coverage # Coverage raporu
+npm run e2e           # Playwright headless
+npm run e2e:ui        # Playwright UI mode
 ```
 
 ### Coverage Hedefi
-- Unit + component: %70+
-- E2E: kritik akışların her biri (login, holding kaydet, kripto görüntüle)
+- **Vitest unit + component:** %70+ (mevcut: %30 threshold)
+- **Playwright E2E:** kritik akışların her biri (login ✅, dashboard ✅, holding kaydet ❌, kripto görüntüle ❌)
+
+### Eksik (Faz 2)
+- [ ] Component testleri (`CryptoPositionTable`, `LoginForm`, dashboard kartları)
+- [ ] Hook testleri (custom hook'lar refactor edildikten sonra)
+- [ ] MSW kullanımı — `lib/api.ts` fetch'lerinin mock'lanması
+- [ ] Playwright: holding kaydet senaryosu, kripto pozisyon görüntüleme
 
 ---
 

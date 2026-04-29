@@ -326,17 +326,33 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 
 | Revision | Açıklama |
 |----------|----------|
-| `(base)` | İlk şema (users, integrations, wallet_addresses, tefas_holdings, portfolio_snapshots, asset_positions, investment_advice) |
+| `876bd62e282c` | İlk şema (users, integrations, wallet_addresses, portfolio_snapshots, asset_positions, investment_advice) |
+| `a1b2c3d4e5f6` | `tefas_holdings` tablosu |
 | `b2c3d4e5f6a7` | `integrations.encrypted_extra` kolonu (Binance TR session token) |
 | `c3d4e5f6a7b8` | `stock_holdings` tablosu |
+| `d4e5f6a7b8c9` | ✅ `users` lifecycle kolonları: `email_verified`, `verify_token`, `deleted_at`, `credit_balance` (CHECK >=0) |
+| `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` kolonu |
+| `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE |
 
-### Eksik (Henüz Yapılmamış)
-- [ ] Tüm `user_id` FK'larında index (performans için kritik)
-- [ ] `portfolio_snapshots(user_id, snapshot_date DESC)` composite index
-- [ ] `users.credit_balance` ve `email_verified` kolonları
-- [ ] `credit_transactions` tablosu (Faz 3)
+### Mevcut Index'ler
+- `ix_users_email` (UNIQUE)
+- `ix_integrations_user_id`
+- `ix_wallet_addresses_user_id`
+- `ix_tefas_holdings_user_id`
+- `ix_stock_holdings_user_id`
+- `ix_investment_advice_user_id`
+- `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
+- `ix_asset_positions_snapshot_id`
+- `uq_integrations_user_provider` (UNIQUE)
+- `uq_snapshot_user_date` (UNIQUE)
+- `uq_wallet_user_chain_address` (UNIQUE)
+
+### Eksik (Faz 2-3'te Yapılacak)
+- [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
 - [ ] `expense_categories` + `expenses` tabloları (Faz 3 — harcama takibi)
-- [ ] Soft delete: `deleted_at TIMESTAMPTZ` her tabloda
+- [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
+- [ ] `revoked_tokens` tablosu (Faz 2 — JWT blacklist)
+- [ ] Soft delete cron — 30 gün sonra hard delete
 
 ---
 

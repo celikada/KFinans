@@ -114,11 +114,10 @@ Backend (transactional)
 
 ## 5. Veritabanı Şeması
 
-### 5.1 Eklenecek (`users` tablosuna)
-```sql
-ALTER TABLE users ADD COLUMN credit_balance INT NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN anthropic_consent_at TIMESTAMPTZ;
-```
+### 5.1 `users` Tablosu (Mevcut)
+✅ `credit_balance INT NOT NULL DEFAULT 0` — migration `d4e5f6a7b8c9` ile eklendi.
+✅ `CHECK (credit_balance >= 0)` constraint — DB seviyesinde negatif bakiye koruması.
+⚠️ `anthropic_consent_at TIMESTAMPTZ` — Faz 3'te eklenecek (Anthropic için açık rıza).
 
 ### 5.2 Yeni Tablo: `credit_transactions`
 ```sql

@@ -378,13 +378,17 @@ quantity = NUMERIC(20, 8)  # 8 ondalık (kesirli pay desteği)
 
 **KESINLIKLE FLOAT KULLANMA.** Decimal precision finansal sistemde yasal gereklilik.
 
-## B.10 Bilinen Sorunlar (Düzeltilmeli)
+## B.10 Bilinen Sorunlar
 
-1. **GBp dönüşümü hatalı** — GBP/USD kuru kullanılmıyor (Faz 3)
-2. **USD/TRY fallback sabit** — TCMB entegrasyonu yapılmalı
-3. **Cache yok** — her istek dış API çağrısı, rate limit riski
-4. **Hafta sonu TEFAS** — kullanıcıya bilgilendirme yok
-5. **Kripto coin map'i hardcoded** — yeni coin desteği için kod değişikliği gerekiyor
+### ✅ Düzeltildi (2026-04-30)
+1. **GBp dönüşümü** — `api/v1/stocks.py::convert_to_tl` artık GBP/USD kuru kullanıyor (`fetch_gbp_to_usd`). Test koruması: `test_stocks_currency.py` (7 test).
+
+### ⚠️ Hâlâ Düzeltilecek
+2. **USD/TRY fallback sabit** — TCMB entegrasyonu yapılmalı (Faz 2)
+3. **Cache yok** — her istek dış API çağrısı, rate limit riski (Faz 2 — Redis)
+4. **Hafta sonu TEFAS** — kullanıcıya bilgilendirme yok (Faz 2 — frontend)
+5. **Kripto coin map'i hardcoded** — yeni coin desteği için kod değişikliği gerekiyor (Faz 3)
+6. **Model adı `advisor.py`'de hardcoded** — `claude-sonnet-4-6` config'e taşınmalı (Faz 2)
 
 ---
 

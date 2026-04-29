@@ -14,18 +14,27 @@
 - ✅ Auto-migration: container start'ta `alembic upgrade head`
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
-### 1.2 CI Pipeline (Çalışıyor)
-- ✅ GitHub Actions `ci.yml`: PostgreSQL test service, Ruff lint+format, pytest unit + integration, frontend `npm run build`
+### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
+- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30)
+- ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build
+- ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium)
+- ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
 
 ### 1.3 Yayın Pipeline (Çalışıyor)
 - ✅ GitHub Actions `cd.yml`: develop → GHCR'a backend + frontend image push (commit SHA tag)
 
-### 1.4 Eksik (Production'a Kadar)
+### 1.4 GitHub Actions Limit Durumu
+- Repo: **PRIVATE** → Free tier 2,000 dk/ay
+- Workflow path filtresi aktif (sadece ilgili dizin değişince tetiklenir)
+- Tahmini aylık tüketim: ~600-1,500 dk (push sıklığına göre)
+
+### 1.5 Eksik (Production'a Kadar)
 - ❌ Kubernetes manifestleri (`k8s/` klasörü boş)
 - ❌ Production deployment (kubectl rollout otomasyonu)
 - ❌ Tilt/Skaffold dev loop (Docker Compose'tan geçiş — bilinçli teknik borç)
 - ❌ Monitoring (Prometheus + Grafana)
 - ❌ Centralized logging (Loki veya ELK)
+- ❌ Branch protection rule'ları (`main`, `develop`)
 
 ---
 
@@ -208,23 +217,27 @@ jobs:
             (en geniş taban)
 ```
 
-### 5.2 Backend Test Yapısı
+### 5.2 Backend Test Yapısı (Mevcut — 89 test geçiyor)
 ```
 backend/tests/
-├── conftest.py                  # async engine, test DB, client, auth_headers
-├── unit/
-│   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx mock)
-│   ├── test_aggregator.py       # ❌ TL normalize, calculate_changes
-│   └── test_advisor.py          # ❌ Prompt formatting, token sayımı
-├── integration/
-│   ├── test_auth.py             # ✅ Login/refresh; eksik: register testi
-│   ├── test_portfolio.py        # ⚠️ Sadece TEFAS holdings; eksik: crypto, wallets, stocks
-│   ├── test_stocks.py           # ❌ Stocks CRUD + Yahoo mock
-│   ├── test_wallets.py          # ❌ Blockchain wallet CRUD
-│   ├── test_integrations.py     # ❌ Exchange key encrypt/decrypt
+├── conftest.py                  # ✅ NullPool + per-request session + slowapi disable
+├── unit/                        # 57 test
+│   ├── test_security.py         # ✅ JWT, Fernet, bcrypt — 22 test
+│   ├── test_aggregator.py       # ✅ WoW/MoM/breakdown/weight/staking — 22 test
+│   ├── test_stocks_currency.py  # ✅ GBp/USD/TRY dönüşüm zinciri — 7 test
+│   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx) — 6 test
+│   └── test_advisor.py          # ❌ Anthropic mock + token sayımı (Faz 3)
+├── integration/                 # 32 test
+│   ├── test_auth.py             # ✅ Register/login/refresh — 7 test
+│   ├── test_portfolio.py        # ✅ TEFAS holdings CRUD — 8 test
+│   ├── test_idor.py             # ✅ Cross-user erişim koruma — 7 test
+│   ├── test_integrations_api.py # ✅ Exchange key encrypt/decrypt + leak — 5 test
+│   ├── test_wallets_api.py      # ✅ Blockchain wallet CRUD — 5 test
+│   ├── test_stocks_api.py       # ⚠️ Henüz yazılmadı (preview/import/export)
+│   ├── test_crypto_api.py       # ❌ Binance/iCrypex mock (Faz 2)
 │   └── test_advice.py           # ❌ AI çağrı mock + kredi kontrolü (Faz 3)
 └── e2e/
-    └── test_tefas_flow.py       # ❌ login → holding kaydet → preview → export
+    └── (kullanılmıyor — E2E frontend Playwright'ta)
 ```
 
 ### 5.3 Test Araçları
@@ -271,26 +284,43 @@ async def test_tefas_fetch():
 ### 5.5 Coverage Hedefleri
 | Katman | Hedef | Mevcut |
 |--------|-------|--------|
-| `services/` (iş mantığı) | %85+ | ~%30 |
-| `api/v1/` (endpoint'ler) | %80+ | ~%20 |
-| `core/` (auth, deps) | %90+ | ~%50 |
-| Genel | %70+ | ~%20 |
+| `core/security.py` (JWT, Fernet) | **%100** | ~%95 ✅ |
+| `services/aggregator.py` (formüller) | **%100** | ~%85 ✅ |
+| `api/v1/auth.py` | %95 | ~%80 ✅ |
+| `services/exchange/*` | %70 | ~%5 (sadece logger import) |
+| `services/blockchain/*` | %70 | ~%5 |
+| Genel CI gate (faz bazlı) | Faz 1: %30 ✅ → Faz 2: %50 → Faz 3: %70 | ~%30+ |
 
-CI'da coverage düşüşü merge'i bloklayacak (Faz 2'de aktif edilecek).
+CI'da coverage threshold `ci-backend.yml::coverage-gate` ile uygulanır — düşüşte merge bloke.
 
-### 5.6 Frontend Testleri (Henüz Yok)
+### 5.6 Frontend Testleri (Kuruldu)
 ```
-frontend/__tests__/
-├── unit/
-│   └── api.test.ts                  # lib/api.ts fonksiyonları (msw mock)
-├── components/
-│   ├── CryptoPositionTable.test.tsx
-│   └── LoginForm.test.tsx
-└── e2e/
-    └── login-flow.spec.ts            # Playwright
+frontend/
+├── vitest.config.ts            # ✅ jsdom + V8 coverage + %30 threshold
+├── vitest.setup.ts             # ✅ @testing-library/jest-dom + cleanup
+├── playwright.config.ts        # ✅ Chromium + retry x2 (CI)
+├── __tests__/
+│   └── api.test.ts             # ✅ setAuth/clearAuth — 3 test
+├── playwright/
+│   ├── login.spec.ts           # ✅ Token redirect senaryoları — 3 test
+│   └── dashboard.spec.ts       # ✅ Register + login akışı — 2 test
+└── (eksik) __tests__/components/CryptoPositionTable.test.tsx (Faz 2)
 ```
 
-Araçlar: **Vitest** + React Testing Library + **MSW** + **Playwright**
+**Araçlar (kurulu):**
+- Vitest 2.1 + jsdom + V8 coverage
+- @testing-library/react, jest-dom, user-event
+- @playwright/test (Chromium)
+- MSW 2.6 (mock service worker — kurulu, henüz kullanılmadı)
+
+**npm scripts:**
+```
+npm test           # Vitest run
+npm run test:watch # Watch mode
+npm run test:coverage
+npm run e2e        # Playwright
+npm run e2e:ui     # Playwright UI mode
+```
 
 ---
 

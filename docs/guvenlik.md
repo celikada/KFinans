@@ -19,8 +19,12 @@
 | Auth gerektiren endpoint'ler | `Depends(get_current_user)` | ✅ Aktif |
 | User izolasyonu | `WHERE user_id == current_user.id` | ✅ Aktif |
 | Pydantic input validation | Tüm request body'ler | ✅ Aktif |
+| Servis katmanı logging | 9 servis dosyasında module-level logger | ✅ Aktif |
+| Test kapsama (regresyon koruma) | IDOR (5 endpoint), security primitives (22 test), integrations leak (5 test) | ✅ Aktif |
+| Soft delete altyapısı | `users.deleted_at` kolonu hazır (cron Faz 3) | ✅ Şema hazır |
+| `users.credit_balance` (CHECK >= 0) | DB seviyesinde negatif bakiye koruması | ✅ Aktif |
 
-**Bu korumalar regresyon kabul etmez** — production'a çıkmadan önce düşürülemez.
+**Bu korumalar regresyon kabul etmez** — production'a çıkmadan önce düşürülemez. CI'da `test_idor.py`, `test_security.py`, `test_integrations_api.py` testleri bunları otomatik doğrular.
 
 ---
 
