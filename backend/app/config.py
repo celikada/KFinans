@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     avalanche_c_rpc_url: str = "https://api.avax.network/ext/bc/C/rpc"
     infura_api_key: str = ""
 
+    # CORS — production'da frontend domain'i ekle
+    cors_origins: list[str] = ["http://localhost:3000"]
+
     @property
     def ethereum_rpc_url(self) -> str:
         if self.infura_api_key:
