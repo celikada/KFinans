@@ -8,6 +8,7 @@ const INPUT_CLS =
 
 const PROVIDER_LABELS: Record<string, string> = {
   binance: "Binance",
+  binancetr: "Binance TR",
   icrypex: "iCrypex",
 };
 
@@ -34,7 +35,7 @@ export default function CryptoPage() {
   const [posError, setPosError] = useState("");
 
   // form state
-  const [provider, setProvider] = useState<"binance" | "icrypex">("binance");
+  const [provider, setProvider] = useState<"binance" | "binancetr" | "icrypex">("binance");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [saving, setSaving] = useState(false);
@@ -168,10 +169,11 @@ export default function CryptoPage() {
             <div className="flex gap-3 flex-wrap">
               <select
                 value={provider}
-                onChange={(e) => { setProvider(e.target.value as "binance" | "icrypex"); setApiSecret(""); }}
-                className={`w-32 ${INPUT_CLS}`}
+                onChange={(e) => { setProvider(e.target.value as "binance" | "binancetr" | "icrypex"); setApiSecret(""); }}
+                className={`w-36 ${INPUT_CLS}`}
               >
                 <option value="binance">Binance</option>
+                <option value="binancetr">Binance TR</option>
                 <option value="icrypex">iCrypex</option>
               </select>
               <input

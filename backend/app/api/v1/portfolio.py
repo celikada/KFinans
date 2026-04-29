@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.portfolio import SnapshotOut, PortfolioChanges, PortfolioBreakdown, StakingPosition
 from app.services.aggregator import fetch_usd_to_tl
 from app.services.exchange.binance import BinanceService
+from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -273,7 +274,12 @@ class CryptoPositionOut(BaseModel):
     total_value_tl: Decimal
 
 
-@router.get("/crypto", response_model=list[CryptoPositionOut])
+class CryptoResponse(BaseModel):
+    positions: list[CryptoPositionOut]
+    errors: dict[str, str]
+
+
+@router.get("/crypto", response_model=CryptoResponse)
 async def get_crypto_positions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -281,31 +287,34 @@ async def get_crypto_positions(
     result = await db.execute(
         select(Integration).where(
             Integration.user_id == current_user.id,
-            Integration.provider.in_(["binance", "icrypex"]),
+            Integration.provider.in_(["binance", "binancetr", "icrypex"]),
             Integration.is_active.is_(True),
         )
     )
     integrations = result.scalars().all()
     if not integrations:
-        return []
+        return CryptoResponse(positions=[], errors={})
 
     usd_tl = await fetch_usd_to_tl()
     all_assets = []
+    errors: dict[str, str] = {}
 
     for intg in integrations:
         try:
             api_key = decrypt_secret(intg.encrypted_key)
+            api_secret = decrypt_secret(intg.encrypted_secret) if intg.encrypted_secret else ""
             if intg.provider == "binance":
-                api_secret = decrypt_secret(intg.encrypted_secret) if intg.encrypted_secret else ""
                 svc = BinanceService(api_key, api_secret)
+            elif intg.provider == "binancetr":
+                svc = BinanceTRService(api_key, api_secret)
             else:
-                svc = ICrypexService(api_key)
+                svc = ICrypexService(api_key, api_secret)
             assets = await svc.fetch()
             all_assets.extend(assets)
-        except Exception:
-            pass
+        except Exception as e:
+            errors[intg.provider] = str(e)
 
-    return [
+    positions = [
         CryptoPositionOut(
             provider=a.provider,
             symbol=a.symbol,
@@ -319,6 +328,7 @@ async def get_crypto_positions(
         )
         for a in all_assets
     ]
+    return CryptoResponse(positions=positions, errors=errors)
 
 
 @router.get("/staking", response_model=list[StakingPosition])
