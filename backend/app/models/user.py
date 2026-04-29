@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, func
+from typing import Optional
+from sqlalchemy import Boolean, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from app.models.base import Base
@@ -14,6 +15,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     # conservative | balanced | aggressive
     risk_profile: Mapped[str] = mapped_column(String(20), nullable=False, default="balanced")
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    verify_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     integrations: Mapped[list["Integration"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -21,3 +26,4 @@ class User(Base):
     portfolio_snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     investment_advice: Mapped[list["InvestmentAdvice"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     tefas_holdings: Mapped[list["TefasHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    stock_holdings: Mapped[list["StockHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")

@@ -1,8 +1,11 @@
+import logging
 from decimal import Decimal
 import httpx
 from app.services.base import AssetData
 from app.models.portfolio import PortfolioSnapshot, AssetPosition
 from app.schemas.portfolio import PortfolioChanges, PortfolioBreakdown, StakingPosition
+
+logger = logging.getLogger(__name__)
 
 TCMB_RATE_URL = "https://api.exchangerate-api.com/v4/latest/USD"
 
@@ -13,6 +16,21 @@ async def fetch_usd_to_tl() -> Decimal:
         resp = await client.get(TCMB_RATE_URL)
         data = resp.json()
         return Decimal(str(data["rates"]["TRY"]))
+
+
+_BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
+
+async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
+    """Binance'ten USDT pariteli spot fiyatları çeker. Bulunamayanlar 0 döner."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(_BINANCE_PRICE_URL)
+        resp.raise_for_status()
+        all_prices = {t["symbol"]: Decimal(t["price"]) for t in resp.json()}
+
+    result: dict[str, Decimal] = {}
+    for sym in symbols:
+        result[sym] = all_prices.get(f"{sym}USDT", Decimal(0))
+    return result
 
 
 def to_asset_position(asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal) -> AssetPosition:

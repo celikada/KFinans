@@ -1,7 +1,10 @@
+import logging
 from decimal import Decimal
 from web3 import AsyncWeb3
 from app.services.base import BaseBlockchainIntegration, AssetData
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 WEI = Decimal("1e18")
 

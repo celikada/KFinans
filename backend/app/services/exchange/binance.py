@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import hmac
+import logging
 import time
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -8,6 +9,8 @@ from urllib.parse import urlencode
 import httpx
 
 from app.services.base import BaseExchangeIntegration, AssetData
+
+logger = logging.getLogger(__name__)
 
 _BASE = "https://api.binance.com"
 _STABLECOIN_USD: dict[str, Decimal] = {

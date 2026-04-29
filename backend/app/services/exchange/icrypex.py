@@ -1,7 +1,10 @@
 import asyncio
+import logging
 import httpx
 from decimal import Decimal
 from app.services.base import BaseIntegration, AssetData
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_URL = "https://account.icrypex.com/connect/token"
 _BASE = "https://api.icrypex.com"

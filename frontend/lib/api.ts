@@ -1,4 +1,4 @@
-const BASE = "http://localhost:8000/api/v1";
+const BASE = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1`;
 
 function getToken() {
   return typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
@@ -32,6 +32,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? res.statusText);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -44,16 +45,99 @@ export const api = {
 
   getIntegrations: () => request<IntegrationDTO[]>("/integrations"),
 
-  addIntegration: (provider: string, api_key: string, api_secret?: string) =>
+  addIntegration: (provider: string, api_key: string, api_secret?: string, extra_token?: string) =>
     request<IntegrationDTO>("/integrations", {
       method: "POST",
-      body: JSON.stringify({ provider, api_key, api_secret }),
+      body: JSON.stringify({ provider, api_key, api_secret, extra_token }),
     }),
 
   removeIntegration: (provider: string) =>
     request<void>(`/integrations/${provider}`, { method: "DELETE" }),
 
-  getCryptoPositions: () => request<CryptoPositionDTO[]>("/portfolio/crypto"),
+  getCryptoPositions: () => request<{ positions: CryptoPositionDTO[]; errors: Record<string, string> }>("/portfolio/crypto"),
+
+  getWallets: () => request<WalletDTO[]>("/wallets"),
+  addWallet: (chain: string, address: string, label?: string) =>
+    request<WalletDTO>("/wallets", {
+      method: "POST",
+      body: JSON.stringify({ chain, address, label }),
+    }),
+  removeWallet: (walletId: string) =>
+    request<void>(`/wallets/${walletId}`, { method: "DELETE" }),
+  getWalletPositions: () =>
+    request<{ positions: WalletPositionDTO[]; errors: Record<string, string> }>("/portfolio/wallets"),
+
+  getStockHoldings: () => request<StockHoldingDTO[]>("/portfolio/stocks/holdings"),
+  saveStockHoldings: (holdings: StockHoldingDTO[]) =>
+    request<StockHoldingDTO[]>("/portfolio/stocks/holdings", {
+      method: "PUT",
+      body: JSON.stringify(holdings),
+    }),
+  stockPreview: (holdings: StockHoldingDTO[]) =>
+    request<StockPositionDTO[]>("/portfolio/stocks/preview", {
+      method: "POST",
+      body: JSON.stringify(holdings),
+    }),
+  exportStockHoldings: async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/portfolio/stocks/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hisse-senedi.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importStockHoldings: async (file: File): Promise<StockHoldingDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/portfolio/stocks/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+
+  exportWallets: async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/wallets/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "blockchain-cüzdanları.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  importWallets: async (file: File): Promise<WalletDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/wallets/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
 
   getTefasHoldings: () =>
     request<TefasHoldingDTO[]>("/portfolio/tefas/holdings"),
@@ -114,6 +198,44 @@ export interface CryptoPositionDTO {
   symbol: string;
   liquid_quantity: string;
   staked_quantity: string;
+  unit_price_usd: string;
+  unit_price_tl: string;
+  total_value_tl: string;
+}
+
+export interface StockHoldingDTO {
+  ticker: string;
+  quantity: number;
+  name: string;
+}
+
+export interface StockPositionDTO {
+  ticker: string;
+  name: string;
+  quantity: string;
+  currency: string;
+  unit_price_original: string;
+  unit_price_tl: string;
+  total_value_tl: string;
+}
+
+export interface WalletDTO {
+  id: string;
+  chain: string;
+  address: string;
+  label: string | null;
+  is_active: boolean;
+}
+
+export interface WalletPositionDTO {
+  wallet_id: string;
+  chain: string;
+  address: string;
+  label: string | null;
+  symbol: string;
+  liquid_quantity: string;
+  staked_quantity: string;
+  pending_rewards: string;
   unit_price_usd: string;
   unit_price_tl: string;
   total_value_tl: string;

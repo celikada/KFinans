@@ -1,13 +1,14 @@
+import asyncio
+import logging
 from decimal import Decimal
 from web3 import AsyncWeb3
 from app.services.base import BaseBlockchainIntegration, AssetData
 from app.config import settings
 
-# Sonic SFC (Special Fee Contract) — staking arayüzü
-# Adres Sonic dokümantasyonundan doğrulanmalı: https://docs.soniclabs.com
+logger = logging.getLogger(__name__)
+
 SFC_ADDRESS = "0xFC00FACE00000000000000000000000000000000"
 
-# Minimum ABI: stake okuma için gerekli metodlar
 SFC_ABI = [
     {
         "inputs": [{"name": "delegator", "type": "address"}, {"name": "toValidatorID", "type": "uint256"}],
@@ -33,6 +34,7 @@ SFC_ABI = [
 ]
 
 WEI = Decimal("1e18")
+_CONCURRENCY = 20  # paralel RPC çağrısı limiti
 
 
 class SonicService(BaseBlockchainIntegration):
@@ -43,25 +45,36 @@ class SonicService(BaseBlockchainIntegration):
 
     async def fetch(self) -> list[AssetData]:
         checksum_addr = AsyncWeb3.to_checksum_address(self.address)
-        sfc = self._w3.eth.contract(address=AsyncWeb3.to_checksum_address(SFC_ADDRESS), abi=SFC_ABI)
+        sfc = self._w3.eth.contract(
+            address=AsyncWeb3.to_checksum_address(SFC_ADDRESS), abi=SFC_ABI
+        )
 
-        # Liquid S bakiyesi
-        balance_wei = await self._w3.eth.get_balance(checksum_addr)
+        balance_wei, last_validator_id = await asyncio.gather(
+            self._w3.eth.get_balance(checksum_addr),
+            sfc.functions.lastValidatorID().call(),
+        )
         liquid = Decimal(balance_wei) / WEI
 
-        # Tüm validator'lara karşı stake miktarlarını sorgula
-        total_staked = Decimal(0)
-        total_rewards = Decimal(0)
+        # Paralel stake sorgusu — semaphore ile aşırı yükü önle
+        sem = asyncio.Semaphore(_CONCURRENCY)
 
-        last_validator_id = await sfc.functions.lastValidatorID().call()
-        for validator_id in range(1, last_validator_id + 1):
-            try:
-                stake_wei = await sfc.functions.getStake(checksum_addr, validator_id).call()
-                rewards_wei = await sfc.functions.pendingRewards(checksum_addr, validator_id).call()
-                total_staked += Decimal(stake_wei) / WEI
-                total_rewards += Decimal(rewards_wei) / WEI
-            except Exception:
-                continue
+        async def query_validator(vid: int) -> tuple[int, int]:
+            async with sem:
+                try:
+                    stake = await sfc.functions.getStake(checksum_addr, vid).call()
+                    if stake == 0:
+                        return 0, 0
+                    rewards = await sfc.functions.pendingRewards(checksum_addr, vid).call()
+                    return stake, rewards
+                except Exception:
+                    return 0, 0
+
+        results = await asyncio.gather(
+            *[query_validator(vid) for vid in range(1, last_validator_id + 1)]
+        )
+
+        total_staked = sum(Decimal(s) for s, _ in results) / WEI
+        total_rewards = sum(Decimal(r) for _, r in results) / WEI
 
         assets = []
         if liquid > 0 or total_staked > 0:
