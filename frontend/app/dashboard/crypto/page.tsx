@@ -226,12 +226,32 @@ export default function CryptoPage() {
           <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{posError}</p>
         )}
 
-        {!loadingPositions && positions.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">Pozisyonlar</h2>
-              <span className="text-lg font-bold text-gray-900">{fmtTL(totalTL)} ₺</span>
-            </div>
+        {!loadingPositions && positions.length > 0 && (() => {
+          const byProvider = Object.entries(
+            positions.reduce<Record<string, number>>((acc, p) => {
+              acc[p.provider] = (acc[p.provider] ?? 0) + parseFloat(p.total_value_tl);
+              return acc;
+            }, {})
+          ).sort((a, b) => b[1] - a[1]);
+
+          return (
+            <>
+              {byProvider.length > 1 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex gap-3 flex-wrap">
+                  {byProvider.map(([prov, total]) => (
+                    <div key={prov} className="flex-1 min-w-[140px] bg-gray-50 rounded-xl px-4 py-3">
+                      <p className="text-xs text-gray-400 mb-1">{PROVIDER_LABELS[prov] ?? prov}</p>
+                      <p className="text-sm font-bold text-gray-900">{fmtTL(total)} ₺</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-gray-700">Pozisyonlar</h2>
+                  <span className="text-lg font-bold text-gray-900">{fmtTL(totalTL)} ₺</span>
+                </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
@@ -292,7 +312,9 @@ export default function CryptoPage() {
               </tbody>
             </table>
           </div>
-        )}
+        </>
+          );
+        })()}
       </main>
     </div>
   );
