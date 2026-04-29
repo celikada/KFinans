@@ -40,6 +40,17 @@ export default function CryptoPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"value" | "name" | "amount">("value");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  function toggleSort(col: "value" | "name" | "amount") {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(col);
+      setSortDir(col === "name" ? "asc" : "desc");
+    }
+  }
 
   useEffect(() => {
     api.getIntegrations().then((data) => {
@@ -222,15 +233,35 @@ export default function CryptoPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-6 py-3 text-left">Coin</th>
-                  <th className="px-6 py-3 text-right">Miktar</th>
-                  <th className="px-6 py-3 text-right">Fiyat (USDT)</th>
-                  <th className="px-6 py-3 text-right">Toplam (₺)</th>
+                  {(["name", "amount", null, "value"] as const).map((col, i) => {
+                    const labels = ["Coin", "Miktar", "Fiyat (USDT)", "Toplam (₺)"];
+                    const aligns = ["text-left", "text-right", "text-right", "text-right"];
+                    const active = col && sortBy === col;
+                    const arrow = sortDir === "desc" ? " ↓" : " ↑";
+                    return (
+                      <th
+                        key={i}
+                        className={`px-6 py-3 ${aligns[i]} ${col ? "cursor-pointer select-none hover:text-gray-600" : ""} ${active ? "text-gray-700" : ""}`}
+                        onClick={() => col && toggleSort(col)}
+                      >
+                        {labels[i]}{active && arrow}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {positions
-                  .sort((a, b) => parseFloat(b.total_value_tl) - parseFloat(a.total_value_tl))
+                {[...positions]
+                  .sort((a, b) => {
+                    const dir = sortDir === "desc" ? -1 : 1;
+                    if (sortBy === "name") return dir * a.symbol.localeCompare(b.symbol);
+                    if (sortBy === "amount") {
+                      const qa = parseFloat(a.liquid_quantity) + parseFloat(a.staked_quantity);
+                      const qb = parseFloat(b.liquid_quantity) + parseFloat(b.staked_quantity);
+                      return dir * (qa - qb);
+                    }
+                    return dir * (parseFloat(a.total_value_tl) - parseFloat(b.total_value_tl));
+                  })
                   .map((pos) => {
                     const totalQty = parseFloat(pos.liquid_quantity) + parseFloat(pos.staked_quantity);
                     return (
