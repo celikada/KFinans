@@ -1,0 +1,420 @@
+# Sistem Mimarisi ve Veritabanı Şeması
+
+**Sahip ajanlar:** `architect`, `dba`
+**İlgili dokümanlar:** [api-referansi.md](./api-referansi.md), [altyapi-test.md](./altyapi-test.md)
+
+---
+
+## 1. Mimari Felsefe
+
+KFinans **modüler monolit** mimarisi kullanır. Mevcut ölçekte (Faz 1-3 hedef: ~10K kullanıcı) mikroservis karmaşıklığı (service mesh, distributed tracing, inter-service auth) gereksizdir. Modüler yapı kod içinde net sınırlar çizer ve gelecekte servis ayırımı gerekirse refactor maliyetini düşürür.
+
+### Karar Çerçevesi
+
+| Kriter | Monolit (✓) | Mikroservis |
+|--------|------------|-------------|
+| Takım büyüklüğü | 1-3 kişi | 5+ takım |
+| Trafik | <100 RPS sürekli | >1K RPS sürekli |
+| Servis sayısı | 1 backend yeterli | Bağımsız ölçeklenecek 3+ alan |
+| Karmaşıklık bütçesi | Düşük | Yüksek (k8s + service mesh + observability) |
+
+KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mimaride kalınacak.
+
+---
+
+## 2. Yüksek Seviyeli Mimari
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                         İstemci Katmanı                          │
+│   ┌────────────────┐                       ┌─────────────────┐   │
+│   │  Next.js Web   │                       │ Flutter Android │   │
+│   │  app.kfinans.x │                       │  (Play Store)   │   │
+│   └────────┬───────┘                       └────────┬────────┘   │
+└────────────┼────────────────────────────────────────┼────────────┘
+             │ HTTPS / REST (api.kfinans.x)           │
+┌────────────▼─────────────────────────────────────────▼───────────┐
+│                       Kubernetes Cluster                          │
+│                       namespace: kfinans                          │
+│                                                                   │
+│   ┌─────────────────────────────────────────────────────────┐    │
+│   │           nginx-ingress + cert-manager                  │    │
+│   │   api.kfinans.x → backend-svc:80                        │    │
+│   │   app.kfinans.x → frontend-svc:80                       │    │
+│   └────────┬───────────────────────┬──────────────────────-─┘    │
+│            │                        │                             │
+│   ┌────────▼─────────┐    ┌────────▼─────────┐                   │
+│   │  backend Deploy  │    │ frontend Deploy  │                   │
+│   │  FastAPI+uvicorn │    │  Next.js (SSR)   │                   │
+│   │  replicas: 2     │    │  replicas: 2     │                   │
+│   └────────┬─────────┘    └──────────────────┘                   │
+│            │                                                      │
+│   ┌────────▼─────────────────────────────────────────────┐       │
+│   │  PostgreSQL StatefulSet (bitnami/postgresql Helm)   │       │
+│   │  Persistent Volume Claim (50Gi)                     │       │
+│   └─────────────────────────────────────────────────────┘       │
+│                                                                   │
+│   ┌──────────────────────────────────────────────────────┐       │
+│   │  APScheduler (backend pod içinde)                    │       │
+│   │  Pazar 23:00 → portfolio_snapshots'a yazar          │       │
+│   └──────────────────────────────────────────────────────┘       │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ HTTPS (giden trafik)
+       ┌──────────────────────────────────────────┐
+       │  Anthropic API (Claude)                  │
+       │  Binance, iCrypex (CCXT)                 │
+       │  Sonic/Avalanche/Ethereum RPC            │
+       │  Yahoo Finance, TEFAS                    │
+       │  iyzico ödeme (Faz 3)                    │
+       └──────────────────────────────────────────┘
+```
+
+---
+
+## 3. Backend İç Yapısı (Modüler Monolit)
+
+```
+backend/app/
+├── main.py                # FastAPI app, lifespan, CORS, slowapi, /health
+├── config.py              # pydantic-settings (Settings class)
+├── scheduler.py           # APScheduler — Pazar 23:00 haftalık snapshot
+│
+├── api/v1/                # HTTP arayüz katmanı
+│   ├── router.py          # Tüm router'ları birleştirir
+│   ├── auth.py            # /auth (login, register, refresh) + rate limit
+│   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking)
+│   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel)
+│   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel)
+│   ├── wallets.py         # /wallets (blockchain adres CRUD + Excel)
+│   ├── integrations.py    # /integrations (exchange API key)
+│   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
+│
+├── core/                  # Çekirdek altyapı
+│   ├── deps.py            # get_db, get_current_user
+│   ├── security.py        # JWT, bcrypt, Fernet encrypt/decrypt
+│   └── limiter.py         # slowapi Limiter (paylaşılan instance)
+│
+├── services/              # İş mantığı katmanı
+│   ├── exchange/
+│   │   ├── base.py        # BaseExchangeIntegration
+│   │   ├── binance.py     # CCXT wrapper
+│   │   ├── binancetr.py   # Session token (cid cookie) ile özel istemci
+│   │   └── icrypex.py     # CCXT wrapper
+│   ├── blockchain/
+│   │   ├── sonic.py       # SFC staking contract, Semaphore(20) paralel
+│   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM)
+│   │   └── ethereum.py    # EVM RPC + Etherscan
+│   ├── tefas.py           # TefasService (httpx + JSON API)
+│   ├── stocks.py          # Yahoo Finance Chart API
+│   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
+│   └── advisor.py         # Anthropic SDK — claude-sonnet-4-6
+│
+├── models/                # SQLAlchemy ORM
+│   ├── user.py            # users (+ credit_balance, email_verified)
+│   ├── integration.py     # integrations + wallet_addresses
+│   ├── tefas.py           # tefas_holdings
+│   ├── stock.py           # stock_holdings
+│   ├── portfolio.py       # portfolio_snapshots + asset_positions
+│   ├── advice.py          # investment_advice
+│   └── credit.py          # credit_transactions (Faz 3)
+│
+└── schemas/               # Pydantic — request/response sözleşmeleri
+    ├── auth.py
+    ├── portfolio.py       # SnapshotOut, PortfolioChanges, CryptoPositionOut, WalletPositionOut
+    ├── tefas.py           # TefasHolding, TefasPositionOut
+    ├── stocks.py          # StockHolding, StockPositionOut
+    └── integration.py
+```
+
+### Katman Sınırları
+
+```
+api/v1/         ← HTTP istekleri, validation, response model
+   ↓
+services/       ← İş mantığı, dış API çağrıları
+   ↓
+models/         ← Veritabanı erişimi (SQLAlchemy)
+```
+
+**Kural:** `models/` `services/`'i, `services/` `api/`'yi import edemez (bağımlılık tek yönlü).
+
+---
+
+## 4. Veri Akışı
+
+### 4.1 Anlık Pozisyon Sorgulama (Cache yok, gerçek zamanlı)
+
+```
+GET /api/v1/portfolio/crypto
+  ↓
+api/v1/portfolio.py: get_crypto_positions()
+  ↓
+SELECT integrations WHERE user_id=X AND is_active
+  ↓
+For each integration (paralel: asyncio.gather):
+  decrypt_secret(encrypted_key) → API key
+  BinanceService.fetch() → Asset list
+  ↓
+fetch_usd_to_tl() → güncel kur
+  ↓
+Her asset için: total_value_tl = (liquid + staked) * unit_price_usd * usd_tl
+  ↓
+JSON response
+```
+
+### 4.2 Haftalık Snapshot (APScheduler — şu an boş, implement edilecek)
+
+```
+Her Pazar 23:00 (Europe/Istanbul)
+  ↓
+Tüm aktif kullanıcılar için döngü:
+  Tüm pozisyonları topla (kripto + blockchain + TEFAS + hisse)
+  TL'ye normalize et (aggregator.py)
+  ↓
+INSERT portfolio_snapshots (user_id, snapshot_date, total_value_tl)
+INSERT asset_positions (snapshot_id, source_type, asset_type, ...)
+  ↓
+Eski veriden değişim hesaplanabilir (calculate_changes)
+```
+
+---
+
+## 5. Veritabanı Şeması
+
+### 5.1 Genel Kurallar
+- Tüm primary key'ler **UUID** (`gen_random_uuid()` PostgreSQL default)
+- Tüm timestamp'ler **timezone-aware** (`TIMESTAMPTZ`)
+- Para tutarları **NUMERIC** (asla FLOAT) — kayıp kabul edilmez
+- Soft delete yok (Faz 3'te `deleted_at` eklenecek — KVKK 30 gün bekleme için)
+
+### 5.2 Tablolar
+
+#### `users`
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+email           TEXT UNIQUE NOT NULL
+password_hash   TEXT NOT NULL                    -- bcrypt
+risk_profile    TEXT                              -- 'conservative'|'balanced'|'aggressive'
+credit_balance  INT NOT NULL DEFAULT 0           -- Faz 3
+email_verified  BOOLEAN NOT NULL DEFAULT FALSE   -- Faz 2
+verify_token    TEXT                              -- e-posta doğrulama tokeni
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_users_email (email)
+```
+
+#### `integrations` (Exchange API key'ler)
+```sql
+id               UUID PK
+user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+provider         TEXT NOT NULL                   -- 'binance'|'binancetr'|'icrypex'
+encrypted_key    TEXT NOT NULL                   -- Fernet
+encrypted_secret TEXT                             -- Fernet
+encrypted_extra  TEXT                             -- Fernet — Binance TR session token
+is_active        BOOLEAN NOT NULL DEFAULT TRUE
+last_synced_at   TIMESTAMPTZ
+created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_integrations_user_id (user_id)
+UNIQUE (user_id, provider)
+```
+
+#### `wallet_addresses` (Blockchain cüzdanları)
+```sql
+id         UUID PK
+user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+chain      TEXT NOT NULL                         -- 'sonic'|'avalanche_p'|'avalanche_c'|'ethereum'
+address    TEXT NOT NULL
+label      TEXT
+is_active  BOOLEAN NOT NULL DEFAULT TRUE
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+
+UNIQUE (user_id, chain, address)
+INDEX ix_wallet_addresses_user_id (user_id)
+```
+
+#### `tefas_holdings`
+```sql
+id       UUID PK
+user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+code     VARCHAR(10) NOT NULL                    -- 'GO3', 'TI2' vb.
+quantity NUMERIC(20, 8) NOT NULL
+name     TEXT NOT NULL DEFAULT ''
+
+INDEX ix_tefas_holdings_user_id (user_id)
+```
+
+#### `stock_holdings`
+```sql
+id       UUID PK
+user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+ticker   VARCHAR(20) NOT NULL                    -- 'THYAO.IS', 'AAPL', 'BP.L'
+quantity NUMERIC(20, 8) NOT NULL
+name     TEXT NOT NULL DEFAULT ''
+
+INDEX ix_stock_holdings_user_id (user_id)
+```
+
+> Hisse fiyatları **DB'de saklanmaz**. Her preview/dashboard isteğinde Yahoo Finance'tan çekilir; TRY dışı fiyatlar Binance USDTTRY kuru ile normalize edilir.
+
+#### `portfolio_snapshots` + `asset_positions`
+```sql
+portfolio_snapshots
+  id              UUID PK
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  snapshot_date   DATE NOT NULL
+  total_value_tl  NUMERIC(18, 2) NOT NULL
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+
+  UNIQUE (user_id, snapshot_date)
+  INDEX ix_portfolio_snapshots_user_date (user_id, snapshot_date DESC)
+
+asset_positions
+  id                UUID PK
+  snapshot_id       UUID NOT NULL REFERENCES portfolio_snapshots(id) ON DELETE CASCADE
+  source_type       TEXT NOT NULL  -- 'exchange'|'blockchain'|'fund'|'manual'
+  provider          TEXT NOT NULL  -- 'binance', 'sonic', 'tefas' vb.
+  asset_type        TEXT NOT NULL  -- 'crypto'|'staked_crypto'|'fund'|'pension'|'cash'|'manual'
+  symbol            TEXT NOT NULL
+  name              TEXT NOT NULL
+  liquid_quantity   NUMERIC(28, 8) NOT NULL
+  staked_quantity   NUMERIC(28, 8) NOT NULL DEFAULT 0
+  pending_rewards   NUMERIC(28, 8) NOT NULL DEFAULT 0
+  unit_price_tl     NUMERIC(18, 4) NOT NULL
+  total_value_tl    NUMERIC(18, 2) NOT NULL
+  weight_pct        NUMERIC(5, 2) NOT NULL
+  wallet_address_id UUID REFERENCES wallet_addresses(id) ON DELETE SET NULL
+
+  INDEX ix_asset_positions_snapshot_id (snapshot_id)
+```
+
+#### `investment_advice` (AI tavsiyeler)
+```sql
+id                UUID PK
+user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+snapshot_id       UUID REFERENCES portfolio_snapshots(id) ON DELETE SET NULL
+horizon           TEXT NOT NULL                  -- 'medium'|'long'
+content           TEXT NOT NULL                  -- Markdown
+credits_used      INT NOT NULL                   -- 5 (medium) | 10 (long)
+prompt_tokens     INT NOT NULL
+completion_tokens INT NOT NULL
+generated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_investment_advice_user_id (user_id)
+```
+
+#### `credit_transactions` (Faz 3 — henüz yok)
+```sql
+id           UUID PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT
+amount       INT NOT NULL                        -- pozitif: yükleme, negatif: kullanım
+reason       TEXT NOT NULL                       -- 'purchase'|'ai_advice_medium'|'crypto_sync'
+reference_id TEXT                                 -- iyzico/Stripe işlem ID
+idempotency_key TEXT UNIQUE                       -- çift ödeme koruması
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_credit_transactions_user_id (user_id)
+INDEX ix_credit_transactions_created_at (created_at DESC)
+```
+
+> Detaylı kredi sistemi: [kredi-sistemi.md](./kredi-sistemi.md)
+
+---
+
+## 6. Mevcut Migration'lar
+
+| Revision | Açıklama |
+|----------|----------|
+| `(base)` | İlk şema (users, integrations, wallet_addresses, tefas_holdings, portfolio_snapshots, asset_positions, investment_advice) |
+| `b2c3d4e5f6a7` | `integrations.encrypted_extra` kolonu (Binance TR session token) |
+| `c3d4e5f6a7b8` | `stock_holdings` tablosu |
+
+### Eksik (Henüz Yapılmamış)
+- [ ] Tüm `user_id` FK'larında index (performans için kritik)
+- [ ] `portfolio_snapshots(user_id, snapshot_date DESC)` composite index
+- [ ] `users.credit_balance` ve `email_verified` kolonları
+- [ ] `credit_transactions` tablosu (Faz 3)
+- [ ] `expense_categories` + `expenses` tabloları (Faz 3 — harcama takibi)
+- [ ] Soft delete: `deleted_at TIMESTAMPTZ` her tabloda
+
+---
+
+## 7. Veri Kaynakları ve Servisler
+
+### 7.1 BaseIntegration Pattern
+
+Her dış veri kaynağı `services/` altında `BaseIntegration` (veya `BaseExchangeIntegration`) sınıfından türer ve `async def fetch()` metodunu implement eder. Dönen veri **standart `Asset` veri yapısı** ile normalize edilir.
+
+```python
+# Standart Asset şeması
+@dataclass
+class Asset:
+    provider: str          # 'binance', 'sonic' vb.
+    symbol: str            # 'BTC', 'AVAX'
+    name: str
+    liquid_quantity: Decimal
+    staked_quantity: Decimal
+    pending_rewards: Decimal
+    unit_price_usd: Decimal
+```
+
+### 7.2 Servis Detayları
+
+| Servis | Sınıf | Notlar |
+|--------|-------|--------|
+| Binance | `BinanceService` | CCXT, fetch_balance + savings/locked |
+| Binance TR | `BinanceTRService` | Özel istemci, session token (cid cookie); GeeTest CAPTCHA nedeniyle programatik login YOK |
+| iCrypex | `ICrypexService` | CCXT wrapper |
+| Sonic | `SonicService` | web3.py + SFC staking contract; `Semaphore(20)` ile paralel validator sorgu |
+| Avalanche P-Chain | `AvalanchePChainService` | `platform.getStake` REST API, httpx |
+| Avalanche C-Chain | `AvalancheCChainService` | EVM RPC, web3.py |
+| Ethereum | `EthereumService` | EVM RPC + Etherscan |
+| TEFAS | `TefasService` | httpx + JSON API |
+| Yahoo Finance | `fetch_stock_quotes()` | httpx (`v8/finance/chart/{ticker}`) |
+| Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` |
+
+> Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)
+
+---
+
+## 8. Performans ve Ölçeklenebilirlik
+
+### 8.1 Mevcut Bottleneck'ler
+- **Anlık fiyat çekimi:** Her dashboard render'ı dış API çağrısı yapıyor → cache eklenmeli (Redis veya in-memory TTL)
+- **Sonic SFC validator sorgusu:** ~20 validator için Semaphore(20) paralel — daha fazlası rate limit riski
+- **Crypto fetch'ler sıralı integration için:** `asyncio.gather` ile paralelleştirilebilir
+
+### 8.2 İyileştirme Önerileri (Faz 3 Önce)
+- USD/TRY kuru için 60 saniye in-memory cache
+- TEFAS fiyatları için günlük cache (gün içinde değişmez)
+- Yahoo Finance quotes için 5 dakika cache
+- PostgreSQL connection pool: `pool_size=10, max_overflow=20` (default'tan artır)
+
+---
+
+## 9. Dış Bağımlılıklar (Failure Modes)
+
+| Servis | Failure Etkisi | Mitigation |
+|--------|----------------|------------|
+| Binance API | Kripto pozisyon görünmez | Try/except + errors response field |
+| Sonic RPC | Sonic cüzdan görünmez | Per-wallet error tracking |
+| TEFAS API | Fon fiyatı eski kalır | Last known price gösterilir |
+| Yahoo Finance | Hisse fiyatı yok | 422 + ticker doğrulama uyarısı |
+| Anthropic API | Tavsiye üretilmez | Kredi tüketilmez (transaction rollback) |
+| iyzico | Ödeme alınmaz | İdempotency + retry; Stripe fallback (Faz 4) |
+| PostgreSQL | Sistem çöker | StatefulSet replikası + PITR backup (Faz 3) |
+
+---
+
+## 10. Mimari Değişiklik Kontrol Listesi
+
+Yeni özellik / refactor öncesi şunları kontrol et:
+- [ ] Yeni servis `BaseIntegration` pattern'ine uyuyor mu?
+- [ ] DB migration eklendi mi (Alembic)?
+- [ ] Yeni endpoint'te `response_model` ve `status_code` belirli mi?
+- [ ] Inline Pydantic model yok, `schemas/` altında mı?
+- [ ] Auth gerekli mi? `Depends(get_current_user)` var mı?
+- [ ] Rate limit gerekli mi? `@limiter.limit(...)` eklendi mi?
+- [ ] Logging eklendi mi (önemli olaylar için)?
+- [ ] Index gerekecek query'ler için DBA'ya danışıldı mı?
