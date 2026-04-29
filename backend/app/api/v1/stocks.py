@@ -11,8 +11,25 @@ from app.core.deps import get_db, get_current_user
 from app.models.stock import StockHolding as StockHoldingModel
 from app.models.user import User
 from app.schemas.stocks import StockHolding, StockPositionOut
-from app.services.aggregator import fetch_usd_to_tl
+from app.services.aggregator import fetch_gbp_to_usd, fetch_usd_to_tl
 from app.services.stocks import fetch_stock_quotes
+
+
+def convert_to_tl(price: Decimal, currency: str, usd_tl: Decimal, gbp_usd: Decimal) -> Decimal:
+    """Hisse senedi fiyatini TL'ye dönüştürür.
+
+    GBp (pence): pence -> GBP -> USD -> TL zinciri uygulanir.
+    USD: USD -> TL.
+    TRY: direkt.
+    Diger: USD varsayimiyla USD -> TL.
+    """
+    if currency == "TRY":
+        return price
+    if currency == "GBp":
+        gbp = price / Decimal("100")
+        usd = gbp * gbp_usd
+        return (usd * usd_tl).quantize(Decimal("0.0001"))
+    return (price * usd_tl).quantize(Decimal("0.0001"))
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/stocks", tags=["stocks"])
@@ -54,9 +71,10 @@ async def stock_preview(
     _: Annotated[User, Depends(get_current_user)],
 ):
     tickers = [h.ticker.upper() for h in holdings]
-    quotes, usd_tl = await asyncio.gather(
+    quotes, usd_tl, gbp_usd = await asyncio.gather(
         fetch_stock_quotes(tickers),
         fetch_usd_to_tl(),
+        fetch_gbp_to_usd(),
     )
 
     out = []
@@ -68,12 +86,7 @@ async def stock_preview(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"{ticker} için fiyat alınamadı. Yahoo Finance ticker'ını kontrol edin (ör. THYAO.IS, AAPL).",
             )
-        if q.currency == "TRY":
-            price_tl = q.price
-        elif q.currency == "GBp":
-            price_tl = (q.price / 100 * usd_tl).quantize(Decimal("0.0001"))
-        else:
-            price_tl = (q.price * usd_tl).quantize(Decimal("0.0001"))
+        price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd)
 
         qty = Decimal(str(h.quantity))
         out.append(StockPositionOut(
@@ -105,15 +118,15 @@ async def export_stock_holdings(
     if rows:
         try:
             tickers = [r.ticker for r in rows]
-            usd_tl, raw_quotes = await asyncio.gather(fetch_usd_to_tl(), fetch_stock_quotes(tickers))
+            usd_tl, gbp_usd, raw_quotes = await asyncio.gather(
+                fetch_usd_to_tl(),
+                fetch_gbp_to_usd(),
+                fetch_stock_quotes(tickers),
+            )
             for ticker, q in raw_quotes.items():
                 if q:
-                    if q.currency == "TRY":
-                        quotes[ticker] = (q.price, q.currency)
-                    elif q.currency == "GBp":
-                        quotes[ticker] = ((q.price / 100 * usd_tl).quantize(Decimal("0.01")), q.currency)
-                    else:
-                        quotes[ticker] = ((q.price * usd_tl).quantize(Decimal("0.01")), q.currency)
+                    price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd).quantize(Decimal("0.01"))
+                    quotes[ticker] = (price_tl, q.currency)
         except Exception:
             logger.warning("Hisse export: canlı fiyat alınamadı")
 

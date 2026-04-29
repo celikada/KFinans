@@ -18,6 +18,14 @@ async def fetch_usd_to_tl() -> Decimal:
         return Decimal(str(data["rates"]["TRY"]))
 
 
+async def fetch_gbp_to_usd() -> Decimal:
+    """Anlık GBP/USD kurunu çeker. UK hisselerinin (GBp) TL'ye dönüşümünde kullanilir."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get("https://api.exchangerate-api.com/v4/latest/GBP")
+        data = resp.json()
+        return Decimal(str(data["rates"]["USD"]))
+
+
 _BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
 
 async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
