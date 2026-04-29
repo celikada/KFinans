@@ -21,9 +21,15 @@ class BinanceService(BaseExchangeIntegration):
 
     def __init__(self, api_key: str, api_secret: str):
         super().__init__(api_key, api_secret)
+        self._time_offset_ms: int = 0
+
+    async def _sync_time(self, client: httpx.AsyncClient) -> None:
+        r = await client.get(f"{_BASE}/api/v3/time")
+        server_ms = r.json()["serverTime"]
+        self._time_offset_ms = server_ms - int(time.time() * 1000)
 
     def _sign(self, params: dict) -> dict:
-        params["timestamp"] = int(time.time() * 1000)
+        params["timestamp"] = int(time.time() * 1000) + self._time_offset_ms
         query = urlencode(params)
         sig = hmac.new(self.api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
         params["signature"] = sig
@@ -44,16 +50,21 @@ class BinanceService(BaseExchangeIntegration):
             headers=self._auth_header(),
         )
         r.raise_for_status()
-        return {
-            b["asset"]: Decimal(b["free"]) + Decimal(b["locked"])
-            for b in r.json()["balances"]
-            if Decimal(b["free"]) + Decimal(b["locked"]) > 0
-        }
+        balances = {}
+        for b in r.json()["balances"]:
+            asset = b["asset"]
+            # LD* = Simple Earn kilitli receipt token'ları; gerçek varlıklar earn API'den gelir
+            if asset.startswith("LD"):
+                continue
+            amt = Decimal(b["free"]) + Decimal(b["locked"])
+            if amt > 0:
+                balances[asset] = amt
+        return balances
 
     async def _get_flexible_earn(self, client: httpx.AsyncClient) -> dict[str, Decimal]:
         """Simple Earn — esnek ürünler."""
         balances: dict[str, Decimal] = {}
-        current = 0
+        current = 1
         page_size = 100
         while True:
             r = await client.get(
@@ -101,20 +112,29 @@ class BinanceService(BaseExchangeIntegration):
 
     async def fetch(self) -> list[AssetData]:
         async with httpx.AsyncClient(timeout=20) as client:
-            prices_task = asyncio.create_task(self._get_all_prices(client))
-            spot_task = asyncio.create_task(self._get_spot_balances(client))
+            await self._sync_time(client)
 
-            prices, spot = await asyncio.gather(prices_task, spot_task)
-
+            prices, spot = await asyncio.gather(
+                self._get_all_prices(client),
+                self._get_spot_balances(client),
+            )
             flex_earn, locked_earn = await asyncio.gather(
                 self._get_flexible_earn(client),
                 self._get_locked_earn(client),
             )
 
+        btc_price = prices.get("BTCUSDT", Decimal(0))
+
         def price_of(symbol: str) -> Decimal:
             if symbol in _STABLECOIN_USD:
                 return _STABLECOIN_USD[symbol]
-            return prices.get(f"{symbol}USDT", Decimal(0))
+            if f"{symbol}USDT" in prices:
+                return prices[f"{symbol}USDT"]
+            # BTC çifti üzerinden çevir
+            btc_pair = prices.get(f"{symbol}BTC", Decimal(0))
+            if btc_pair and btc_price:
+                return (btc_pair * btc_price).quantize(Decimal("0.00000001"))
+            return Decimal(0)
 
         all_symbols = set(spot) | set(flex_earn) | set(locked_earn)
         assets = []
@@ -125,6 +145,7 @@ class BinanceService(BaseExchangeIntegration):
             if total <= 0:
                 continue
             unit_price = price_of(symbol)
+            # Fiyatı bilinmeyen token'ları atla (dust veya Binance iç token'ları)
             if unit_price == 0 and symbol not in _STABLECOIN_USD:
                 continue
             assets.append(AssetData(
