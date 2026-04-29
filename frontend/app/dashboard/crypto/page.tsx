@@ -55,7 +55,7 @@ export default function CryptoPage() {
 
   useEffect(() => {
     api.getIntegrations().then((data) => {
-      const crypto = data.filter((i) => i.provider === "binance" || i.provider === "icrypex");
+      const crypto = data.filter((i) => i.provider in PROVIDER_LABELS);
       setIntegrations(crypto);
       if (crypto.length > 0) fetchPositions();
     });
