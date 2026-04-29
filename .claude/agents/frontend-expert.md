@@ -65,3 +65,9 @@ DELETE /wallets/{id}      → cüzdan sil
 - `export function proxy(request)` — fonksiyon adı `proxy` olmalı
 - Turbopack dev server: watch error'lar (`/app/src`) cosmetic, işlevselliği etkilemez
 - `output: "standalone"` — Docker production build için aktif
+
+## Diğer Ajanlara Yönlendirme
+- **Yeni endpoint için backend'de değişiklik gerekiyorsa** → `backend-expert`
+- **API yanıtının yapısı/içeriği değişmeli** → `backend-expert` ile koordineli
+- **Çerez politikası, KVKK uyarıları, gizlilik banner** → `compliance-expert`
+- **Component testleri (React Testing Library)** → `test-expert`

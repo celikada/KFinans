@@ -84,3 +84,9 @@ Yeni özellik eklendiğinde şunları doğrula:
 - [ ] Hata mesajları stack trace içermiyor mu?
 - [ ] Yeni file upload endpoint'inde tip/boyut kontrolü var mı?
 - [ ] Rate limit eklendi mi (write endpoint'leri için özellikle)?
+
+## Diğer Ajanlara Yönlendirme
+- **KVKK, gizlilik politikası, yasal uyumluluk** → `compliance-expert`
+- **Veritabanı seviyesi koruma (row-level security, encrypted columns)** → `dba` ile koordineli
+- **HTTPS/TLS, secret yönetimi, k8s NetworkPolicy** → `devops`
+- **API key encryption pattern'i (Fernet)** — bu ajanın domain'i

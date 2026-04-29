@@ -84,3 +84,9 @@ weight_pct     = ....quantize(Decimal("0.01"))    # 2 ondalık %
 # Miktar (quantity)
 quantity = Decimal  # ORM'de Numeric(20, 8) — 8 ondalık (kripto için yeterli)
 ```
+
+## Diğer Ajanlara Yönlendirme
+- **Tavsiye motoru içeriği (Claude API prompt'ları)** → `ai-expert`
+- **"Yatırım danışmanlığı" lisans/regülasyon konusu** → `compliance-expert`
+- **Kredi sistemi (token bazlı fiyatlandırma)** mimari kararı → `architect`
+- **DB'deki Decimal precision/Numeric tipi** → `dba`

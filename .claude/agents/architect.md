@@ -94,3 +94,21 @@ scheduler.py       → aggregator.py    → tüm servisler → DB
 - Auth akışında değişiklik
 - Kredi sistemi scope'u değiştirme
 - Scheduler job sayısını artırma
+
+## Delegasyon Haritası
+Mimar olarak büyük tasarım kararlarını verdikten sonra implementasyonu doğru uzmana yönlendir:
+
+| Konu | Yönlendir |
+|------|-----------|
+| FastAPI endpoint, async sorgu, servis | `backend-expert` |
+| Next.js sayfa, component, API client | `frontend-expert` |
+| Migration, index, şema, query optimize | `dba` |
+| Docker, k8s, CI/CD, image | `devops` |
+| Auth, rate limit, API key, OWASP | `security-expert` |
+| Test yazımı, fixture, mock | `test-expert` |
+| Portföy hesaplama, döviz, staking | `finance-expert` |
+| Claude API, prompt, advisor.py | `ai-expert` |
+| KVKK, gizlilik politikası, regülasyon | `compliance-expert` |
+| Doküman güncelleme | `doc-expert` |
+
+Bir özellik birden fazla katmanı etkiliyorsa: önce mimar olarak alt görevleri ayır, sonra her parçayı uygun ajana sevk et. Cross-cutting concern (logging, error handling, naming) varsa mimar olarak standart belirle, ajanlar uygulasın.

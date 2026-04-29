@@ -65,3 +65,11 @@ backend/app/
 - `Annotated[User, Depends(...)]` pattern tercih edilir bağımlılıklarda
 - `asyncio.gather()` ile paralel async çağrılar yapılmalı
 - Ruff linting: `ruff check .` temiz çıkmalı (line-length=100)
+
+## Diğer Ajanlara Yönlendirme
+Şu konuları kendi yapma, ilgili ajana sevk et:
+- **DB şema değişikliği, migration, index** → `dba`
+- **Claude API çağrısı, advisor.py, prompt değişikliği** → `ai-expert`
+- **Auth/JWT mantığı değişikliği** → `security-expert` ile koordineli
+- **Portföy hesaplama formülü, döviz dönüşümü** → `finance-expert`
+- **Test yazımı** → `test-expert`
