@@ -8,8 +8,10 @@ from httpx import AsyncClient
 
 
 async def _make_user(client: AsyncClient, email: str) -> dict:
+    from tests.conftest import verify_user_email
     pwd = "guclu-sifre-123"
     await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    await verify_user_email(email)
     login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 

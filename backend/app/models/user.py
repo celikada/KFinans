@@ -16,7 +16,8 @@ class User(Base):
     # conservative | balanced | aggressive
     risk_profile: Mapped[str] = mapped_column(String(20), nullable=False, default="balanced")
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    verify_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verify_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
+    verify_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())

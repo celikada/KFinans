@@ -11,7 +11,9 @@ from app.services.tefas import _EXPORT_URL
 
 
 async def _register_and_login(client: AsyncClient, email: str, password: str = "test1234") -> str:
+    from tests.conftest import verify_user_email
     await client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    await verify_user_email(email)
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
     return resp.json()["access_token"]
 

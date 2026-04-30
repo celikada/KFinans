@@ -1,12 +1,14 @@
 import os
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import NullPool
 from app.main import app
 from app.core.deps import get_db
 from app.core.limiter import limiter
 from app.models.base import Base
+from app.models.user import User
 
 TEST_DB_URL = os.getenv(
     "DATABASE_URL",
@@ -50,3 +52,20 @@ async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+async def verify_user_email(email: str) -> None:
+    """Test yardimcisi: kayit sonrasi e-posta dogrulamasini DB uzerinden simule et.
+
+    Test ortaminda gercek e-posta gonderimi yok; bu helper login'in calisabilmesi
+    icin email_verified=True yapip verify_token'i temizler.
+    """
+    async with TestSession() as session:
+        await session.execute(
+            update(User).where(User.email == email).values(
+                email_verified=True,
+                verify_token=None,
+                verify_token_expires_at=None,
+            )
+        )
+        await session.commit()

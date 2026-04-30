@@ -10,11 +10,14 @@ unutursa bu testler patlar.
 import pytest
 from httpx import AsyncClient
 
+from tests.conftest import verify_user_email
+
 
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
-    """Yeni kullanıcı oluştur, token ile birlikte döndür."""
+    """Yeni kullanıcı oluştur, e-posta dogrulamasini simule et, token ile birlikte döndür."""
     payload = {"email": email, "password": "guclu-sifre-123"}
     await client.post("/api/v1/auth/register", json=payload)
+    await verify_user_email(email)
     resp = await client.post("/api/v1/auth/login", json=payload)
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # CORS — production'da frontend domain'i ekle
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # E-posta (Resend) — kullanıcı kayıt doğrulama
+    resend_api_key: str = ""
+    email_from: str = "KFinans <noreply@kfinans.app>"
+    frontend_url: str = "http://localhost:3000"
+    verify_token_expire_hours: int = 24
+
     @property
     def ethereum_rpc_url(self) -> str:
         if self.infura_api_key:
