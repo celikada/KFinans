@@ -43,6 +43,21 @@ export const api = {
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
 
+  register: (email: string, password: string, risk_profile: string) =>
+    request<RegisterResponseDTO>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, risk_profile }),
+    }),
+
+  verifyEmail: (token: string) =>
+    request<{ detail: string }>(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+
+  resendVerification: (email: string) =>
+    request<{ detail: string }>("/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
   getIntegrations: () => request<IntegrationDTO[]>("/integrations"),
 
   addIntegration: (provider: string, api_key: string, api_secret?: string, extra_token?: string) =>
@@ -185,6 +200,14 @@ export const api = {
     return res.json();
   },
 };
+
+export interface RegisterResponseDTO {
+  id: string;
+  email: string;
+  risk_profile: string;
+  email_verified: boolean;
+  verification_email_sent: boolean;
+}
 
 export interface IntegrationDTO {
   id: string;

@@ -1,6 +1,7 @@
 "use client";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { api, setAuth } from "@/lib/api";
 
@@ -70,6 +71,13 @@ export default function LoginPage() {
             {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
           </button>
         </form>
+
+        <p className="mt-4 text-xs text-gray-400 text-center">
+          Hesabın yok mu?{" "}
+          <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+            Kayıt ol
+          </Link>
+        </p>
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-2">
