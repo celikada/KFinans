@@ -1,0 +1,18 @@
+import uuid
+from decimal import Decimal
+from sqlalchemy import String, Text, Numeric, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
+from app.models.base import Base
+
+
+class StockHolding(Base):
+    __tablename__ = "stock_holdings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    user: Mapped["User"] = relationship(back_populates="stock_holdings")
