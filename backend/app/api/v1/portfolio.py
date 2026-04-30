@@ -27,9 +27,30 @@ from app.services.exchange.icrypex import ICrypexService
 from app.services.blockchain.sonic import SonicService
 from app.services.blockchain.avalanche import AvalanchePChainService, AvalancheCChainService
 from app.services.blockchain.ethereum import EthereumService
+from app.services.snapshot import compute_and_save_snapshot
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
+
+
+@router.post("/snapshot", response_model=SnapshotOut, status_code=status.HTTP_201_CREATED)
+async def create_snapshot(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mevcut kullanici icin manuel olarak portfoy snapshot'i alir.
+
+    Otomatik haftalik job (Pazar 23:00) ile ayni mantigi calistirir; ayni gun
+    icinde tekrar cagrilirsa eski snapshot silinip yenisi olusturulur.
+    """
+    snapshot = await compute_and_save_snapshot(current_user.id, db)
+    # Asset position'lari donulen response icin tekrar yukle
+    result = await db.execute(
+        select(PortfolioSnapshot)
+        .where(PortfolioSnapshot.id == snapshot.id)
+        .options(selectinload(PortfolioSnapshot.asset_positions))
+    )
+    return result.scalar_one()
 
 
 @router.get("", response_model=SnapshotOut)

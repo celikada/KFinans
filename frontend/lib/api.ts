@@ -71,6 +71,12 @@ export const api = {
 
   getCryptoPositions: () => request<{ positions: CryptoPositionDTO[]; errors: Record<string, string> }>("/portfolio/crypto"),
 
+  createSnapshot: () =>
+    request<{ id: string; snapshot_date: string; total_value_tl: string; asset_positions: unknown[] }>(
+      "/portfolio/snapshot",
+      { method: "POST" }
+    ),
+
   getWallets: () => request<WalletDTO[]>("/wallets"),
   addWallet: (chain: string, address: string, label?: string) =>
     request<WalletDTO>("/wallets", {
