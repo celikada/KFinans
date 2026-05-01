@@ -28,6 +28,8 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 | 429 | Too Many Requests | slowapi rate limit aşıldı |
 | 402 | Payment Required | Yetersiz kredi (Faz 3) |
 | 500 | Internal Error | Beklenmeyen hata (loglanır) |
+| 502 | Bad Gateway | Snapshot — tüm kaynaklar fail |
+| 503 | Service Unavailable | Snapshot — kritik USD/TL kuru alınamadı |
 
 ### 1.4 Rate Limiting (slowapi, in-memory)
 | Endpoint | Limit |
@@ -211,10 +213,13 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
 
 // 502 Bad Gateway — hiçbir kaynaktan veri alınamadı
 { "detail": "Snapshot hesaplanamadı: tüm kaynaklar başarısız" }
+
+// 503 Service Unavailable — kritik USD/TL kuru alınamadı (TCMB + exchangerate-api ikisi de fail)
+{ "detail": "Snapshot alinamadi: ..." }
 ```
 
 > Hata izolasyonu: bir kaynak başarısız olursa diğerleri devam eder, başarısız kaynak loglanır.
-> USD/TRY kuru çekilemezse fallback değer 1.0 kullanılır (geçici çözüm — TCMB API entegrasyonu Faz 2 sonrası).
+> Döviz kuru: USD/TL kritik — TCMB primary, exchangerate-api fallback; ikisi de fail ise snapshot iptal (503). GBP/USD opsiyonel — fail ise UK hisseleri 0 değerle devam eder (201).
 
 ### `GET /portfolio/wallets`
 **Anlık** blockchain pozisyonları (Sonic, Avalanche, Ethereum).

@@ -193,16 +193,14 @@ Tüm sunum, kıyaslama ve snapshot **TL** üzerinden yapılır. USD/EUR/GBP fiya
 
 ### B.2.2 USD/TRY Kuru
 ```python
-# aggregator.py
+# aggregator.py — Faz 2'de TCMB primary'ye taşındı
 async def fetch_usd_to_tl() -> Decimal:
-    # Birinci öncelik: Binance USDTTRY spot
-    # Fallback: Sabit kur (33.50) — production'da kabul edilemez
+    # 1) TCMB today.xml (https://www.tcmb.gov.tr/kurlar/today.xml) — ForexBuying
+    # 2) Fallback: https://api.exchangerate-api.com/v4/latest/USD
+    # 3) İkisi de fail → RuntimeError (snapshot iptal — 503)
 ```
-**TODO:** Fallback'i TCMB API'sine bağla:
-```
-https://www.tcmb.gov.tr/kurlar/today.xml
-```
-Üç katmanlı strateji: Binance → TCMB → cached last-good (max 24 saat).
+TCMB XML'i 5 dk in-memory cache'lenir; aynı snapshot içinde tek HTTP çağrısı.
+GBP/USD için aynı zincir: TCMB'den derive (`GBP/TRY ÷ USD/TRY`) → exchangerate-api → RuntimeError.
 
 ### B.2.3 GBp (Pence) Dönüşümü
 **Mevcut hata:**
@@ -383,8 +381,10 @@ quantity = NUMERIC(20, 8)  # 8 ondalık (kesirli pay desteği)
 ### ✅ Düzeltildi (2026-04-30)
 1. **GBp dönüşümü** — `api/v1/stocks.py::convert_to_tl` artık GBP/USD kuru kullanıyor (`fetch_gbp_to_usd`). Test koruması: `test_stocks_currency.py` (7 test).
 
+### ✅ Düzeltildi (2026-04-30, sürüm 3.3)
+2. **USD/TRY fallback sabit** — `aggregator.py` TCMB primary + exchangerate-api fallback ile baştan yazıldı; 5 dk in-memory cache, kritik fail'de 503. Test koruması: `test_exchange_rates.py` (9 test) + `test_snapshot.py` (2 yeni test).
+
 ### ⚠️ Hâlâ Düzeltilecek
-2. **USD/TRY fallback sabit** — TCMB entegrasyonu yapılmalı (Faz 2)
 3. **Cache yok** — her istek dış API çağrısı, rate limit riski (Faz 2 — Redis)
 4. **Hafta sonu TEFAS** — kullanıcıya bilgilendirme yok (Faz 2 — frontend)
 5. **Kripto coin map'i hardcoded** — yeni coin desteği için kod değişikliği gerekiyor (Faz 3)
@@ -404,9 +404,9 @@ quantity = NUMERIC(20, 8)  # 8 ondalık (kesirli pay desteği)
 - [ ] AI çıktısı sanitization (XSS riski — `rehype-sanitize`)
 
 ### Finansal Hesaplama
-- [ ] GBp → GBP/USD/TL dönüşümü düzeltme
-- [ ] TCMB kuru entegrasyonu (USD/TRY fallback)
-- [ ] Redis cache (USD/TRY 60sn, TEFAS 1 saat, Yahoo 5dk)
+- [x] GBp → GBP/USD/TL dönüşümü düzeltme
+- [x] TCMB kuru entegrasyonu (USD/TRY + GBP/USD fallback, 5 dk in-memory cache)
+- [ ] Redis cache (TEFAS 1 saat, Yahoo 5dk — USD/TRY için TCMB cache yeterli)
 - [ ] EUR, JPY, CHF gibi diğer kurların entegrasyonu (Faz 3)
 - [ ] Kripto sembol → ticker mapping config'den (yeni coin için kod değişikliği gerekmesin)
 - [ ] TEFAS hafta sonu uyarısı (frontend)

@@ -188,7 +188,8 @@ services/snapshot.py::compute_and_save_snapshot(user_id, db)
   ├── TEFAS (httpx)
   └── Hisse senedi (Yahoo Finance)
   ↓
-fetch_usd_to_tl() → fallback 1.0
+fetch_usd_to_tl() (TCMB → exchangerate-api fallback)
+fetch_gbp_to_usd() (TCMB derive → exchangerate-api fallback) — opsiyonel
 TL normalize (aggregator.calculate_breakdown)
   ↓ İdempotent: aynı gün eskiyi DELETE → yeniyi INSERT
 INSERT portfolio_snapshots (user_id, snapshot_date, total_value_tl)
@@ -200,6 +201,11 @@ calculate_changes() WoW/MoM hesaplaması bu tablo üzerinden
 **Manuel tetikleme:** `POST /api/v1/portfolio/snapshot` — aynı `compute_and_save_snapshot()` fonksiyonunu çağırır (test/UI için). Frontend dashboard'da "Snapshot al" butonu mevcut.
 
 **Hata izolasyonu:** Bir kaynak fail olursa (örn. Binance timeout), diğer kaynaklar devam eder; başarısız kaynak loglanır. Tüm kaynaklar fail olursa snapshot yazılmaz, 502 döner.
+
+**Döviz kuru:** `aggregator.py` `asyncio.gather(..., return_exceptions=True)` ile USD/TL ve GBP/USD ayrı ayrı kontrol edilir.
+- **USD/TL kritik:** TCMB → exchangerate-api → ikisi de fail ise `RuntimeError` → snapshot iptal (503).
+- **GBP/USD opsiyonel:** Aynı zincir; fail ise 0 ile devam (UK hisseleri 0 değer, log warning).
+- TCMB XML'i 5 dakika in-memory cache'lenir; aynı snapshot içinde tekrar HTTP çağrısı yapılmaz.
 
 ### 4.3 Kullanıcı Kayıt + E-posta Doğrulama Akışı
 
@@ -441,7 +447,7 @@ class Asset:
 | Ethereum | `EthereumService` | EVM RPC + Etherscan |
 | TEFAS | `TefasService` | httpx + JSON API |
 | Yahoo Finance | `fetch_stock_quotes()` | httpx (`v8/finance/chart/{ticker}`) |
-| Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` |
+| Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
 | Snapshot | `snapshot.py::compute_and_save_snapshot()` | Tüm kaynakları paralel topla, TL normalize, DB'ye yaz (idempotent) |
 | E-posta | `email.py::send_verification_email()` | Resend SDK + HTML şablon |
 
@@ -471,7 +477,7 @@ VERIFY_TOKEN_EXPIRE_HOURS=24
 - **Crypto fetch'ler sıralı integration için:** `asyncio.gather` ile paralelleştirilebilir
 
 ### 8.2 İyileştirme Önerileri (Faz 3 Önce)
-- USD/TRY kuru için 60 saniye in-memory cache
+- ✅ USD/TRY ve GBP/USD için 5 dk in-memory TCMB cache (Faz 2 — tamamlandı)
 - TEFAS fiyatları için günlük cache (gün içinde değişmez)
 - Yahoo Finance quotes için 5 dakika cache
 - PostgreSQL connection pool: `pool_size=10, max_overflow=20` (default'tan artır)

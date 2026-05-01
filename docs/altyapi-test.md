@@ -15,7 +15,7 @@
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
 ### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
-- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30) — **107 test**
+- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30) — **117 test**
 - ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build — 3 unit test
 - ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
 - ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
@@ -217,23 +217,24 @@ jobs:
             (en geniş taban)
 ```
 
-### 5.2 Backend Test Yapısı (Mevcut — 107 test geçiyor)
+### 5.2 Backend Test Yapısı (Mevcut — 117 test geçiyor)
 ```
 backend/tests/
 ├── conftest.py                  # ✅ NullPool + per-request session + slowapi disable
-├── unit/                        # 57 test
+├── unit/                        # 66 test
 │   ├── test_security.py         # ✅ JWT, Fernet, bcrypt — 22 test
 │   ├── test_aggregator.py       # ✅ WoW/MoM/breakdown/weight/staking — 22 test
+│   ├── test_exchange_rates.py   # ✅ TCMB XML parse + fallback chain + cache — 9 test
 │   ├── test_stocks_currency.py  # ✅ GBp/USD/TRY dönüşüm zinciri — 7 test
 │   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx) — 6 test
 │   └── test_advisor.py          # ❌ Anthropic mock + token sayımı (Faz 3)
-├── integration/                 # 50 test
-│   ├── test_auth.py             # ✅ Register/login/refresh + verify-email + resend + 403 hard block — 21 test (eski 7 + yeni 14)
+├── integration/                 # 52 test
+│   ├── test_auth.py             # ✅ Register/login/refresh + verify-email + resend + 403 hard block — 21 test
 │   ├── test_portfolio.py        # ✅ TEFAS holdings CRUD — 8 test
 │   ├── test_idor.py             # ✅ Cross-user erişim koruma — 7 test
+│   ├── test_snapshot.py         # ✅ POST /portfolio/snapshot + idempotency + hata izolasyonu + USD/TL 503 + GBP/USD 201 devam — 6 test
 │   ├── test_integrations_api.py # ✅ Exchange key encrypt/decrypt + leak — 5 test
 │   ├── test_wallets_api.py      # ✅ Blockchain wallet CRUD — 5 test
-│   ├── test_snapshot.py         # ✅ POST /portfolio/snapshot + idempotency + hata izolasyonu — 4 test
 │   ├── test_stocks_api.py       # ⚠️ Henüz yazılmadı (preview/import/export)
 │   ├── test_crypto_api.py       # ❌ Binance/iCrypex mock (Faz 2)
 │   └── test_advice.py           # ❌ AI çağrı mock + kredi kontrolü (Faz 3)
@@ -242,8 +243,9 @@ backend/tests/
 ```
 
 **Yeni test grupları (son sprint):**
+- `test_exchange_rates.py` (yeni dosya): 9 unit test — TCMB XML parse (ForexBuying + Unit=100 normalize), USD/TL fallback chain (TCMB → exchangerate-api → RuntimeError), GBP/USD derive ve fallback, 5 dk in-memory TCMB cache davranışı
+- `test_snapshot.py`: 2 yeni integration test — USD/TL fail → 503, GBP/USD fail → 201 (devam et). Mevcut testlerde TCMB URL'i de mock'lanır (boş XML → fallback'e düşer)
 - `test_auth.py`: 14 yeni test — kayıt akışı (risk profili, mail tetikleme), `verify-email` token doğrulama, expired token, `resend-verification` 202 davranışı, login 403 hard block
-- `test_snapshot.py`: 4 yeni integration test — `compute_and_save_snapshot` idempotency (aynı gün üzerine yazma), kaynak fail izolasyonu, USD/TL fallback, manuel endpoint
 
 ### 5.3 Test Araçları
 

@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.2
+**Versiyon:** 3.3
 **Tarih:** 2026-04-30
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 ilk dört madde develop'ta
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 ilk beş madde develop'ta
 **Üretici:** Mayotek
 
 ---
@@ -38,7 +38,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
-| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, BES manuel giriş, TCMB fallback, Kubernetes manifest'leri | 🔄 Devam ediyor |
+| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş, Kubernetes manifest'leri | 🔄 Devam ediyor |
 | **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
@@ -195,16 +195,28 @@ Kubernetes Ingress (nginx)
 
 **4. Scheduler + snapshot servisi**
 - Yeni servis: `services/snapshot.py::compute_and_save_snapshot()` — tüm kaynakları (Binance, BinanceTR, iCrypex, Sonic, Avalanche P/C, Ethereum, TEFAS, hisse) paralel toplar, TL'ye normalize eder, `portfolio_snapshots` + `asset_positions` yazar
-- İdempotent (aynı gün eskiyi siler, yenisi yazılır), hata izolasyonu (bir kaynak fail diğerleri devam), USD/TL fallback (1.0)
+- İdempotent (aynı gün eskiyi siler, yenisi yazılır), hata izolasyonu (bir kaynak fail diğerleri devam)
+- USD/TL kritik kur — başarısız olursa snapshot iptal (raise); GBP/USD opsiyonel — başarısız olursa 0 ile devam (UK hisseleri 0 değer + log warning)
 - `app/scheduler.py`: `AsyncIOScheduler` (Europe/Istanbul, Pazar 23:00, misfire_grace_time=3600s)
-- Yeni endpoint: `POST /portfolio/snapshot` (manuel tetikleme — test/UI için)
+- Yeni endpoint: `POST /portfolio/snapshot` (manuel tetikleme — test/UI için), kur servisleri erişilemezse 503
 - Frontend dashboard'da "Snapshot al" butonu
 - 4 yeni snapshot integration test
 
+**5. TCMB API USD/TRY (ve GBP/USD) fallback**
+- `services/aggregator.py` baştan yazıldı: `TCMB_URL = https://www.tcmb.gov.tr/kurlar/today.xml` (primary)
+- Fallback: `https://api.exchangerate-api.com/v4/latest/{USD,GBP}`
+- `_fetch_tcmb_rates()` — TCMB XML'i parse eder (`ForexBuying`); `Unit=100` (JPY vb.) tek birime normalize edilir
+- `fetch_usd_to_tl()`: TCMB → exchangerate-api → fail ise `RuntimeError`
+- `fetch_gbp_to_usd()`: TCMB'den derive (`GBP/TRY ÷ USD/TRY`) → exchangerate-api → fail ise `RuntimeError`
+- 5 dakikalık in-memory TCMB cache (aynı snapshot içinde tek HTTP çağrısı)
+- `services/snapshot.py`: `asyncio.gather(..., return_exceptions=True)` ile USD/TL kritik (raise), GBP/USD opsiyonel (0 ile devam)
+- `POST /portfolio/snapshot` `RuntimeError` → 503
+- 9 yeni unit test (`test_exchange_rates.py`) + 2 yeni integration test (kur fail senaryoları)
+
 **Test paketi (güncel):**
-- **107 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
-  - Unit: security (22), aggregator (22), GBp dönüşümü (7), TEFAS (6) — toplam 57
-  - Integration: auth (21 — eski 7 + yeni 14), portfolio (8), IDOR (7), integrations (5), wallets (5), snapshot (4) — toplam 50
+- **117 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
+  - Unit: security (22), aggregator (22), exchange_rates (9), GBp dönüşümü (7), TEFAS (6) — toplam 66
+  - Integration: auth (21), portfolio (8), IDOR (7), integrations (5), wallets (5), snapshot (6) — toplam 52
   - E2E: login redirect, register + login akışı (Playwright)
 
 ### 🐛 Son Sprint'te Düzeltilen Bug'lar
@@ -222,7 +234,7 @@ Kubernetes Ingress (nginx)
 - [x] Kullanıcı kayıt frontend sayfası + e-posta doğrulama akışı (Resend)
 - [x] Haftalık snapshot servisi + scheduler implementasyonu
 - [x] Stocks ve Wallets UI sayfaları
-- [ ] TCMB API USD/TRY fallback (şu an snapshot'ta fallback 1.0)
+- [x] TCMB API USD/TRY fallback (TCMB primary + exchangerate-api fallback, 5 dk in-memory cache)
 - [ ] BES manuel giriş ekranı
 - [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
 - [ ] KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
