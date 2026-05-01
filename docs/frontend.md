@@ -19,6 +19,7 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Hisse senedi portföyü (Yahoo Finance + Excel) | `/dashboard/stocks` | ✅ Aktif |
 | Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel) | `/dashboard/tefas` | ✅ Aktif |
+| BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
 
 ### Auth Davranışı (Korunmalı)
 - Token yoksa `/dashboard/*` → `/login`'e redirect
@@ -35,6 +36,12 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 ### Snapshot Tetikleme (Yeni)
 - `/dashboard` üst kısmında "Snapshot al" butonu — `POST /portfolio/snapshot` çağrılır
 - Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
+
+### BES Akışı (Yeni)
+- `/dashboard/bes`: TEFAS sayfası pattern'inde, ama her satırda iki input (plan adı + toplam ₺)
+- Butonlar: "Plan ekle", "Kaldır", "Kaydet" (`PUT /portfolio/bes/holdings` — idempotent), "Excel İndir" (`GET /portfolio/bes/export`), "Excel Yükle" (`POST /portfolio/bes/import`)
+- Footer'da toplam tutar gösterimi
+- Dashboard kartı: önceki "Bireysel emeklilik — yakında" pasif kartı silindi, yerine `/dashboard/bes`'e link veren aktif buton geldi; `besTotal` ve `besPlanCount` state'leri ile özet TL gösteriliyor
 
 ---
 
@@ -59,7 +66,9 @@ frontend/
 │       │   └── page.tsx
 │       ├── wallets/              # Blockchain cüzdanları (ekle/sil + Excel)
 │       │   └── page.tsx
-│       └── tefas/page.tsx        # TEFAS
+│       ├── tefas/page.tsx        # TEFAS
+│       └── bes/                  # BES manuel giriş (plan adı + ₺ + Excel)
+│           └── page.tsx
 │
 ├── lib/
 │   └── api.ts                    # Tüm API çağrıları + TypeScript DTO'ları
@@ -279,8 +288,8 @@ npm run e2e:ui        # Playwright UI mode
 - [x] Kullanıcı kayıt sayfası (`/register`)
 - [x] E-posta doğrulama landing page (`/verify-email`)
 - [x] "Snapshot al" butonu — manuel haftalık snapshot tetikleme
+- [x] BES manuel giriş ekranı (`/dashboard/bes` + dashboard kartı aktivasyonu)
 - [ ] Şifre sıfırlama akışı (`/forgot-password`, `/reset-password`)
-- [ ] BES manuel giriş ekranı
 - [ ] Dashboard haftalık/aylık değişim grafiği (Recharts veya Chart.js)
 - [ ] Profil/ayarlar sayfası (risk profili, dil tercihi)
 

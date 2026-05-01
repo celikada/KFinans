@@ -88,6 +88,7 @@ backend/app/
 │   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking) + POST /snapshot manuel tetik
 │   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel)
 │   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel)
+│   ├── bes.py             # /portfolio/bes/* (manuel giriş + Excel)
 │   ├── wallets.py         # /wallets (blockchain adres CRUD + Excel)
 │   ├── integrations.py    # /integrations (exchange API key)
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
@@ -110,7 +111,7 @@ backend/app/
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
-│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar
+│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES)
 │   ├── email.py           # Resend SDK — verify_email + HTML şablon
 │   └── advisor.py         # Anthropic SDK — model + max_tokens settings'ten
 │
@@ -119,6 +120,7 @@ backend/app/
 │   ├── integration.py     # integrations + wallet_addresses
 │   ├── tefas.py           # tefas_holdings
 │   ├── stock.py           # stock_holdings
+│   ├── bes.py             # bes_holdings (plan_name, total_value_tl)
 │   ├── portfolio.py       # portfolio_snapshots + asset_positions
 │   ├── advice.py          # investment_advice
 │   └── credit.py          # credit_transactions (Faz 3)
@@ -128,6 +130,7 @@ backend/app/
     ├── portfolio.py       # SnapshotOut, PortfolioChanges, CryptoPositionOut, WalletPositionOut
     ├── tefas.py           # TefasHolding, TefasPositionOut
     ├── stocks.py          # StockHolding, StockPositionOut
+    ├── bes.py             # BesHolding (plan_name, total_value_tl)
     └── integration.py
 ```
 
@@ -186,7 +189,8 @@ services/snapshot.py::compute_and_save_snapshot(user_id, db)
   ├── Avalanche C-Chain (web3)
   ├── Ethereum (web3 + Etherscan)
   ├── TEFAS (httpx)
-  └── Hisse senedi (Yahoo Finance)
+  ├── Hisse senedi (Yahoo Finance)
+  └── BES (DB — manuel giriş, _gather_bes_assets())
   ↓
 fetch_usd_to_tl() (TCMB → exchangerate-api fallback)
 fetch_gbp_to_usd() (TCMB derive → exchangerate-api fallback) — opsiyonel
@@ -315,6 +319,18 @@ INDEX ix_stock_holdings_user_id (user_id)
 
 > Hisse fiyatları **DB'de saklanmaz**. Her preview/dashboard isteğinde Yahoo Finance'tan çekilir; TRY dışı fiyatlar Binance USDTTRY kuru ile normalize edilir.
 
+#### `bes_holdings`
+```sql
+id              UUID PK
+user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+plan_name       VARCHAR(200) NOT NULL                  -- 'AgeSA Klasik' vb.
+total_value_tl  NUMERIC(18, 2) NOT NULL CHECK (total_value_tl >= 0)
+
+INDEX ix_bes_holdings_user_id (user_id)
+```
+
+> BES manuel giriştir; otomatik scraping yok. Snapshot servisi `_gather_bes_assets()` ile her kaydı `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` olacak şekilde `AssetData`'ya dönüştürür.
+
 #### `portfolio_snapshots` + `asset_positions`
 ```sql
 portfolio_snapshots
@@ -391,6 +407,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` kolonu |
 | `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE |
 | `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token` |
+| `1f2e3d4c5b6a` | ✅ `bes_holdings` tablosu (plan_name, total_value_tl) + `ix_bes_holdings_user_id` |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -399,6 +416,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_wallet_addresses_user_id`
 - `ix_tefas_holdings_user_id`
 - `ix_stock_holdings_user_id`
+- `ix_bes_holdings_user_id`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
 - `ix_asset_positions_snapshot_id`
@@ -447,8 +465,9 @@ class Asset:
 | Ethereum | `EthereumService` | EVM RPC + Etherscan |
 | TEFAS | `TefasService` | httpx + JSON API |
 | Yahoo Finance | `fetch_stock_quotes()` | httpx (`v8/finance/chart/{ticker}`) |
+| BES | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")` |
 | Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
-| Snapshot | `snapshot.py::compute_and_save_snapshot()` | Tüm kaynakları paralel topla, TL normalize, DB'ye yaz (idempotent) |
+| Snapshot | `snapshot.py::compute_and_save_snapshot()` | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent) |
 | E-posta | `email.py::send_verification_email()` | Resend SDK + HTML şablon |
 
 > Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)

@@ -311,6 +311,44 @@ API yapısı TEFAS ile aynı:
 
 ---
 
+## 6.1 BES — Bireysel Emeklilik (`/api/v1/portfolio/bes`)
+
+Manuel giriş modülü. Kullanıcı plan adı + toplam ₺ değer girer; otomatik scraping yok (Faz 2 sonrası planlanıyor).
+
+### `GET /portfolio/bes/holdings`
+Kayıtlı BES plan listesi.
+```json
+[{ "plan_name": "AgeSA Klasik", "total_value_tl": "45000.00" }]
+```
+
+### `PUT /portfolio/bes/holdings`
+Tüm holding'leri değiştir (replace-all). **İdempotent** — eski kayıtlar silinir, yenileri yazılır.
+```json
+// Request
+[{ "plan_name": "AgeSA Klasik", "total_value_tl": "45000.00" }]
+
+// 200 OK — kaydedilen liste
+[{ "plan_name": "AgeSA Klasik", "total_value_tl": "45000.00" }]
+
+// 422 Unprocessable Entity
+{ "detail": "plan_name boş olamaz" }       // min_length=1
+{ "detail": "total_value_tl >= 0 olmalı" } // ge=0
+```
+
+### `GET /portfolio/bes/export`
+`bes-holdingleri.xlsx` dosyasını indirir (plan adı + toplam ₺ kolonları).
+
+### `POST /portfolio/bes/import`
+xlsx yükle, mevcut BES kayıtlarını **siler**, yenilerini ekler.
+```
+multipart/form-data: file=bes.xlsx
+422: "Sadece .xlsx dosyası kabul edilir" | "Geçerli BES kaydı bulunamadı"
+```
+
+> Snapshot entegrasyonu: `services/snapshot.py::_gather_bes_assets()` BES kayıtlarını `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` ile `AssetData` listesine çevirir.
+
+---
+
 ## 7. Exchange Entegrasyonları (`/api/v1/integrations`)
 
 ### `GET /integrations`
@@ -462,9 +500,9 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 - [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri
 - [x] `POST /portfolio/snapshot` manuel tetikleme endpoint'i
 - [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
+- [x] BES manuel giriş endpoint'leri (`/portfolio/bes/*` — GET, PUT, export, import)
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3
 - [ ] Harcama endpoint'leri (`/expenses/*`) — Faz 3
-- [ ] BES manuel giriş endpoint'i — Faz 2
 - [ ] `/me/data-export` (KVKK) ve `/me/account` (DELETE) endpoint'leri
 - [ ] Pagination (cursor-based) `/portfolio/history` ve `/advice` için
 - [ ] Server-Sent Events `/portfolio/stream` (anlık fiyat) — Faz 4

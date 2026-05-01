@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.3
+**Versiyon:** 3.4
 **Tarih:** 2026-04-30
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 ilk beş madde develop'ta
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 altı madde develop'ta
 **Üretici:** Mayotek
 
 ---
@@ -38,7 +38,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
-| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş, Kubernetes manifest'leri | 🔄 Devam ediyor |
+| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, Kubernetes manifest'leri | 🔄 Devam ediyor |
 | **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
@@ -115,7 +115,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Avalanche P-Chain | platform.getStake | httpx (REST API) |
 | Avalanche C-Chain | EVM (RPC) | web3.py |
 | Ethereum | EVM (RPC) | web3.py + Etherscan |
-| BES | Manuel giriş (Faz 2) | — |
+| BES | Manuel giriş ✅ (Faz 2) | Kullanıcı plan adı + toplam ₺ girer; idempotent PUT + Excel import/export |
 
 > Blockchain entegrasyonlarında **özel anahtar asla sisteme girmez** — yalnızca public adres saklanır.
 > Detaylı entegrasyon mantığı: [mimari.md](./mimari.md#7-veri-kaynaklari-ve-servisler)
@@ -213,10 +213,24 @@ Kubernetes Ingress (nginx)
 - `POST /portfolio/snapshot` `RuntimeError` → 503
 - 9 yeni unit test (`test_exchange_rates.py`) + 2 yeni integration test (kur fail senaryoları)
 
+**6. BES (Bireysel Emeklilik Sistemi) manuel giriş modülü**
+- Backend: `models/bes.py` (`BesHolding(id, user_id, plan_name, total_value_tl)`), migration `1f2e3d4c5b6a` — `bes_holdings` tablosu + `ix_bes_holdings_user_id`
+- `User.bes_holdings` ilişkisi (cascade all, delete-orphan)
+- `schemas/bes.py`: `BesHolding(plan_name min_length=1 max_length=200, total_value_tl Decimal ge=0)`
+- Yeni router: `api/v1/bes.py` (prefix `/portfolio/bes`, tag `bes`)
+  - `GET /holdings` → liste
+  - `PUT /holdings` → idempotent (replace-all)
+  - `GET /export` → `bes-holdingleri.xlsx`
+  - `POST /import` → Excel'den yükle (mevcut kayıtları değiştirir)
+- `services/snapshot.py`: yeni `_gather_bes_assets()` — BES holding'leri `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` ile `AssetData`'ya çevrilir; ana paralel toplama dalına `bes_holdings` DB çekimi eklendi
+- Frontend: `/dashboard/bes` sayfası (plan adı + toplam ₺ tek satırda iki input, "Plan ekle" + "Kaldır" + "Kaydet" + Excel İndir/Yükle), dashboard kartı pasif "yakında"dan aktif `besTotal`/`besPlanCount` özetli butona dönüştü
+- `lib/api.ts`: `getBesHoldings`, `saveBesHoldings`, `exportBesHoldings`, `importBesHoldings` + `BesHoldingDTO`
+- 8 yeni API test (`test_bes_api.py`) + 1 IDOR test + 1 snapshot integration test
+
 **Test paketi (güncel):**
-- **117 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
+- **127 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
   - Unit: security (22), aggregator (22), exchange_rates (9), GBp dönüşümü (7), TEFAS (6) — toplam 66
-  - Integration: auth (21), portfolio (8), IDOR (7), integrations (5), wallets (5), snapshot (6) — toplam 52
+  - Integration: auth (21), portfolio (8), IDOR (8), integrations (5), wallets (5), snapshot (7), bes (8) — toplam 62
   - E2E: login redirect, register + login akışı (Playwright)
 
 ### 🐛 Son Sprint'te Düzeltilen Bug'lar
@@ -235,7 +249,7 @@ Kubernetes Ingress (nginx)
 - [x] Haftalık snapshot servisi + scheduler implementasyonu
 - [x] Stocks ve Wallets UI sayfaları
 - [x] TCMB API USD/TRY fallback (TCMB primary + exchangerate-api fallback, 5 dk in-memory cache)
-- [ ] BES manuel giriş ekranı
+- [x] BES manuel giriş ekranı (model + endpoint'ler + Excel + snapshot entegrasyonu + frontend)
 - [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
 - [ ] KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
 - [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)
