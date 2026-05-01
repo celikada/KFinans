@@ -43,7 +43,13 @@ async def create_snapshot(
     Otomatik haftalik job (Pazar 23:00) ile ayni mantigi calistirir; ayni gun
     icinde tekrar cagrilirsa eski snapshot silinip yenisi olusturulur.
     """
-    snapshot = await compute_and_save_snapshot(current_user.id, db)
+    try:
+        snapshot = await compute_and_save_snapshot(current_user.id, db)
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Snapshot alinamadi: {e}",
+        )
     # Asset position'lari donulen response icin tekrar yukle
     result = await db.execute(
         select(PortfolioSnapshot)

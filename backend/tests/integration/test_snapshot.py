@@ -1,6 +1,6 @@
 """Snapshot servisi ve manuel /portfolio/snapshot endpoint'i icin integration testler.
 
-Dis HTTP cagrilari (TEFAS, exchange rate API'leri) respx ile mock'lanir;
+Dis HTTP cagrilari (TCMB, TEFAS, exchange rate API'leri) respx ile mock'lanir;
 test gercek dis servislere gitmez.
 """
 import pytest
@@ -9,14 +9,32 @@ from httpx import AsyncClient, Response
 from sqlalchemy import select
 
 from app.models.portfolio import PortfolioSnapshot
+from app.services import aggregator
+from app.services.aggregator import EXCHANGERATE_API_GBP, EXCHANGERATE_API_USD, TCMB_URL
 from app.services.tefas import _EXPORT_URL
 from tests.conftest import TestSession, verify_user_email
 
 
-_USD_TL_URL = "https://api.exchangerate-api.com/v4/latest/USD"
-_GBP_USD_URL = "https://api.exchangerate-api.com/v4/latest/GBP"
 _USD_TL_RESPONSE = {"rates": {"TRY": 35.0}}
 _GBP_USD_RESPONSE = {"rates": {"USD": 1.25}}
+
+# TCMB icin tum testlerde fallback'e dusurmek istiyoruz; bos XML donerse
+# parse hatasiz ama 'USD' yok → exchangerate-api'ye dusulur.
+_TCMB_EMPTY_XML = b'<?xml version="1.0" encoding="utf-8"?><Tarih_Date></Tarih_Date>'
+
+
+def _mock_rates(rsx):
+    """Tum dis kuru URL'lerini mock'lar (TCMB bos -> exchangerate-api'ye dusulur)."""
+    rsx.get(TCMB_URL).mock(return_value=Response(200, content=_TCMB_EMPTY_XML))
+    rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
+    rsx.get(EXCHANGERATE_API_GBP).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+
+
+@pytest.fixture(autouse=True)
+def _clear_tcmb_cache():
+    aggregator._tcmb_cache = None
+    yield
+    aggregator._tcmb_cache = None
 
 
 async def _register_login(client: AsyncClient, email: str) -> dict:
@@ -31,8 +49,7 @@ async def _register_login(client: AsyncClient, email: str) -> dict:
 async def test_snapshot_empty_user_returns_zero_total(client: AsyncClient):
     headers = await _register_login(client, "snap_empty@example.com")
     with respx.mock(assert_all_called=False) as rsx:
-        rsx.get(_USD_TL_URL).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
-        rsx.get(_GBP_USD_URL).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+        _mock_rates(rsx)
 
         resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
 
@@ -57,8 +74,7 @@ async def test_snapshot_with_tefas_holdings(client: AsyncClient):
         {"fonKodu": "YAC", "sonPortfoyDegeri": 100_000_000.0, "sonPayAdedi": 80_000_000.0},
     ]
     with respx.mock(assert_all_called=False) as rsx:
-        rsx.get(_USD_TL_URL).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
-        rsx.get(_GBP_USD_URL).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+        _mock_rates(rsx)
         rsx.post(_EXPORT_URL).mock(return_value=Response(200, json=tefas_rows))
 
         resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
@@ -80,8 +96,7 @@ async def test_snapshot_persists_in_db(client: AsyncClient):
     headers = await _register_login(client, "snap_persist@example.com")
 
     with respx.mock(assert_all_called=False) as rsx:
-        rsx.get(_USD_TL_URL).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
-        rsx.get(_GBP_USD_URL).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+        _mock_rates(rsx)
 
         await client.post("/api/v1/portfolio/snapshot", headers=headers)
 
@@ -97,8 +112,7 @@ async def test_snapshot_idempotent_same_day(client: AsyncClient):
     headers = await _register_login(client, "snap_idem@example.com")
 
     with respx.mock(assert_all_called=False) as rsx:
-        rsx.get(_USD_TL_URL).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
-        rsx.get(_GBP_USD_URL).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+        _mock_rates(rsx)
 
         first = await client.post("/api/v1/portfolio/snapshot", headers=headers)
         second = await client.post("/api/v1/portfolio/snapshot", headers=headers)
@@ -125,3 +139,34 @@ async def test_snapshot_idempotent_same_day(client: AsyncClient):
 async def test_snapshot_unauthorized_returns_401(client: AsyncClient):
     resp = await client.post("/api/v1/portfolio/snapshot")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_snapshot_fails_when_usd_rate_unavailable(client: AsyncClient):
+    """USD/TL hicbir kaynaktan cekilemezse snapshot iptal (503), DB'ye yazilmaz."""
+    headers = await _register_login(client, "snap_no_rate@example.com")
+
+    with respx.mock(assert_all_called=False) as rsx:
+        rsx.get(TCMB_URL).mock(return_value=Response(503))
+        rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(500))
+        rsx.get(EXCHANGERATE_API_GBP).mock(return_value=Response(200, json=_GBP_USD_RESPONSE))
+
+        resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
+
+    assert resp.status_code == 503
+    assert "USD/TRY" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_continues_when_only_gbp_rate_unavailable(client: AsyncClient):
+    """GBP/USD cekilemezse snapshot devam eder (UK hisseler 0 olur)."""
+    headers = await _register_login(client, "snap_no_gbp@example.com")
+
+    with respx.mock(assert_all_called=False) as rsx:
+        rsx.get(TCMB_URL).mock(return_value=Response(503))
+        rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(200, json=_USD_TL_RESPONSE))
+        rsx.get(EXCHANGERATE_API_GBP).mock(return_value=Response(500))
+
+        resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
+
+    assert resp.status_code == 201

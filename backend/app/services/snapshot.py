@@ -167,12 +167,21 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
     tefas_holdings = tefas_q.scalars().all()
     stock_holdings = stock_q.scalars().all()
 
-    # Doviz kurlari
-    try:
-        usd_tl, gbp_usd = await asyncio.gather(fetch_usd_to_tl(), fetch_gbp_to_usd())
-    except Exception as e:
-        logger.warning("Snapshot: doviz kuru cekilemedi, fallback 1.0: %s", e)
-        usd_tl, gbp_usd = Decimal("1"), Decimal("1")
+    # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
+    # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
+    # GBP/USD sadece UK hisseleri icin; cekilemezse 0 ile devam (UK hisseler 0 deger).
+    rate_results = await asyncio.gather(
+        fetch_usd_to_tl(),
+        fetch_gbp_to_usd(),
+        return_exceptions=True,
+    )
+    usd_tl, gbp_usd = rate_results
+    if isinstance(usd_tl, BaseException):
+        logger.error("Snapshot: USD/TL kuru hicbir kaynaktan cekilemedi, iptal: %s", usd_tl)
+        raise usd_tl
+    if isinstance(gbp_usd, BaseException):
+        logger.warning("Snapshot: GBP/USD cekilemedi, UK hisseleri 0 deger: %s", gbp_usd)
+        gbp_usd = Decimal("0")
 
     # Tum kaynaklardan asset'leri topla (paralel)
     crypto_assets, wallet_assets, tefas_assets, stock_assets = await asyncio.gather(
