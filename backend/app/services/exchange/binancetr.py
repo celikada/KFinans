@@ -45,6 +45,7 @@ class BinanceTRService(BaseExchangeIntegration):
 
     def _sign(self, params: dict) -> dict:
         params["timestamp"] = int(time.time() * 1000) + self._time_offset_ms
+        params.setdefault("recvWindow", 60000)
         query = urlencode(params)
         sig = hmac.new(self.api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
         params["signature"] = sig

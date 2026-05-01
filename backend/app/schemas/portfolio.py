@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -5,7 +6,7 @@ from pydantic import BaseModel
 
 
 class AssetPositionOut(BaseModel):
-    id: str
+    id: uuid.UUID
     source_type: str
     provider: str
     asset_type: str
@@ -23,7 +24,7 @@ class AssetPositionOut(BaseModel):
 
 
 class SnapshotOut(BaseModel):
-    id: str
+    id: uuid.UUID
     snapshot_date: date
     total_value_tl: Decimal
     asset_positions: list[AssetPositionOut] = []
