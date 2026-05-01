@@ -1,14 +1,14 @@
 """add verify_token_expires_at to users + verify_token index
 
 Revision ID: 9a8b7c6d5e4f
-Revises: c3d4e5f6a7b8
+Revises: f6a7b8c9d0e1
 Create Date: 2026-04-30 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "9a8b7c6d5e4f"
-down_revision = "c3d4e5f6a7b8"
+down_revision = "f6a7b8c9d0e1"
 branch_labels = None
 depends_on = None
 
