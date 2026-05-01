@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     # Claude API — finansal tavsiye özelliği etkinleştirilene kadar opsiyonel
     anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-6"
+    claude_max_tokens: int = 1024
 
     # Blockchain RPC
     sonic_rpc_url: str = "https://rpc.soniclabs.com"

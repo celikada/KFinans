@@ -53,12 +53,13 @@ services/advisor.py: AdvisorService.generate(user, snapshot, horizon)
 | Karmaşık portföy (20+ varlık) | `claude-opus-4-7` | Çok varlık + staking + döviz; derin akıl yürütme |
 | Hızlı sınıflandırma, etiketleme | `claude-haiku-4-5-20251001` | Düşük maliyet, basit görev |
 
-**Mevcut sorun:** Model adı `advisor.py`'de hardcoded (`"claude-sonnet-4-6"`). Config'e taşınmalı:
+**Çözüldü (2026-05-01):** Model adı ve max_tokens config'e taşındı:
 ```python
-# config.py — eklenecek
-advice_model: str = "claude-sonnet-4-6"
-advice_max_tokens: int = 1024
+# app/config.py
+claude_model: str = "claude-sonnet-4-6"
+claude_max_tokens: int = 1024
 ```
+`.env` ile override edilebilir (`CLAUDE_MODEL=...`, `CLAUDE_MAX_TOKENS=...`). Yeni Claude sürümüne geçişte kod değişikliği gerekmez.
 
 ## A.4 Prompt Tasarımı
 
@@ -388,14 +389,14 @@ quantity = NUMERIC(20, 8)  # 8 ondalık (kesirli pay desteği)
 3. **Cache yok** — her istek dış API çağrısı, rate limit riski (Faz 2 — Redis)
 4. **Hafta sonu TEFAS** — kullanıcıya bilgilendirme yok (Faz 2 — frontend)
 5. **Kripto coin map'i hardcoded** — yeni coin desteği için kod değişikliği gerekiyor (Faz 3)
-6. **Model adı `advisor.py`'de hardcoded** — `claude-sonnet-4-6` config'e taşınmalı (Faz 2)
+6. ~~Model adı `advisor.py`'de hardcoded~~ ✅ 2026-05-01 — `settings.claude_model`
 
 ---
 
 ## C. Eksik / Eklenecek (TODO)
 
 ### AI Tavsiye
-- [ ] Model adı config'den (advisor.py hardcoded)
+- [x] Model adı config'den (advisor.py — 2026-05-01)
 - [ ] Hata yönetimi (timeout, rate limit)
 - [ ] Cache hit oranı izleme
 - [ ] Prompt versiyonlama

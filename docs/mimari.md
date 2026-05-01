@@ -112,7 +112,7 @@ backend/app/
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
 │   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar
 │   ├── email.py           # Resend SDK — verify_email + HTML şablon
-│   └── advisor.py         # Anthropic SDK — claude-sonnet-4-6
+│   └── advisor.py         # Anthropic SDK — model + max_tokens settings'ten
 │
 ├── models/                # SQLAlchemy ORM
 │   ├── user.py            # users (+ credit_balance, email_verified)
