@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_secret
+from app.models.bes import BesHolding
 from app.models.integration import Integration, WalletAddress
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.models.stock import StockHolding
@@ -93,6 +94,26 @@ async def _gather_tefas_assets(holdings: list[TefasHolding]) -> list[AssetData]:
         return []
 
 
+def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
+    """BES holdinglerini AssetData'ya cevirir.
+
+    Manuel girilen toplam TL degerini birim fiyat olarak alir; liquid_quantity=1
+    ile to_asset_position'da total_value_tl = value olur. Asset_type='pension'.
+    """
+    return [
+        AssetData(
+            symbol=f"BES-{i + 1}",
+            name=h.plan_name,
+            provider="bes",
+            asset_type="pension",
+            source_type="bes",
+            liquid_quantity=Decimal("1"),
+            unit_price_tl=Decimal(str(h.total_value_tl)),
+        )
+        for i, h in enumerate(holdings)
+    ]
+
+
 async def _gather_stock_assets(
     holdings: list[StockHolding], usd_tl: Decimal, gbp_usd: Decimal
 ) -> list[AssetData]:
@@ -148,7 +169,7 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
     await db.flush()
 
     # Tum kaynaklari paralel cek
-    intg_q, wallet_q, tefas_q, stock_q = await asyncio.gather(
+    intg_q, wallet_q, tefas_q, stock_q, bes_q = await asyncio.gather(
         db.execute(
             select(Integration).where(
                 Integration.user_id == user_id, Integration.is_active.is_(True)
@@ -161,11 +182,13 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         ),
         db.execute(select(TefasHolding).where(TefasHolding.user_id == user_id)),
         db.execute(select(StockHolding).where(StockHolding.user_id == user_id)),
+        db.execute(select(BesHolding).where(BesHolding.user_id == user_id)),
     )
     integrations = intg_q.scalars().all()
     wallets = wallet_q.scalars().all()
     tefas_holdings = tefas_q.scalars().all()
     stock_holdings = stock_q.scalars().all()
+    bes_holdings = bes_q.scalars().all()
 
     # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
@@ -190,8 +213,13 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         _gather_tefas_assets(tefas_holdings),
         _gather_stock_assets(stock_holdings, usd_tl, gbp_usd),
     )
+    bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
     all_assets: list[AssetData] = (
-        list(crypto_assets) + list(wallet_assets) + list(tefas_assets) + list(stock_assets)
+        list(crypto_assets)
+        + list(wallet_assets)
+        + list(tefas_assets)
+        + list(stock_assets)
+        + list(bes_assets)
     )
 
     # Toplam degeri hesapla (weight_pct icin gerekli)

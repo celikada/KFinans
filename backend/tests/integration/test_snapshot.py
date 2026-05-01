@@ -158,6 +158,32 @@ async def test_snapshot_fails_when_usd_rate_unavailable(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_snapshot_includes_bes_holdings(client: AsyncClient):
+    """BES manuel holdingler snapshot'a 'pension' asset_type ile dahil edilmeli."""
+    headers = await _register_login(client, "snap_bes@example.com")
+
+    await client.put(
+        "/api/v1/portfolio/bes/holdings",
+        json=[
+            {"plan_name": "AvivaSA Atak Hisse", "total_value_tl": 100000.00},
+            {"plan_name": "Anadolu Hayat OKS", "total_value_tl": 50000.00},
+        ],
+        headers=headers,
+    )
+
+    with respx.mock(assert_all_called=False) as rsx:
+        _mock_rates(rsx)
+        resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert float(data["total_value_tl"]) == pytest.approx(150000.00)
+    bes_positions = [p for p in data["asset_positions"] if p["asset_type"] == "pension"]
+    assert len(bes_positions) == 2
+    assert all(p["provider"] == "bes" for p in bes_positions)
+
+
+@pytest.mark.asyncio
 async def test_snapshot_continues_when_only_gbp_rate_unavailable(client: AsyncClient):
     """GBP/USD cekilemezse snapshot devam eder (UK hisseler 0 olur)."""
     headers = await _register_login(client, "snap_no_gbp@example.com")

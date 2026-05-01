@@ -14,6 +14,8 @@ export default function DashboardPage() {
   const [tefasFundCount, setTefasFundCount] = useState(0);
   const [cryptoTotal, setCryptoTotal] = useState<number | null>(null);
   const [cryptoLoading, setCryptoLoading] = useState(false);
+  const [besTotal, setBesTotal] = useState<number | null>(null);
+  const [besPlanCount, setBesPlanCount] = useState(0);
   const [snapshotting, setSnapshotting] = useState(false);
   const [snapshotMsg, setSnapshotMsg] = useState("");
 
@@ -34,6 +36,13 @@ export default function DashboardPage() {
       const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
       setCryptoTotal(total);
     }).catch(() => {}).finally(() => setCryptoLoading(false));
+
+    api.getBesHoldings().then((holdings) => {
+      if (!holdings.length) return;
+      setBesPlanCount(holdings.length);
+      const total = holdings.reduce((s, h) => s + parseFloat(h.total_value_tl.toString()), 0);
+      setBesTotal(total);
+    }).catch(() => {});
   }, [router]);
 
   function logout() {
@@ -123,13 +132,22 @@ export default function DashboardPage() {
             <p className="text-sm text-gray-400">Sonic, Avalanche, Ethereum — yakında</p>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 opacity-50 cursor-not-allowed">
-            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center mb-4">
+          <button
+            onClick={() => router.push("/dashboard/bes")}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-green-100 transition-all group"
+          >
+            <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-100 transition-colors">
               <span className="text-xl">🏦</span>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">BES</h3>
-            <p className="text-sm text-gray-400">Bireysel emeklilik — yakında</p>
-          </div>
+            {besTotal !== null ? (
+              <p className="text-sm font-semibold text-green-600">{fmtTL(besTotal)} ₺</p>
+            ) : besPlanCount > 0 ? (
+              <p className="text-sm text-gray-400">{besPlanCount} plan</p>
+            ) : (
+              <p className="text-sm text-gray-400">Bireysel emeklilik — manuel giriş</p>
+            )}
+          </button>
         </div>
       </main>
 

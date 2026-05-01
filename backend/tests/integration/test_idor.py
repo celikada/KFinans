@@ -127,11 +127,29 @@ async def test_user_a_cannot_see_user_b_integrations(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_user_a_cannot_see_user_b_bes(client: AsyncClient):
+    user_a = await _register_and_login(client, "user_a_bes@example.com")
+    user_b = await _register_and_login(client, "user_b_bes@example.com")
+
+    # User B kendi BES birikimlerini ekler
+    await client.put(
+        "/api/v1/portfolio/bes/holdings",
+        json=[{"plan_name": "B'nin BES Plani", "total_value_tl": 50000.0}],
+        headers=user_b,
+    )
+
+    resp = await client.get("/api/v1/portfolio/bes/holdings", headers=user_a)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
 async def test_no_token_returns_401(client: AsyncClient):
     """Auth gerektiren endpoint'te token olmadan 401."""
     endpoints = [
         ("GET", "/api/v1/portfolio/tefas/holdings"),
         ("GET", "/api/v1/portfolio/stocks/holdings"),
+        ("GET", "/api/v1/portfolio/bes/holdings"),
         ("GET", "/api/v1/wallets"),
         ("GET", "/api/v1/integrations"),
         ("GET", "/api/v1/portfolio"),
