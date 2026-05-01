@@ -15,12 +15,15 @@
 | Exchange API key encryption | Fernet (AES-128-CBC) | ✅ Aktif |
 | CORS allowlist | `settings.cors_origins` (env'den) | ✅ Aktif |
 | Rate limiting (auth endpoint'leri) | slowapi (in-memory) | ✅ Aktif |
+| **E-posta doğrulama zorunluluğu** | `email_verified=False` ise login 403 hard block | ✅ Aktif |
+| **Doğrulama token'ı (TTL'li)** | `secrets.token_urlsafe(32)`, `verify_token_expires_at` (24 saat) | ✅ Aktif |
+| **Account enumeration koruması** | `POST /auth/resend-verification` her zaman 202 döner | ✅ Aktif |
 | Health endpoint (auth gerektirmez) | `/health` | ✅ Aktif |
 | Auth gerektiren endpoint'ler | `Depends(get_current_user)` | ✅ Aktif |
 | User izolasyonu | `WHERE user_id == current_user.id` | ✅ Aktif |
 | Pydantic input validation | Tüm request body'ler | ✅ Aktif |
 | Servis katmanı logging | 9 servis dosyasında module-level logger | ✅ Aktif |
-| Test kapsama (regresyon koruma) | IDOR (5 endpoint), security primitives (22 test), integrations leak (5 test) | ✅ Aktif |
+| Test kapsama (regresyon koruma) | IDOR (5 endpoint), security primitives (22 test), integrations leak (5 test), auth flow (21 test) | ✅ Aktif |
 | Soft delete altyapısı | `users.deleted_at` kolonu hazır (cron Faz 3) | ✅ Şema hazır |
 | `users.credit_balance` (CHECK >= 0) | DB seviyesinde negatif bakiye koruması | ✅ Aktif |
 
@@ -58,16 +61,30 @@
 
 ## 3. Kimlik Doğrulama (Authentication)
 
-### 3.1 Kayıt → Giriş → Yenileme Akışı
+### 3.1 Kayıt → Doğrulama → Giriş → Yenileme Akışı
 
 ```
-POST /auth/register
+POST /auth/register {email, password, risk_profile}
   ↓ bcrypt(password)
-  ↓ INSERT users
-  ↓ (Faz 2) e-posta doğrulama linki
+  ↓ secrets.token_urlsafe(32) → verify_token (24 saat TTL)
+  ↓ INSERT users (email_verified=False, verify_token, verify_token_expires_at)
+  ↓ services/email.py::send_verification_email() (Resend)
+  ↓ 201 Created (mail fail olsa bile user oluşur — kullanıcı bloklanmaz)
+
+GET /auth/verify-email?token=...
+  ↓ SELECT users WHERE verify_token=? AND verify_token_expires_at > now()
+  ↓ UPDATE users SET email_verified=True, verify_token=NULL, verify_token_expires_at=NULL
+  ↓ 200 OK (geçersiz/süresi dolmuş token → 400)
+
+POST /auth/resend-verification {email}
+  ↓ SELECT users WHERE email=?
+  ↓ Eğer mevcut + doğrulanmamış: yeni token üret + mail gönder
+  ↓ Aksi halde sessizce yut
+  ↓ HER ZAMAN 202 (account enumeration koruması)
 
 POST /auth/login
   ↓ verify_password(password, hash)
+  ↓ user.email_verified == False → 403 hard block
   ↓ create_access_token(user.id, exp=480 dk)
   ↓ create_refresh_token(user.id, exp=7 gün)
 
@@ -82,6 +99,19 @@ POST /auth/refresh (access expired)
   ↓ DB lookup (user hala var mı?)
   ↓ yeni access + refresh
 ```
+
+### 3.1.1 E-posta Doğrulama — Tehdit Modeli
+
+| Tehdit | Mitigation |
+|--------|------------|
+| Token brute force (32 byte URL-safe = ~256 bit) | İstatistiksel olarak imkansız |
+| Token expire edilmemesi | `verify_token_expires_at` (default 24 saat) |
+| Eski token'ın yeniden kullanılması | Doğrulama sonrası `verify_token=NULL` |
+| Account enumeration `/resend-verification` üzerinden | Her zaman 202 — yanıttan kullanıcının var olup olmadığı çıkarılamaz |
+| Doğrulanmamış hesapla giriş | `/auth/login` 403 hard block |
+| Mail gönderim fail → kullanıcı sıkışır | Kullanıcı `/resend-verification` ile yeni link talep edebilir; mail fail kayıt blokeleyici değil |
+
+**TODO (gelecek):** `verify_token` plaintext yerine hash'lenmiş saklansın (DB sızıntısında token kullanılamasın) — düşük öncelik (token zaten kısa ömürlü).
 
 ### 3.2 JWT Yapısı
 ```python

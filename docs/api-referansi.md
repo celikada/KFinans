@@ -53,10 +53,14 @@ Health check. Auth gerektirmez. Kubernetes liveness/readiness için.
 ## 3. Auth (`/api/v1/auth`)
 
 ### `POST /auth/register`
-Yeni kullanıcı kaydı. Rate limit: 5/dk.
+Yeni kullanıcı kaydı. Rate limit: 5/dk. Kayıt sonrası **doğrulama maili** otomatik tetiklenir (Resend SDK), `email_verified=False` olur ve `verify_token` üretilir (24 saat ömürlü).
 ```json
-// Request
-{ "email": "user@example.com", "password": "12345678" }
+// Request — RegisterRequest
+{
+  "email":        "user@example.com",
+  "password":     "12345678",
+  "risk_profile": "balanced"        // 'conservative'|'balanced'|'aggressive' (opsiyonel)
+}
 
 // 201 Created
 { "id": "uuid", "email": "user@example.com", "created_at": "2026-04-29T..." }
@@ -65,8 +69,10 @@ Yeni kullanıcı kaydı. Rate limit: 5/dk.
 { "detail": "Bu e-posta zaten kayıtlı" }
 ```
 
+> Mail gönderimi başarısız olsa bile kullanıcı oluşturulur — kullanıcı `POST /auth/resend-verification` ile yeniden talep edebilir.
+
 ### `POST /auth/login`
-Giriş. Rate limit: 10/dk.
+Giriş. Rate limit: 10/dk. **E-posta doğrulanmamışsa hard block (403).**
 ```json
 // Request
 { "email": "user@example.com", "password": "12345678" }
@@ -80,6 +86,9 @@ Giriş. Rate limit: 10/dk.
 
 // 401 Unauthorized
 { "detail": "E-posta veya şifre hatalı" }
+
+// 403 Forbidden — email doğrulanmamış (hard block)
+{ "detail": "E-posta adresiniz henüz doğrulanmadı. Lütfen e-postanızı kontrol edin veya yeni doğrulama linki isteyin." }
 ```
 
 ### `POST /auth/refresh`
@@ -88,10 +97,27 @@ Yeni access + refresh token üretir. Rate limit: 30/dk.
 { "refresh_token": "eyJ..." }
 ```
 
-### `GET /auth/verify-email?token=...` (Faz 2)
-E-posta doğrulama linki.
+### `GET /auth/verify-email?token=...`
+E-posta doğrulama linki. Token DB'deki `users.verify_token` ile eşleşmeli ve `verify_token_expires_at` geçmemiş olmalı. Başarıda `email_verified=True` set edilir, token sıfırlanır.
+```json
+// 200 OK
+{ "message": "E-posta adresiniz doğrulandı." }
 
-### `POST /auth/forgot-password` / `POST /auth/reset-password` (Faz 2)
+// 400 Bad Request
+{ "detail": "Geçersiz veya süresi dolmuş doğrulama linki." }
+```
+
+### `POST /auth/resend-verification`
+Doğrulama linkini yeniden gönderir. **Bilgi sızdırmamak için her zaman 202 döner** (e-posta kayıtlı mı, doğrulanmış mı bilgisi response'tan çıkarılamaz).
+```json
+// Request
+{ "email": "user@example.com" }
+
+// 202 Accepted (her durumda)
+{ "message": "E-posta adresiniz kayıtlıysa doğrulama linki gönderildi." }
+```
+
+### `POST /auth/forgot-password` / `POST /auth/reset-password` (Faz 2 — sonraki adım)
 Şifre sıfırlama akışı.
 
 ---
@@ -170,6 +196,25 @@ Tüm staking pozisyonları (Sonic, Avalanche).
   "errors": { "icrypex": "Bağlantı zaman aşımı" }
 }
 ```
+
+### `POST /portfolio/snapshot`
+Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Sonic, Avalanche P/C, Ethereum, TEFAS, hisse) paralel veri çeker, TL'ye normalize eder, `portfolio_snapshots` + `asset_positions` kayıtlarını yazar. **İdempotent** — aynı gün içinde tekrar çalıştırılırsa eski snapshot silinip yenisi yazılır.
+
+```json
+// 200 OK
+{
+  "id":             "uuid",
+  "snapshot_date":  "2026-04-30",
+  "total_value_tl": "150000.00",
+  "asset_positions": [...]
+}
+
+// 502 Bad Gateway — hiçbir kaynaktan veri alınamadı
+{ "detail": "Snapshot hesaplanamadı: tüm kaynaklar başarısız" }
+```
+
+> Hata izolasyonu: bir kaynak başarısız olursa diğerleri devam eder, başarısız kaynak loglanır.
+> USD/TRY kuru çekilemezse fallback değer 1.0 kullanılır (geçici çözüm — TCMB API entegrasyonu Faz 2 sonrası).
 
 ### `GET /portfolio/wallets`
 **Anlık** blockchain pozisyonları (Sonic, Avalanche, Ethereum).
@@ -408,7 +453,10 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 
 ## 13. Eksik / Eklenecek (TODO)
 
-- [ ] `POST /auth/register` testleri (yalnızca login test ediliyor)
+- [x] `POST /auth/register` testleri (14 yeni test test_auth.py'da)
+- [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri
+- [x] `POST /portfolio/snapshot` manuel tetikleme endpoint'i
+- [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3
 - [ ] Harcama endpoint'leri (`/expenses/*`) — Faz 3
 - [ ] BES manuel giriş endpoint'i — Faz 2

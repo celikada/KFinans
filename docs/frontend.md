@@ -11,11 +11,13 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 
 | Ekran | URL | Durum |
 |-------|-----|-------|
-| Giriş | `/login` | ✅ Aktif |
-| Ana Dashboard (özet kartlar) | `/dashboard` | ✅ Aktif |
+| Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
+| Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
+| E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
+| Ana Dashboard (özet kartlar + "Snapshot al" butonu) | `/dashboard` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
-| Hisse senedi portföyü | `/dashboard/stocks` | ✅ Aktif |
-| Blockchain cüzdanları | `/dashboard/wallets` | ✅ Aktif |
+| Hisse senedi portföyü (Yahoo Finance + Excel) | `/dashboard/stocks` | ✅ Aktif |
+| Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel) | `/dashboard/tefas` | ✅ Aktif |
 
 ### Auth Davranışı (Korunmalı)
@@ -23,6 +25,16 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Token varsa `/login` → `/dashboard`'a redirect
 - 401 response → `localStorage` temizlenir, `/login`'e redirect
 - Bu yönlendirme `proxy.ts` (eski adıyla `middleware.ts`) ile yapılır
+
+### Kayıt + Doğrulama Akışı (Yeni)
+- `/register`: form (email, şifre, risk profili dropdown). Submit sonrası "kayıt başarılı, e-postanı kontrol et" mesajı + "doğrulama linki tekrar gönder" butonu görünür
+- `/verify-email?token=...`: Suspense boundary içinde `useSearchParams` ile token okunur, `GET /auth/verify-email` çağrılır; başarıda "doğrulandı, giriş yapabilirsiniz" mesajı + `/login` linki
+- `/login`: 403 dönerse "e-posta doğrulanmadı" mesajı gösterilir + "tekrar gönder" linki
+- `/login` formunun altında "Hesabın yok mu? Kayıt ol" linki
+
+### Snapshot Tetikleme (Yeni)
+- `/dashboard` üst kısmında "Snapshot al" butonu — `POST /portfolio/snapshot` çağrılır
+- Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
 
 ---
 
@@ -34,14 +46,18 @@ frontend/
 │   ├── layout.tsx                # Root layout (Türkçe locale)
 │   ├── globals.css               # Tailwind import + CSS variables
 │   ├── login/
-│   │   └── page.tsx              # Giriş sayfası
+│   │   └── page.tsx              # Giriş sayfası ("Kayıt ol" linki dahil)
+│   ├── register/
+│   │   └── page.tsx              # Kayıt formu + risk profili dropdown + "tekrar gönder"
+│   ├── verify-email/
+│   │   └── page.tsx              # Token landing (Suspense + useSearchParams)
 │   └── dashboard/
 │       ├── layout.tsx            # Dashboard chrome (header + sidebar)
-│       ├── page.tsx              # Ana dashboard (özet kartlar)
+│       ├── page.tsx              # Ana dashboard (özet kartlar + "Snapshot al" butonu)
 │       ├── crypto/page.tsx       # Kripto pozisyonları
-│       ├── stocks/               # Hisse senedi
+│       ├── stocks/               # Hisse senedi (Yahoo Finance + Excel)
 │       │   └── page.tsx
-│       ├── wallets/              # Blockchain cüzdanları
+│       ├── wallets/              # Blockchain cüzdanları (ekle/sil + Excel)
 │       │   └── page.tsx
 │       └── tefas/page.tsx        # TEFAS
 │
@@ -260,9 +276,10 @@ npm run e2e:ui        # Playwright UI mode
 ## 10. Eksik / Eklenecek (TODO)
 
 ### Kısa Vade (Faz 2)
-- [ ] Kullanıcı kayıt sayfası (`/register`)
-- [ ] E-posta doğrulama landing page
-- [ ] Şifre sıfırlama akışı
+- [x] Kullanıcı kayıt sayfası (`/register`)
+- [x] E-posta doğrulama landing page (`/verify-email`)
+- [x] "Snapshot al" butonu — manuel haftalık snapshot tetikleme
+- [ ] Şifre sıfırlama akışı (`/forgot-password`, `/reset-password`)
 - [ ] BES manuel giriş ekranı
 - [ ] Dashboard haftalık/aylık değişim grafiği (Recharts veya Chart.js)
 - [ ] Profil/ayarlar sayfası (risk profili, dil tercihi)

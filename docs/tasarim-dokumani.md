@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.1
+**Versiyon:** 3.2
 **Tarih:** 2026-04-30
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 başlıyor
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 ilk dört madde develop'ta
 **Üretici:** Mayotek
 
 ---
@@ -37,8 +37,8 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
-| **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Aktif |
-| **Faz 2** | Kullanıcı kaydı, e-posta doğrulama, BES manuel giriş, haftalık snapshot grafiği | 🔄 Sıradaki |
+| **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
+| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, BES manuel giriş, TCMB fallback, Kubernetes manifest'leri | 🔄 Devam ediyor |
 | **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
@@ -169,13 +169,48 @@ Kubernetes Ingress (nginx)
 - Frontend dashboard, login, kripto/wallets/stocks sayfaları
 - Docker Compose dev ortamı (Kubernetes port-forward watchdog kaldırıldı)
 - CI/CD: 4 ayrı workflow — `ci-backend`, `ci-frontend`, `e2e`, `security`
-- **Test paketi: 89 backend + 3 frontend Vitest + 5 Playwright E2E senaryosu**
-  - Unit: security (22), aggregator (22), GBp dönüşümü (7), TEFAS (6)
-  - Integration: auth (7), portfolio (8), IDOR (7), integrations (5), wallets (5)
-  - E2E: login redirect, dashboard akışı (Playwright)
 - 11 domain expert ajanı (`.claude/agents/`) — backend, frontend, dba, devops, security, test, architect, finance, doc, ai, compliance
 - 9 odaklı doküman (`docs/`)
 - Migration durumu güncel: `users` lifecycle kolonları (email_verified, verify_token, deleted_at, credit_balance), `investment_advice.credits_used`, performans index'leri
+
+### ✅ Faz 2 — Tamamlanan Maddeler (develop'ta)
+
+**1. Stocks (hisse senedi) modülü**
+- Backend: `models/stock.py` (StockHolding), migration `c3d4e5f6a7b8`. Mevcut `services/stocks.py` ve `api/v1/stocks.py` artık çalışır durumda (model olmadığı için broken'dı)
+- Frontend: `/dashboard/stocks` — Yahoo Finance fiyat preview, Excel import/export
+- Endpoint'ler: `GET/PUT /portfolio/stocks/holdings`, `POST /portfolio/stocks/preview`, `GET /portfolio/stocks/export`, `POST /portfolio/stocks/import`
+
+**2. Wallets UI sayfası**
+- Frontend: `/dashboard/wallets` — cüzdan ekle/sil/listele, pozisyon tablosu, Excel import/export
+- Backend zaten mevcuttu (`api/v1/wallets.py`)
+
+**3. Kullanıcı kayıt + e-posta doğrulama akışı**
+- Backend: `RegisterRequest(email, password, risk_profile)`, `verify_token` üretimi (24 saat TTL), Resend SDK ile mail
+- Yeni endpoint'ler: `GET /auth/verify-email`, `POST /auth/resend-verification` (her zaman 202 — account enumeration koruması), `POST /auth/login` 403 hard block (email_verified=False)
+- Yeni servis: `services/email.py` (Resend SDK + HTML şablon)
+- Yeni env: `RESEND_API_KEY`, `EMAIL_FROM`, `FRONTEND_URL`, `VERIFY_TOKEN_EXPIRE_HOURS=24`
+- Migration `9a8b7c6d5e4f`: `users.verify_token_expires_at` + `ix_users_verify_token`
+- Frontend: `/register`, `/verify-email` (Suspense + useSearchParams), `/login`'e "Kayıt ol" linki
+- 14 yeni backend test (`test_auth.py`)
+
+**4. Scheduler + snapshot servisi**
+- Yeni servis: `services/snapshot.py::compute_and_save_snapshot()` — tüm kaynakları (Binance, BinanceTR, iCrypex, Sonic, Avalanche P/C, Ethereum, TEFAS, hisse) paralel toplar, TL'ye normalize eder, `portfolio_snapshots` + `asset_positions` yazar
+- İdempotent (aynı gün eskiyi siler, yenisi yazılır), hata izolasyonu (bir kaynak fail diğerleri devam), USD/TL fallback (1.0)
+- `app/scheduler.py`: `AsyncIOScheduler` (Europe/Istanbul, Pazar 23:00, misfire_grace_time=3600s)
+- Yeni endpoint: `POST /portfolio/snapshot` (manuel tetikleme — test/UI için)
+- Frontend dashboard'da "Snapshot al" butonu
+- 4 yeni snapshot integration test
+
+**Test paketi (güncel):**
+- **107 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
+  - Unit: security (22), aggregator (22), GBp dönüşümü (7), TEFAS (6) — toplam 57
+  - Integration: auth (21 — eski 7 + yeni 14), portfolio (8), IDOR (7), integrations (5), wallets (5), snapshot (4) — toplam 50
+  - E2E: login redirect, register + login akışı (Playwright)
+
+### 🐛 Son Sprint'te Düzeltilen Bug'lar
+- **`AssetPositionOut.id` ve `SnapshotOut.id` Pydantic v2 strict UUID rejection** — `str → uuid.UUID` düzeltildi
+- **Binance `_sign` paralel istek recvWindow aşımı** — `recvWindow=60000` eklendi
+- **Migration cycle düzeltmesi** — `c3d4e5f6a7b8.down_revision = a1b2c3d4e5f6`, `9a8b7c6d5e4f.down_revision = f6a7b8c9d0e1`
 
 ### 🐛 Faz 1'de Düzeltilen Bug'lar
 - **GBp dönüşüm hatası** — UK hisseleri için GBP/USD kuru zinciri (`api/v1/stocks.py::convert_to_tl`)
@@ -183,14 +218,17 @@ Kubernetes Ingress (nginx)
 - **Pydantic v2 uyumsuzluk** — `class Config` → `model_config` (kısmi)
 - **Service katmanı logger eksikliği** — 9 servise module-level `logger` eklendi
 
-### 🔄 Faz 2 Sıradaki Öncelikler
-- Kullanıcı kayıt frontend sayfası + e-posta doğrulama akışı (Resend/SES)
-- Haftalık snapshot job'ının implement edilmesi (`scheduler.py` boş)
-- TCMB API USD/TRY fallback (sabit kur yerine)
-- BES manuel giriş ekranı
-- Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
-- KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
-- Test coverage %30 → %50 hedefi
+### 🔄 Faz 2 — Kalan Öncelikler
+- [x] Kullanıcı kayıt frontend sayfası + e-posta doğrulama akışı (Resend)
+- [x] Haftalık snapshot servisi + scheduler implementasyonu
+- [x] Stocks ve Wallets UI sayfaları
+- [ ] TCMB API USD/TRY fallback (şu an snapshot'ta fallback 1.0)
+- [ ] BES manuel giriş ekranı
+- [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
+- [ ] KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
+- [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)
+- [ ] Binance TR Earn endpoint'i için Resmi API yanıtı bekleniyor — geçici çözüm `encrypted_extra` ile cookie token `feature/binancetr-session-token` branch'inde
+- [ ] Test coverage %30 → %50 hedefi
 
 ### 📋 Faz 3 Planlananlar
 - Kredi sistemi tam implementasyonu + iyzico sandbox

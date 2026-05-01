@@ -55,8 +55,10 @@ KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mima
 │   └─────────────────────────────────────────────────────┘       │
 │                                                                   │
 │   ┌──────────────────────────────────────────────────────┐       │
-│   │  APScheduler (backend pod içinde)                    │       │
-│   │  Pazar 23:00 → portfolio_snapshots'a yazar          │       │
+│   │  APScheduler (AsyncIOScheduler, backend pod içinde)  │       │
+│   │  Europe/Istanbul, Pazar 23:00 (CronTrigger)          │       │
+│   │  → services/snapshot.py::compute_and_save_snapshot() │       │
+│   │  → portfolio_snapshots + asset_positions             │       │
 │   └──────────────────────────────────────────────────────┘       │
 └───────────────────────────────────────────────────────────────────┘
                               │
@@ -82,8 +84,8 @@ backend/app/
 │
 ├── api/v1/                # HTTP arayüz katmanı
 │   ├── router.py          # Tüm router'ları birleştirir
-│   ├── auth.py            # /auth (login, register, refresh) + rate limit
-│   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking)
+│   ├── auth.py            # /auth (login, register, refresh, verify-email, resend-verification) + rate limit
+│   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking) + POST /snapshot manuel tetik
 │   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel)
 │   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel)
 │   ├── wallets.py         # /wallets (blockchain adres CRUD + Excel)
@@ -108,6 +110,8 @@ backend/app/
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
+│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar
+│   ├── email.py           # Resend SDK — verify_email + HTML şablon
 │   └── advisor.py         # Anthropic SDK — claude-sonnet-4-6
 │
 ├── models/                # SQLAlchemy ORM
@@ -163,19 +167,63 @@ Her asset için: total_value_tl = (liquid + staked) * unit_price_usd * usd_tl
 JSON response
 ```
 
-### 4.2 Haftalık Snapshot (APScheduler — şu an boş, implement edilecek)
+### 4.2 Haftalık Snapshot (APScheduler — implement edildi)
 
 ```
 Her Pazar 23:00 (Europe/Istanbul)
+  ↓ AsyncIOScheduler + CronTrigger(day_of_week='sun', hour=23, minute=0)
+  ↓ misfire_grace_time=3600s (pod restart toleransı)
   ↓
 Tüm aktif kullanıcılar için döngü:
-  Tüm pozisyonları topla (kripto + blockchain + TEFAS + hisse)
-  TL'ye normalize et (aggregator.py)
   ↓
+services/snapshot.py::compute_and_save_snapshot(user_id, db)
+  ↓ asyncio.gather (paralel, hata izolasyonu):
+  ├── Binance (CCXT)
+  ├── Binance TR (session token)
+  ├── iCrypex (CCXT)
+  ├── Sonic (web3 + SFC)
+  ├── Avalanche P-Chain (REST)
+  ├── Avalanche C-Chain (web3)
+  ├── Ethereum (web3 + Etherscan)
+  ├── TEFAS (httpx)
+  └── Hisse senedi (Yahoo Finance)
+  ↓
+fetch_usd_to_tl() → fallback 1.0
+TL normalize (aggregator.calculate_breakdown)
+  ↓ İdempotent: aynı gün eskiyi DELETE → yeniyi INSERT
 INSERT portfolio_snapshots (user_id, snapshot_date, total_value_tl)
 INSERT asset_positions (snapshot_id, source_type, asset_type, ...)
   ↓
-Eski veriden değişim hesaplanabilir (calculate_changes)
+calculate_changes() WoW/MoM hesaplaması bu tablo üzerinden
+```
+
+**Manuel tetikleme:** `POST /api/v1/portfolio/snapshot` — aynı `compute_and_save_snapshot()` fonksiyonunu çağırır (test/UI için). Frontend dashboard'da "Snapshot al" butonu mevcut.
+
+**Hata izolasyonu:** Bir kaynak fail olursa (örn. Binance timeout), diğer kaynaklar devam eder; başarısız kaynak loglanır. Tüm kaynaklar fail olursa snapshot yazılmaz, 502 döner.
+
+### 4.3 Kullanıcı Kayıt + E-posta Doğrulama Akışı
+
+```
+POST /auth/register {email, password, risk_profile}
+  ↓ bcrypt(password)
+  ↓ secrets.token_urlsafe(32) → verify_token
+  ↓ INSERT users (email_verified=False, verify_token, verify_token_expires_at=now+24h)
+  ↓ services/email.py::send_verification_email() — Resend SDK + HTML şablon
+  ↓ 201 Created (mail fail olsa bile user oluşur)
+
+GET /auth/verify-email?token=...
+  ↓ SELECT users WHERE verify_token=? AND verify_token_expires_at > now()
+  ↓ UPDATE users SET email_verified=True, verify_token=NULL
+  ↓ 200 OK
+
+POST /auth/login (email_verified=False ise)
+  ↓ verify_password OK
+  ↓ user.email_verified == False → 403 hard block
+  ↓ "E-posta adresiniz henüz doğrulanmadı..."
+
+POST /auth/resend-verification {email}
+  ↓ Her zaman 202 (bilgi sızdırmamak için)
+  ↓ Eğer user mevcut ve doğrulanmamışsa: yeni token + mail gönder
 ```
 
 ---
@@ -192,16 +240,19 @@ Eski veriden değişim hesaplanabilir (calculate_changes)
 
 #### `users`
 ```sql
-id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-email           TEXT UNIQUE NOT NULL
-password_hash   TEXT NOT NULL                    -- bcrypt
-risk_profile    TEXT                              -- 'conservative'|'balanced'|'aggressive'
-credit_balance  INT NOT NULL DEFAULT 0           -- Faz 3
-email_verified  BOOLEAN NOT NULL DEFAULT FALSE   -- Faz 2
-verify_token    TEXT                              -- e-posta doğrulama tokeni
-created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+id                       UUID PRIMARY KEY DEFAULT gen_random_uuid()
+email                    TEXT UNIQUE NOT NULL
+password_hash            TEXT NOT NULL                    -- bcrypt
+risk_profile             TEXT                              -- 'conservative'|'balanced'|'aggressive'
+credit_balance           INT NOT NULL DEFAULT 0           -- CHECK (credit_balance >= 0)
+email_verified           BOOLEAN NOT NULL DEFAULT FALSE
+verify_token             TEXT                              -- e-posta doğrulama tokeni (secrets.token_urlsafe(32))
+verify_token_expires_at  TIMESTAMPTZ                       -- token ömrü (default 24 saat)
+deleted_at               TIMESTAMPTZ                       -- soft delete (Faz 3'te aktif)
+created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 
 INDEX ix_users_email (email)
+INDEX ix_users_verify_token (verify_token)
 ```
 
 #### `integrations` (Exchange API key'ler)
@@ -333,9 +384,11 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `d4e5f6a7b8c9` | ✅ `users` lifecycle kolonları: `email_verified`, `verify_token`, `deleted_at`, `credit_balance` (CHECK >=0) |
 | `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` kolonu |
 | `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE |
+| `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token` |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
+- `ix_users_verify_token`
 - `ix_integrations_user_id`
 - `ix_wallet_addresses_user_id`
 - `ix_tefas_holdings_user_id`
@@ -389,8 +442,24 @@ class Asset:
 | TEFAS | `TefasService` | httpx + JSON API |
 | Yahoo Finance | `fetch_stock_quotes()` | httpx (`v8/finance/chart/{ticker}`) |
 | Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` |
+| Snapshot | `snapshot.py::compute_and_save_snapshot()` | Tüm kaynakları paralel topla, TL normalize, DB'ye yaz (idempotent) |
+| E-posta | `email.py::send_verification_email()` | Resend SDK + HTML şablon |
 
 > Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)
+
+### 7.3 E-posta Servisi (Resend)
+
+`services/email.py` Resend SDK ile HTML mail gönderir. Kullanım: kullanıcı kaydı sonrası doğrulama linki, yeniden gönderim.
+
+**Env değişkenleri:**
+```
+RESEND_API_KEY=re_...
+EMAIL_FROM=noreply@kfinans.app
+FRONTEND_URL=https://app.kfinans.app    # Verify linki için (host)
+VERIFY_TOKEN_EXPIRE_HOURS=24
+```
+
+**Şablon:** `send_verification_email(to_email, verify_token)` — `{FRONTEND_URL}/verify-email?token={token}` linki ile HTML mail. Hata durumunda exception fırlatmaz, loglar (kullanıcı kaydı bloklamamak için).
 
 ---
 
