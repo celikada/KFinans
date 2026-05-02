@@ -322,6 +322,9 @@ frontend/
 - @playwright/test (Chromium)
 - MSW 2.6 (mock service worker — kurulu, henüz kullanılmadı)
 
+**Frontend runtime bağımlılıkları (son eklenenler):**
+- `recharts ^3.8.1` — `/dashboard/history` line chart'ları için (toplam portföy + varlık tipi kırılımı)
+
 **npm scripts:**
 ```
 npm test           # Vitest run

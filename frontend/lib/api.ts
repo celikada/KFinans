@@ -83,6 +83,9 @@ export const api = {
       { method: "POST" }
     ),
 
+  getPortfolioHistory: (limit = 12) =>
+    request<SnapshotHistoryDTO[]>(`/portfolio/history?limit=${limit}`),
+
   getWallets: () => request<WalletDTO[]>("/wallets"),
   addWallet: (chain: string, address: string, label?: string) =>
     request<WalletDTO>("/wallets", {
@@ -251,6 +254,21 @@ export const api = {
     return res.json();
   },
 };
+
+export interface SnapshotHistoryDTO {
+  id: string;
+  snapshot_date: string;
+  total_value_tl: string;
+  asset_positions: Array<{
+    id: string;
+    asset_type: string;
+    provider: string;
+    symbol: string;
+    name: string;
+    total_value_tl: string;
+    weight_pct: string;
+  }>;
+}
 
 export interface RegisterResponseDTO {
   id: string;

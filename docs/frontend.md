@@ -14,7 +14,8 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
 | Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
 | E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
-| Ana Dashboard (özet kartlar + "Snapshot al" butonu) | `/dashboard` | ✅ Aktif |
+| Ana Dashboard (5 kart + grand total + "Snapshot al" + "Geçmiş" butonu) | `/dashboard` | ✅ Aktif |
+| Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
 | Hisse senedi portföyü (Yahoo Finance + Excel) | `/dashboard/stocks` | ✅ Aktif |
 | Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
@@ -36,6 +37,22 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 ### Snapshot Tetikleme (Yeni)
 - `/dashboard` üst kısmında "Snapshot al" butonu — `POST /portfolio/snapshot` çağrılır
 - Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
+
+### Dashboard Yenileme (Yeni)
+- 5 kart yapısı: TEFAS, Kripto, **Hisse Senedi** (`/dashboard/stocks`'a link), **Blockchain Cüzdanlar** (`/dashboard/wallets`'a link — eski "yakında" pasif kart aktive edildi), BES
+- Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL): TEFAS top 3 fund kodu, Kripto top 3 coin, Hisse top 3 ticker, Blockchain top 3 sembol, BES top 3 plan
+- Üstte **"Toplam: X ₺"** (5 kart toplamı / grand total)
+- Sağ üstte **"Geçmiş"** butonu → `/dashboard/history`
+- Reusable `Card` component (5 kart için ortak — büyük sayfa parçalama refactor'ünün başlangıcı)
+
+### Snapshot History Grafiği (Yeni)
+- `/dashboard/history` — `recharts ^3.8.1` ile iki line chart
+  1. **Toplam Portföy Değeri** — son 12 snapshot tek mavi çizgi
+  2. **Varlık Tipine Göre** — crypto / fund / stock / pension / cash 5 renkli çizgi
+- Üstte "Son snapshot (tarih)" + büyük TL değer
+- Boş state: "Henüz snapshot yok — 'Snapshot al' butonuna basın veya Pazar 23:00 otomatik snapshot bekleyin"
+- Backend `GET /portfolio/history?limit=12` endpoint'i kullanılıyor (zaten vardı)
+- `lib/api.ts` yeni metot: `getPortfolioHistory(limit=12)` + yeni interface `SnapshotHistoryDTO` (id, snapshot_date, total_value_tl, asset_positions[])
 
 ### BES Akışı (Yeni)
 - `/dashboard/bes`: TEFAS sayfası pattern'inde, ama her satırda iki input (plan adı + toplam ₺)
@@ -60,7 +77,9 @@ frontend/
 │   │   └── page.tsx              # Token landing (Suspense + useSearchParams)
 │   └── dashboard/
 │       ├── layout.tsx            # Dashboard chrome (header + sidebar)
-│       ├── page.tsx              # Ana dashboard (özet kartlar + "Snapshot al" butonu)
+│       ├── page.tsx              # Ana dashboard (5 kart + grand total + Snapshot al + Geçmiş)
+│       ├── history/              # Snapshot geçmişi (recharts 2 line chart)
+│       │   └── page.tsx
 │       ├── crypto/page.tsx       # Kripto pozisyonları
 │       ├── stocks/               # Hisse senedi (Yahoo Finance + Excel)
 │       │   └── page.tsx
@@ -289,8 +308,10 @@ npm run e2e:ui        # Playwright UI mode
 - [x] E-posta doğrulama landing page (`/verify-email`)
 - [x] "Snapshot al" butonu — manuel haftalık snapshot tetikleme
 - [x] BES manuel giriş ekranı (`/dashboard/bes` + dashboard kartı aktivasyonu)
+- [x] Dashboard yenileme: 5 kart + top 3 detay + grand total + reusable `Card` component
+- [x] Snapshot geçmişi grafiği (`/dashboard/history` — recharts 2 line chart)
 - [ ] Şifre sıfırlama akışı (`/forgot-password`, `/reset-password`)
-- [ ] Dashboard haftalık/aylık değişim grafiği (Recharts veya Chart.js)
+- [ ] Dashboard haftalık/aylık değişim oranı grafiği (WoW/MoM bar/line)
 - [ ] Profil/ayarlar sayfası (risk profili, dil tercihi)
 
 ### Orta Vade (Faz 3)
@@ -308,6 +329,7 @@ npm run e2e:ui        # Playwright UI mode
 
 ### Teknik Borç
 - [ ] `crypto/page.tsx`, `stocks/page.tsx`, `wallets/page.tsx` 300+ satır → component'lere böl
+- [ ] Dashboard `page.tsx` 30+ satır büyüdü (5 kart + grand total + Geçmiş butonu); reusable `Card` component çıkarıldı — sayfa parçalamanın başlangıcı, kalan iç state/fetch hook'lara taşınmalı
 - [ ] `lib/api.ts` çok dosyaya böl (`lib/api/auth.ts`, `lib/api/portfolio.ts` vb.)
 - [ ] React Query veya SWR ile cache'leme
 - [ ] httpOnly cookie + CSRF token'a geçiş (XSS savunması)

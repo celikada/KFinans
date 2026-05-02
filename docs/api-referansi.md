@@ -158,7 +158,27 @@ Son haftalık snapshot.
 ```
 
 ### `GET /portfolio/history?limit=12`
-Son N snapshot.
+Son N snapshot (en yeniden eskiye sıralı). Frontend `/dashboard/history` line chart'ı bu endpoint'i kullanır.
+```json
+200 OK
+[
+  {
+    "id":              "uuid",
+    "snapshot_date":   "2026-04-26",
+    "total_value_tl":  "150000.00",
+    "asset_positions": [
+      {
+        "asset_type":     "crypto",   // 'crypto'|'fund'|'stock'|'pension'|'cash'
+        "provider":       "binance",
+        "symbol":         "BTC",
+        "total_value_tl": "...",
+        ...
+      }
+    ]
+  }
+]
+```
+> `limit` opsiyonel (varsayılan 12). Pagination yok — Faz 2 cursor-based pagination TODO'su.
 
 ### `GET /portfolio/changes`
 WoW (haftalık) ve MoM (aylık) değişim.
