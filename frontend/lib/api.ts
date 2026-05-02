@@ -243,6 +243,14 @@ export const api = {
     return res.json();
   },
 
+  // Finansal hedef
+  getGoal: () => request<GoalDTO>("/user/goal"),
+  setGoal: (monthly_expense_goal: number) =>
+    request<GoalDTO>("/user/goal", {
+      method: "PUT",
+      body: JSON.stringify({ monthly_expense_goal }),
+    }),
+
   // Planlı ödemeler (Faz 3)
   listPlannedExpenses: () => request<PlannedExpenseDTO[]>("/planned-expenses"),
 
@@ -454,6 +462,15 @@ export interface TefasPosition {
   quantity: string;
   unit_price_tl: string;
   total_value_tl: string;
+}
+
+export interface GoalDTO {
+  monthly_expense_goal: string | null;
+  freedom_target: string | null;
+  portfolio_value: string | null;
+  passive_income_potential: string | null;
+  progress_pct: number | null;
+  months_covered: number | null;
 }
 
 export type PlannedCategory = "loan" | "tax" | "insurance" | "subscription" | "rent" | "utility" | "other";

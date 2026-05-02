@@ -57,6 +57,10 @@ export default function DashboardPage() {
   // Planlı ödemeler (bu yıl)
   const [plannedTotal, setPlannedTotal] = useState<number | null>(null);
 
+  // Finansal hedef
+  const [goalPct, setGoalPct] = useState<number | null>(null);
+  const [goalPassive, setGoalPassive] = useState<number | null>(null);
+
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
   const [snapshotMsg, setSnapshotMsg] = useState("");
@@ -117,6 +121,11 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     const now = new Date();
+    api.getGoal().then((g) => {
+      if (g.progress_pct !== null) setGoalPct(g.progress_pct);
+      if (g.passive_income_potential) setGoalPassive(parseFloat(g.passive_income_potential));
+    }).catch(() => {});
+
     api.getForecast(now.getFullYear()).then((fc) => {
       const total = parseFloat(fc.year_total);
       if (total > 0) setPlannedTotal(total);
@@ -288,6 +297,8 @@ export default function DashboardPage() {
             top={[]}
             placeholder="Kredi, vergi, fatura planı"
           />
+
+          <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
         </div>
       </main>
 
@@ -329,6 +340,47 @@ interface CardProps {
   loading?: boolean;
   top: TopItem[];
   placeholder: string;
+}
+
+function GoalCard({ href, pct, passive }: { href: string; pct: number | null; passive: number | null }) {
+  const router = useRouter();
+  const hasData = pct !== null;
+  const color =
+    !hasData    ? "bg-violet-50 text-violet-600" :
+    pct >= 100  ? "bg-green-50 text-green-600"   :
+    pct >= 70   ? "bg-blue-50 text-blue-600"     :
+                  "bg-violet-50 text-violet-600";
+
+  return (
+    <button
+      onClick={() => router.push(href)}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-violet-100 transition-all group"
+    >
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${color} group-hover:opacity-80 transition-opacity`}>
+        <span className="text-xl">🎯</span>
+      </div>
+      <h3 className="font-semibold text-gray-900 mb-1">Finansal Hedef</h3>
+
+      {hasData ? (
+        <>
+          <p className="text-sm font-semibold text-violet-600">%{pct!.toFixed(1)} tamamlandı</p>
+          <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-full bg-violet-500 rounded-full transition-all"
+              style={{ width: `${Math.min(pct!, 100)}%` }}
+            />
+          </div>
+          {passive !== null && (
+            <p className="text-xs text-gray-400 mt-2">
+              Pasif gelir pot.: <span className="font-medium text-gray-600">{fmtTL(passive)} ₺/ay</span>
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-gray-400">Aylık ihtiyacını gir, hedeni hesapla</p>
+      )}
+    </button>
+  );
 }
 
 function Card({ href, icon, color, title, total, count, countLabel, loading, top, placeholder }: CardProps) {
