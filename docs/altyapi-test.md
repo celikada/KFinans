@@ -15,7 +15,7 @@
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
 ### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
-- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30) — **135 test**
+- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%50) — **141 test**
 - ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build — 3 unit test
 - ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
 - ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
@@ -214,17 +214,17 @@ jobs:
             (en geniş taban)
 ```
 
-### 5.2 Backend Test Yapısı (Mevcut — 135 test geçiyor)
+### 5.2 Backend Test Yapısı (Mevcut — 141 test geçiyor)
 ```
 backend/tests/
 ├── conftest.py                  # ✅ NullPool + per-request session + slowapi disable
-├── unit/                        # 66 test
+├── unit/                        # 72 test
 │   ├── test_security.py         # ✅ JWT, Fernet, bcrypt — 22 test
 │   ├── test_aggregator.py       # ✅ WoW/MoM/breakdown/weight/staking — 22 test
 │   ├── test_exchange_rates.py   # ✅ TCMB XML parse + fallback chain + cache — 9 test
 │   ├── test_stocks_currency.py  # ✅ GBp/USD/TRY dönüşüm zinciri — 7 test
 │   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx) — 6 test
-│   └── test_advisor.py          # ❌ Anthropic mock + token sayımı (Faz 3)
+│   └── test_advisor.py          # ✅ Anthropic SDK AsyncMock + token sayımı + prompt caching — 6 test
 ├── integration/                 # 70 test
 │   ├── test_auth.py             # ✅ Register/login/refresh + verify-email + resend + 403 hard block — 21 test
 │   ├── test_portfolio.py        # ✅ TEFAS holdings CRUD — 8 test
@@ -242,6 +242,7 @@ backend/tests/
 ```
 
 **Yeni test grupları (son sprint):**
+- `test_advisor.py` (yeni dosya): 6 unit test — `ANTHROPIC_API_KEY` boşsa `RuntimeError`; key set'liyse client oluşur; `generate()` `settings.claude_model` ve `settings.claude_max_tokens` kullanır; token usage `prompt_tokens`/`completion_tokens` olarak kaydedilir; horizon etiketi (orta vade / uzun vade) prompt'ta geçer; system prompt `cache_control: ephemeral` ile gönderilir (prompt caching). Anthropic SDK AsyncMock ile patch'lendi
 - `test_logout.py` (yeni dosya): 8 integration test — `/auth/logout` 200 OK; logout sonrası access blacklist'te (auth endpoint 401); body refresh logout'tan sonra `/auth/refresh` 401; sadece access logout → refresh hala çalışır; logout auth gerektirir (token'sız 401); idempotent (ikinci logout 401 — token zaten blacklist'te); bozuk refresh body'de yutulur ama access yine blacklist'e alınır; User A logout User B'yi etkilemez
 - `test_bes_api.py` (yeni dosya): 8 integration test — boş kullanıcı listesi, save & retrieve, idempotent PUT (replace-all), boş PUT, negatif değer reddi (`total_value_tl >= 0`), boş `plan_name` reddi (min_length=1), Excel export, Excel import
 - `test_idor.py`: yeni `test_user_a_cannot_see_user_b_bes` + `test_no_token_returns_401`'e `/portfolio/bes/holdings` eklendi
@@ -296,9 +297,10 @@ async def test_tefas_fetch():
 | `core/security.py` (JWT, Fernet) | **%100** | ~%95 ✅ |
 | `services/aggregator.py` (formüller) | **%100** | ~%85 ✅ |
 | `api/v1/auth.py` | %95 | ~%80 ✅ |
+| `services/advisor.py` (Anthropic SDK) | %80 | ~%85 ✅ |
 | `services/exchange/*` | %70 | ~%5 (sadece logger import) |
 | `services/blockchain/*` | %70 | ~%5 |
-| Genel CI gate (faz bazlı) | Faz 1: %30 ✅ → Faz 2: %50 → Faz 3: %70 | ~%30+ |
+| Genel CI gate (faz bazlı) | Faz 1: %30 ✅ → Faz 2.5: %50 ✅ → Faz 3: %70 | ~%52.21 |
 
 CI'da coverage threshold `ci-backend.yml::coverage-gate` ile uygulanır — düşüşte merge bloke.
 

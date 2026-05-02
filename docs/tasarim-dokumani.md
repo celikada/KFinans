@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.8
+**Versiyon:** 3.9
 **Tarih:** 2026-05-02
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 10/10 madde tamam (Kubernetes manifest'leri eklendi); test coverage %30→%50 hedefi ve frontend parça testleri Faz 2.5 cleanup'a kaldı
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 10/10 madde tamam (Kubernetes manifest'leri eklendi); Faz 2.5 cleanup'ta test coverage %30→%50 hedefi tamamlandı (%52.21), sadece frontend parça testleri açık kaldı
 **Üretici:** Mayotek
 
 ---
@@ -240,10 +240,11 @@ Kubernetes Ingress (nginx)
 - 8 yeni integration test (`test_logout.py`)
 
 **Test paketi (güncel):**
-- **135 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
-  - Unit: security (22), aggregator (22), exchange_rates (9), GBp dönüşümü (7), TEFAS (6) — toplam 66
+- **141 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
+  - Unit: security (22), aggregator (22), exchange_rates (9), GBp dönüşümü (7), TEFAS (6), advisor (6) — toplam 72
   - Integration: auth (21), portfolio (8), IDOR (8), integrations (5), wallets (5), snapshot (7), bes (8), logout (8) — toplam 70
   - E2E: login redirect, register + login akışı (Playwright)
+  - Coverage: %52.21 (CI gate %50)
 
 ### 🐛 Son Sprint'te Düzeltilen Bug'lar
 - **`AssetPositionOut.id` ve `SnapshotOut.id` Pydantic v2 strict UUID rejection** — `str → uuid.UUID` düzeltildi
@@ -269,7 +270,7 @@ Kubernetes Ingress (nginx)
 ### 🔄 Faz 2.5 — Cleanup (Faz 3 öncesi)
 - [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)
 - [ ] Binance TR Earn endpoint'i için Resmi API yanıtı bekleniyor — geçici çözüm `encrypted_extra` ile cookie token `feature/binancetr-session-token` branch'inde
-- [ ] Test coverage %30 → %50 hedefi
+- [x] Test coverage %30 → %50 hedefi (2026-05-02: %52.21 — `services/advisor.py` 6 unit test ile %0 → ~%85; orphan `services/bes.py` silindi; CI gate %50)
 - [ ] Frontend bileşen parçalama + Vitest/RTL component test'leri
 
 ### 📋 Faz 3 Planlananlar

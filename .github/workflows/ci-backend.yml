@@ -134,7 +134,7 @@ jobs:
       - name: Coverage rapor (en son XML)
         run: |
           # Bu adım coverage threshold'unu kontrol eder.
-          # Mevcut hedef: %30 (Faz 1). Faz 2'de %50, Faz 3'te %70'e çekilecek.
+          # Mevcut hedef: %50 (Faz 2.5 — 2026-05-02). Faz 3'te %70'e çekilecek.
           # XML'lerden coverage yüzdesini parse et:
           python <<'EOF'
           import xml.etree.ElementTree as ET
@@ -149,7 +149,7 @@ jobs:
               print("UYARI: coverage XML bulunamadı")
               exit(0)
           best = max(totals)
-          THRESHOLD = 30.0
+          THRESHOLD = 50.0
           print(f"En iyi coverage: %{best:.2f} (hedef: %{THRESHOLD})")
           if best < THRESHOLD:
               print(f"❌ Coverage %{THRESHOLD} altına düştü")
