@@ -72,6 +72,8 @@ KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mima
        └──────────────────────────────────────────┘
 ```
 
+> **K8s manifest'leri:** `k8s/` klasöründe (namespace, configmap, postgres StatefulSet, backend/frontend Deployment, nginx-ingress + cert-manager, kustomization). Deploy rehberi ve önkoşullar: [`k8s/README.md`](../k8s/README.md). Tek komut: `kubectl apply -k k8s/`.
+
 ---
 
 ## 3. Backend İç Yapısı (Modüler Monolit)

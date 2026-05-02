@@ -246,6 +246,12 @@ def decrypt_secret(ciphertext: str) -> str:
 - Production'da **Kubernetes Secret + sealed-secrets** veya **External Secrets Operator** zorunlu
 - Key rotasyonu: yeni key + dual-decrypt + re-encrypt migration (kritik operasyon, prosedür yazılmalı)
 
+### 5.4 K8s Secrets Yerleşimi (Mevcut)
+- Tüm hassas env (`DATABASE_URL`, `SECRET_KEY`, `FERNET_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `POSTGRES_PASSWORD`) `kfinans-secrets` adlı Kubernetes Secret'ında
+- `k8s/secrets.example.yaml` şablon olarak versiyon kontrolünde; gerçek `k8s/secrets.yaml` `.gitignore` ile korumalı (commit'lenmemeli)
+- **Önerilen production akışı:** YAML manifest yerine `kubectl create secret generic kfinans-secrets --from-literal=KEY=value -n kfinans` ile imperatif oluşturma; secret değerleri shell history'e veya repo'ya düşmez
+- **Faz 3 hedefi:** External Secrets Operator (AWS Secrets Manager / HashiCorp Vault) veya SealedSecrets ile GitOps uyumlu secret yönetimi
+
 ---
 
 ## 6. Rate Limiting

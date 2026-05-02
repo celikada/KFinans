@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.7
+**Versiyon:** 3.8
 **Tarih:** 2026-05-02
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 9/10 madde + BES detaylı genişletme (4 metric + contract_number)
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 10/10 madde tamam (Kubernetes manifest'leri eklendi); test coverage %30→%50 hedefi ve frontend parça testleri Faz 2.5 cleanup'a kaldı
 **Üretici:** Mayotek
 
 ---
@@ -38,7 +38,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
-| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri | 🔄 Devam ediyor |
+| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri ✅ | ✅ Tamamlandı (Faz 2.5: test coverage + frontend parçalama) |
 | **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
@@ -256,7 +256,7 @@ Kubernetes Ingress (nginx)
 - **Pydantic v2 uyumsuzluk** — `class Config` → `model_config` (kısmi)
 - **Service katmanı logger eksikliği** — 9 servise module-level `logger` eklendi
 
-### 🔄 Faz 2 — Kalan Öncelikler
+### ✅ Faz 2 — Kalan Öncelikler (Tamamlandı)
 - [x] Kullanıcı kayıt frontend sayfası + e-posta doğrulama akışı (Resend)
 - [x] Haftalık snapshot servisi + scheduler implementasyonu
 - [x] Stocks ve Wallets UI sayfaları
@@ -264,10 +264,13 @@ Kubernetes Ingress (nginx)
 - [x] BES manuel giriş ekranı (model + endpoint'ler + Excel + snapshot entegrasyonu + frontend)
 - [x] JWT blacklist + `/auth/logout` endpoint'i (revoked_tokens tablosu + jti claim + refresh blacklist kontrolü)
 - [x] KVKK metinleri (KVKK aydınlatma, gizlilik, kullanım şartları, çerez — `/legal/*` sayfaları + register'da 3 ayrı onay; placeholder'lar kullanıcı tarafından doldurulacak)
-- [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
+- [x] Kubernetes manifest'leri (`k8s/` klasörü — namespace, configmap, postgres StatefulSet, backend/frontend Deployment, nginx-ingress + cert-manager, kustomization, kapsamlı README; tek komut: `kubectl apply -k k8s/`)
+
+### 🔄 Faz 2.5 — Cleanup (Faz 3 öncesi)
 - [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)
 - [ ] Binance TR Earn endpoint'i için Resmi API yanıtı bekleniyor — geçici çözüm `encrypted_extra` ile cookie token `feature/binancetr-session-token` branch'inde
 - [ ] Test coverage %30 → %50 hedefi
+- [ ] Frontend bileşen parçalama + Vitest/RTL component test'leri
 
 ### 📋 Faz 3 Planlananlar
 - Kredi sistemi tam implementasyonu + iyzico sandbox

@@ -41,7 +41,14 @@ export default function DashboardPage() {
     api.getBesHoldings().then((holdings) => {
       if (!holdings.length) return;
       setBesPlanCount(holdings.length);
-      const total = holdings.reduce((s, h) => s + parseFloat(h.total_value_tl.toString()), 0);
+      const total = holdings.reduce((s, h) =>
+        s
+        + (parseFloat(h.paid_principal.toString()) || 0)
+        + (parseFloat(h.paid_returns.toString()) || 0)
+        + (parseFloat(h.govt_contribution.toString()) || 0)
+        + (parseFloat(h.govt_returns.toString()) || 0),
+        0,
+      );
       setBesTotal(total);
     }).catch(() => {});
   }, [router]);

@@ -29,8 +29,8 @@
 - Tahmini aylık tüketim: ~600-1,500 dk (push sıklığına göre)
 
 ### 1.5 Eksik (Production'a Kadar)
-- ❌ Kubernetes manifestleri (`k8s/` klasörü boş)
-- ❌ Production deployment (kubectl rollout otomasyonu)
+- ✅ Kubernetes manifestleri (`k8s/` klasörü — kustomize, tek komutla deploy) — bkz. §3
+- ❌ Production deployment (kubectl rollout otomasyonu — manuel `kubectl apply -k k8s/`, CD'den otomatik tetik yok)
 - ❌ Tilt/Skaffold dev loop (Docker Compose'tan geçiş — bilinçli teknik borç)
 - ❌ Monitoring (Prometheus + Grafana)
 - ❌ Centralized logging (Loki veya ELK)
@@ -91,68 +91,64 @@ docker compose up -d --build backend
 
 ---
 
-## 3. Production: Kubernetes (Eklenecek)
+## 3. Production: Kubernetes (Manifest'ler Hazır)
 
 ### 3.1 Namespace ve Mevcut Durum
 ```
 namespace: kfinans
-mevcut:    postgres StatefulSet (bitnami/postgresql Helm) ✅
-eklenecek: backend Deployment + Service
-           frontend Deployment + Service
-           nginx Ingress + cert-manager
-           Secrets (DATABASE_URL, SECRET_KEY, FERNET_KEY, ANTHROPIC_API_KEY)
-           ConfigMap (CORS_ORIGINS, NEXT_PUBLIC_API_URL)
+mevcut (k8s/ klasöründe):
+  ✅ namespace.yaml            — kfinans namespace
+  ✅ configmap.yaml            — non-secret env (CORS, EMAIL_FROM, FRONTEND_URL,
+                                  RPC URL'leri, CLAUDE_MODEL, NEXT_PUBLIC_API_URL)
+  ✅ secrets.example.yaml      — şablon (gerçek secrets.yaml gitignore'da)
+  ✅ postgres.yaml             — PostgreSQL 16 StatefulSet (replicas: 1, 50Gi PVC,
+                                  headless Service, pg_isready probes)
+  ✅ backend.yaml              — FastAPI Deployment (replicas: 2,
+                                  RollingUpdate maxUnavailable: 0,
+                                  initContainer alembic upgrade head,
+                                  /health liveness + readiness + startup probes,
+                                  envFrom configmap+secret, ClusterIP)
+  ✅ frontend.yaml             — Next.js standalone Deployment (replicas: 2, ClusterIP)
+  ✅ ingress.yaml              — nginx-ingress + cert-manager TLS
+                                  (api.kfinans.app → backend, app.kfinans.app → frontend)
+  ✅ kustomization.yaml        — kustomize index (tek komutla deploy)
+  ✅ README.md                 — kapsamlı deploy rehberi
+
+Frontend Dockerfile zaten production-ready (multi-stage standalone, next.config.ts'de
+output: "standalone"). Backend Dockerfile production target da mevcut.
 ```
 
-### 3.2 Manifest Yapısı (Önerilen)
-```
-k8s/
-├── namespace.yaml
-├── secrets/
-│   ├── kfinans-secrets.yaml         # External Secrets Operator veya sealed-secrets
-│   └── README.md                     # `kubectl create secret` komutları
-├── postgres/
-│   ├── values.yaml                   # bitnami/postgresql Helm override
-│   └── pvc.yaml                      # 50Gi PersistentVolumeClaim
-├── backend/
-│   ├── deployment.yaml               # replicas: 2, resources, probes
-│   ├── service.yaml                  # ClusterIP :80 → :8000
-│   ├── configmap.yaml                # CORS_ORIGINS vb.
-│   └── hpa.yaml                      # HorizontalPodAutoscaler (CPU 70%)
-├── frontend/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── configmap.yaml
-└── ingress.yaml                       # nginx-ingress + cert-manager (Let's Encrypt)
+### 3.2 Önkoşullar
+- Kubernetes cluster (1.27+) + `kubectl` yapılandırılmış
+- nginx-ingress controller kurulu
+- cert-manager kurulu + ClusterIssuer (`letsencrypt-prod`) tanımlı
+- DNS: `api.kfinans.app` ve `app.kfinans.app` cluster ingress IP'sine bağlı
+- GHCR'ya push edilmiş image'lar: `ghcr.io/celikada/kfinans-backend:{sha}`, `ghcr.io/celikada/kfinans-frontend:{sha}`
+
+### 3.3 Tek Komut Deploy
+```bash
+# 1) Secret hazırlığı (sadece ilk seferinde):
+cp k8s/secrets.example.yaml k8s/secrets.yaml
+# secrets.yaml'i base64 değerlerle doldur (DATABASE_URL, SECRET_KEY, FERNET_KEY,
+# ANTHROPIC_API_KEY, RESEND_API_KEY, POSTGRES_PASSWORD vb.)
+# Alternatif: kubectl create secret generic kfinans-secrets --from-literal=... -n kfinans
+
+# 2) Image tag güncelle (kustomization.yaml içindeki images: bloğu)
+
+# 3) Deploy
+kubectl apply -k k8s/
+
+# 4) Migration init container otomatik çalışır; durumu izle
+kubectl -n kfinans rollout status deploy/backend
+kubectl -n kfinans rollout status deploy/frontend
 ```
 
-### 3.3 Backend Deployment Özeti
-```yaml
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-      - name: backend
-        image: ghcr.io/celikada/kfinans-backend:{git-sha}
-        ports: [{ containerPort: 8000 }]
-        envFrom:
-          - secretRef: { name: kfinans-secrets }
-          - configMapRef: { name: kfinans-config }
-        resources:
-          requests: { cpu: 100m, memory: 256Mi }
-          limits:   { cpu: 500m, memory: 512Mi }
-        livenessProbe:
-          httpGet: { path: /health, port: 8000 }
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet: { path: /health, port: 8000 }
-          initialDelaySeconds: 10
-          periodSeconds: 5
-```
+> Ayrıntılı rehber (önkoşullar, secret oluşturma, image push, migration akışı, ölçeklendirme, yedekleme, Faz 3 TODO'ları): [`k8s/README.md`](../k8s/README.md)
 
-### 3.4 Image Tagging Stratejisi
+### 3.4 Faz 3 TODO'ları (manifest seti dışında)
+HPA (HorizontalPodAutoscaler), NetworkPolicy, PodDisruptionBudget, Prometheus + Grafana, PgBouncer, `revoked_tokens` cleanup CronJob, external-secrets/SealedSecrets, `pg_dump` CronJob.
+
+### 3.5 Image Tagging Stratejisi
 ```
 ghcr.io/celikada/kfinans-backend:{git-sha}    # immutable, deployment için
 ghcr.io/celikada/kfinans-backend:develop      # son develop build
@@ -191,12 +187,13 @@ jobs:
     steps:
       - docker build → ghcr.io/.../{git-sha}
       - docker push
-  # production deploy: manuel veya `kubectl rollout` (Faz 3'te otomatize)
+  # ✅ K8s manifest'leri hazır (k8s/, kustomize) — manuel `kubectl apply -k k8s/`
+  # ❌ Otomatik kubectl rollout: Faz 3 (CD pipeline'a eklenecek)
 ```
 
 ### 4.3 Eklenecek
 - [ ] Test coverage `Codecov` veya `Coveralls`'a yüklensin
-- [ ] `kubectl rollout` otomasyonu (main → production)
+- [ ] `kubectl rollout` otomasyonu (main → production) — **manifest'ler hazır, sadece pipeline adımı eksik**
 - [ ] Slack/Discord deploy bildirimi
 - [ ] Vulnerability scan (Trivy) — image push öncesi
 
@@ -415,7 +412,7 @@ git push --tags
 ## 9. Eksik / Eklenecek (TODO)
 
 ### Acil
-- [ ] Kubernetes manifest'lerini yaz (`k8s/` klasörü)
+- [x] Kubernetes manifest'lerini yaz (`k8s/` klasörü — kustomize, tek komutla deploy)
 - [ ] Test coverage'ı %20'den %70'e çıkar
 - [ ] Frontend test altyapısı (Vitest + RTL + Playwright)
 
