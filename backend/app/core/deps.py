@@ -20,6 +20,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.revoked_token import RevokedToken
     from app.models.user import User
 
     credentials_exception = HTTPException(
@@ -30,10 +31,17 @@ async def get_current_user(
     try:
         payload = decode_token(token)
         user_id: str = payload.get("sub")
+        jti: str | None = payload.get("jti")
         if not user_id:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
+
+    # Blacklist kontrolu (eski jti'siz token'lar geriye donuk uyumlu kalir)
+    if jti:
+        revoked = await db.execute(select(RevokedToken).where(RevokedToken.jti == jti))
+        if revoked.scalar_one_or_none():
+            raise credentials_exception
 
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()

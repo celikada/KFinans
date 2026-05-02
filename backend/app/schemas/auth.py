@@ -32,6 +32,11 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    """Refresh token opsiyonel: yoksa sadece header'daki access blacklist'e alinir."""
+    refresh_token: str | None = None
+
+
 class RegisterResponse(BaseModel):
     id: uuid.UUID
     email: str

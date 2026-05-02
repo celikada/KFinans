@@ -45,7 +45,12 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, [router]);
 
-  function logout() {
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      // Backend ulasilamasa bile lokal session temizlenmeli
+    }
     clearAuth();
     router.push("/login");
   }

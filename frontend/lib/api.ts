@@ -43,6 +43,12 @@ export const api = {
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
 
+  logout: (refreshToken?: string) =>
+    request<{ detail: string }>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken ?? null }),
+    }),
+
   register: (email: string, password: string, risk_profile: string) =>
     request<RegisterResponseDTO>("/auth/register", {
       method: "POST",

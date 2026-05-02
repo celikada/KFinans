@@ -4,12 +4,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.deps import get_db
+from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.security import (
     create_access_token,
@@ -18,9 +19,11 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
+    LogoutRequest,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
@@ -28,6 +31,8 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.email import send_verification_email
+
+_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -68,8 +73,18 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
         if data.get("type") != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token türü")
         user_id = data.get("sub")
+        jti = data.get("jti")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token")
+
+    # Logout sonrasi iptal edilmis refresh token kabul edilmez
+    if jti:
+        revoked = await db.execute(select(RevokedToken).where(RevokedToken.jti == jti))
+        if revoked.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token iptal edilmiş",
+            )
 
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
@@ -80,6 +95,60 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),
     )
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+    payload: LogoutRequest,
+    access_token: str = Depends(_oauth2),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Header'daki access token'i ve (varsa) body'deki refresh token'i blacklist'e alir.
+
+    Idempotent: ayni token tekrar logout edilirse JSON 200 doner; PRIMARY KEY
+    cakismasi olursa rollback yapilip basarili sayilir.
+    """
+    # Access token (zaten get_current_user dogruladi)
+    try:
+        access_payload = decode_token(access_token)
+        access_jti = access_payload.get("jti")
+        if access_jti:
+            db.add(RevokedToken(
+                jti=access_jti,
+                user_id=current_user.id,
+                token_type="access",
+                expires_at=datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc),
+            ))
+    except JWTError:
+        pass  # get_current_user gecmisti zaten; ulasilmamali
+
+    # Refresh token (opsiyonel)
+    if payload.refresh_token:
+        try:
+            refresh_payload = decode_token(payload.refresh_token)
+            if (
+                refresh_payload.get("type") == "refresh"
+                and refresh_payload.get("sub") == str(current_user.id)
+                and refresh_payload.get("jti")
+            ):
+                db.add(RevokedToken(
+                    jti=refresh_payload["jti"],
+                    user_id=current_user.id,
+                    token_type="refresh",
+                    expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
+                ))
+        except JWTError:
+            pass  # Gecersiz refresh token; sessizce yutulur
+
+    try:
+        await db.commit()
+    except Exception:
+        # Idempotency: aynI jti tekrar logout edilirse PK cakismasI olur
+        await db.rollback()
+
+    logger.info("Kullanıcı çıkış yaptı: %s", current_user.email)
+    return {"detail": "Çıkış yapıldı"}
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
