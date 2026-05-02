@@ -1,0 +1,101 @@
+"use client";
+import { useState } from "react";
+import { CryptoPositionDTO } from "@/lib/api";
+import { fmtNum, fmtTL } from "@/lib/format";
+import { PROVIDER_LABELS } from "./constants";
+
+type SortCol = "value" | "name" | "amount";
+type SortDir = "desc" | "asc";
+
+interface Props {
+  positions: CryptoPositionDTO[];
+}
+
+export function PositionsTable({ positions }: Props) {
+  const [sortBy, setSortBy] = useState<SortCol>("value");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function toggleSort(col: SortCol) {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(col);
+      setSortDir(col === "name" ? "asc" : "desc");
+    }
+  }
+
+  const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+
+  const sorted = [...positions].sort((a, b) => {
+    const dir = sortDir === "desc" ? -1 : 1;
+    if (sortBy === "name") return dir * a.symbol.localeCompare(b.symbol);
+    if (sortBy === "amount") {
+      const qa = parseFloat(a.liquid_quantity) + parseFloat(a.staked_quantity);
+      const qb = parseFloat(b.liquid_quantity) + parseFloat(b.staked_quantity);
+      return dir * (qa - qb);
+    }
+    return dir * (parseFloat(a.total_value_tl) - parseFloat(b.total_value_tl));
+  });
+
+  const arrow = sortDir === "desc" ? " ↓" : " ↑";
+  const headers: Array<{ label: string; align: string; col: SortCol | null }> = [
+    { label: "Coin", align: "text-left", col: "name" },
+    { label: "Miktar", align: "text-right", col: "amount" },
+    { label: "Fiyat (USDT)", align: "text-right", col: null },
+    { label: "Toplam (₺)", align: "text-right", col: "value" },
+  ];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">Pozisyonlar</h2>
+        <span className="text-lg font-bold text-gray-900">{fmtTL(totalTL)} ₺</span>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
+            {headers.map((h, i) => {
+              const active = h.col && sortBy === h.col;
+              return (
+                <th
+                  key={i}
+                  className={`px-6 py-3 ${h.align} ${h.col ? "cursor-pointer select-none hover:text-gray-600" : ""} ${active ? "text-gray-700" : ""}`}
+                  onClick={() => h.col && toggleSort(h.col)}
+                >
+                  {h.label}{active && arrow}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {sorted.map((pos) => {
+            const totalQty = parseFloat(pos.liquid_quantity) + parseFloat(pos.staked_quantity);
+            return (
+              <tr key={`${pos.provider}-${pos.symbol}`} className="hover:bg-gray-50 transition-colors">
+                <td className="px-6 py-4">
+                  <span className="font-mono font-semibold text-gray-900">{pos.symbol}</span>
+                  <p className="text-xs text-gray-400 mt-0.5">{PROVIDER_LABELS[pos.provider] ?? pos.provider}</p>
+                </td>
+                <td className="px-6 py-4 text-right text-gray-600">
+                  {fmtNum(totalQty.toString())}
+                  {parseFloat(pos.staked_quantity) > 0 && (
+                    <p className="text-xs text-orange-400">
+                      {fmtNum(pos.staked_quantity)} stake
+                    </p>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-right text-gray-600">
+                  ${fmtNum(pos.unit_price_usd, 4)}
+                </td>
+                <td className="px-6 py-4 text-right font-semibold text-gray-900">
+                  {fmtTL(pos.total_value_tl)} ₺
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}

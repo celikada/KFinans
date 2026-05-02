@@ -136,8 +136,8 @@ export default function HistoryPage() {
                       stroke="#9ca3af"
                     />
                     <Tooltip
-                      formatter={(v: number) => `${fmtTL(v)} ₺`}
-                      labelFormatter={fmtDate}
+                      formatter={(v) => `${fmtTL(v as number)} ₺`}
+                      labelFormatter={(label) => fmtDate(label as string)}
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Line
@@ -168,8 +168,8 @@ export default function HistoryPage() {
                       stroke="#9ca3af"
                     />
                     <Tooltip
-                      formatter={(v: number) => `${fmtTL(v)} ₺`}
-                      labelFormatter={fmtDate}
+                      formatter={(v) => `${fmtTL(v as number)} ₺`}
+                      labelFormatter={(label) => fmtDate(label as string)}
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
