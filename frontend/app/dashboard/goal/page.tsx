@@ -11,9 +11,8 @@ const CURRENCIES: GoalCurrency[] = ["TRY", "USD", "EUR", "GBP"];
 
 function fmtForeign(val: number, currency: GoalCurrency) {
   const sym = GOAL_CURRENCY_SYMBOLS[currency];
-  return currency === "TRY"
-    ? `${val.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ₺`
-    : `${sym}${val.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const n = val.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return currency === "TRY" ? `${n} ₺` : `${sym}${n}`;
 }
 
 function ProgressBar({ pct }: { pct: number }) {
@@ -34,10 +33,10 @@ export default function GoalPage() {
   const [goal, setGoal] = useState<GoalDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState("");
   const [currency, setCurrency] = useState<GoalCurrency>("USD");
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,7 +44,7 @@ export default function GoalPage() {
       const data = await api.getGoal();
       setGoal(data);
       if (data.goal_amount) setInputVal(data.goal_amount);
-      if (data.goal_currency) setCurrency(data.goal_currency);
+      if (data.goal_currency) setCurrency(data.goal_currency as GoalCurrency);
     } catch {
       setError("Yüklenemedi");
     } finally {
@@ -63,10 +62,12 @@ export default function GoalPage() {
     if (!val || val <= 0) { setError("Geçerli bir tutar girin"); return; }
     setSaving(true);
     setError("");
+    setSaved(false);
     try {
       const data = await api.setGoal(val, currency);
       setGoal(data);
-      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kaydedilemedi");
     } finally {
@@ -74,17 +75,17 @@ export default function GoalPage() {
     }
   }
 
-  const amount       = goal?.goal_amount       ? parseFloat(goal.goal_amount)       : null;
-  const cur          = (goal?.goal_currency ?? currency) as GoalCurrency;
-  const rate         = goal?.rate_to_tl        ? parseFloat(goal.rate_to_tl)        : null;
-  const monthlyTL    = goal?.monthly_tl        ? parseFloat(goal.monthly_tl)        : null;
-  const targetTL     = goal?.freedom_target_tl ? parseFloat(goal.freedom_target_tl) : null;
-  const portfolio    = goal?.portfolio_value   ? parseFloat(goal.portfolio_value)   : null;
-  const passiveTL    = goal?.passive_income_tl ? parseFloat(goal.passive_income_tl) : null;
-  const passiveFgn   = goal?.passive_income_foreign ? parseFloat(goal.passive_income_foreign) : null;
-  const pct          = goal?.progress_pct ?? null;
-  const months       = goal?.months_covered ?? null;
-  const isForeign    = cur !== "TRY";
+  const amount     = goal?.goal_amount        ? parseFloat(goal.goal_amount)        : null;
+  const cur        = currency as GoalCurrency;
+  const rate       = goal?.rate_to_tl         ? parseFloat(goal.rate_to_tl)         : null;
+  const monthlyTL  = goal?.monthly_tl         ? parseFloat(goal.monthly_tl)         : null;
+  const targetTL   = goal?.freedom_target_tl  ? parseFloat(goal.freedom_target_tl)  : null;
+  const portfolio  = goal?.portfolio_value    ? parseFloat(goal.portfolio_value)    : null;
+  const passiveTL  = goal?.passive_income_tl  ? parseFloat(goal.passive_income_tl)  : null;
+  const passiveFgn = goal?.passive_income_foreign ? parseFloat(goal.passive_income_foreign) : null;
+  const pct        = goal?.progress_pct ?? null;
+  const months     = goal?.months_covered ?? null;
+  const isForeign  = cur !== "TRY";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -95,86 +96,102 @@ export default function GoalPage() {
 
         {!loading && (
           <>
-            {/* Hedef girişi */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Aylık finansal özgürlük ihtiyacı</h2>
+            {/* Hedef formu — her zaman görünür */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <h2 className="text-sm font-semibold text-gray-700">Aylık finansal özgürlük ihtiyacı</h2>
+              <p className="text-xs text-gray-400">
+                Bu değerin {MULTIPLIER} katı finansal özgürlük hedefinizi oluşturur.
+              </p>
 
-              {!editing && amount ? (
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-3xl font-bold text-gray-900">
-                      {fmtForeign(amount, cur)}
-                      <span className="text-base font-normal text-gray-400"> / ay</span>
-                    </p>
-                    {isForeign && monthlyTL && rate && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        = {fmtTL(monthlyTL)} ₺/ay
-                        <span className="text-xs text-gray-400 ml-2">(1 {cur} = {fmtTL(rate)} ₺)</span>
-                      </p>
-                    )}
-                    {targetTL && (
-                      <p className="text-xs text-gray-400 mt-2">
-                        Hedef: <span className="font-medium text-gray-600">{fmtTL(targetTL)} ₺</span>
-                        {isForeign && amount && (
-                          <span className="ml-1">({fmtForeign(amount * MULTIPLIER, cur)})</span>
-                        )}
-                        <span className="ml-1 text-gray-300">({MULTIPLIER}× aylık)</span>
-                      </p>
-                    )}
-                  </div>
-                  <button onClick={() => setEditing(true)} className="text-sm text-indigo-600 hover:text-indigo-800 shrink-0">
-                    Düzenle
-                  </button>
+              {/* Para birimi seçici */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">Para birimi</label>
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+                  {CURRENCIES.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCurrency(c)}
+                      className={`px-4 py-2 text-sm font-medium transition-colors ${
+                        currency === c
+                          ? "bg-violet-600 text-white"
+                          : "bg-white text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {GOAL_CURRENCY_SYMBOLS[c]} {c}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-500">
-                    Bu değerin {MULTIPLIER} katı finansal özgürlük hedefinizi oluşturur.
-                  </p>
-                  <div className="flex gap-2">
-                    {/* Para birimi seçici */}
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden shrink-0">
-                      {CURRENCIES.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setCurrency(c)}
-                          className={`px-3 py-2 text-xs font-medium transition-colors ${
-                            currency === c
-                              ? "bg-violet-600 text-white"
-                              : "bg-white text-gray-500 hover:bg-gray-50"
-                          }`}
-                        >
-                          {GOAL_CURRENCY_SYMBOLS[c]} {c}
-                        </button>
-                      ))}
-                    </div>
+              </div>
+
+              {/* Tutar girişi */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-2">
+                  Aylık ihtiyaç ({currency})
+                </label>
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      {GOAL_CURRENCY_SYMBOLS[currency]}
+                    </span>
                     <input
                       type="number"
                       min="1"
-                      step="100"
-                      className={`${INPUT_CLS} flex-1`}
-                      placeholder={currency === "TRY" ? "örn. 50000" : "örn. 3000"}
+                      step={currency === "TRY" ? "1000" : "100"}
+                      className={`${INPUT_CLS} pl-7`}
+                      placeholder={currency === "TRY" ? "50000" : "3000"}
                       value={inputVal}
                       onChange={(e) => setInputVal(e.target.value)}
                     />
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="text-sm bg-violet-600 text-white px-4 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
-                    >
-                      {saving ? "..." : "Kaydet"}
-                    </button>
                   </div>
-                  {error && <p className="text-xs text-red-500">{error}</p>}
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="text-sm bg-violet-600 text-white px-5 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {saving ? "Kaydediliyor..." : saved ? "✓ Kaydedildi" : "Kaydet"}
+                  </button>
+                </div>
+              </div>
+
+              {error && <p className="text-xs text-red-500">{error}</p>}
+
+              {/* Anlık özet: girilen değere göre hesap */}
+              {inputVal && parseFloat(inputVal) > 0 && (
+                <div className="bg-violet-50 rounded-xl p-4 text-xs space-y-1 text-violet-700">
+                  {isForeign && rate && (
+                    <p>
+                      {GOAL_CURRENCY_SYMBOLS[currency]}{parseFloat(inputVal).toLocaleString("tr-TR")} × {fmtTL(rate)} ₺ =
+                      <span className="font-semibold"> {fmtTL(parseFloat(inputVal) * rate)} ₺/ay</span>
+                    </p>
+                  )}
+                  <p>
+                    Finansal özgürlük hedefi:
+                    <span className="font-semibold ml-1">
+                      {isForeign && rate
+                        ? `${fmtTL(parseFloat(inputVal) * rate * MULTIPLIER)} ₺`
+                        : `${fmtTL(parseFloat(inputVal) * MULTIPLIER)} ₺`}
+                    </span>
+                  </p>
                 </div>
               )}
             </div>
 
             {/* İlerleme */}
-            {amount && targetTL && (
+            {amount && targetTL && monthlyTL && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-                <h2 className="text-sm font-semibold text-gray-700">İlerleme durumu</h2>
+                <div className="flex justify-between items-start">
+                  <h2 className="text-sm font-semibold text-gray-700">İlerleme durumu</h2>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">Kaydedilen hedef</p>
+                    <p className="text-sm font-semibold text-gray-700">
+                      {fmtForeign(amount, goal!.goal_currency as GoalCurrency)}/ay
+                    </p>
+                    {isForeign && (
+                      <p className="text-xs text-gray-400">= {fmtTL(monthlyTL)} ₺/ay</p>
+                    )}
+                  </div>
+                </div>
 
                 {portfolio ? (
                   <>
@@ -190,18 +207,18 @@ export default function GoalPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
                       <Stat
                         label="Aylık pasif gelir (TL)"
                         value={`${fmtTL(passiveTL!)} ₺`}
                         sub="portföy ÷ 300"
                         color="text-violet-600"
                       />
-                      {isForeign && passiveFgn !== null && (
+                      {isForeign && passiveFgn !== null && rate && (
                         <Stat
-                          label={`Aylık pasif gelir (${cur})`}
-                          value={fmtForeign(passiveFgn, cur)}
-                          sub={`${fmtTL(passiveTL!)} ₺ ÷ ${fmtTL(rate!)} ₺/${cur}`}
+                          label={`Aylık pasif gelir (${goal!.goal_currency})`}
+                          value={fmtForeign(passiveFgn, goal!.goal_currency as GoalCurrency)}
+                          sub={`1 ${goal!.goal_currency} = ${fmtTL(rate)} ₺`}
                           color="text-blue-600"
                         />
                       )}
@@ -221,16 +238,16 @@ export default function GoalPage() {
                         label="Pasif gelir vs ihtiyaç"
                         value={
                           isForeign && passiveFgn !== null
-                            ? (passiveFgn >= amount! ? "Finansal özgür 🎉" : `${fmtForeign(amount! - passiveFgn, cur)} eksik`)
-                            : (passiveTL! >= (monthlyTL ?? 0) ? "Finansal özgür 🎉" : `${fmtTL((monthlyTL ?? 0) - passiveTL!)} ₺ eksik`)
+                            ? (passiveFgn >= amount ? "Finansal özgür 🎉" : `${fmtForeign(amount - passiveFgn, goal!.goal_currency as GoalCurrency)} eksik`)
+                            : (passiveTL! >= monthlyTL ? "Finansal özgür 🎉" : `${fmtTL(monthlyTL - passiveTL!)} ₺ eksik`)
                         }
                         sub={
-                          (isForeign ? passiveFgn! >= amount! : passiveTL! >= (monthlyTL ?? 0))
+                          (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
                             ? "Pasif geliriniz ihtiyacı karşılıyor"
                             : "Pasif gelir henüz yeterli değil"
                         }
                         color={
-                          (isForeign ? passiveFgn! >= amount! : passiveTL! >= (monthlyTL ?? 0))
+                          (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
                             ? "text-green-600" : "text-orange-500"
                         }
                       />
@@ -238,7 +255,7 @@ export default function GoalPage() {
                   </>
                 ) : (
                   <p className="text-sm text-gray-400 py-2">
-                    Portföy verisi yok — bir snapshot al, ardından ilerleme hesaplanır.
+                    Portföy verisi yok — dashboard&apos;dan bir snapshot al, ardından ilerleme hesaplanır.
                   </p>
                 )}
               </div>
@@ -249,8 +266,8 @@ export default function GoalPage() {
               <p className="font-semibold mb-2">Finansal özgürlük formülü</p>
               <p>Hedef = Aylık ihtiyaç × {MULTIPLIER}</p>
               <p>Aylık pasif gelir = Portföy ÷ {MULTIPLIER}</p>
-              {isForeign && rate && (
-                <p>Güncel kur: 1 {cur} = {fmtTL(rate)} ₺ (TCMB)</p>
+              {goal?.rate_to_tl && goal.goal_currency !== "TRY" && (
+                <p>Güncel kur (TCMB): 1 {goal.goal_currency} = {fmtTL(parseFloat(goal.rate_to_tl))} ₺</p>
               )}
               <p className="pt-1 text-violet-500">
                 {MULTIPLIER} ay = 25 yıllık sürdürülebilir çekim oranı (%4 kuralı).
