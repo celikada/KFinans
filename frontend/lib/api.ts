@@ -245,10 +245,10 @@ export const api = {
 
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
-  setGoal: (monthly_expense_goal: number) =>
+  setGoal: (amount: number, currency: GoalCurrency) =>
     request<GoalDTO>("/user/goal", {
       method: "PUT",
-      body: JSON.stringify({ monthly_expense_goal }),
+      body: JSON.stringify({ amount, currency }),
     }),
 
   // Planlı ödemeler (Faz 3)
@@ -464,11 +464,21 @@ export interface TefasPosition {
   total_value_tl: string;
 }
 
+export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";
+
+export const GOAL_CURRENCY_SYMBOLS: Record<GoalCurrency, string> = {
+  TRY: "₺", USD: "$", EUR: "€", GBP: "£",
+};
+
 export interface GoalDTO {
-  monthly_expense_goal: string | null;
-  freedom_target: string | null;
+  goal_amount: string | null;
+  goal_currency: GoalCurrency;
+  rate_to_tl: string | null;
+  monthly_tl: string | null;
+  freedom_target_tl: string | null;
   portfolio_value: string | null;
-  passive_income_potential: string | null;
+  passive_income_tl: string | null;
+  passive_income_foreign: string | null;
   progress_pct: number | null;
   months_covered: number | null;
 }

@@ -21,7 +21,8 @@ class User(Base):
     verify_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    monthly_expense_goal: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    goal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+    goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     integrations: Mapped[list["Integration"]] = relationship(back_populates="user", cascade="all, delete-orphan")

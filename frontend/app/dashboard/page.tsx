@@ -123,7 +123,7 @@ export default function DashboardPage() {
     const now = new Date();
     api.getGoal().then((g) => {
       if (g.progress_pct !== null) setGoalPct(g.progress_pct);
-      if (g.passive_income_potential) setGoalPassive(parseFloat(g.passive_income_potential));
+      if (g.passive_income_tl) setGoalPassive(parseFloat(g.passive_income_tl));
     }).catch(() => {});
 
     api.getForecast(now.getFullYear()).then((fc) => {

@@ -1,6 +1,7 @@
 from decimal import Decimal
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,23 +9,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
+from app.services.aggregator import _fetch_tcmb_rates
 
 router = APIRouter(prefix="/user/goal", tags=["goal"])
 
 FREEDOM_MULTIPLIER = 300
+GoalCurrency = Literal["TRY", "USD", "EUR", "GBP"]
+SUPPORTED_CURRENCIES: tuple[str, ...] = ("TRY", "USD", "EUR", "GBP")
+
+
+async def _rate_to_tl(currency: str) -> Decimal:
+    """Verilen para biriminin TL karsiligi (1 birim = X TL)."""
+    if currency == "TRY":
+        return Decimal("1")
+    rates = await _fetch_tcmb_rates()
+    rate = rates.get(currency)
+    if not rate:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{currency}/TRY kuru alınamadı",
+        )
+    return rate
 
 
 class GoalIn(BaseModel):
-    monthly_expense_goal: Decimal = Field(..., gt=0, le=9_999_999.99)
+    amount: Decimal = Field(..., gt=0, le=99_999_999.99)
+    currency: GoalCurrency = "TRY"
 
 
 class GoalOut(BaseModel):
-    monthly_expense_goal: Decimal | None
-    freedom_target: Decimal | None        # monthly × 300
-    portfolio_value: Decimal | None       # son snapshot
-    passive_income_potential: Decimal | None  # portfolio / 300
-    progress_pct: float | None            # portfolio / freedom_target × 100
-    months_covered: float | None          # portfolio / monthly (kaç ay karşılıyor)
+    goal_amount: Decimal | None          # orijinal para biriminde
+    goal_currency: str
+    rate_to_tl: Decimal | None           # 1 birim = X TL
+    monthly_tl: Decimal | None           # TL karsiligi
+    freedom_target_tl: Decimal | None    # monthly_tl × 300
+    portfolio_value: Decimal | None      # son snapshot TL
+    passive_income_tl: Decimal | None    # portfolio / 300
+    passive_income_foreign: Decimal | None  # pasif gelir / kur (hedef para biriminde)
+    progress_pct: float | None
+    months_covered: float | None
 
 
 @router.get("", response_model=GoalOut)
@@ -32,40 +55,52 @@ async def get_goal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    goal = current_user.monthly_expense_goal
-
-    # Son snapshot'tan portföy değeri
     snap_q = await db.execute(
         select(PortfolioSnapshot.total_value_tl)
         .where(PortfolioSnapshot.user_id == current_user.id)
         .order_by(desc(PortfolioSnapshot.snapshot_date))
         .limit(1)
     )
-    row = snap_q.scalar_one_or_none()
-    portfolio = Decimal(str(row)) if row is not None else None
+    portfolio = snap_q.scalar_one_or_none()
+    portfolio_dec = Decimal(str(portfolio)) if portfolio is not None else None
 
-    if goal is None:
+    amount = current_user.goal_amount
+    currency = current_user.goal_currency or "TRY"
+
+    if amount is None:
+        passive = (portfolio_dec / FREEDOM_MULTIPLIER) if portfolio_dec else None
         return GoalOut(
-            monthly_expense_goal=None,
-            freedom_target=None,
-            portfolio_value=portfolio,
-            passive_income_potential=portfolio / FREEDOM_MULTIPLIER if portfolio else None,
+            goal_amount=None,
+            goal_currency=currency,
+            rate_to_tl=None,
+            monthly_tl=None,
+            freedom_target_tl=None,
+            portfolio_value=portfolio_dec,
+            passive_income_tl=passive,
+            passive_income_foreign=None,
             progress_pct=None,
             months_covered=None,
         )
 
-    freedom_target = goal * FREEDOM_MULTIPLIER
-    passive_income = (portfolio / FREEDOM_MULTIPLIER) if portfolio else None
-    progress_pct = (float(portfolio) / float(freedom_target) * 100) if portfolio else None
-    months_covered = (float(portfolio) / float(goal)) if portfolio else None
+    rate = await _rate_to_tl(currency)
+    monthly_tl = (amount * rate).quantize(Decimal("0.01"))
+    freedom_target = (monthly_tl * FREEDOM_MULTIPLIER).quantize(Decimal("0.01"))
+    passive_tl = (portfolio_dec / FREEDOM_MULTIPLIER).quantize(Decimal("0.01")) if portfolio_dec else None
+    passive_foreign = (passive_tl / rate).quantize(Decimal("0.01")) if passive_tl else None
+    progress_pct = round(float(portfolio_dec) / float(freedom_target) * 100, 2) if portfolio_dec else None
+    months_covered = round(float(portfolio_dec) / float(monthly_tl), 1) if portfolio_dec else None
 
     return GoalOut(
-        monthly_expense_goal=goal,
-        freedom_target=freedom_target,
-        portfolio_value=portfolio,
-        passive_income_potential=passive_income,
-        progress_pct=round(progress_pct, 2) if progress_pct is not None else None,
-        months_covered=round(months_covered, 1) if months_covered is not None else None,
+        goal_amount=amount,
+        goal_currency=currency,
+        rate_to_tl=rate,
+        monthly_tl=monthly_tl,
+        freedom_target_tl=freedom_target,
+        portfolio_value=portfolio_dec,
+        passive_income_tl=passive_tl,
+        passive_income_foreign=passive_foreign,
+        progress_pct=progress_pct,
+        months_covered=months_covered,
     )
 
 
@@ -75,7 +110,8 @@ async def set_goal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.monthly_expense_goal = payload.monthly_expense_goal
+    current_user.goal_amount = payload.amount
+    current_user.goal_currency = payload.currency
     await db.commit()
     await db.refresh(current_user)
     return await get_goal(current_user, db)
