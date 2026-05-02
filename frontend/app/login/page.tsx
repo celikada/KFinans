@@ -85,6 +85,13 @@ export default function LoginPage() {
         <Image src="/images/mayotek-logo.png" alt="Mayotek" width={90} height={30} />
         <p className="text-xs text-gray-400">ürünüdür</p>
       </div>
+
+      <div className="mt-4 flex gap-3 text-xs text-gray-400">
+        <Link href="/legal/kvkk" className="hover:text-gray-600">KVKK</Link>
+        <Link href="/legal/privacy" className="hover:text-gray-600">Gizlilik</Link>
+        <Link href="/legal/terms" className="hover:text-gray-600">Şartlar</Link>
+        <Link href="/legal/cookies" className="hover:text-gray-600">Çerezler</Link>
+      </div>
     </div>
   );
 }

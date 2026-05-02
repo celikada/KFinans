@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { api, clearAuth } from "@/lib/api";
 
@@ -156,10 +157,18 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      <footer className="mt-auto py-4 flex justify-center items-center gap-2">
-        <span className="text-xs text-gray-300">Bir</span>
-        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={64} height={22} />
-        <span className="text-xs text-gray-300">ürünüdür</span>
+      <footer className="mt-auto py-4 flex flex-col items-center gap-2">
+        <div className="flex justify-center items-center gap-2">
+          <span className="text-xs text-gray-300">Bir</span>
+          <Image src="/images/mayotek-logo.png" alt="Mayotek" width={64} height={22} />
+          <span className="text-xs text-gray-300">ürünüdür</span>
+        </div>
+        <div className="flex gap-3 text-xs text-gray-300">
+          <Link href="/legal/kvkk" className="hover:text-gray-500">KVKK</Link>
+          <Link href="/legal/privacy" className="hover:text-gray-500">Gizlilik</Link>
+          <Link href="/legal/terms" className="hover:text-gray-500">Şartlar</Link>
+          <Link href="/legal/cookies" className="hover:text-gray-500">Çerezler</Link>
+        </div>
       </footer>
     </div>
   );

@@ -41,22 +41,27 @@ KFinans **şifrelenmiş kişisel veri** içermez (sağlık, etnik köken, biyome
 
 ---
 
-## 3. Eksik Yasal Belgeler (Production'a Kadar Hazırlanmalı)
+## 3. Yasal Belgeler
 
 ### 3.1 Kullanıcı Görünür Belgeler
-- [ ] **Gizlilik Politikası** (Türkçe + İngilizce) — `/privacy` sayfası + footer linki
-- [ ] **Kullanım Şartları** — kayıt sırasında onay zorunlu
-- [ ] **KVKK Aydınlatma Metni** — kayıt sırasında bilgilendirme
-- [ ] **Açık Rıza Metni** — exchange API key, blockchain adres ekleme öncesi onay kutusu
-- [ ] **Çerez Politikası** — analytics eklendiğinde
-- [ ] **Mesafeli Sözleşme** — kredi paketi satın alma öncesi (6502)
+- [x] **KVKK Aydınlatma Metni** — `/legal/kvkk` (2026-05-02) — register'da "okudum" onayı zorunlu
+- [x] **Gizlilik Politikası** — `/legal/privacy` (2026-05-02) — register'da kabul onayı zorunlu, footer linki
+- [x] **Kullanım Şartları** — `/legal/terms` (2026-05-02) — register'da kabul onayı zorunlu
+- [x] **Çerez Politikası** — `/legal/cookies` (2026-05-02) — şu an sadece zorunlu oturum çerezi
+- [x] **Açık Rıza — Yurt Dışı Aktarım** — register'da Anthropic/Resend (ABD) için ayrı checkbox (KVKK m.9)
+- [ ] **Mesafeli Sözleşme** — kredi paketi satın alma öncesi (Faz 3 — 6502 sayılı Kanun)
+
+> **Doldurulması gereken placeholder'lar** (yasal metinlerde işaretli):
+> - `[TİCARİ ÜNVAN]`, `[KEP_ADRESI]`, `[TEBLİGAT_ADRESİ]` — `legal/kvkk/page.tsx`
+> - `[İSTANBUL/MERKEZ]` — `legal/terms/page.tsx`
+> - `kvkk@kfinans.app` ve `privacy@kfinans.app` mailbox'ları kurulmalı
 
 ### 3.2 Operasyonel Belgeler (İç Kullanım)
-- [ ] Kişisel Veri İşleme Envanteri (VERBİS kaydı için)
-- [ ] Veri saklama ve imha politikası
-- [ ] Veri ihlali müdahale planı (72 saat bildirim prosedürü)
+- [ ] Kişisel Veri İşleme Envanteri (VERBİS kaydı için — şu an eşik altı, gerekli değil)
+- [ ] Veri saklama ve imha politikası — KVKK metni Bölüm 5'te kullanıcı görünür özet var
+- [x] Veri ihlali müdahale planı (72 saat bildirim) — KVKK metni Bölüm 8 ve gizlilik politikası taahhüt ediyor; iç süreç dokümanı Faz 3
 - [ ] Personel gizlilik taahhütnameleri (şirket büyüdüğünde)
-- [ ] Üçüncü taraf veri işleme sözleşmeleri (Anthropic, iyzico, AWS)
+- [ ] Üçüncü taraf veri işleme sözleşmeleri (Anthropic, iyzico, AWS) — SCC imzalanmalı
 
 ### 3.3 VERBİS Kaydı
 KVKK m.16 — Veri Sorumluları Sicili (VERBİS) kaydı şu eşiklerde zorunlu:

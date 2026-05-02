@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.5
-**Tarih:** 2026-04-30
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 yedi madde develop'ta
+**Versiyon:** 3.6
+**Tarih:** 2026-05-02
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 sekiz madde develop'ta (KVKK metinleri dahil)
 **Üretici:** Mayotek
 
 ---
@@ -262,8 +262,8 @@ Kubernetes Ingress (nginx)
 - [x] TCMB API USD/TRY fallback (TCMB primary + exchangerate-api fallback, 5 dk in-memory cache)
 - [x] BES manuel giriş ekranı (model + endpoint'ler + Excel + snapshot entegrasyonu + frontend)
 - [x] JWT blacklist + `/auth/logout` endpoint'i (revoked_tokens tablosu + jti claim + refresh blacklist kontrolü)
+- [x] KVKK metinleri (KVKK aydınlatma, gizlilik, kullanım şartları, çerez — `/legal/*` sayfaları + register'da 3 ayrı onay; placeholder'lar kullanıcı tarafından doldurulacak)
 - [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
-- [ ] KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
 - [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)
 - [ ] Binance TR Earn endpoint'i için Resmi API yanıtı bekleniyor — geçici çözüm `encrypted_extra` ile cookie token `feature/binancetr-session-token` branch'inde
 - [ ] Test coverage %30 → %50 hedefi

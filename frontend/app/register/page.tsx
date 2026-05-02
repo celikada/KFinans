@@ -17,6 +17,9 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [riskProfile, setRiskProfile] = useState<RiskProfile>("balanced");
+  const [kvkkRead, setKvkkRead] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [overseasConsent, setOverseasConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -34,6 +37,18 @@ export default function RegisterPage() {
     }
     if (password !== passwordConfirm) {
       setError("Şifreler eşleşmiyor");
+      return;
+    }
+    if (!kvkkRead) {
+      setError("KVKK Aydınlatma Metni'ni okuduğunuzu onaylamanız gerekir");
+      return;
+    }
+    if (!termsAccepted) {
+      setError("Kullanım Şartları ve Gizlilik Politikası'nı kabul etmeniz gerekir");
+      return;
+    }
+    if (!overseasConsent) {
+      setError("Yurt dışı veri aktarımı için açık rıza vermeniz gerekir");
       return;
     }
 
@@ -161,6 +176,56 @@ export default function RegisterPage() {
             </select>
           </div>
 
+          <div className="space-y-2 pt-1">
+            <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={kvkkRead}
+                onChange={(e) => setKvkkRead(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                <Link href="/legal/kvkk" target="_blank" className="text-blue-600 hover:underline">
+                  KVKK Aydınlatma Metni
+                </Link>
+                &apos;ni okudum, anladım.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                <Link href="/legal/terms" target="_blank" className="text-blue-600 hover:underline">
+                  Kullanım Şartları
+                </Link>
+                {" "}ve{" "}
+                <Link href="/legal/privacy" target="_blank" className="text-blue-600 hover:underline">
+                  Gizlilik Politikası
+                </Link>
+                &apos;nı kabul ediyorum.
+              </span>
+            </label>
+
+            <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={overseasConsent}
+                onChange={(e) => setOverseasConsent(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                E-posta gönderimi (Resend, ABD) ve AI tavsiye üretimi (Anthropic, ABD) için
+                kişisel verilerimin <strong>yurt dışına aktarılmasına</strong> KVKK m.9 kapsamında
+                <strong> açık rıza</strong> veriyorum.
+              </span>
+            </label>
+          </div>
+
           {error && (
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
           )}
@@ -186,6 +251,13 @@ export default function RegisterPage() {
         <p className="text-xs text-gray-400">Bir</p>
         <Image src="/images/mayotek-logo.png" alt="Mayotek" width={90} height={30} />
         <p className="text-xs text-gray-400">ürünüdür</p>
+      </div>
+
+      <div className="mt-4 flex gap-3 text-xs text-gray-400">
+        <Link href="/legal/kvkk" className="hover:text-gray-600">KVKK</Link>
+        <Link href="/legal/privacy" className="hover:text-gray-600">Gizlilik</Link>
+        <Link href="/legal/terms" className="hover:text-gray-600">Şartlar</Link>
+        <Link href="/legal/cookies" className="hover:text-gray-600">Çerezler</Link>
       </div>
     </div>
   );
