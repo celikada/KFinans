@@ -243,6 +243,24 @@ export const api = {
     return res.json();
   },
 
+  // Gelir takibi
+  listIncomes: (params: { year?: number; month?: number; category?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.year !== undefined) q.set("year", String(params.year));
+    if (params.month !== undefined) q.set("month", String(params.month));
+    if (params.category) q.set("category", params.category);
+    const qs = q.toString();
+    return request<IncomeDTO[]>(`/income${qs ? `?${qs}` : ""}`);
+  },
+  createIncome: (payload: IncomeInput) =>
+    request<IncomeDTO>("/income", { method: "POST", body: JSON.stringify(payload) }),
+  updateIncome: (id: number, payload: Partial<IncomeInput>) =>
+    request<IncomeDTO>(`/income/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteIncome: (id: number) =>
+    request<void>(`/income/${id}`, { method: "DELETE" }),
+  getIncomeSummary: (year: number, month: number) =>
+    request<IncomeSummaryDTO>(`/income/summary?year=${year}&month=${month}`),
+
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
   setGoal: (amount: number, currency: GoalCurrency) =>
@@ -462,6 +480,52 @@ export interface TefasPosition {
   quantity: string;
   unit_price_tl: string;
   total_value_tl: string;
+}
+
+export type IncomeCategory =
+  | "salary" | "freelance" | "rental" | "dividend" | "bonus" | "sale" | "other";
+
+export const INCOME_CATEGORIES: IncomeCategory[] = [
+  "salary", "freelance", "rental", "dividend", "bonus", "sale", "other",
+];
+
+export const INCOME_CATEGORY_LABELS: Record<IncomeCategory, string> = {
+  salary:    "Maaş",
+  freelance: "Serbest Meslek",
+  rental:    "Kira Geliri",
+  dividend:  "Temettü / Faiz",
+  bonus:     "İkramiye / Prim",
+  sale:      "Varlık Satışı",
+  other:     "Diğer",
+};
+
+export interface IncomeInput {
+  amount: number;
+  category: IncomeCategory;
+  date: string;
+  description?: string | null;
+}
+
+export interface IncomeDTO {
+  id: number;
+  amount: string;
+  category: IncomeCategory;
+  date: string;
+  description: string | null;
+}
+
+export interface IncomeCategoryBreakdownDTO {
+  category: IncomeCategory;
+  total: string;
+  count: number;
+}
+
+export interface IncomeSummaryDTO {
+  year: number;
+  month: number;
+  total: string;
+  count: number;
+  by_category: IncomeCategoryBreakdownDTO[];
 }
 
 export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { api, clearAuth, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,6 +56,11 @@ export default function DashboardPage() {
 
   // Planlı ödemeler (bu yıl)
   const [plannedTotal, setPlannedTotal] = useState<number | null>(null);
+
+  // Gelir (bu ay)
+  const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
+  const [incomeCount, setIncomeCount] = useState(0);
+  const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
 
   // Finansal hedef
   const [goalPct, setGoalPct] = useState<number | null>(null);
@@ -121,6 +126,17 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     const now = new Date();
+    api.getIncomeSummary(now.getFullYear(), now.getMonth() + 1).then((sum) => {
+      if (sum.count === 0) return;
+      setIncomeTotal(parseFloat(sum.total));
+      setIncomeCount(sum.count);
+      setIncomeTop(top3(
+        sum.by_category,
+        (b) => parseFloat(b.total),
+        (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
+      ));
+    }).catch(() => {});
+
     api.getGoal().then((g) => {
       if (g.progress_pct !== null) setGoalPct(g.progress_pct);
       if (g.passive_income_tl) setGoalPassive(parseFloat(g.passive_income_tl));
@@ -298,6 +314,18 @@ export default function DashboardPage() {
             placeholder="Kredi, vergi, fatura planı"
           />
 
+          <Card
+            href="/dashboard/income"
+            icon="💰"
+            color="emerald"
+            title="Gelirler (bu ay)"
+            total={incomeTotal}
+            count={incomeCount}
+            countLabel="kayıt"
+            top={incomeTop}
+            placeholder="Maaş, kira, temettü..."
+          />
+
           <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
         </div>
       </main>
@@ -326,7 +354,8 @@ const COLOR_MAP: Record<string, { bg: string; bgHover: string; ring: string; tex
   purple: { bg: "bg-purple-50", bgHover: "group-hover:bg-purple-100", ring: "hover:border-purple-100", text: "text-purple-600" },
   green:  { bg: "bg-green-50",  bgHover: "group-hover:bg-green-100",  ring: "hover:border-green-100",  text: "text-green-600" },
   red:    { bg: "bg-red-50",    bgHover: "group-hover:bg-red-100",    ring: "hover:border-red-100",    text: "text-red-600" },
-  violet: { bg: "bg-violet-50", bgHover: "group-hover:bg-violet-100", ring: "hover:border-violet-100", text: "text-violet-600" },
+  violet:  { bg: "bg-violet-50",  bgHover: "group-hover:bg-violet-100",  ring: "hover:border-violet-100",  text: "text-violet-600" },
+  emerald: { bg: "bg-emerald-50", bgHover: "group-hover:bg-emerald-100", ring: "hover:border-emerald-100", text: "text-emerald-600" },
 };
 
 interface CardProps {
