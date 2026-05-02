@@ -94,10 +94,28 @@ Giriş. Rate limit: 10/dk. **E-posta doğrulanmamışsa hard block (403).**
 ```
 
 ### `POST /auth/refresh`
-Yeni access + refresh token üretir. Rate limit: 30/dk.
+Yeni access + refresh token üretir. Rate limit: 30/dk. Refresh token'ın `jti`'si `revoked_tokens` tablosundaysa **401 "Token iptal edilmiş"** döner.
 ```json
 { "refresh_token": "eyJ..." }
+
+// 401 Unauthorized — token logout ile iptal edilmiş
+{ "detail": "Token iptal edilmiş" }
 ```
+
+### `POST /auth/logout`
+Mevcut access token'ı (header'dan) ve opsiyonel olarak body'deki refresh token'ı `revoked_tokens` tablosuna ekler. Auth gerektirir (token'sız 401). **İdempotent** — aynı token tekrar logout edilirse `get_current_user` zaten 401 döner. Bilgi sızdırmamak için bozuk/geçersiz refresh token sessizce yutulur (access token yine blacklist'e alınır).
+```json
+// Request — LogoutRequest (body opsiyonel)
+{ "refresh_token": "eyJ..." }   // veya {} / null
+
+// 200 OK
+{ "message": "Çıkış yapıldı" }
+
+// 401 Unauthorized — auth header yok / geçersiz / blacklist'te
+{ "detail": "..." }
+```
+
+> Frontend şu an `localStorage`'da yalnızca access token tutuyor; bu nedenle pratikte sadece access token blacklist'e alınıyor. Refresh akışı eklendiğinde refresh token da gönderilmeli.
 
 ### `GET /auth/verify-email?token=...`
 E-posta doğrulama linki. Token DB'deki `users.verify_token` ile eşleşmeli ve `verify_token_expires_at` geçmemiş olmalı. Başarıda `email_verified=True` set edilir, token sıfırlanır.
@@ -499,6 +517,7 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 - [x] `POST /auth/register` testleri (14 yeni test test_auth.py'da)
 - [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri
 - [x] `POST /portfolio/snapshot` manuel tetikleme endpoint'i
+- [x] `POST /auth/logout` (JWT blacklist) + `POST /auth/refresh` revoked token kontrolü
 - [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
 - [x] BES manuel giriş endpoint'leri (`/portfolio/bes/*` — GET, PUT, export, import)
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3

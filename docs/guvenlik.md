@@ -18,6 +18,8 @@
 | **E-posta doğrulama zorunluluğu** | `email_verified=False` ise login 403 hard block | ✅ Aktif |
 | **Doğrulama token'ı (TTL'li)** | `secrets.token_urlsafe(32)`, `verify_token_expires_at` (24 saat) | ✅ Aktif |
 | **Account enumeration koruması** | `POST /auth/resend-verification` her zaman 202 döner | ✅ Aktif |
+| **JWT blacklist + logout** | `revoked_tokens` tablosu (jti PK); `POST /auth/logout`; `get_current_user` ve `/auth/refresh` jti kontrolü | ✅ Aktif |
+| **`jti` claim** | `create_access_token` ve `create_refresh_token` her token'a `uuid4.hex` jti ekler | ✅ Aktif |
 | Health endpoint (auth gerektirmez) | `/health` | ✅ Aktif |
 | Auth gerektiren endpoint'ler | `Depends(get_current_user)` | ✅ Aktif |
 | User izolasyonu | `WHERE user_id == current_user.id` | ✅ Aktif |
@@ -123,7 +125,8 @@ POST /auth/refresh (access expired)
   "sub":  "user-uuid",
   "exp":  unix_timestamp,
   "iat":  unix_timestamp,
-  "type": "access"
+  "type": "access",
+  "jti":  "uuid4.hex"   # selective revocation için (Faz 2 — eklendi)
 }
 
 # Payload (refresh)
@@ -131,9 +134,12 @@ POST /auth/refresh (access expired)
   "sub":  "user-uuid",
   "exp":  unix_timestamp,
   "iat":  unix_timestamp,
-  "type": "refresh"
+  "type": "refresh",
+  "jti":  "uuid4.hex"
 }
 ```
+
+> Eski (jti'siz) tokenlar için geriye dönük uyumluluk: `get_current_user` ve `/auth/refresh` payload'da `jti` yoksa blacklist kontrolünü atlar. Bu, deploy anında elinde geçerli token olan kullanıcıların 401 almamasını sağlar. Tüm yeni tokenlar jti ile üretilir.
 
 ### 3.3 Token Süreleri
 | Token | Süre (Dev) | Süre (Prod, Hedef) |
@@ -141,32 +147,33 @@ POST /auth/refresh (access expired)
 | Access | 480 dk (8 saat) | 15 dk |
 | Refresh | 7 gün | 7 gün |
 
-### 3.4 Bilinen Açıklar
-1. **JWT blacklist YOK** — logout sonrası token hâlâ geçerli (refresh süresi dolana kadar)
-2. **Refresh token rotation YOK** — aynı refresh token defalarca kullanılabilir
-3. **Tek device session yönetimi YOK** — user tüm device'larında otomatik çıkış yapamıyor
-4. **`jti` (JWT ID) claim YOK** — selective revocation imkansız
+### 3.4 Logout / Token İptali (Faz 2 — Tamamlandı)
 
-#### Düzeltme Planı (Faz 3)
-```python
-# 1. jti ekle
-payload["jti"] = str(uuid.uuid4())
-
-# 2. revoked_tokens tablosu
-class RevokedToken(Base):
-    jti: Mapped[str] = mapped_column(primary_key=True)
-    revoked_at: Mapped[datetime]
-    expires_at: Mapped[datetime]  # cleanup için
-
-# 3. decode_token() içinde kontrol
-if await db.execute(select(RevokedToken).where(RevokedToken.jti == jti)).scalar_one_or_none():
-    raise HTTPException(401, "Token iptal edildi")
-
-# 4. POST /auth/logout endpoint'i
-async def logout(token: str = Depends(oauth2_scheme)):
-    payload = decode_token(token)
-    db.add(RevokedToken(jti=payload["jti"], expires_at=...))
 ```
+POST /auth/logout {refresh_token?}   (Authorization: Bearer <access>)
+  ↓ get_current_user(access) — token zaten doğrulandı
+  ↓ INSERT revoked_tokens (jti, user_id, token_type='access', expires_at)
+  ↓ Body'de refresh varsa + sub eşleşiyorsa: refresh jti'sini de blacklist'e al
+  ↓ PK çakışması → rollback (idempotent — sessiz)
+  ↓ Bozuk/geçersiz refresh → sessizce yutulur (bilgi sızdırma yok)
+  ↓ 200 OK
+```
+
+**Bileşenler:**
+- `models/revoked_token.py` — `RevokedToken(jti TEXT PK, user_id UUID, token_type TEXT, expires_at TIMESTAMPTZ, created_at TIMESTAMPTZ)`. Migration `2a3b4c5d6e7f`. `expires_at` üzerinde index — Faz 3 cleanup cron için.
+- `core/security.py` — `create_access_token` ve `create_refresh_token` `jti=uuid.uuid4().hex` ekler.
+- `core/deps.py::get_current_user` — decode sonrası `RevokedToken.jti` sorgular; bulduysa 401. `jti` payload'da yoksa kontrol atlanır (geriye dönük uyumluluk).
+- `api/v1/auth.py::POST /auth/refresh` — refresh token'ın `jti`'si blacklist'teyse 401 "Token iptal edilmiş".
+
+**Test kapsamı:** `tests/integration/test_logout.py` — 8 test (200 OK, access blacklist sonrası 401, refresh blacklist sonrası 401, sadece access logout → refresh hala çalışır, auth gerektirir, idempotent, bozuk refresh yutulur, kullanıcı izolasyonu).
+
+### 3.5 Bilinen Açıklar (Güncel)
+1. ~~**JWT blacklist YOK**~~ ✅ Çözüldü (Faz 2 — `revoked_tokens` + `/auth/logout`)
+2. ~~**`jti` (JWT ID) claim YOK**~~ ✅ Çözüldü (Faz 2 — tüm yeni tokenlar `jti` taşır)
+3. **Refresh token rotation YOK** — aynı refresh token süresi dolana kadar defalarca kullanılabilir (Faz 3)
+4. **Tek device "tüm cihazlardan çık" yok** — kullanıcının tüm aktif tokenlarını toplu iptal etme akışı yok (Faz 3 — `revoked_tokens`'a `user_id+token_type` toplu insert ile çözülebilir)
+5. **Frontend refresh saklamıyor** — `localStorage` sadece access tutuyor; logout'ta refresh blacklist'e alınmıyor. Refresh akışı eklendiğinde düzeltilmeli (frontend teknik borç)
+6. **`revoked_tokens` cleanup yok** — süresi dolmuş kayıtlar bekliyor; Faz 3'te cron job (`DELETE WHERE expires_at < now()`)
 
 ---
 
@@ -376,10 +383,10 @@ Loglanacak eylemler:
 | A01: Broken Access Control | ✅ | User izolasyonu var; IDOR riski code review ile |
 | A02: Cryptographic Failures | ⚠️ | bcrypt + Fernet ✅; HTTPS ❌ (prod'da olacak) |
 | A03: Injection | ✅ | ORM only; raw SQL yok |
-| A04: Insecure Design | ⚠️ | Logout/blacklist eksik (Faz 3) |
+| A04: Insecure Design | ✅ | Logout + JWT blacklist (Faz 2'de eklendi) |
 | A05: Security Misconfiguration | ⚠️ | Security headers eksik (prod'da eklenecek) |
 | A06: Vulnerable Components | ❌ | Audit/scan yok (yapılacak) |
-| A07: Identification & Auth Failures | ⚠️ | Refresh rotation yok (Faz 3) |
+| A07: Identification & Auth Failures | ⚠️ | Logout + blacklist ✅; refresh rotation yok (Faz 3) |
 | A08: Software & Data Integrity | ⚠️ | Image signing yok |
 | A09: Security Logging & Monitoring | ❌ | Audit log yok (Faz 3) |
 | A10: Server-Side Request Forgery | ✅ | Dış URL kullanıcı girişiyle oluşmuyor |

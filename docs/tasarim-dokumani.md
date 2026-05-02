@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.4
+**Versiyon:** 3.5
 **Tarih:** 2026-04-30
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 altı madde develop'ta
+**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 yedi madde develop'ta
 **Üretici:** Mayotek
 
 ---
@@ -38,7 +38,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
-| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, Kubernetes manifest'leri | 🔄 Devam ediyor |
+| **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri | 🔄 Devam ediyor |
 | **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
@@ -227,10 +227,21 @@ Kubernetes Ingress (nginx)
 - `lib/api.ts`: `getBesHoldings`, `saveBesHoldings`, `exportBesHoldings`, `importBesHoldings` + `BesHoldingDTO`
 - 8 yeni API test (`test_bes_api.py`) + 1 IDOR test + 1 snapshot integration test
 
+**7. JWT blacklist + logout endpoint'i**
+- Backend: `models/revoked_token.py` — `RevokedToken(jti TEXT PK, user_id, token_type, expires_at, created_at)`. Migration `2a3b4c5d6e7f` — `revoked_tokens` tablosu + `ix_revoked_tokens_expires_at` (cleanup için)
+- `core/security.py` — `create_access_token` ve `create_refresh_token` artık her token'a `jti=uuid.uuid4().hex` claim ekler
+- `core/deps.py::get_current_user` — decode sonrası jti blacklist kontrolü; eski jti'siz tokenlar geriye dönük uyumlu (jti yoksa atlanır)
+- Yeni endpoint: `POST /auth/logout` — `LogoutRequest(refresh_token: str | None)`. Header'daki access ve body'deki refresh (varsa, sub eşleşiyorsa) blacklist'e alınır. PK çakışmasında rollback (idempotent), bozuk refresh sessizce yutulur
+- `POST /auth/refresh` güncellendi — refresh token blacklist'teyse 401 "Token iptal edilmiş"
+- Schema: `LogoutRequest` `schemas/auth.py`'a eklendi
+- Frontend: `lib/api.ts::logout(refreshToken?)` ve `/dashboard/page.tsx` logout butonu (`clearAuth()` öncesi `api.logout()` çağırır)
+- Bilinen limitasyon: frontend `localStorage`'da yalnızca access tutuyor; refresh akışı eklendiğinde refresh token da blacklist'e alınmalı
+- 8 yeni integration test (`test_logout.py`)
+
 **Test paketi (güncel):**
-- **127 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
+- **135 backend** + 3 frontend Vitest + 5 Playwright E2E senaryosu
   - Unit: security (22), aggregator (22), exchange_rates (9), GBp dönüşümü (7), TEFAS (6) — toplam 66
-  - Integration: auth (21), portfolio (8), IDOR (8), integrations (5), wallets (5), snapshot (7), bes (8) — toplam 62
+  - Integration: auth (21), portfolio (8), IDOR (8), integrations (5), wallets (5), snapshot (7), bes (8), logout (8) — toplam 70
   - E2E: login redirect, register + login akışı (Playwright)
 
 ### 🐛 Son Sprint'te Düzeltilen Bug'lar
@@ -250,6 +261,7 @@ Kubernetes Ingress (nginx)
 - [x] Stocks ve Wallets UI sayfaları
 - [x] TCMB API USD/TRY fallback (TCMB primary + exchangerate-api fallback, 5 dk in-memory cache)
 - [x] BES manuel giriş ekranı (model + endpoint'ler + Excel + snapshot entegrasyonu + frontend)
+- [x] JWT blacklist + `/auth/logout` endpoint'i (revoked_tokens tablosu + jti claim + refresh blacklist kontrolü)
 - [ ] Kubernetes manifest'leri (`k8s/` klasörü hâlâ boş)
 - [ ] KVKK metinleri (gizlilik politikası, aydınlatma, açık rıza)
 - [ ] Şifre sıfırlama akışı (`/auth/forgot-password`, `/auth/reset-password`)

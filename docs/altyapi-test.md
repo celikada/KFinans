@@ -15,7 +15,7 @@
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
 ### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
-- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30) — **127 test**
+- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%30) — **135 test**
 - ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build — 3 unit test
 - ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
 - ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
@@ -217,7 +217,7 @@ jobs:
             (en geniş taban)
 ```
 
-### 5.2 Backend Test Yapısı (Mevcut — 127 test geçiyor)
+### 5.2 Backend Test Yapısı (Mevcut — 135 test geçiyor)
 ```
 backend/tests/
 ├── conftest.py                  # ✅ NullPool + per-request session + slowapi disable
@@ -228,7 +228,7 @@ backend/tests/
 │   ├── test_stocks_currency.py  # ✅ GBp/USD/TRY dönüşüm zinciri — 7 test
 │   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx) — 6 test
 │   └── test_advisor.py          # ❌ Anthropic mock + token sayımı (Faz 3)
-├── integration/                 # 62 test
+├── integration/                 # 70 test
 │   ├── test_auth.py             # ✅ Register/login/refresh + verify-email + resend + 403 hard block — 21 test
 │   ├── test_portfolio.py        # ✅ TEFAS holdings CRUD — 8 test
 │   ├── test_idor.py             # ✅ Cross-user erişim koruma (BES dahil) — 8 test
@@ -236,6 +236,7 @@ backend/tests/
 │   ├── test_bes_api.py          # ✅ BES holdings CRUD + Excel + validation — 8 test
 │   ├── test_integrations_api.py # ✅ Exchange key encrypt/decrypt + leak — 5 test
 │   ├── test_wallets_api.py      # ✅ Blockchain wallet CRUD — 5 test
+│   ├── test_logout.py           # ✅ JWT blacklist + /auth/logout + idempotency + user izolasyonu — 8 test
 │   ├── test_stocks_api.py       # ⚠️ Henüz yazılmadı (preview/import/export)
 │   ├── test_crypto_api.py       # ❌ Binance/iCrypex mock (Faz 2)
 │   └── test_advice.py           # ❌ AI çağrı mock + kredi kontrolü (Faz 3)
@@ -244,6 +245,7 @@ backend/tests/
 ```
 
 **Yeni test grupları (son sprint):**
+- `test_logout.py` (yeni dosya): 8 integration test — `/auth/logout` 200 OK; logout sonrası access blacklist'te (auth endpoint 401); body refresh logout'tan sonra `/auth/refresh` 401; sadece access logout → refresh hala çalışır; logout auth gerektirir (token'sız 401); idempotent (ikinci logout 401 — token zaten blacklist'te); bozuk refresh body'de yutulur ama access yine blacklist'e alınır; User A logout User B'yi etkilemez
 - `test_bes_api.py` (yeni dosya): 8 integration test — boş kullanıcı listesi, save & retrieve, idempotent PUT (replace-all), boş PUT, negatif değer reddi (`total_value_tl >= 0`), boş `plan_name` reddi (min_length=1), Excel export, Excel import
 - `test_idor.py`: yeni `test_user_a_cannot_see_user_b_bes` + `test_no_token_returns_401`'e `/portfolio/bes/holdings` eklendi
 - `test_snapshot.py`: yeni `test_snapshot_includes_bes_holdings` — BES manual değer snapshot'a `pension` asset_type ile geliyor

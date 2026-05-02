@@ -84,7 +84,7 @@ backend/app/
 │
 ├── api/v1/                # HTTP arayüz katmanı
 │   ├── router.py          # Tüm router'ları birleştirir
-│   ├── auth.py            # /auth (login, register, refresh, verify-email, resend-verification) + rate limit
+│   ├── auth.py            # /auth (login, register, refresh, logout, verify-email, resend-verification) + rate limit + JWT blacklist
 │   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking) + POST /snapshot manuel tetik
 │   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel)
 │   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel)
@@ -94,8 +94,8 @@ backend/app/
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
 │
 ├── core/                  # Çekirdek altyapı
-│   ├── deps.py            # get_db, get_current_user
-│   ├── security.py        # JWT, bcrypt, Fernet encrypt/decrypt
+│   ├── deps.py            # get_db, get_current_user (RevokedToken jti kontrolü dahil)
+│   ├── security.py        # JWT (jti=uuid4.hex), bcrypt, Fernet encrypt/decrypt
 │   └── limiter.py         # slowapi Limiter (paylaşılan instance)
 │
 ├── services/              # İş mantığı katmanı
@@ -121,12 +121,13 @@ backend/app/
 │   ├── tefas.py           # tefas_holdings
 │   ├── stock.py           # stock_holdings
 │   ├── bes.py             # bes_holdings (plan_name, total_value_tl)
+│   ├── revoked_token.py   # revoked_tokens (jti PK, JWT blacklist)
 │   ├── portfolio.py       # portfolio_snapshots + asset_positions
 │   ├── advice.py          # investment_advice
 │   └── credit.py          # credit_transactions (Faz 3)
 │
 └── schemas/               # Pydantic — request/response sözleşmeleri
-    ├── auth.py
+    ├── auth.py            # RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest
     ├── portfolio.py       # SnapshotOut, PortfolioChanges, CryptoPositionOut, WalletPositionOut
     ├── tefas.py           # TefasHolding, TefasPositionOut
     ├── stocks.py          # StockHolding, StockPositionOut
@@ -236,6 +237,29 @@ POST /auth/resend-verification {email}
   ↓ Eğer user mevcut ve doğrulanmamışsa: yeni token + mail gönder
 ```
 
+### 4.4 Logout + Token İptali (JWT Blacklist)
+
+```
+POST /auth/logout {refresh_token?}   (Authorization: Bearer <access>)
+  ↓ get_current_user(access) → user (zaten doğrulandı)
+  ↓ INSERT revoked_tokens (jti, user_id, token_type='access', expires_at)
+  ↓ Eğer body'de refresh varsa ve sub eşleşiyorsa:
+  ↓   INSERT revoked_tokens (jti, user_id, token_type='refresh', expires_at)
+  ↓ PK çakışmasında rollback (idempotent)
+  ↓ Bozuk refresh → sessizce yutulur (bilgi sızdırma yok)
+  ↓ 200 OK { "message": "Çıkış yapıldı" }
+
+Sonraki istek (Authorization: Bearer <iptal-edilmiş-access>):
+  ↓ decode_token() OK
+  ↓ get_current_user: SELECT 1 FROM revoked_tokens WHERE jti=?
+  ↓ Bulunduysa → 401
+  ↓ (Eski jti'siz tokenlar geriye dönük uyumlu — jti yoksa kontrol atlanır)
+
+POST /auth/refresh {refresh_token=<iptal-edilmiş>}
+  ↓ decode_token() OK
+  ↓ jti blacklist'te → 401 "Token iptal edilmiş"
+```
+
 ---
 
 ## 5. Veritabanı Şeması
@@ -331,6 +355,19 @@ INDEX ix_bes_holdings_user_id (user_id)
 
 > BES manuel giriştir; otomatik scraping yok. Snapshot servisi `_gather_bes_assets()` ile her kaydı `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` olacak şekilde `AssetData`'ya dönüştürür.
 
+#### `revoked_tokens` (JWT blacklist)
+```sql
+jti          TEXT PRIMARY KEY                       -- JWT'nin jti claim'i (uuid4.hex)
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+token_type   TEXT NOT NULL                          -- 'access' | 'refresh'
+expires_at   TIMESTAMPTZ NOT NULL                   -- token doğal son kullanma; cleanup job için
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_revoked_tokens_expires_at (expires_at)
+```
+
+> `POST /auth/logout` access (zorunlu) ve refresh (opsiyonel) tokenları bu tabloya yazar. `get_current_user` decode sonrası `jti`'yi sorgular; blacklist'teyse 401. PK çakışmasında rollback ile sessiz idempotency (aynı token tekrar logout edilirse hata değil — ikinci `get_current_user` zaten 401 döndürür). Eski (jti'siz) tokenlar geriye dönük uyumlu — `jti` yoksa kontrol atlanır. Cleanup için `expires_at` index'i kullanılır (Faz 3 cron job).
+
 #### `portfolio_snapshots` + `asset_positions`
 ```sql
 portfolio_snapshots
@@ -408,6 +445,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE |
 | `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token` |
 | `1f2e3d4c5b6a` | ✅ `bes_holdings` tablosu (plan_name, total_value_tl) + `ix_bes_holdings_user_id` |
+| `2a3b4c5d6e7f` | ✅ `revoked_tokens` tablosu (jti PK, user_id, token_type, expires_at) + `ix_revoked_tokens_expires_at` (JWT blacklist) |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -417,6 +455,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_tefas_holdings_user_id`
 - `ix_stock_holdings_user_id`
 - `ix_bes_holdings_user_id`
+- `ix_revoked_tokens_expires_at`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
 - `ix_asset_positions_snapshot_id`
@@ -428,7 +467,8 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
 - [ ] `expense_categories` + `expenses` tabloları (Faz 3 — harcama takibi)
 - [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
-- [ ] `revoked_tokens` tablosu (Faz 2 — JWT blacklist)
+- [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f` ile eklendi
+- [ ] `revoked_tokens` cleanup cron job (`expires_at < now()` olanları sil — Faz 3)
 - [ ] Soft delete cron — 30 gün sonra hard delete
 
 ---
