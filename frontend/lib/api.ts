@@ -290,6 +290,21 @@ export const api = {
   getForecast: (year: number) =>
     request<ForecastResultDTO>(`/planned-expenses/forecast?year=${year}`),
 
+  // Kıymetli madenler
+  getCommodities: () => request<CommoditySummaryDTO>("/portfolio/commodities"),
+  createCommodity: (payload: CommodityInput) =>
+    request<CommodityDTO>("/portfolio/commodities", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateCommodity: (id: number, payload: { quantity?: number; notes?: string | null }) =>
+    request<CommodityDTO>(`/portfolio/commodities/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteCommodity: (id: number) =>
+    request<void>(`/portfolio/commodities/${id}`, { method: "DELETE" }),
+
   // Bütçe vs. Gerçekleşen
   listBudgets: () => request<BudgetDTO[]>("/budgets"),
   upsertBudget: (category: string, amount: number) =>
@@ -641,6 +656,63 @@ export interface ForecastResultDTO {
   year: number;
   months: ForecastMonthDTO[];
   year_total: string;
+}
+
+// Kıymetli madenler
+export type CommodityUnitType = "gram" | "biga" | "coin";
+export type CommodityMetal = "gold" | "silver";
+export type CoinType = "ceyrek" | "yarim" | "tam" | "cumhuriyet" | "resat" | "ata";
+
+export const BIGA_GOLD_CODES = ["A01","A02","A03","A04","A05","A06","A07","A08"] as const;
+export const BIGA_SILVER_CODES = ["G01","G02","G03","G04","G05","G06","G07"] as const;
+export const BIGA_GRAM_WEIGHTS: Record<string, number> = {
+  A01: 1, A02: 5, A03: 10, A04: 50, A05: 100, A06: 250, A07: 500, A08: 1000,
+  G01: 1, G02: 5, G03: 10, G04: 50, G05: 100, G06: 500, G07: 1000,
+};
+export const COIN_LABELS: Record<CoinType, string> = {
+  ceyrek:     "Çeyrek Altın (~1.75g)",
+  yarim:      "Yarım Altın (~3.50g)",
+  tam:        "Tam Altın (~7.02g)",
+  cumhuriyet: "Cumhuriyet Altını (~7.22g)",
+  resat:      "Reşat Altını (~7.22g)",
+  ata:        "Ata Altını (~7.22g)",
+};
+export const COIN_TYPES: CoinType[] = ["ceyrek","yarim","tam","cumhuriyet","resat","ata"];
+
+export interface CommodityInput {
+  unit_type: CommodityUnitType;
+  metal?: CommodityMetal;
+  biga_code?: string;
+  coin_type?: CoinType;
+  quantity: number;
+  notes?: string | null;
+}
+
+export interface CommodityDTO {
+  id: number;
+  unit_type: CommodityUnitType;
+  metal: CommodityMetal;
+  biga_code: string | null;
+  coin_type: CoinType | null;
+  quantity: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CommodityPositionDTO extends CommodityDTO {
+  gram_equivalent: string;
+  total_value_tl: string;
+  gold_price_tl: string;
+  silver_price_tl: string;
+}
+
+export interface CommoditySummaryDTO {
+  positions: CommodityPositionDTO[];
+  total_gold_gram: string;
+  total_silver_gram: string;
+  total_value_tl: string;
+  gold_price_tl: string;
+  silver_price_tl: string;
 }
 
 export interface BudgetDTO {

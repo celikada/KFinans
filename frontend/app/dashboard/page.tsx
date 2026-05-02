@@ -6,6 +6,7 @@ import Image from "next/image";
 import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import type { BudgetComparisonDTO } from "@/lib/api";
 
+
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -62,6 +63,10 @@ export default function DashboardPage() {
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
   const [incomeCount, setIncomeCount] = useState(0);
   const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
+
+  // Kıymetli madenler
+  const [commodityTotal, setCommodityTotal] = useState<number | null>(null);
+  const [commodityCount, setCommodityCount] = useState(0);
 
   // Bütçe
   const [budgetOverCount, setBudgetOverCount] = useState<number | null>(null);
@@ -141,6 +146,14 @@ export default function DashboardPage() {
       ));
     }).catch(() => {});
 
+    api.getCommodities().then((s) => {
+      const total = parseFloat(s.total_value_tl);
+      if (s.positions.length > 0) {
+        setCommodityTotal(total);
+        setCommodityCount(s.positions.length);
+      }
+    }).catch(() => {});
+
     api.getBudgetComparison(now.getFullYear(), now.getMonth() + 1).then((rows) => {
       const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
       setBudgetOverCount(overCount);
@@ -199,7 +212,8 @@ export default function DashboardPage() {
     (cryptoTotal ?? 0) +
     (stockTotal ?? 0) +
     (walletTotal ?? 0) +
-    (besTotal ?? 0);
+    (besTotal ?? 0) +
+    (commodityTotal ?? 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -337,6 +351,18 @@ export default function DashboardPage() {
 
           <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
 
+          <Card
+            href="/dashboard/commodities"
+            icon="🥇"
+            color="amber"
+            title="Altın & Gümüş"
+            total={commodityTotal}
+            count={commodityCount}
+            countLabel="pozisyon"
+            top={[]}
+            placeholder="Gram, BiGA, sikke (çeyrek, tam...)"
+          />
+
           <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
         </div>
       </main>
@@ -367,6 +393,7 @@ const COLOR_MAP: Record<string, { bg: string; bgHover: string; ring: string; tex
   red:    { bg: "bg-red-50",    bgHover: "group-hover:bg-red-100",    ring: "hover:border-red-100",    text: "text-red-600" },
   violet:  { bg: "bg-violet-50",  bgHover: "group-hover:bg-violet-100",  ring: "hover:border-violet-100",  text: "text-violet-600" },
   emerald: { bg: "bg-emerald-50", bgHover: "group-hover:bg-emerald-100", ring: "hover:border-emerald-100", text: "text-emerald-600" },
+  amber:   { bg: "bg-amber-50",   bgHover: "group-hover:bg-amber-100",   ring: "hover:border-amber-100",   text: "text-amber-600" },
 };
 
 interface CardProps {
