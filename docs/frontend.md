@@ -14,13 +14,14 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
 | Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
 | E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
-| Ana Dashboard (5 kart + grand total + "Snapshot al" + "Geçmiş" butonu) | `/dashboard` | ✅ Aktif |
+| Ana Dashboard (6 kart + grand total + "Snapshot al" + "Geçmiş" butonu) | `/dashboard` | ✅ Aktif |
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
 | Hisse senedi portföyü (Yahoo Finance + Excel) | `/dashboard/stocks` | ✅ Aktif |
 | Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel) | `/dashboard/tefas` | ✅ Aktif |
 | BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
+| Harcama takibi (form + tablo + pasta grafik + ay seçici) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |
 
 ### Auth Davranışı (Korunmalı)
 - Token yoksa `/dashboard/*` → `/login`'e redirect
@@ -39,11 +40,11 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
 
 ### Dashboard Yenileme (Yeni)
-- 5 kart yapısı: TEFAS, Kripto, **Hisse Senedi** (`/dashboard/stocks`'a link), **Blockchain Cüzdanlar** (`/dashboard/wallets`'a link — eski "yakında" pasif kart aktive edildi), BES
-- Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL): TEFAS top 3 fund kodu, Kripto top 3 coin, Hisse top 3 ticker, Blockchain top 3 sembol, BES top 3 plan
-- Üstte **"Toplam: X ₺"** (5 kart toplamı / grand total)
+- 6 kart yapısı: TEFAS, Kripto, **Hisse Senedi** (`/dashboard/stocks`'a link), **Blockchain Cüzdanlar** (`/dashboard/wallets`'a link — eski "yakında" pasif kart aktive edildi), BES, **Harcamalar (bu ay)** (`/dashboard/expenses`'e link — kırmızı tema, 💸 ikonu)
+- Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL): TEFAS top 3 fund kodu, Kripto top 3 coin, Hisse top 3 ticker, Blockchain top 3 sembol, BES top 3 plan, Harcamalar top 3 kategori (bu ayın toplamı + en yüksek 3 kategori)
+- Üstte **"Toplam: X ₺"** (varlık kartlarının toplamı / grand total — harcama kartı toplama dahil değil)
 - Sağ üstte **"Geçmiş"** butonu → `/dashboard/history`
-- Reusable `Card` component (5 kart için ortak — büyük sayfa parçalama refactor'ünün başlangıcı)
+- Reusable `Card` component (6 kart için ortak); `COLOR_MAP`'e `red` rengi eklendi (harcama kartı için)
 
 ### Snapshot History Grafiği (Yeni)
 - `/dashboard/history` — `recharts ^3.8.1` ile iki line chart
@@ -59,6 +60,16 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Butonlar: "Plan ekle", "Kaldır", "Kaydet" (`PUT /portfolio/bes/holdings` — idempotent), "Excel İndir" (`GET /portfolio/bes/export`), "Excel Yükle" (`POST /portfolio/bes/import`)
 - Footer'da toplam tutar gösterimi
 - Dashboard kartı: önceki "Bireysel emeklilik — yakında" pasif kartı silindi, yerine `/dashboard/bes`'e link veren aktif buton geldi; `besTotal` ve `besPlanCount` state'leri ile özet TL gösteriliyor
+
+### Harcama Takibi Akışı (Yeni — Faz 3 MVP)
+- `/dashboard/expenses` (~100 satır page.tsx, sadece composition); 4 component pattern uygulanmış (sayfa parçalama refactor'ünün ilk tam örneği):
+  - `_components/ExpenseForm.tsx` — Tutar + Kategori + Tarih + Açıklama (4 sütunlu grid). Submit `POST /expenses`
+  - `_components/ExpenseTable.tsx` — Aylık liste, sil butonu (confirm), footer'da toplam. `DELETE /expenses/{id}`
+  - `_components/CategoryPieChart.tsx` — `recharts` PieChart, 10 kategori için sabit renk paleti
+  - `_components/MonthSelector.tsx` — Ay (1-12) + Yıl dropdown (önceki / mevcut / sonraki yıl)
+- API katmanı (`lib/api.ts`): `listExpenses`, `createExpense`, `updateExpense`, `deleteExpense`, `getExpenseSummary` + DTO'lar (`ExpenseDTO`, `ExpenseInput`, `ExpenseSummaryDTO`, `CategoryBreakdownDTO`)
+- Sabitler: `EXPENSE_CATEGORIES` (10 kategori) + `EXPENSE_CATEGORY_LABELS` (TR çeviriler — backend Literal değerleriyle eşleşir)
+- Dashboard kartı: 6. kart "Harcamalar (bu ay)" — kırmızı tema (💸), bu ayın toplamı + top 3 kategori. Backend `GET /expenses/summary?year=&month=` ile beslenir
 
 ---
 
@@ -86,8 +97,15 @@ frontend/
 │       ├── wallets/              # Blockchain cüzdanları (ekle/sil + Excel)
 │       │   └── page.tsx
 │       ├── tefas/page.tsx        # TEFAS
-│       └── bes/                  # BES manuel giriş (plan adı + ₺ + Excel)
-│           └── page.tsx
+│       ├── bes/                  # BES manuel giriş (plan adı + ₺ + Excel)
+│       │   └── page.tsx
+│       └── expenses/             # Harcama takibi (Faz 3 MVP — 4 component pattern)
+│           ├── page.tsx          # ~100 satır, composition only
+│           └── _components/
+│               ├── ExpenseForm.tsx
+│               ├── ExpenseTable.tsx
+│               ├── CategoryPieChart.tsx   # recharts PieChart
+│               └── MonthSelector.tsx
 │
 ├── lib/
 │   └── api.ts                    # Tüm API çağrıları + TypeScript DTO'ları
@@ -317,7 +335,8 @@ npm run e2e:ui        # Playwright UI mode
 ### Orta Vade (Faz 3)
 - [ ] Kredi yönetimi sayfası (bakiye + paket satın alma)
 - [ ] AI tavsiye ekranı (Markdown render — `react-markdown`)
-- [ ] Harcama takibi sayfaları (kategori, liste, analiz)
+- [x] Harcama takibi sayfaları (Faz 3 MVP — `/dashboard/expenses` + 4 component + dashboard kartı)
+- [ ] Harcama AI analizi ekranı (kredi tüketimli — `/expenses/analysis/generate`)
 - [ ] PDF export (jsPDF veya server-side Puppeteer)
 - [ ] Bildirim merkezi (toast + notification panel)
 

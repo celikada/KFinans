@@ -86,6 +86,34 @@ export const api = {
   getPortfolioHistory: (limit = 12) =>
     request<SnapshotHistoryDTO[]>(`/portfolio/history?limit=${limit}`),
 
+  // Harcama (Faz 3 MVP — manuel giris)
+  listExpenses: (params: { year?: number; month?: number; category?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.year !== undefined) q.set("year", String(params.year));
+    if (params.month !== undefined) q.set("month", String(params.month));
+    if (params.category) q.set("category", params.category);
+    const qs = q.toString();
+    return request<ExpenseDTO[]>(`/expenses${qs ? `?${qs}` : ""}`);
+  },
+
+  createExpense: (payload: ExpenseInput) =>
+    request<ExpenseDTO>("/expenses", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateExpense: (id: number, payload: Partial<ExpenseInput>) =>
+    request<ExpenseDTO>(`/expenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteExpense: (id: number) =>
+    request<void>(`/expenses/${id}`, { method: "DELETE" }),
+
+  getExpenseSummary: (year: number, month: number) =>
+    request<ExpenseSummaryDTO>(`/expenses/summary?year=${year}&month=${month}`),
+
   getWallets: () => request<WalletDTO[]>("/wallets"),
   addWallet: (chain: string, address: string, label?: string) =>
     request<WalletDTO>("/wallets", {
@@ -268,6 +296,57 @@ export interface SnapshotHistoryDTO {
     total_value_tl: string;
     weight_pct: string;
   }>;
+}
+
+export type ExpenseCategory =
+  | "food" | "groceries" | "transport" | "bills" | "health"
+  | "entertainment" | "clothing" | "home" | "tax" | "other";
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  "food", "groceries", "transport", "bills", "health",
+  "entertainment", "clothing", "home", "tax", "other",
+];
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  food: "Yiyecek",
+  groceries: "Market",
+  transport: "Ulaşım",
+  bills: "Faturalar",
+  health: "Sağlık",
+  entertainment: "Eğlence",
+  clothing: "Giyim",
+  home: "Ev",
+  tax: "Vergi",
+  other: "Diğer",
+};
+
+export interface ExpenseInput {
+  amount: number;
+  category: ExpenseCategory;
+  date: string;        // YYYY-MM-DD
+  description?: string | null;
+}
+
+export interface ExpenseDTO {
+  id: number;
+  amount: string;
+  category: ExpenseCategory;
+  date: string;
+  description: string | null;
+}
+
+export interface CategoryBreakdownDTO {
+  category: ExpenseCategory;
+  total: string;
+  count: number;
+}
+
+export interface ExpenseSummaryDTO {
+  year: number;
+  month: number;
+  total: string;
+  count: number;
+  by_category: CategoryBreakdownDTO[];
 }
 
 export interface RegisterResponseDTO {

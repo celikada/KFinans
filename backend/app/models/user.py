@@ -29,3 +29,4 @@ class User(Base):
     tefas_holdings: Mapped[list["TefasHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     stock_holdings: Mapped[list["StockHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     bes_holdings: Mapped[list["BesHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    expenses: Mapped[list["Expense"]] = relationship(back_populates="user", cascade="all, delete-orphan")

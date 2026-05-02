@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.9
+**Versiyon:** 4.0
 **Tarih:** 2026-05-02
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 10/10 madde tamam (Kubernetes manifest'leri eklendi); Faz 2.5 cleanup'ta test coverage %30→%50 hedefi tamamlandı (%52.21), sadece frontend parça testleri açık kaldı
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP başladı**: harcama takibi (manuel) tamamlandı (159 backend test). AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
 **Üretici:** Mayotek
 
 ---
@@ -39,7 +39,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
 | **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri ✅ | ✅ Tamamlandı (Faz 2.5: test coverage + frontend parçalama) |
-| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | Planlı |
+| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | 🚧 MVP başladı (harcama takibi tamam; AI/kredi/iyzico açık) |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
 
 ---
@@ -273,11 +273,18 @@ Kubernetes Ingress (nginx)
 - [x] Test coverage %30 → %50 hedefi (2026-05-02: %52.21 — `services/advisor.py` 6 unit test ile %0 → ~%85; orphan `services/bes.py` silindi; CI gate %50)
 - [ ] Frontend bileşen parçalama + Vitest/RTL component test'leri
 
-### 📋 Faz 3 Planlananlar
-- Kredi sistemi tam implementasyonu + iyzico sandbox
-- KVKK endpoint'leri (`/me/data-export`, `/me/account` soft delete)
-- `audit_logs` tablosu
-- Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
-- Background job kuyruğu (Celery/RQ)
+### 📋 Faz 3 — Durum
+
+**MVP tamamlanan:**
+- [x] **Harcama takibi (manuel)** — `expenses` tablosu (migration `4c5d6e7f8a9b`), 5 endpoint (`GET/POST/PUT/DELETE /expenses` + `GET /expenses/summary`), 10 sabit kategori (`Literal`), `/dashboard/expenses` sayfası (4 component pattern: ExpenseForm + ExpenseTable + CategoryPieChart + MonthSelector), dashboard 6. kart "Harcamalar (bu ay)" (kırmızı tema, top 3 kategori). 18 yeni integration test (`test_expenses_api.py`) — IDOR + auth + filter + summary.
+
+**Açık kalan:**
+- [ ] AI tavsiye motoru aktivasyonu (`/advice/generate` — kredi tüketimli)
+- [ ] Harcama AI analizi (`/expenses/analysis/generate` — 3 kredi)
+- [ ] Kredi sistemi tam implementasyonu + iyzico sandbox (`credit_transactions` tablosu, idempotency, webhook)
+- [ ] KVKK endpoint'leri (`/me/data-export`, `/me/account` soft delete)
+- [ ] `audit_logs` tablosu
+- [ ] Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
+- [ ] Background job kuyruğu (Celery/RQ)
 
 > Detaylı yol haritası ve TODO'lar her alt dokümanın sonundadır.

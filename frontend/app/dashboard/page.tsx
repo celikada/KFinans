@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { api, clearAuth } from "@/lib/api";
+import { api, clearAuth, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -48,6 +48,11 @@ export default function DashboardPage() {
   const [besTotal, setBesTotal] = useState<number | null>(null);
   const [besPlanCount, setBesPlanCount] = useState(0);
   const [besTop, setBesTop] = useState<TopItem[]>([]);
+
+  // Harcama (bu ay)
+  const [expenseTotal, setExpenseTotal] = useState<number | null>(null);
+  const [expenseCount, setExpenseCount] = useState(0);
+  const [expenseTop, setExpenseTop] = useState<TopItem[]>([]);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -106,6 +111,19 @@ export default function DashboardPage() {
       const total = items.reduce((s, i) => s + i.total, 0);
       setBesTotal(total);
       setBesTop(top3(items, (i) => i.total, (i) => i.plan_name));
+    }).catch(() => {});
+
+    const now = new Date();
+    api.getExpenseSummary(now.getFullYear(), now.getMonth() + 1).then((sum) => {
+      const total = parseFloat(sum.total);
+      if (sum.count === 0) return;
+      setExpenseTotal(total);
+      setExpenseCount(sum.count);
+      setExpenseTop(top3(
+        sum.by_category,
+        (b) => parseFloat(b.total),
+        (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
+      ));
     }).catch(() => {});
   }, [router]);
 
@@ -240,6 +258,18 @@ export default function DashboardPage() {
             top={besTop}
             placeholder="Bireysel emeklilik — manuel giriş"
           />
+
+          <Card
+            href="/dashboard/expenses"
+            icon="💸"
+            color="red"
+            title="Harcamalar (bu ay)"
+            total={expenseTotal}
+            count={expenseCount}
+            countLabel="kayıt"
+            top={expenseTop}
+            placeholder="Aylık gider takibi"
+          />
         </div>
       </main>
 
@@ -266,6 +296,7 @@ const COLOR_MAP: Record<string, { bg: string; bgHover: string; ring: string; tex
   indigo: { bg: "bg-indigo-50", bgHover: "group-hover:bg-indigo-100", ring: "hover:border-indigo-100", text: "text-indigo-600" },
   purple: { bg: "bg-purple-50", bgHover: "group-hover:bg-purple-100", ring: "hover:border-purple-100", text: "text-purple-600" },
   green:  { bg: "bg-green-50",  bgHover: "group-hover:bg-green-100",  ring: "hover:border-green-100",  text: "text-green-600" },
+  red:    { bg: "bg-red-50",    bgHover: "group-hover:bg-red-100",    ring: "hover:border-red-100",    text: "text-red-600" },
 };
 
 interface CardProps {

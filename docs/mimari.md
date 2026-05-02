@@ -93,6 +93,7 @@ backend/app/
 │   ├── bes.py             # /portfolio/bes/* (manuel giriş + Excel)
 │   ├── wallets.py         # /wallets (blockchain adres CRUD + Excel)
 │   ├── integrations.py    # /integrations (exchange API key)
+│   ├── expenses.py        # /expenses (manuel harcama CRUD + summary — Faz 3 MVP)
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
 │
 ├── core/                  # Çekirdek altyapı
@@ -126,6 +127,7 @@ backend/app/
 │   ├── revoked_token.py   # revoked_tokens (jti PK, JWT blacklist)
 │   ├── portfolio.py       # portfolio_snapshots + asset_positions
 │   ├── advice.py          # investment_advice
+│   ├── expense.py         # expenses (manuel harcama — Faz 3 MVP)
 │   └── credit.py          # credit_transactions (Faz 3)
 │
 └── schemas/               # Pydantic — request/response sözleşmeleri
@@ -134,6 +136,7 @@ backend/app/
     ├── tefas.py           # TefasHolding, TefasPositionOut
     ├── stocks.py          # StockHolding, StockPositionOut
     ├── bes.py             # BesHolding (plan_name, total_value_tl)
+    ├── expense.py         # ExpenseCategory, ExpenseCreate/Update/Out, ExpenseSummary, CategoryBreakdown
     └── integration.py
 ```
 
@@ -357,6 +360,21 @@ INDEX ix_bes_holdings_user_id (user_id)
 
 > BES manuel giriştir; otomatik scraping yok. Snapshot servisi `_gather_bes_assets()` ile her kaydı `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` olacak şekilde `AssetData`'ya dönüştürür.
 
+#### `expenses` (Faz 3 MVP — manuel harcama takibi)
+```sql
+id           UUID PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+category     TEXT NOT NULL                        -- ExpenseCategory enum (10 sabit kategori)
+date         DATE NOT NULL
+description  VARCHAR(500)
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_expenses_user_date (user_id, date)       -- aylık liste/summary sorguları için
+```
+
+> 10 sabit kategori: `food`, `groceries`, `transport`, `bills`, `health`, `entertainment`, `clothing`, `home`, `tax`, `other`. Schema'da `Literal` tipi ile zorlanır; kategori dışı değer 422 döner. `User.expenses` ilişkisi cascade all, delete-orphan.
+
 #### `revoked_tokens` (JWT blacklist)
 ```sql
 jti          TEXT PRIMARY KEY                       -- JWT'nin jti claim'i (uuid4.hex)
@@ -448,6 +466,8 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token` |
 | `1f2e3d4c5b6a` | ✅ `bes_holdings` tablosu (plan_name, total_value_tl) + `ix_bes_holdings_user_id` |
 | `2a3b4c5d6e7f` | ✅ `revoked_tokens` tablosu (jti PK, user_id, token_type, expires_at) + `ix_revoked_tokens_expires_at` (JWT blacklist) |
+| `3b4c5d6e7f8a` | ✅ `bes_holdings` 4 metric genişletme (paid_principal, paid_returns, govt_contribution, govt_returns + contract_number; eski `total_value_tl` kolonu kaldırıldı) |
+| `4c5d6e7f8a9b` | ✅ `expenses` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_expenses_user_date` — Faz 3 MVP harcama takibi |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -457,6 +477,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_tefas_holdings_user_id`
 - `ix_stock_holdings_user_id`
 - `ix_bes_holdings_user_id`
+- `ix_expenses_user_date` (user_id + date)
 - `ix_revoked_tokens_expires_at`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
@@ -467,7 +488,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 
 ### Eksik (Faz 2-3'te Yapılacak)
 - [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
-- [ ] `expense_categories` + `expenses` tabloları (Faz 3 — harcama takibi)
+- [x] `expenses` tablosu (Faz 3 MVP — migration `4c5d6e7f8a9b` ile eklendi; 10 sabit kategori `Literal` ile schema'da, ayrı `expense_categories` tablosuna gerek yok)
 - [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
 - [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f` ile eklendi
 - [ ] `revoked_tokens` cleanup cron job (`expires_at < now()` olanları sil — Faz 3)

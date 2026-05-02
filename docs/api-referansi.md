@@ -496,16 +496,85 @@ iyzico callback. İmza doğrulaması yapılır; başarılı ödemede `credit_tra
 
 ---
 
-## 11. Harcamalar (`/api/v1/expenses`) — Faz 3
+## 11. Harcamalar (`/api/v1/expenses`) — Faz 3 MVP
 
+Manuel harcama takibi modülü. 10 sabit kategori (`food`, `groceries`, `transport`, `bills`, `health`, `entertainment`, `clothing`, `home`, `tax`, `other`); kategori dışı değer 422 döndürür. Tüm endpoint'ler auth gerektirir; başka kullanıcının kaydına erişim 404 döner (IDOR koruması).
+
+### `GET /expenses`
+Kullanıcının harcamalarını listeler. Tarihe göre **azalan** sıralı.
+
+| Query param | Tür | Açıklama |
+|-------------|-----|----------|
+| `year`      | int  | Opsiyonel — yıl filtresi |
+| `month`     | int  | Opsiyonel — ay filtresi (1-12). `year` ile birlikte kullanılır |
+| `category`  | enum | Opsiyonel — `ExpenseCategory` değeri; geçersizse 422 |
+
+```json
+200 OK
+[{
+  "id":          "uuid",
+  "amount":      "245.50",
+  "category":    "groceries",
+  "date":        "2026-04-29",
+  "description": "Migros haftalık alışveriş",
+  "created_at":  "2026-04-29T18:32:00Z"
+}]
+
+422: { "detail": "value is not a valid enumeration member" }
 ```
-GET/POST        /expenses
-PUT/DELETE      /expenses/{id}
-POST            /expenses/import
-GET/POST        /expenses/categories
-GET             /expenses/analysis
-POST            /expenses/analysis/generate   # 3 kredi
+
+### `POST /expenses`
+Yeni harcama ekler.
+```json
+// Request — ExpenseCreate
+{
+  "amount":      "245.50",       // Decimal, gt=0
+  "category":    "groceries",     // ExpenseCategory
+  "date":        "2026-04-29",    // ISO date
+  "description": "Migros"         // Opsiyonel, max_length=500
+}
+
+// 201 Created — ExpenseOut
+{ "id": "uuid", "amount": "245.50", ... }
+
+422: { "detail": "ensure this value is greater than 0" }     // amount <= 0
+422: { "detail": "value is not a valid enumeration member" } // geçersiz kategori
 ```
+
+### `PUT /expenses/{id}`
+Partial update — `ExpenseUpdate` tüm alanları opsiyonel. Body'de gönderilen alanlar değişir, diğerleri korunur.
+```json
+// Request — ExpenseUpdate (örn. sadece tutar)
+{ "amount": "260.00" }
+
+// 200 OK — güncellenmiş ExpenseOut
+404: { "detail": "Harcama bulunamadı" }   // başka kullanıcı veya yok
+```
+
+### `DELETE /expenses/{id}`
+```
+204 No Content
+404: { "detail": "Harcama bulunamadı" }
+```
+
+### `GET /expenses/summary?year=&month=`
+Belirli ayın toplamı + kategori kırılımı. `year` ve `month` zorunlu.
+```json
+200 OK — ExpenseSummary
+{
+  "year":   2026,
+  "month":  4,
+  "total":  "3450.75",
+  "count":  18,
+  "by_category": [
+    { "category": "groceries", "total": "1250.00", "count": 6 },
+    { "category": "bills",     "total":  "980.50", "count": 3 },
+    { "category": "transport", "total":  "620.25", "count": 5 }
+  ]
+}
+```
+
+> Boş ayda `total="0"`, `count=0`, `by_category=[]` döner (404 değil).
 
 ---
 
@@ -541,7 +610,8 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 - [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
 - [x] BES manuel giriş endpoint'leri (`/portfolio/bes/*` — GET, PUT, export, import)
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3
-- [ ] Harcama endpoint'leri (`/expenses/*`) — Faz 3
+- [x] Harcama endpoint'leri (`/expenses/*`) — Faz 3 MVP (5 endpoint: list/create/update/delete/summary)
+- [ ] Harcama analizi AI (`/expenses/analysis/generate`) — Faz 3 (3 kredi)
 - [ ] `/me/data-export` (KVKK) ve `/me/account` (DELETE) endpoint'leri
 - [ ] Pagination (cursor-based) `/portfolio/history` ve `/advice` için
 - [ ] Server-Sent Events `/portfolio/stream` (anlık fiyat) — Faz 4
