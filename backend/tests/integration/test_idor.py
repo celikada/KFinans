@@ -134,7 +134,13 @@ async def test_user_a_cannot_see_user_b_bes(client: AsyncClient):
     # User B kendi BES birikimlerini ekler
     await client.put(
         "/api/v1/portfolio/bes/holdings",
-        json=[{"plan_name": "B'nin BES Plani", "total_value_tl": 50000.0}],
+        json=[{
+            "plan_name": "B'nin BES Plani",
+            "paid_principal": 40000.0,
+            "paid_returns": 10000.0,
+            "govt_contribution": 0,
+            "govt_returns": 0,
+        }],
         headers=user_b,
     )
 

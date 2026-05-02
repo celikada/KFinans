@@ -9,6 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -48,9 +49,19 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">Şifre</label>
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? "Gizle" : "Göster"}
+              </button>
+            </div>
             <input
-              type="password"
+              id="login-password"
+              type={showPassword ? "text" : "password"}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}

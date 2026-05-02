@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [riskProfile, setRiskProfile] = useState<RiskProfile>("balanced");
+  const [showPassword, setShowPassword] = useState(false);
   const [kvkkRead, setKvkkRead] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [overseasConsent, setOverseasConsent] = useState(false);
@@ -138,9 +139,19 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Şifre</label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="register-password" className="block text-sm font-medium text-gray-700">Şifre</label>
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? "Gizle" : "Göster"}
+              </button>
+            </div>
             <input
-              type="password"
+              id="register-password"
+              type={showPassword ? "text" : "password"}
               required
               minLength={8}
               value={password}
@@ -153,7 +164,7 @@ export default function RegisterPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Şifre (tekrar)</label>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
               minLength={8}
               value={passwordConfirm}
@@ -219,9 +230,13 @@ export default function RegisterPage() {
                 className="mt-0.5 accent-blue-600"
               />
               <span>
-                E-posta gönderimi (Resend, ABD) ve AI tavsiye üretimi (Anthropic, ABD) için
-                kişisel verilerimin <strong>yurt dışına aktarılmasına</strong> KVKK m.9 kapsamında
-                <strong> açık rıza</strong> veriyorum.
+                Kişisel verilerimin hizmet sağlayıcılar aracılığıyla{" "}
+                <strong>yurt dışına aktarılmasına</strong> KVKK m.9 kapsamında{" "}
+                <strong>açık rıza</strong> veriyorum (detaylar{" "}
+                <Link href="/legal/kvkk" target="_blank" className="text-blue-600 hover:underline">
+                  KVKK Aydınlatma Metni
+                </Link>
+                &apos;nde).
               </span>
             </label>
           </div>

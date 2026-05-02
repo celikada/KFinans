@@ -165,8 +165,10 @@ async def test_snapshot_includes_bes_holdings(client: AsyncClient):
     await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[
-            {"plan_name": "AvivaSA Atak Hisse", "total_value_tl": 100000.00},
-            {"plan_name": "Anadolu Hayat OKS", "total_value_tl": 50000.00},
+            {"plan_name": "AvivaSA Atak Hisse", "paid_principal": 80000, "paid_returns": 20000,
+             "govt_contribution": 0, "govt_returns": 0},
+            {"plan_name": "Anadolu Hayat OKS", "paid_principal": 40000, "paid_returns": 10000,
+             "govt_contribution": 0, "govt_returns": 0},
         ],
         headers=headers,
     )

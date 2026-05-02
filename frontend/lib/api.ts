@@ -323,7 +323,11 @@ export interface TefasHoldingDTO {
 
 export interface BesHoldingDTO {
   plan_name: string;
-  total_value_tl: number | string;
+  contract_number?: string | null;
+  paid_principal: number | string;
+  paid_returns: number | string;
+  govt_contribution: number | string;
+  govt_returns: number | string;
 }
 
 export interface TefasPosition {

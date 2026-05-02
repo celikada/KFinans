@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 3.6
+**Versiyon:** 3.7
 **Tarih:** 2026-05-02
-**Durum:** Aktif geliştirme — Faz 1 tamamlandı, Faz 2 sekiz madde develop'ta (KVKK metinleri dahil)
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2: 9/10 madde + BES detaylı genişletme (4 metric + contract_number)
 **Üretici:** Mayotek
 
 ---
@@ -213,16 +213,17 @@ Kubernetes Ingress (nginx)
 - `POST /portfolio/snapshot` `RuntimeError` → 503
 - 9 yeni unit test (`test_exchange_rates.py`) + 2 yeni integration test (kur fail senaryoları)
 
-**6. BES (Bireysel Emeklilik Sistemi) manuel giriş modülü**
-- Backend: `models/bes.py` (`BesHolding(id, user_id, plan_name, total_value_tl)`), migration `1f2e3d4c5b6a` — `bes_holdings` tablosu + `ix_bes_holdings_user_id`
+**6. BES (Bireysel Emeklilik Sistemi) manuel giriş modülü** _(2026-05-02 genişletildi)_
+- Backend: `models/bes.py` `BesHolding(id, user_id, plan_name, contract_number?, paid_principal, paid_returns, govt_contribution, govt_returns)` — 4 ayrı metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Toplam `total_value_tl` model property olarak hesaplanır.
+- Migration `1f2e3d4c5b6a` (ilk hal) + `3b4c5d6e7f8a` (4 metric + contract_number genişletme, eski `total_value_tl` kolonu kaldırıldı)
 - `User.bes_holdings` ilişkisi (cascade all, delete-orphan)
-- `schemas/bes.py`: `BesHolding(plan_name min_length=1 max_length=200, total_value_tl Decimal ge=0)`
+- `schemas/bes.py`: `BesHolding(plan_name min_length=1 max_length=200, contract_number? max_length=100, 4× Decimal ge=0)`
 - Yeni router: `api/v1/bes.py` (prefix `/portfolio/bes`, tag `bes`)
   - `GET /holdings` → liste
   - `PUT /holdings` → idempotent (replace-all)
   - `GET /export` → `bes-holdingleri.xlsx`
   - `POST /import` → Excel'den yükle (mevcut kayıtları değiştirir)
-- `services/snapshot.py`: yeni `_gather_bes_assets()` — BES holding'leri `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` ile `AssetData`'ya çevrilir; ana paralel toplama dalına `bes_holdings` DB çekimi eklendi
+- `services/snapshot.py`: `_gather_bes_assets()` — BES holding'leri tek `AssetData`'ya çevrilir (`asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=` 4 metric toplamı); ana paralel toplama dalına `bes_holdings` DB çekimi eklendi
 - Frontend: `/dashboard/bes` sayfası (plan adı + toplam ₺ tek satırda iki input, "Plan ekle" + "Kaldır" + "Kaydet" + Excel İndir/Yükle), dashboard kartı pasif "yakında"dan aktif `besTotal`/`besPlanCount` özetli butona dönüştü
 - `lib/api.ts`: `getBesHoldings`, `saveBesHoldings`, `exportBesHoldings`, `importBesHoldings` + `BesHoldingDTO`
 - 8 yeni API test (`test_bes_api.py`) + 1 IDOR test + 1 snapshot integration test

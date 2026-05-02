@@ -5,31 +5,54 @@ import { api, BesHoldingDTO } from "@/lib/api";
 
 interface Holding {
   plan_name: string;
-  total_value_tl: string;
+  contract_number: string;
+  paid_principal: string;
+  paid_returns: string;
+  govt_contribution: string;
+  govt_returns: string;
 }
 
 const INPUT_CLS =
   "px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder:text-gray-400";
 
-function fmtTL(val: string | number) {
-  return parseFloat(val.toString()).toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const EMPTY_ROW: Holding = {
+  plan_name: "",
+  contract_number: "",
+  paid_principal: "",
+  paid_returns: "",
+  govt_contribution: "",
+  govt_returns: "",
+};
+
+function fmtTL(val: number) {
+  return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function rowTotal(h: Holding): number {
+  return (
+    (parseFloat(h.paid_principal) || 0) +
+    (parseFloat(h.paid_returns) || 0) +
+    (parseFloat(h.govt_contribution) || 0) +
+    (parseFloat(h.govt_returns) || 0)
+  );
 }
 
 function toDTO(holdings: Holding[]): BesHoldingDTO[] {
   return holdings
-    .filter((h) => h.plan_name.trim() && parseFloat(h.total_value_tl) >= 0)
+    .filter((h) => h.plan_name.trim() && rowTotal(h) > 0)
     .map((h) => ({
       plan_name: h.plan_name.trim(),
-      total_value_tl: parseFloat(h.total_value_tl),
+      contract_number: h.contract_number.trim() || null,
+      paid_principal: parseFloat(h.paid_principal) || 0,
+      paid_returns: parseFloat(h.paid_returns) || 0,
+      govt_contribution: parseFloat(h.govt_contribution) || 0,
+      govt_returns: parseFloat(h.govt_returns) || 0,
     }));
 }
 
 export default function BesPage() {
   const router = useRouter();
-  const [holdings, setHoldings] = useState<Holding[]>([{ plan_name: "", total_value_tl: "" }]);
+  const [holdings, setHoldings] = useState<Holding[]>([{ ...EMPTY_ROW }]);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -49,7 +72,11 @@ export default function BesPage() {
         if (data.length > 0) {
           setHoldings(data.map((h) => ({
             plan_name: h.plan_name,
-            total_value_tl: h.total_value_tl.toString(),
+            contract_number: h.contract_number ?? "",
+            paid_principal: h.paid_principal.toString(),
+            paid_returns: h.paid_returns.toString(),
+            govt_contribution: h.govt_contribution.toString(),
+            govt_returns: h.govt_returns.toString(),
           })));
         }
       })
@@ -100,7 +127,11 @@ export default function BesPage() {
       const imported = await api.importBesHoldings(file);
       setHoldings(imported.map((h) => ({
         plan_name: h.plan_name,
-        total_value_tl: h.total_value_tl.toString(),
+        contract_number: h.contract_number ?? "",
+        paid_principal: h.paid_principal.toString(),
+        paid_returns: h.paid_returns.toString(),
+        govt_contribution: h.govt_contribution.toString(),
+        govt_returns: h.govt_returns.toString(),
       })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -117,7 +148,7 @@ export default function BesPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { plan_name: "", total_value_tl: "" }]);
+    setHoldings((h) => [...h, { ...EMPTY_ROW }]);
   }
 
   function removeRow(i: number) {
@@ -128,7 +159,7 @@ export default function BesPage() {
     setHoldings((h) => h.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)));
   }
 
-  const total = holdings.reduce((s, h) => s + (parseFloat(h.total_value_tl) || 0), 0);
+  const grandTotal = holdings.reduce((s, h) => s + rowTotal(h), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -142,44 +173,60 @@ export default function BesPage() {
         <h1 className="text-lg font-semibold text-gray-900">BES — Bireysel Emeklilik</h1>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-1">BES Birikimleri</h2>
           <p className="text-xs text-gray-400 mb-4">
-            BES şirketinden son ekstreyle aldığınız toplam birikimi <span className="font-medium">manuel olarak</span> girin.
-            İleride otomatik scraping eklenecek.
+            BES şirketinden son ekstrenizdeki <span className="font-medium">4 ana kalemi</span> ayrı
+            girin: yatırdığınız ana para + getirisi, devlet katkısı + getirisi. Toplam BES değeriniz
+            otomatik hesaplanır.
           </p>
 
           {initialLoad ? (
             <p className="text-sm text-gray-400">Yükleniyor...</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {holdings.map((row, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input
-                    placeholder="Plan adı (örn. AvivaSA Atak Hisse)"
-                    value={row.plan_name}
-                    onChange={(e) => updateRow(i, "plan_name", e.target.value)}
-                    className={`flex-1 ${INPUT_CLS}`}
-                    maxLength={200}
-                  />
-                  <input
-                    placeholder="Toplam ₺"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={row.total_value_tl}
-                    onChange={(e) => updateRow(i, "total_value_tl", e.target.value)}
-                    className={`w-40 text-right ${INPUT_CLS}`}
-                  />
-                  {holdings.length > 1 && (
-                    <button
-                      onClick={() => removeRow(i)}
-                      className="text-gray-300 hover:text-red-400 text-lg leading-none px-1"
-                    >
-                      ×
-                    </button>
-                  )}
+                <div key={i} className="border border-gray-100 rounded-xl p-4 space-y-3">
+                  <div className="flex gap-2 items-center">
+                    <input
+                      placeholder="Plan adı (örn. AvivaSA Atak Hisse)"
+                      value={row.plan_name}
+                      onChange={(e) => updateRow(i, "plan_name", e.target.value)}
+                      className={`flex-1 ${INPUT_CLS}`}
+                      maxLength={200}
+                    />
+                    <input
+                      placeholder="Sözleşme no (opsiyonel)"
+                      value={row.contract_number}
+                      onChange={(e) => updateRow(i, "contract_number", e.target.value)}
+                      className={`w-44 font-mono text-xs ${INPUT_CLS}`}
+                      maxLength={100}
+                    />
+                    {holdings.length > 1 && (
+                      <button
+                        onClick={() => removeRow(i)}
+                        className="text-gray-300 hover:text-red-400 text-lg leading-none px-1"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <NumField label="Yatırdığım" value={row.paid_principal}
+                      onChange={(v) => updateRow(i, "paid_principal", v)} />
+                    <NumField label="Yatırım getirisi" value={row.paid_returns}
+                      onChange={(v) => updateRow(i, "paid_returns", v)} />
+                    <NumField label="Devlet katkısı" value={row.govt_contribution}
+                      onChange={(v) => updateRow(i, "govt_contribution", v)} />
+                    <NumField label="Devlet katkı getirisi" value={row.govt_returns}
+                      onChange={(v) => updateRow(i, "govt_returns", v)} />
+                  </div>
+
+                  <div className="text-right text-xs text-gray-500">
+                    Bu plan toplamı: <span className="font-semibold text-gray-700">{fmtTL(rowTotal(row))} ₺</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -219,14 +266,39 @@ export default function BesPage() {
             <p className="mt-3 text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
           )}
 
-          {total > 0 && (
+          {grandTotal > 0 && (
             <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-sm text-gray-500">Toplam</span>
-              <span className="text-lg font-bold text-gray-900">{fmtTL(total)} ₺</span>
+              <span className="text-sm text-gray-500">Toplam BES Değeri</span>
+              <span className="text-lg font-bold text-gray-900">{fmtTL(grandTotal)} ₺</span>
             </div>
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+function NumField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-gray-500 mb-1">{label} (₺)</label>
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0,00"
+        className={`w-full text-right ${INPUT_CLS}`}
+      />
     </div>
   );
 }

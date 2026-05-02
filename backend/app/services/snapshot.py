@@ -97,8 +97,10 @@ async def _gather_tefas_assets(holdings: list[TefasHolding]) -> list[AssetData]:
 def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
     """BES holdinglerini AssetData'ya cevirir.
 
-    Manuel girilen toplam TL degerini birim fiyat olarak alir; liquid_quantity=1
-    ile to_asset_position'da total_value_tl = value olur. Asset_type='pension'.
+    Toplam = paid_principal + paid_returns + govt_contribution + govt_returns
+    (4 metric BesHolding modelinde ayri alanlar; snapshot'a tek pension
+    pozisyonu olarak girer, toplam degeri unit_price_tl olarak tasinir).
+    Asset_type='pension', provider='bes'.
     """
     return [
         AssetData(

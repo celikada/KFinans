@@ -1,5 +1,6 @@
 import uuid
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import ForeignKey, Numeric, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -9,10 +10,16 @@ from app.models.base import Base
 
 
 class BesHolding(Base):
-    """BES (Bireysel Emeklilik Sistemi) manuel girilen fon bakiyeleri.
+    """BES (Bireysel Emeklilik Sistemi) plan bakiye detayi.
 
-    Faz 1'de scraping yok — kullanici plan adi ve toplam TL degeri girer.
-    Ileride bes.py soyut servis olarak yazilirsa fiyat birimi alanlari eklenir.
+    BES'te 4 ana metrik birbirinden ayri izlenir:
+      - paid_principal:    yatirilan ana para (kumulatif)
+      - paid_returns:      bu paranin getirisi
+      - govt_contribution: devlet katkisi (yatirimin %30'u, yillik tavanli)
+      - govt_returns:      devlet katkisinin getirisi
+
+    contract_number: sozlesme numarasi (kullanicinin kendi referansi; Acik
+    Finans regulasyonu BES'i kapsadiginda otomatik fetch icin kullanilabilir).
     """
 
     __tablename__ = "bes_holdings"
@@ -25,6 +32,15 @@ class BesHolding(Base):
         index=True,
     )
     plan_name: Mapped[str] = mapped_column(Text, nullable=False)
-    total_value_tl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    contract_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    paid_principal: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    paid_returns: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    govt_contribution: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    govt_returns: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
 
     user: Mapped["User"] = relationship(back_populates="bes_holdings")
+
+    @property
+    def total_value_tl(self) -> Decimal:
+        """4 metric toplami — snapshot ve dashboard ozetinde kullanilir."""
+        return self.paid_principal + self.paid_returns + self.govt_contribution + self.govt_returns
