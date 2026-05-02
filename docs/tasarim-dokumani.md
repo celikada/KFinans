@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 4.0
-**Tarih:** 2026-05-02
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP başladı**: harcama takibi (manuel) tamamlandı (159 backend test). AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
+**Versiyon:** 4.1
+**Tarih:** 2026-05-03
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP devam ediyor**: harcama takibi + planlı ödemeler tamamlandı (175 backend test). AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
 **Üretici:** Mayotek
 
 ---
@@ -277,6 +277,7 @@ Kubernetes Ingress (nginx)
 
 **MVP tamamlanan:**
 - [x] **Harcama takibi (manuel)** — `expenses` tablosu (migration `4c5d6e7f8a9b`), 5 endpoint (`GET/POST/PUT/DELETE /expenses` + `GET /expenses/summary`), 10 sabit kategori (`Literal`), `/dashboard/expenses` sayfası (4 component pattern: ExpenseForm + ExpenseTable + CategoryPieChart + MonthSelector), dashboard 6. kart "Harcamalar (bu ay)" (kırmızı tema, top 3 kategori). 18 yeni integration test (`test_expenses_api.py`) — IDOR + auth + filter + summary.
+- [x] **Planlı Ödemeler & Nakit Akışı Tahmini** — `planned_expenses` tablosu (migration `5d6e7f8a9b0c`), 7 kategori, 6 tekrar tipi, 5 endpoint + tahmin motoru, `/dashboard/planned` yıllık timeline görünümü, dashboard 7. kart. 16 yeni integration test. _(Ayrıntılar aşağıda.)_
 
 **Açık kalan:**
 - [ ] AI tavsiye motoru aktivasyonu (`/advice/generate` — kredi tüketimli)
@@ -286,5 +287,52 @@ Kubernetes Ingress (nginx)
 - [ ] `audit_logs` tablosu
 - [ ] Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
 - [ ] Background job kuyruğu (Celery/RQ)
+
+---
+
+### Faz 3 #2 — Planlı Ödemeler & Yıllık Nakit Akışı Tahmini (2026-05-03)
+
+#### Backend
+
+**Model:** `PlannedExpense` — `models/planned_expense.py`
+- Migration: `5d6e7f8a9b0c`
+- Kategoriler (7): `loan`, `tax`, `insurance`, `subscription`, `rent`, `utility`, `other`
+- Tekrar tipleri (6): `one_time`, `monthly`, `quarterly`, `biannual`, `yearly`, `custom`
+- Alanlar:
+  - `title` — ödeme başlığı
+  - `amount NUMERIC(18, 2)` — tutar
+  - `is_estimated BOOLEAN` — tahmini tutar bayrağı
+  - `category` — yukarıdaki 7 kategoriden biri (`Literal`)
+  - `recurrence` — yukarıdaki 6 tekrar tipinden biri (`Literal`)
+  - `months INTEGER[]` — custom recurrence için hangi aylar (1-12 dizisi)
+  - `day_of_month INTEGER` — ayın hangi günü (1-31)
+  - `start_date DATE` — geçerlilik başlangıcı
+  - `end_date DATE` — geçerlilik sonu (opsiyonel)
+  - `remaining_count INTEGER` — aylık kredi için kalan taksit; otomatik olarak `end_date`'e çevrilir
+  - `notes VARCHAR(500)` — serbest not (opsiyonel)
+
+**Endpoint'ler:**
+- `GET /planned-expenses` — kullanıcının planlı ödemeleri
+- `POST /planned-expenses` — yeni planlı ödeme ekle
+- `PUT /planned-expenses/{id}` — güncelle
+- `DELETE /planned-expenses/{id}` — sil
+- `GET /planned-expenses/forecast?year=` — tahmin motoru: 12 aylık breakdown + yıl toplamı
+
+**Tahmin motoru:** `_applies_in_month(expense, year, month)` fonksiyonu her planlı ödemenin belirtilen ay için geçerli olup olmadığını (`start_date`, `end_date`, `recurrence`, `months` alanları değerlendirilerek) belirler; 12 ay için çağrılır ve yıllık nakit akışı breakdown'ını döndürür.
+
+**Test:** 16 yeni integration test
+
+#### Frontend
+
+- **Sayfa:** `/dashboard/planned` — yıllık timeline görünümü, bar chart stili (`YearlyForecast` component)
+- **Component'ler (3):**
+  - `PlannedForm` — planlı ödeme ekle/düzenle formu (kategori, tekrar tipi, tutar, tarih aralığı)
+  - `PlannedList` — mevcut planlı ödemeleri listele/sil
+  - `YearlyForecast` — 12 aylık bar chart stili nakit akışı tahmini
+- **Dashboard 7. kart:** "Planlı Ödemeler (bu yıl)" — violet tema
+- **`lib/api.ts` eklemeleri:**
+  - 5 metot: `getPlannedExpenses`, `createPlannedExpense`, `updatePlannedExpense`, `deletePlannedExpense`, `getPlannedForecast`
+  - DTO'lar: `PlannedExpenseDTO`, `PlannedExpenseCreateDTO`, `PlannedForecastDTO`
+  - Sabitler: `PLANNED_CATEGORY_LABELS`, `PLANNED_RECURRENCE_LABELS`, `MONTH_NAMES`
 
 > Detaylı yol haritası ve TODO'lar her alt dokümanın sonundadır.

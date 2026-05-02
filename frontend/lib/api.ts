@@ -243,6 +243,27 @@ export const api = {
     return res.json();
   },
 
+  // Planlı ödemeler (Faz 3)
+  listPlannedExpenses: () => request<PlannedExpenseDTO[]>("/planned-expenses"),
+
+  createPlannedExpense: (payload: PlannedExpenseInput) =>
+    request<PlannedExpenseDTO>("/planned-expenses", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updatePlannedExpense: (id: number, payload: Partial<PlannedExpenseInput>) =>
+    request<PlannedExpenseDTO>(`/planned-expenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deletePlannedExpense: (id: number) =>
+    request<void>(`/planned-expenses/${id}`, { method: "DELETE" }),
+
+  getForecast: (year: number) =>
+    request<ForecastResultDTO>(`/planned-expenses/forecast?year=${year}`),
+
   getBesHoldings: () => request<BesHoldingDTO[]>("/portfolio/bes/holdings"),
 
   saveBesHoldings: (holdings: BesHoldingDTO[]) =>
@@ -433,4 +454,88 @@ export interface TefasPosition {
   quantity: string;
   unit_price_tl: string;
   total_value_tl: string;
+}
+
+export type PlannedCategory = "loan" | "tax" | "insurance" | "subscription" | "rent" | "utility" | "other";
+export type PlannedRecurrence = "one_time" | "monthly" | "quarterly" | "biannual" | "yearly" | "custom";
+
+export const PLANNED_CATEGORY_LABELS: Record<PlannedCategory, string> = {
+  loan: "Kredi / Borç",
+  tax: "Vergi",
+  insurance: "Sigorta",
+  subscription: "Abonelik",
+  rent: "Kira",
+  utility: "Fatura",
+  other: "Diğer",
+};
+
+export const PLANNED_RECURRENCE_LABELS: Record<PlannedRecurrence, string> = {
+  one_time: "Tek seferlik",
+  monthly: "Aylık",
+  quarterly: "3 aylık",
+  biannual: "6 aylık",
+  yearly: "Yıllık",
+  custom: "Özel aylar",
+};
+
+export const PLANNED_CATEGORIES: PlannedCategory[] = [
+  "loan", "tax", "insurance", "subscription", "rent", "utility", "other",
+];
+
+export const PLANNED_RECURRENCES: PlannedRecurrence[] = [
+  "one_time", "monthly", "quarterly", "biannual", "yearly", "custom",
+];
+
+export const MONTH_NAMES = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+];
+
+export interface PlannedExpenseInput {
+  title: string;
+  amount: number;
+  is_estimated?: boolean;
+  category: PlannedCategory;
+  recurrence: PlannedRecurrence;
+  months?: number[] | null;
+  day_of_month?: number;
+  start_date: string;        // YYYY-MM-DD
+  end_date?: string | null;
+  remaining_count?: number | null;
+  notes?: string | null;
+}
+
+export interface PlannedExpenseDTO {
+  id: number;
+  title: string;
+  amount: string;
+  is_estimated: boolean;
+  category: PlannedCategory;
+  recurrence: PlannedRecurrence;
+  months: number[] | null;
+  day_of_month: number;
+  start_date: string;
+  end_date: string | null;
+  remaining_count: number | null;
+  notes: string | null;
+}
+
+export interface ForecastItemDTO {
+  id: number;
+  title: string;
+  amount: string;
+  category: PlannedCategory;
+  is_estimated: boolean;
+}
+
+export interface ForecastMonthDTO {
+  month: number;
+  total: string;
+  items: ForecastItemDTO[];
+}
+
+export interface ForecastResultDTO {
+  year: number;
+  months: ForecastMonthDTO[];
+  year_total: string;
 }

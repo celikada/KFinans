@@ -17,27 +17,27 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 ```
 
 ### 1.3 Standart HTTP Kodları
-| Kod | Anlamı | Örnek |
-|-----|--------|-------|
-| 200 | OK | Veri döndü |
-| 201 | Created | Yeni kayıt eklendi (register) |
-| 401 | Unauthorized | Token yok/geçersiz |
-| 404 | Not Found | Snapshot yok |
-| 409 | Conflict | E-posta zaten kayıtlı |
-| 422 | Unprocessable Entity | Geçersiz girdi (Pydantic validation) |
-| 429 | Too Many Requests | slowapi rate limit aşıldı |
-| 402 | Payment Required | Yetersiz kredi (Faz 3) |
-| 500 | Internal Error | Beklenmeyen hata (loglanır) |
-| 502 | Bad Gateway | Snapshot — tüm kaynaklar fail |
-| 503 | Service Unavailable | Snapshot — kritik USD/TL kuru alınamadı |
+| Kod | Anlamı               | Örnek                                   |
+| --- | -------------------- | --------------------------------------- |
+| 200 | OK                   | Veri döndü                              |
+| 201 | Created              | Yeni kayıt eklendi (register)           |
+| 401 | Unauthorized         | Token yok/geçersiz                      |
+| 404 | Not Found            | Snapshot yok                            |
+| 409 | Conflict             | E-posta zaten kayıtlı                   |
+| 422 | Unprocessable Entity | Geçersiz girdi (Pydantic validation)    |
+| 429 | Too Many Requests    | slowapi rate limit aşıldı               |
+| 402 | Payment Required     | Yetersiz kredi (Faz 3)                  |
+| 500 | Internal Error       | Beklenmeyen hata (loglanır)             |
+| 502 | Bad Gateway          | Snapshot — tüm kaynaklar fail           |
+| 503 | Service Unavailable  | Snapshot — kritik USD/TL kuru alınamadı |
 
 ### 1.4 Rate Limiting (slowapi, in-memory)
-| Endpoint | Limit |
-|----------|-------|
-| `POST /auth/login` | 10/dakika |
-| `POST /auth/register` | 5/dakika |
-| `POST /auth/refresh` | 30/dakika |
-| Diğer | Henüz limit yok (Faz 3'te eklenecek) |
+| Endpoint              | Limit                                |
+| --------------------- | ------------------------------------ |
+| `POST /auth/login`    | 10/dakika                            |
+| `POST /auth/register` | 5/dakika                             |
+| `POST /auth/refresh`  | 30/dakika                            |
+| Diğer                 | Henüz limit yok (Faz 3'te eklenecek) |
 
 ---
 

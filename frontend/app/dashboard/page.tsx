@@ -54,6 +54,9 @@ export default function DashboardPage() {
   const [expenseCount, setExpenseCount] = useState(0);
   const [expenseTop, setExpenseTop] = useState<TopItem[]>([]);
 
+  // Planlı ödemeler (bu yıl)
+  const [plannedTotal, setPlannedTotal] = useState<number | null>(null);
+
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
   const [snapshotMsg, setSnapshotMsg] = useState("");
@@ -114,6 +117,11 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     const now = new Date();
+    api.getForecast(now.getFullYear()).then((fc) => {
+      const total = parseFloat(fc.year_total);
+      if (total > 0) setPlannedTotal(total);
+    }).catch(() => {});
+
     api.getExpenseSummary(now.getFullYear(), now.getMonth() + 1).then((sum) => {
       const total = parseFloat(sum.total);
       if (sum.count === 0) return;
@@ -270,6 +278,16 @@ export default function DashboardPage() {
             top={expenseTop}
             placeholder="Aylık gider takibi"
           />
+
+          <Card
+            href="/dashboard/planned"
+            icon="📅"
+            color="violet"
+            title="Planlı Ödemeler (bu yıl)"
+            total={plannedTotal}
+            top={[]}
+            placeholder="Kredi, vergi, fatura planı"
+          />
         </div>
       </main>
 
@@ -297,6 +315,7 @@ const COLOR_MAP: Record<string, { bg: string; bgHover: string; ring: string; tex
   purple: { bg: "bg-purple-50", bgHover: "group-hover:bg-purple-100", ring: "hover:border-purple-100", text: "text-purple-600" },
   green:  { bg: "bg-green-50",  bgHover: "group-hover:bg-green-100",  ring: "hover:border-green-100",  text: "text-green-600" },
   red:    { bg: "bg-red-50",    bgHover: "group-hover:bg-red-100",    ring: "hover:border-red-100",    text: "text-red-600" },
+  violet: { bg: "bg-violet-50", bgHover: "group-hover:bg-violet-100", ring: "hover:border-violet-100", text: "text-violet-600" },
 };
 
 interface CardProps {

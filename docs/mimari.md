@@ -11,12 +11,12 @@ KFinans **modüler monolit** mimarisi kullanır. Mevcut ölçekte (Faz 1-3 hedef
 
 ### Karar Çerçevesi
 
-| Kriter | Monolit (✓) | Mikroservis |
-|--------|------------|-------------|
-| Takım büyüklüğü | 1-3 kişi | 5+ takım |
-| Trafik | <100 RPS sürekli | >1K RPS sürekli |
-| Servis sayısı | 1 backend yeterli | Bağımsız ölçeklenecek 3+ alan |
-| Karmaşıklık bütçesi | Düşük | Yüksek (k8s + service mesh + observability) |
+| Kriter              | Monolit (✓)       | Mikroservis                                 |
+| ------------------- | ----------------- | ------------------------------------------- |
+| Takım büyüklüğü     | 1-3 kişi          | 5+ takım                                    |
+| Trafik              | <100 RPS sürekli  | >1K RPS sürekli                             |
+| Servis sayısı       | 1 backend yeterli | Bağımsız ölçeklenecek 3+ alan               |
+| Karmaşıklık bütçesi | Düşük             | Yüksek (k8s + service mesh + observability) |
 
 KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mimaride kalınacak.
 
@@ -375,6 +375,28 @@ INDEX ix_expenses_user_date (user_id, date)       -- aylık liste/summary sorgul
 
 > 10 sabit kategori: `food`, `groceries`, `transport`, `bills`, `health`, `entertainment`, `clothing`, `home`, `tax`, `other`. Schema'da `Literal` tipi ile zorlanır; kategori dışı değer 422 döner. `User.expenses` ilişkisi cascade all, delete-orphan.
 
+#### `planned_expenses` (Faz 3 — planlı ödemeler & nakit akışı tahmini)
+```sql
+id              UUID PK
+user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+title           TEXT NOT NULL                         -- ödeme başlığı
+amount          NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+is_estimated    BOOLEAN NOT NULL DEFAULT FALSE        -- tahmini tutar bayrağı
+category        TEXT NOT NULL                         -- PlannedCategory enum (7 kategori)
+recurrence      TEXT NOT NULL                         -- PlannedRecurrence enum (6 tekrar tipi)
+months          INTEGER[]                             -- custom recurrence için ay listesi (1-12)
+day_of_month    INTEGER                               -- ayın hangi günü (1-31)
+start_date      DATE NOT NULL                         -- geçerlilik başlangıcı
+end_date        DATE                                  -- geçerlilik sonu (opsiyonel)
+remaining_count INTEGER                               -- aylık kredi taksit sayısı; end_date'e otomatik dönüştürülür
+notes           VARCHAR(500)                          -- serbest not (opsiyonel)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_planned_expenses_user_id (user_id)
+```
+
+> 7 kategori: `loan`, `tax`, `insurance`, `subscription`, `rent`, `utility`, `other`. 6 tekrar tipi: `one_time`, `monthly`, `quarterly`, `biannual`, `yearly`, `custom`. Schema'da `Literal` tipi ile zorlanır. `_applies_in_month()` fonksiyonu `start_date`, `end_date`, `recurrence`, `months` değerlerini birlikte değerlendirerek 12 aylık nakit akışı breakdown'ı üretir. `User.planned_expenses` ilişkisi cascade all, delete-orphan.
+
 #### `revoked_tokens` (JWT blacklist)
 ```sql
 jti          TEXT PRIMARY KEY                       -- JWT'nin jti claim'i (uuid4.hex)
@@ -454,20 +476,21 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 
 ## 6. Mevcut Migration'lar
 
-| Revision | Açıklama |
-|----------|----------|
-| `876bd62e282c` | İlk şema (users, integrations, wallet_addresses, portfolio_snapshots, asset_positions, investment_advice) |
-| `a1b2c3d4e5f6` | `tefas_holdings` tablosu |
-| `b2c3d4e5f6a7` | `integrations.encrypted_extra` kolonu (Binance TR session token) |
-| `c3d4e5f6a7b8` | `stock_holdings` tablosu |
-| `d4e5f6a7b8c9` | ✅ `users` lifecycle kolonları: `email_verified`, `verify_token`, `deleted_at`, `credit_balance` (CHECK >=0) |
-| `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` kolonu |
-| `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE |
-| `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token` |
-| `1f2e3d4c5b6a` | ✅ `bes_holdings` tablosu (plan_name, total_value_tl) + `ix_bes_holdings_user_id` |
-| `2a3b4c5d6e7f` | ✅ `revoked_tokens` tablosu (jti PK, user_id, token_type, expires_at) + `ix_revoked_tokens_expires_at` (JWT blacklist) |
+| Revision       | Açıklama                                                                                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `876bd62e282c` | İlk şema (users, integrations, wallet_addresses, portfolio_snapshots, asset_positions, investment_advice)                                                       |
+| `a1b2c3d4e5f6` | `tefas_holdings` tablosu                                                                                                                                        |
+| `b2c3d4e5f6a7` | `integrations.encrypted_extra` kolonu (Binance TR session token)                                                                                                |
+| `c3d4e5f6a7b8` | `stock_holdings` tablosu                                                                                                                                        |
+| `d4e5f6a7b8c9` | ✅ `users` lifecycle kolonları: `email_verified`, `verify_token`, `deleted_at`, `credit_balance` (CHECK >=0)                                                     |
+| `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` kolonu                                                                                                                       |
+| `f6a7b8c9d0e1` | ✅ Performans index'leri + `integrations(user_id, provider)` UNIQUE                                                                                              |
+| `9a8b7c6d5e4f` | ✅ `users.verify_token_expires_at` + `ix_users_verify_token`                                                                                                     |
+| `1f2e3d4c5b6a` | ✅ `bes_holdings` tablosu (plan_name, total_value_tl) + `ix_bes_holdings_user_id`                                                                                |
+| `2a3b4c5d6e7f` | ✅ `revoked_tokens` tablosu (jti PK, user_id, token_type, expires_at) + `ix_revoked_tokens_expires_at` (JWT blacklist)                                           |
 | `3b4c5d6e7f8a` | ✅ `bes_holdings` 4 metric genişletme (paid_principal, paid_returns, govt_contribution, govt_returns + contract_number; eski `total_value_tl` kolonu kaldırıldı) |
-| `4c5d6e7f8a9b` | ✅ `expenses` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_expenses_user_date` — Faz 3 MVP harcama takibi |
+| `4c5d6e7f8a9b` | ✅ `expenses` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_expenses_user_date` — Faz 3 MVP harcama takibi                       |
+| `5d6e7f8a9b0c` | ✅ `planned_expenses` tablosu (id, user_id, title, amount, is_estimated, category, recurrence, months[], day_of_month, start_date, end_date, remaining_count, notes, created_at) + `ix_planned_expenses_user_id` — Faz 3 planlı ödemeler & nakit akışı tahmini |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -478,6 +501,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_stock_holdings_user_id`
 - `ix_bes_holdings_user_id`
 - `ix_expenses_user_date` (user_id + date)
+- `ix_planned_expenses_user_id` (user_id)
 - `ix_revoked_tokens_expires_at`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
@@ -489,6 +513,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 ### Eksik (Faz 2-3'te Yapılacak)
 - [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
 - [x] `expenses` tablosu (Faz 3 MVP — migration `4c5d6e7f8a9b` ile eklendi; 10 sabit kategori `Literal` ile schema'da, ayrı `expense_categories` tablosuna gerek yok)
+- [x] `planned_expenses` tablosu (Faz 3 — migration `5d6e7f8a9b0c` ile eklendi; 7 kategori + 6 tekrar tipi `Literal` ile schema'da; `_applies_in_month()` tahmin motoru)
 - [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
 - [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f` ile eklendi
 - [ ] `revoked_tokens` cleanup cron job (`expires_at < now()` olanları sil — Faz 3)
@@ -517,21 +542,21 @@ class Asset:
 
 ### 7.2 Servis Detayları
 
-| Servis | Sınıf | Notlar |
-|--------|-------|--------|
-| Binance | `BinanceService` | CCXT, fetch_balance + savings/locked |
-| Binance TR | `BinanceTRService` | Özel istemci, session token (cid cookie); GeeTest CAPTCHA nedeniyle programatik login YOK |
-| iCrypex | `ICrypexService` | CCXT wrapper |
-| Sonic | `SonicService` | web3.py + SFC staking contract; `Semaphore(20)` ile paralel validator sorgu |
-| Avalanche P-Chain | `AvalanchePChainService` | `platform.getStake` REST API, httpx |
-| Avalanche C-Chain | `AvalancheCChainService` | EVM RPC, web3.py |
-| Ethereum | `EthereumService` | EVM RPC + Etherscan |
-| TEFAS | `TefasService` | httpx + JSON API |
-| Yahoo Finance | `fetch_stock_quotes()` | httpx (`v8/finance/chart/{ticker}`) |
-| BES | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")` |
-| Aggregator | `aggregator.py` | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
-| Snapshot | `snapshot.py::compute_and_save_snapshot()` | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent) |
-| E-posta | `email.py::send_verification_email()` | Resend SDK + HTML şablon |
+| Servis            | Sınıf                                       | Notlar                                                                                                                                                                       |
+| ----------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Binance           | `BinanceService`                            | CCXT, fetch_balance + savings/locked                                                                                                                                         |
+| Binance TR        | `BinanceTRService`                          | Özel istemci, session token (cid cookie); GeeTest CAPTCHA nedeniyle programatik login YOK                                                                                    |
+| iCrypex           | `ICrypexService`                            | CCXT wrapper                                                                                                                                                                 |
+| Sonic             | `SonicService`                              | web3.py + SFC staking contract; `Semaphore(20)` ile paralel validator sorgu                                                                                                  |
+| Avalanche P-Chain | `AvalanchePChainService`                    | `platform.getStake` REST API, httpx                                                                                                                                          |
+| Avalanche C-Chain | `AvalancheCChainService`                    | EVM RPC, web3.py                                                                                                                                                             |
+| Ethereum          | `EthereumService`                           | EVM RPC + Etherscan                                                                                                                                                          |
+| TEFAS             | `TefasService`                              | httpx + JSON API                                                                                                                                                             |
+| Yahoo Finance     | `fetch_stock_quotes()`                      | httpx (`v8/finance/chart/{ticker}`)                                                                                                                                          |
+| BES               | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")`                                                                                             |
+| Aggregator        | `aggregator.py`                             | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
+| Snapshot          | `snapshot.py::compute_and_save_snapshot()`  | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent)                                                                                               |
+| E-posta           | `email.py::send_verification_email()`       | Resend SDK + HTML şablon                                                                                                                                                     |
 
 > Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)
 
