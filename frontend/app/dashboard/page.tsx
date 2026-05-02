@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
+import type { BudgetComparisonDTO } from "@/lib/api";
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,6 +62,9 @@ export default function DashboardPage() {
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
   const [incomeCount, setIncomeCount] = useState(0);
   const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
+
+  // Bütçe
+  const [budgetOverCount, setBudgetOverCount] = useState<number | null>(null);
 
   // Finansal hedef
   const [goalPct, setGoalPct] = useState<number | null>(null);
@@ -135,6 +139,11 @@ export default function DashboardPage() {
         (b) => parseFloat(b.total),
         (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
       ));
+    }).catch(() => {});
+
+    api.getBudgetComparison(now.getFullYear(), now.getMonth() + 1).then((rows) => {
+      const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
+      setBudgetOverCount(overCount);
     }).catch(() => {});
 
     api.getGoal().then((g) => {
@@ -327,6 +336,8 @@ export default function DashboardPage() {
           />
 
           <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
+
+          <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
         </div>
       </main>
 
@@ -407,6 +418,28 @@ function GoalCard({ href, pct, passive }: { href: string; pct: number | null; pa
         </>
       ) : (
         <p className="text-sm text-gray-400">Aylık ihtiyacını gir, hedeni hesapla</p>
+      )}
+    </button>
+  );
+}
+
+function BudgetCard({ href, overCount }: { href: string; overCount: number | null }) {
+  const router = useRouter();
+  return (
+    <button
+      onClick={() => router.push(href)}
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-amber-100 transition-all group"
+    >
+      <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
+        <span className="text-xl">📊</span>
+      </div>
+      <h3 className="font-semibold text-gray-900 mb-1">Bütçe Takibi</h3>
+      {overCount === null && <p className="text-sm text-gray-400">Kategori bazında limit belirle</p>}
+      {overCount !== null && overCount === 0 && (
+        <p className="text-sm text-emerald-600 font-medium">Tüm kategoriler bütçe dahilinde</p>
+      )}
+      {overCount !== null && overCount > 0 && (
+        <p className="text-sm text-red-600 font-semibold">{overCount} kategori bütçeyi aştı</p>
       )}
     </button>
   );

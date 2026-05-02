@@ -290,6 +290,18 @@ export const api = {
   getForecast: (year: number) =>
     request<ForecastResultDTO>(`/planned-expenses/forecast?year=${year}`),
 
+  // Bütçe vs. Gerçekleşen
+  listBudgets: () => request<BudgetDTO[]>("/budgets"),
+  upsertBudget: (category: string, amount: number) =>
+    request<BudgetDTO>(`/budgets/${category}`, {
+      method: "PUT",
+      body: JSON.stringify({ amount }),
+    }),
+  deleteBudget: (category: string) =>
+    request<void>(`/budgets/${category}`, { method: "DELETE" }),
+  getBudgetComparison: (year: number, month: number) =>
+    request<BudgetComparisonDTO[]>(`/budgets/comparison?year=${year}&month=${month}`),
+
   getBesHoldings: () => request<BesHoldingDTO[]>("/portfolio/bes/holdings"),
 
   saveBesHoldings: (holdings: BesHoldingDTO[]) =>
@@ -629,4 +641,20 @@ export interface ForecastResultDTO {
   year: number;
   months: ForecastMonthDTO[];
   year_total: string;
+}
+
+export interface BudgetDTO {
+  id: number;
+  category: string;
+  amount: string;
+  updated_at: string;
+}
+
+export interface BudgetComparisonDTO {
+  category: string;
+  budget_amount: string | null;
+  actual_amount: string;
+  remaining: string | null;
+  pct_used: number | null;
+  over_budget: boolean;
 }

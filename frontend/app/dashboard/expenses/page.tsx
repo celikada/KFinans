@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { api, ExpenseDTO, ExpenseSummaryDTO } from "@/lib/api";
+import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
 import { ExpenseForm } from "./_components/ExpenseForm";
@@ -18,6 +18,7 @@ export default function ExpensesPage() {
   const [summary, setSummary] = useState<ExpenseSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [overBudget, setOverBudget] = useState<BudgetComparisonDTO[]>([]);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
@@ -25,12 +26,14 @@ export default function ExpensesPage() {
     setLoading(true);
     setError("");
     try {
-      const [list, sum] = await Promise.all([
+      const [list, sum, comparison] = await Promise.all([
         api.listExpenses({ year, month }),
         api.getExpenseSummary(year, month),
+        api.getBudgetComparison(year, month),
       ]);
       setExpenses(list);
       setSummary(sum);
+      setOverBudget(comparison.filter((r) => r.over_budget));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : "Yüklenemedi");
@@ -45,7 +48,6 @@ export default function ExpensesPage() {
   }, [refresh, router]);
 
   function handleAdded(added: ExpenseDTO) {
-    // Yeni harcama secili ay'a ait mi? Evet ise listeye ekle, summary'i yenile.
     const addedMonth = parseInt(added.date.slice(5, 7));
     const addedYear = parseInt(added.date.slice(0, 4));
     if (addedYear === year && addedMonth === month) {
@@ -77,6 +79,29 @@ export default function ExpensesPage() {
           </div>
           <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
         </div>
+
+        {/* Bütçe aşım uyarısı */}
+        {overBudget.length > 0 && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4">
+            <p className="text-sm font-semibold text-red-700 mb-2">
+              {overBudget.length} kategori bütçe limitini aştı
+            </p>
+            <ul className="space-y-1">
+              {overBudget.map((r) => {
+                const actual = parseFloat(r.actual_amount);
+                const budget = parseFloat(r.budget_amount!);
+                const excess = actual - budget;
+                const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
+                return (
+                  <li key={r.category} className="flex justify-between text-xs text-red-600">
+                    <span>{label}</span>
+                    <span className="font-medium">{fmtTL(budget)} ₺ limit · {fmtTL(excess)} ₺ aşım</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <ExpenseForm onAdded={handleAdded} />
 
