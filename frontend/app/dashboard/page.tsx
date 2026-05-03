@@ -241,42 +241,40 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-end justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Portföy</h2>
-            {grandTotal > 0 && (
-              <p className="text-sm text-gray-500 mt-1">
-                Toplam: <span className="font-semibold text-gray-900">{fmtTL(grandTotal)} ₺</span>
-              </p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Toplam Portföy</p>
+            {grandTotal > 0 ? (
+              <p className="text-3xl font-bold text-gray-900 tabular-nums">{fmtTL(grandTotal)} ₺</p>
+            ) : (
+              <p className="text-3xl font-bold text-gray-300">—</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 pb-1">
             <button
               onClick={() => router.push("/dashboard/history")}
-              className="text-sm border border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
-              title="Snapshot geçmişi grafikleri"
+              className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
               Geçmiş
             </button>
             <button
               onClick={takeSnapshot}
               disabled={snapshotting}
-              className="text-sm border border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-              title="Tüm kaynaklardan veri çek ve haftalık snapshot kaydet"
+              className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {snapshotting ? "Snapshot alınıyor..." : "Snapshot al"}
+              {snapshotting ? "Alınıyor..." : "Snapshot al"}
             </button>
           </div>
         </div>
         {snapshotMsg && (
-          <p className="text-xs text-gray-500 bg-gray-100 px-3 py-2 rounded-lg mb-4">{snapshotMsg}</p>
+          <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg mb-4">{snapshotMsg}</p>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {!hiddenCards.includes("tefas") && (
             <Card
               href="/dashboard/tefas"
-              icon="📈"
+              icon="tefas"
               color="blue"
               title="TEFAS Fonları"
               total={tefasTotal}
@@ -290,7 +288,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("crypto") && (
             <Card
               href="/dashboard/crypto"
-              icon="₿"
+              icon="crypto"
               color="orange"
               title="Kripto"
               total={cryptoTotal}
@@ -303,7 +301,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("stocks") && (
             <Card
               href="/dashboard/stocks"
-              icon="📊"
+              icon="stocks"
               color="indigo"
               title="Hisse Senedi"
               total={stockTotal}
@@ -317,7 +315,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("wallets") && (
             <Card
               href="/dashboard/wallets"
-              icon="⛓️"
+              icon="wallets"
               color="purple"
               title="Blockchain Cüzdanlar"
               total={walletTotal}
@@ -330,7 +328,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("bes") && (
             <Card
               href="/dashboard/bes"
-              icon="🏦"
+              icon="bes"
               color="green"
               title="BES"
               total={besTotal}
@@ -344,7 +342,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("expenses") && (
             <Card
               href="/dashboard/expenses"
-              icon="💸"
+              icon="expenses"
               color="red"
               title="Harcamalar (bu ay)"
               total={expenseTotal}
@@ -358,7 +356,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("planned") && (
             <Card
               href="/dashboard/planned"
-              icon="📅"
+              icon="planned"
               color="violet"
               title="Planlı Ödemeler (bu yıl)"
               total={plannedTotal}
@@ -370,7 +368,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("income") && (
             <Card
               href="/dashboard/income"
-              icon="💰"
+              icon="income"
               color="emerald"
               title="Gelirler (bu ay)"
               total={incomeTotal}
@@ -388,7 +386,7 @@ export default function DashboardPage() {
           {!hiddenCards.includes("commodities") && (
             <Card
               href="/dashboard/commodities"
-              icon="🥇"
+              icon="commodities"
               color="amber"
               title="Altın & Gümüş"
               total={commodityTotal}
@@ -422,21 +420,93 @@ export default function DashboardPage() {
   );
 }
 
-const COLOR_MAP: Record<string, { bg: string; bgHover: string; ring: string; text: string }> = {
-  blue:   { bg: "bg-blue-50",   bgHover: "group-hover:bg-blue-100",   ring: "hover:border-blue-100",   text: "text-blue-600" },
-  orange: { bg: "bg-orange-50", bgHover: "group-hover:bg-orange-100", ring: "hover:border-orange-100", text: "text-orange-500" },
-  indigo: { bg: "bg-indigo-50", bgHover: "group-hover:bg-indigo-100", ring: "hover:border-indigo-100", text: "text-indigo-600" },
-  purple: { bg: "bg-purple-50", bgHover: "group-hover:bg-purple-100", ring: "hover:border-purple-100", text: "text-purple-600" },
-  green:  { bg: "bg-green-50",  bgHover: "group-hover:bg-green-100",  ring: "hover:border-green-100",  text: "text-green-600" },
-  red:    { bg: "bg-red-50",    bgHover: "group-hover:bg-red-100",    ring: "hover:border-red-100",    text: "text-red-600" },
-  violet:  { bg: "bg-violet-50",  bgHover: "group-hover:bg-violet-100",  ring: "hover:border-violet-100",  text: "text-violet-600" },
-  emerald: { bg: "bg-emerald-50", bgHover: "group-hover:bg-emerald-100", ring: "hover:border-emerald-100", text: "text-emerald-600" },
-  amber:   { bg: "bg-amber-50",   bgHover: "group-hover:bg-amber-100",   ring: "hover:border-amber-100",   text: "text-amber-600" },
+const COLOR_MAP: Record<string, { bg: string; border: string; text: string; accent: string }> = {
+  blue:    { bg: "bg-blue-50",    border: "hover:border-blue-200",    text: "text-blue-600",    accent: "bg-blue-500" },
+  orange:  { bg: "bg-orange-50",  border: "hover:border-orange-200",  text: "text-orange-500",  accent: "bg-orange-500" },
+  indigo:  { bg: "bg-indigo-50",  border: "hover:border-indigo-200",  text: "text-indigo-600",  accent: "bg-indigo-500" },
+  purple:  { bg: "bg-purple-50",  border: "hover:border-purple-200",  text: "text-purple-600",  accent: "bg-purple-500" },
+  green:   { bg: "bg-green-50",   border: "hover:border-green-200",   text: "text-green-600",   accent: "bg-green-500" },
+  red:     { bg: "bg-red-50",     border: "hover:border-red-200",     text: "text-red-500",     accent: "bg-red-500" },
+  violet:  { bg: "bg-violet-50",  border: "hover:border-violet-200",  text: "text-violet-600",  accent: "bg-violet-500" },
+  emerald: { bg: "bg-emerald-50", border: "hover:border-emerald-200", text: "text-emerald-600", accent: "bg-emerald-500" },
+  amber:   { bg: "bg-amber-50",   border: "hover:border-amber-200",   text: "text-amber-600",   accent: "bg-amber-500" },
+};
+
+type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget";
+
+const ICONS: Record<IconName, React.ReactNode> = {
+  tefas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
+  ),
+  crypto: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727" />
+    </svg>
+  ),
+  stocks: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6"  y1="20" x2="6"  y2="14" />
+    </svg>
+  ),
+  wallets: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
+  bes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  expenses: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="1" y="4" width="22" height="16" rx="2" />
+      <line x1="1" y1="10" x2="23" y2="10" />
+    </svg>
+  ),
+  planned: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8"  y1="2" x2="8"  y2="6" />
+      <line x1="3"  y1="10" x2="21" y2="10" />
+    </svg>
+  ),
+  income: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  ),
+  goal: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  ),
+  commodities: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  ),
+  budget: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+    </svg>
+  ),
 };
 
 interface CardProps {
   href: string;
-  icon: string;
+  icon: IconName;
   color: keyof typeof COLOR_MAP;
   title: string;
   total: number | null;
@@ -450,39 +520,40 @@ interface CardProps {
 function GoalCard({ href, pct, passive }: { href: string; pct: number | null; passive: number | null }) {
   const router = useRouter();
   const hasData = pct !== null;
-  const color =
-    !hasData    ? "bg-violet-50 text-violet-600" :
-    pct >= 100  ? "bg-green-50 text-green-600"   :
-    pct >= 70   ? "bg-blue-50 text-blue-600"     :
-                  "bg-violet-50 text-violet-600";
 
   return (
     <button
       onClick={() => router.push(href)}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-violet-100 transition-all group"
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md hover:border-violet-200 transition-all group"
     >
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${color} group-hover:opacity-80 transition-opacity`}>
-        <span className="text-xl">🎯</span>
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 group-hover:bg-violet-100 transition-colors">
+          {ICONS.goal}
+        </div>
+        {hasData && (
+          <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+            %{pct!.toFixed(0)}
+          </span>
+        )}
       </div>
-      <h3 className="font-semibold text-gray-900 mb-1">Finansal Hedef</h3>
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">Finansal Hedef</h3>
 
       {hasData ? (
         <>
-          <p className="text-sm font-semibold text-violet-600">%{pct!.toFixed(1)} tamamlandı</p>
-          <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mb-2">
             <div
               className="h-full bg-violet-500 rounded-full transition-all"
               style={{ width: `${Math.min(pct!, 100)}%` }}
             />
           </div>
           {passive !== null && (
-            <p className="text-xs text-gray-400 mt-2">
-              Pasif gelir pot.: <span className="font-medium text-gray-600">{fmtTL(passive)} ₺/ay</span>
+            <p className="text-xs text-gray-400">
+              Pasif gelir: <span className="font-medium text-gray-600">{fmtTL(passive)} ₺/ay</span>
             </p>
           )}
         </>
       ) : (
-        <p className="text-sm text-gray-400">Aylık ihtiyacını gir, hedeni hesapla</p>
+        <p className="text-xs text-gray-400">Aylık ihtiyacını gir, hedefini hesapla</p>
       )}
     </button>
   );
@@ -493,19 +564,30 @@ function BudgetCard({ href, overCount }: { href: string; overCount: number | nul
   return (
     <button
       onClick={() => router.push(href)}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-amber-100 transition-all group"
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md hover:border-amber-200 transition-all group"
     >
-      <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
-        <span className="text-xl">📊</span>
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 group-hover:bg-amber-100 transition-colors">
+          {ICONS.budget}
+        </div>
+        {overCount !== null && overCount > 0 && (
+          <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+            {overCount} aşım
+          </span>
+        )}
+        {overCount !== null && overCount === 0 && (
+          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            Dahilinde
+          </span>
+        )}
       </div>
-      <h3 className="font-semibold text-gray-900 mb-1">Bütçe Takibi</h3>
-      {overCount === null && <p className="text-sm text-gray-400">Kategori bazında limit belirle</p>}
-      {overCount !== null && overCount === 0 && (
-        <p className="text-sm text-emerald-600 font-medium">Tüm kategoriler bütçe dahilinde</p>
-      )}
-      {overCount !== null && overCount > 0 && (
-        <p className="text-sm text-red-600 font-semibold">{overCount} kategori bütçeyi aştı</p>
-      )}
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">Bütçe Takibi</h3>
+      {overCount === null
+        ? <p className="text-xs text-gray-400">Kategori bazında limit belirle</p>
+        : overCount === 0
+          ? <p className="text-xs text-emerald-600">Tüm kategoriler bütçe dahilinde</p>
+          : <p className="text-xs text-red-500">{overCount} kategori bütçeyi aştı</p>
+      }
     </button>
   );
 }
@@ -518,32 +600,29 @@ function Card({ href, icon, color, title, total, count, countLabel, loading, top
   return (
     <button
       onClick={() => router.push(href)}
-      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md ${c.ring} transition-all group`}
+      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md ${c.border} transition-all group`}
     >
-      <div className={`w-10 h-10 ${c.bg} rounded-xl flex items-center justify-center mb-4 ${c.bgHover} transition-colors`}>
-        <span className="text-xl">{icon}</span>
+      <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} mb-3 group-hover:opacity-80 transition-opacity`}>
+        {ICONS[icon]}
       </div>
-      <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
 
-      {hasTotal && (
-        <p className={`text-sm font-semibold ${c.text}`}>{fmtTL(total)} ₺</p>
-      )}
-      {!hasTotal && (count ?? 0) > 0 && (
-        <p className="text-sm text-gray-400">{count} {countLabel} · yükleniyor...</p>
-      )}
-      {!hasTotal && (count ?? 0) === 0 && loading && (
-        <p className="text-sm text-gray-400">yükleniyor...</p>
-      )}
-      {!hasTotal && (count ?? 0) === 0 && !loading && (
-        <p className="text-sm text-gray-400">{placeholder}</p>
+      {hasTotal ? (
+        <p className={`text-base font-bold tabular-nums ${c.text}`}>{fmtTL(total)} ₺</p>
+      ) : (count ?? 0) > 0 ? (
+        <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>
+      ) : loading ? (
+        <p className="text-xs text-gray-400">Yükleniyor...</p>
+      ) : (
+        <p className="text-xs text-gray-400">{placeholder}</p>
       )}
 
       {top.length > 0 && (
-        <ul className="mt-4 pt-3 border-t border-gray-50 space-y-1">
+        <ul className="mt-3 pt-3 border-t border-gray-50 space-y-1.5">
           {top.map((it) => (
-            <li key={it.label} className="flex justify-between text-xs text-gray-500">
-              <span className="truncate font-mono">{it.label}</span>
-              <span className="font-medium tabular-nums ml-2 shrink-0">{fmtTL(it.value)} ₺</span>
+            <li key={it.label} className="flex justify-between items-center text-xs">
+              <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
+              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">{fmtTL(it.value)} ₺</span>
             </li>
           ))}
         </ul>
