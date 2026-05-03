@@ -262,6 +262,14 @@ async def import_tefas_mkk(
             distributor=h.distributor,
         ))
     await db.commit()
+
+    # Snapshot tetikle ki Finansal Hedef + History güncel kalsın
+    try:
+        from app.services.snapshot import compute_and_save_snapshot
+        await compute_and_save_snapshot(current_user.id, db)
+    except Exception as exc:
+        logger.warning("MKK TEFAS import sonrası snapshot alınamadı: %s", exc)
+
     return parsed
 
 
