@@ -11,9 +11,10 @@ class TefasHolding(BaseModel):
 
     @field_validator("avg_cost_tl")
     @classmethod
-    def avg_cost_must_be_positive(cls, v: float | None) -> float | None:
+    def normalize_avg_cost(cls, v: float | None) -> float | None:
+        # 0 veya negatif değer → None (maliyet bilinmiyor anlamında)
         if v is not None and v <= 0:
-            raise ValueError("avg_cost_tl sıfırdan büyük olmalıdır")
+            return None
         return v
 
 

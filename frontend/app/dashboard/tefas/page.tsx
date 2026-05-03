@@ -115,6 +115,21 @@ export default function TefasPage() {
     }
   }
 
+  async function handleMkkUpload(file: File) {
+    setError("");
+    const imported = await api.importTefasMkk(file);
+    setHoldings(imported.map((h) => ({
+      code: h.code,
+      quantity: h.quantity.toString(),
+      name: h.name,
+      avg_cost_tl: h.avg_cost_tl?.toString() ?? "",
+      distributor: h.distributor ?? "",
+    })));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    fetchPricesFor(imported);
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -161,7 +176,7 @@ export default function TefasPage() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Fon Holdingleri</h2>
-          <MkkHint />
+          <MkkHint onUpload={handleMkkUpload} />
           <div className="mb-4" />
 
           {initialLoad ? (

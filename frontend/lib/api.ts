@@ -257,6 +257,22 @@ export const api = {
     return res.json();
   },
 
+  importTefasMkk: async (file: File): Promise<TefasHoldingDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/portfolio/tefas/import-mkk`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+
   // Gelir takibi
   listIncomes: (params: { year?: number; month?: number; category?: string } = {}) => {
     const q = new URLSearchParams();

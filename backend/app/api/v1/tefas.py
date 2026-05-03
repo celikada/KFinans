@@ -173,6 +173,98 @@ async def export_tefas_holdings(
     )
 
 
+@router.post("/import-mkk", response_model=list[TefasHolding])
+async def import_tefas_mkk(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """MKK e-Yatırımcı 'Tüm Kıymetler' raporundan TEFAS fonlarını içe aktarır.
+
+    Beklenen format (.xls binary, xlrd 1.2.0):
+      Header satırı: Üye, Hesap, Kıymet Sınıfı, Menkul Kıymet Kodu, Kıymet Adı,
+                     Ek Tanım, Alt Hesap, Adet, Fiyat (TL), ...
+      Sadece "Kıymet Sınıfı = Fon" satırları işlenir.
+    """
+    import xlrd
+
+    if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Sadece .xls veya .xlsx dosyası kabul edilir",
+        )
+    content = await file.read()
+    try:
+        wb = xlrd.open_workbook(file_contents=content)
+        sh = wb.sheet_by_index(0)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MKK Excel dosyası okunamadı (.xls binary formatında olmalı)",
+        )
+
+    # Header satırını "Üye" sütunundan tespit et
+    header_row = None
+    for r in range(min(sh.nrows, 20)):
+        first = str(sh.cell_value(r, 0)).strip()
+        if first.lower() == "üye":
+            header_row = r
+            break
+    if header_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
+        )
+
+    parsed: list[TefasHolding] = []
+    for r in range(header_row + 1, sh.nrows):
+        kind = str(sh.cell_value(r, 2)).strip()
+        if kind.lower() != "fon":
+            continue
+        code_raw = sh.cell_value(r, 3)
+        code = str(code_raw).strip().upper() if code_raw else ""
+        if not code:
+            continue
+        name_raw = sh.cell_value(r, 4)
+        name = str(name_raw).strip() if name_raw else ""
+        try:
+            qty = float(sh.cell_value(r, 7))
+            price = float(sh.cell_value(r, 8))
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        member = str(sh.cell_value(r, 0)).strip() or None
+        if member:
+            member = member[:50]
+        parsed.append(TefasHolding(
+            code=code,
+            quantity=qty,
+            name=name,
+            avg_cost_tl=price if price > 0 else None,
+            distributor=member,
+        ))
+
+    if not parsed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Dosyada 'Fon' kıymet sınıfında geçerli kayıt bulunamadı",
+        )
+
+    await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
+    for h in parsed:
+        db.add(TefasHoldingModel(
+            user_id=current_user.id,
+            code=h.code,
+            quantity=h.quantity,
+            name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
+            distributor=h.distributor,
+        ))
+    await db.commit()
+    return parsed
+
+
 @router.post("/import", response_model=list[TefasHolding])
 async def import_tefas_holdings(
     file: UploadFile = File(...),

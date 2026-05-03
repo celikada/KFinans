@@ -25,6 +25,7 @@ dependencies = [
     "anthropic>=0.40",
     "python-multipart",
     "openpyxl>=3.1",
+    "xlrd==1.2.0",
     "slowapi>=0.1.9",
     "resend>=2.0",
 ]
