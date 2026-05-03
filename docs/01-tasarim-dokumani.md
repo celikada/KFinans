@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 4.1
+**Versiyon:** 4.2
 **Tarih:** 2026-05-03
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP devam ediyor**: harcama takibi + planlı ödemeler tamamlandı (175 backend test). AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme tamamlandı. AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
 **Üretici:** Mayotek
 
 ---
@@ -276,14 +276,22 @@ Kubernetes Ingress (nginx)
 ### 📋 Faz 3 — Durum
 
 **MVP tamamlanan:**
-- [x] **Harcama takibi (manuel)** — `expenses` tablosu (migration `4c5d6e7f8a9b`), 5 endpoint (`GET/POST/PUT/DELETE /expenses` + `GET /expenses/summary`), 10 sabit kategori (`Literal`), `/dashboard/expenses` sayfası (4 component pattern: ExpenseForm + ExpenseTable + CategoryPieChart + MonthSelector), dashboard 6. kart "Harcamalar (bu ay)" (kırmızı tema, top 3 kategori). 18 yeni integration test (`test_expenses_api.py`) — IDOR + auth + filter + summary.
-- [x] **Planlı Ödemeler & Nakit Akışı Tahmini** — `planned_expenses` tablosu (migration `5d6e7f8a9b0c`), 7 kategori, 6 tekrar tipi, 5 endpoint + tahmin motoru, `/dashboard/planned` yıllık timeline görünümü, dashboard 7. kart. 16 yeni integration test. _(Ayrıntılar aşağıda.)_
+- [x] **Harcama takibi (manuel)** — `expenses` tablosu (migration `4c5d6e7f8a9b`), 5 endpoint (`GET/POST/PUT/DELETE /expenses` + `GET /expenses/summary`), 10 sabit kategori (`Literal`), `/dashboard/expenses` sayfası (4 component pattern: ExpenseForm + ExpenseTable + CategoryPieChart + MonthSelector), dashboard 6. kart "Harcamalar (bu ay)" (kırmızı tema, top 3 kategori). 18 yeni integration test (`test_expenses_api.py`) — IDOR + auth + filter + summary. **Excel import/export eklendi** (`GET /expenses/export`, `POST /expenses/import`).
+- [x] **Planlı Ödemeler & Nakit Akışı Tahmini** — `planned_expenses` tablosu (migration `5d6e7f8a9b0c`), 7 kategori, 6 tekrar tipi, 5 endpoint + tahmin motoru, `/dashboard/planned` yıllık timeline görünümü, dashboard kartı. 16 yeni integration test.
+- [x] **Finansal Hedef ve Özgürlük Takibi** — `users.goal_amount` + `users.goal_currency` (migration `6e7f8a9b0c1d` + `7f8a9b0c1d2e`). USD/EUR/GBP/TRY desteği ile pasif gelir hedefi takip ediliyor; `/dashboard/goal` sayfası + dashboard kartı (yüzde göstergesi).
+- [x] **Gelir Takibi (manuel)** — `incomes` tablosu (migration `8a9b0c1d2e3f`), 7 kategori (maaş, serbest meslek, kira, temettü, ikramiye, varlık satışı, diğer), CRUD + summary + Excel import/export, `/dashboard/income` sayfası + dashboard kartı.
+- [x] **Bütçe vs. Gerçekleşen** — `budgets` tablosu (migration `9b0c1d2e3f4a`, `(user_id, category)` UNIQUE), kategori bazlı aylık bütçe upsert; `GET /budgets`, `PUT /budgets/{category}`, `DELETE /budgets/{category}`, `GET /budgets/comparison?year=&month=`. `/dashboard/budget` sayfası (BudgetForm + ComparisonTable) + dashboard kartı (aşılan bütçe sayısı).
+- [x] **Kıymetli Maden (altın/gümüş) Modülü** — `commodity_holdings` tablosu (migration `a0b1c2d3e4f5`). 3 birim tipi (gram, BiGA, sikke), 15 BiGA kodu (A01-A08 altın, G01-G07 gümüş), 6 sikke türü. `services/commodity.py` Yahoo Finance Chart API (XAU=X/XAG=X primary, GC=F/SI=F fallback) + 5 dk in-memory cache. `/portfolio/commodities` 6 endpoint (CRUD + Excel import/export). `/dashboard/commodities` sayfası + dashboard kartı + UI fault-tolerance uyarı bandı.
+- [x] **Maliyet Bazı (avg_cost_tl) ve Distributor (kurum) Alanları** — TEFAS + Stocks holding'lerine `avg_cost_tl` (migration `b1c2d3e4f5a6`) ve `distributor` (migration `c2d3e4f5a6b7`) eklendi. Preview/list response'larında kâr/zarar (₺ + %) hesaplanıyor; aynı kodun farklı kurumlardan (örn. ZJI fonu Ziraat + Foneria) ayrı satır olarak izlenebilmesi sağlandı.
+- [x] **MKK e-Yatırımcı Excel Import** — `xlrd==1.2.0` ile MKK "Tüm Kıymetler" .xls binary dosyası direkt parse ediliyor. `POST /portfolio/tefas/import-mkk` (Kıymet Sınıfı=Fon filtresi) + `POST /portfolio/stocks/import-mkk` (Kıymet Sınıfı=HS + Ek Tanım=A filtresi, BIST kodları `.IS` suffix ile Yahoo Finance ticker'ına çevrilir). MKK distributor (Üye sütunu) otomatik dolduruluyor. Import sonrası `compute_and_save_snapshot` otomatik tetikleniyor (best-effort, fail olsa bile import korunur). UI: paylaşılan `MkkHint` bileşeni + doğrudan upload butonu.
+- [x] **Kullanıcı Hesap Yönetimi & Ayarlar** — `GET /user/me`, `PUT /user/profile` (risk profili), `PUT /user/password` (mevcut şifre doğrulamalı), `DELETE /user/me` (soft-delete, `users.deleted_at` set). `/dashboard/settings` sayfası 5 bölüm: hesap özeti, risk profili, şifre değiştir, dashboard kart gizleme (localStorage `kfinans_hidden_cards`), hesap silme.
+- [x] **Modern UI Yenileme** — Emoji ikonlar inline SVG'lere dönüştürüldü; KFinans + Mayotek logoları SVG bileşenleri (`Logos.tsx`); 11 dashboard kartı `DASHBOARD_CARDS` üzerinden render ediliyor; container `max-w-5xl`, satırlar `flex-wrap` ile mobile uyumlu; Stocks + TEFAS form bileşenleri yeniden düzenlendi.
 
 **Açık kalan:**
 - [ ] AI tavsiye motoru aktivasyonu (`/advice/generate` — kredi tüketimli)
 - [ ] Harcama AI analizi (`/expenses/analysis/generate` — 3 kredi)
 - [ ] Kredi sistemi tam implementasyonu + iyzico sandbox (`credit_transactions` tablosu, idempotency, webhook)
-- [ ] KVKK endpoint'leri (`/me/data-export`, `/me/account` soft delete)
+- [ ] KVKK endpoint'leri (`/me/data-export` — `/user/me` DELETE soft-delete tarafı tamam, hard-delete cron eksik)
 - [ ] `audit_logs` tablosu
 - [ ] Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
 - [ ] Background job kuyruğu (Celery/RQ)
@@ -334,5 +342,86 @@ Kubernetes Ingress (nginx)
   - 5 metot: `getPlannedExpenses`, `createPlannedExpense`, `updatePlannedExpense`, `deletePlannedExpense`, `getPlannedForecast`
   - DTO'lar: `PlannedExpenseDTO`, `PlannedExpenseCreateDTO`, `PlannedForecastDTO`
   - Sabitler: `PLANNED_CATEGORY_LABELS`, `PLANNED_RECURRENCE_LABELS`, `MONTH_NAMES`
+
+---
+
+### Faz 3 #3 — Finansal Hedef, Gelir Takibi, Bütçe, Kıymetli Madenler ve UI Yenileme (2026-05-03)
+
+#### Finansal Hedef ve Pasif Gelir Takibi
+- **Migration `6e7f8a9b0c1d`** + **`7f8a9b0c1d2e`**: `users.monthly_expense_goal` eklendi, sonra `users.goal_amount` (NUMERIC 18,2) + `users.goal_currency` (VARCHAR 3, default `TRY`) lehine değiştirildi. USD/EUR/GBP/TRY 4 para birimi destekleniyor.
+- Endpoint: `GET /goals/me`, `PUT /goals/me` (yalnızca giriş yapmış kullanıcı; risk profili mantığı ile aynı pattern).
+- Frontend: `/dashboard/goal` sayfası (hedef tutar + para birimi + ilerleme barı), dashboard kartı pasif gelir yüzdesi gösterir.
+
+#### Gelir Takibi
+- **Migration `8a9b0c1d2e3f`**: `incomes` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_incomes_user_date` (user_id + date) — Expense'le birebir paralel şema.
+- 7 kategori (`Literal`): salary, freelance, rental, dividend, bonus, sale, other (Türkçe etiketler `INCOME_CATEGORY_LABELS`).
+- Endpoint'ler: `GET /income`, `POST /income`, `PUT /income/{id}`, `DELETE /income/{id}`, `GET /income/summary?year=&month=`, `GET /income/export`, `POST /income/import`.
+- Excel import Türkçe label haritası içerir (`maaş` → `salary` vb.).
+- Frontend: `/dashboard/income` sayfası (4 component pattern + ay seçici + pasta grafiği) + dashboard kartı.
+
+#### Bütçe vs. Gerçekleşen
+- **Migration `9b0c1d2e3f4a`**: `budgets` tablosu (id, user_id, category, amount, updated_at) + `uq_budget_user_category` UNIQUE constraint. Kategori seti `Expense` ile aynı (10 sabit kategori).
+- Endpoint'ler:
+  - `GET /budgets` — kullanıcının tanımlı bütçeleri (kategori sıralı)
+  - `PUT /budgets/{category}` — UPSERT (PostgreSQL `INSERT ... ON CONFLICT DO UPDATE`)
+  - `DELETE /budgets/{category}` — bütçe sil
+  - `GET /budgets/comparison?year=&month=` — kategori bazlı bütçe vs. gerçekleşen (kalan tutar + yüzde + over_budget flag)
+- Frontend: `/dashboard/budget` (BudgetForm + ComparisonTable) + dashboard kartı (aşılan bütçe sayısı sayacı).
+
+#### Kıymetli Madenler (Altın & Gümüş)
+- **Migration `a0b1c2d3e4f5`**: `commodity_holdings` tablosu (id, user_id, unit_type, metal, biga_code?, coin_type?, quantity, notes?, created_at) + `ix_commodity_holdings_user_id`.
+  - `unit_type`: `gram` | `biga` | `coin`
+  - `metal`: `gold` | `silver` (sikke için her zaman `gold`)
+  - `biga_code`: A01-A08 (altın 1g→1kg) veya G01-G07 (gümüş 1g→1kg)
+  - `coin_type`: ceyrek (1.7517g), yarim (3.5033g), tam (7.0166g), cumhuriyet/resat/ata (7.2164g)
+- Servis: `services/commodity.py`
+  - `fetch_metal_prices()` — TCMB USD/TRY (kritik) + Yahoo Finance XAU=X→GC=F + XAG=X→SI=F fallback chain
+  - 5 dakikalık in-memory cache; Yahoo fail durumunda TTL 30 saniyeye düşer (geçici 404 hızla telafi edilir)
+  - Metal fiyatları **best-effort** — Yahoo başarısızlığı 0 döner, UI uyarı banner gösterir
+- Endpoint'ler:
+  - `GET /portfolio/commodities` — pozisyonlar + anlık fiyatlar + summary
+  - `POST /portfolio/commodities` — yeni varlık (model_validator ile unit_type/metal/biga/coin uyumu zorlanır)
+  - `PUT /portfolio/commodities/{id}` — quantity + notes güncelle
+  - `DELETE /portfolio/commodities/{id}`
+  - `GET /portfolio/commodities/export` — Excel
+  - `POST /portfolio/commodities/import` — Excel'den **append** (mevcut kayıtlar silinmez)
+- Frontend: `/dashboard/commodities` (CommodityForm + CommodityList) + dashboard kartı + UI fiyat fault-tolerance uyarı bandı.
+
+#### Maliyet Bazı (avg_cost_tl)
+- **Migration `b1c2d3e4f5a6`**: `tefas_holdings.avg_cost_tl` + `stock_holdings.avg_cost_tl` (Numeric 18,6 nullable) — TRY/adet ortalama maliyet.
+- Schema validator: 0 veya negatif değer girilince `None`'a çevrilir (kullanıcı bilmiyorsa boş bırakabilir).
+- Preview/list response: `cost_basis_tl`, `gain_loss_tl`, `gain_loss_pct` hesaplanır (avg_cost girilmemişse hepsi `None`).
+- Excel export şablonuna "Ort. Maliyet (₺)" + "Kâr/Zarar (₺)" sütunları eklendi.
+- UI: TEFAS + Stocks sayfaları formuna "Ort. maliyet ₺" inputu + tabloda yeşil/kırmızı renklendirilmiş kâr/zarar sütunu.
+
+#### Distributor (Aracı Kurum) Alanı
+- **Migration `c2d3e4f5a6b7`**: `tefas_holdings.distributor` + `stock_holdings.distributor` (VARCHAR 50 nullable).
+- **Use case:** Aynı varlığı (örn. TEFAS ZJI fonu) farklı kurumlardan (Ziraat + Foneria) ayrı satır olarak izleme.
+- UI: Form'a "Kurum" inputu + tabloda mavi pill badge.
+
+#### MKK e-Yatırımcı Excel Import
+- **Yeni bağımlılık:** `xlrd==1.2.0` (eski .xls binary parse — 2.0+ sürümleri xlsx desteğini kaldırdı; MKK eski Excel dosyaları için 1.2.0 zorunlu).
+- Endpoint'ler:
+  - `POST /portfolio/tefas/import-mkk` — `Kıymet Sınıfı = Fon` filtresi, fon kodu + adı + adet + fiyat (avg_cost_tl) + üye (distributor)
+  - `POST /portfolio/stocks/import-mkk` — `Kıymet Sınıfı = HS` AND `Ek Tanım = A` filtresi (aktif tradeable pozisyonlar), BIST kodları otomatik `.IS` suffix ile Yahoo Finance ticker formatına çevrilir
+- Header satırı "Üye" sütunundan otomatik tespit edilir (ilk 20 satır taranır).
+- Import sonrası `compute_and_save_snapshot()` **best-effort** olarak tetiklenir — fail olsa bile import korunur (`try/except` + log warning).
+- Frontend: paylaşılan `MkkHint` bileşeni + opsiyonel `onUpload` prop ile doğrudan upload butonu (Stocks + TEFAS sayfalarında).
+
+#### Kullanıcı Hesap Yönetimi & Ayarlar
+- Yeni router: `api/v1/user.py` (prefix `/user`, tag `user`)
+  - `GET /user/me` — `UserMeOut` (email, risk_profile, email_verified, credit_balance, created_at)
+  - `PUT /user/profile` — risk profili güncelle (Literal validation)
+  - `PUT /user/password` — mevcut şifre doğrulamalı (`verify_password` → 400 "Mevcut şifre hatalı"); yeni şifre `min_length=8`
+  - `DELETE /user/me` — soft-delete (`users.deleted_at = now()`)
+- Frontend: `/dashboard/settings` (5 bölüm: hesap özeti, risk profili, şifre, dashboard kart gizleme, hesap silme).
+- **Dashboard kart gizleme:** `localStorage.kfinans_hidden_cards` (JSON array of `DashboardCardId`); 11 kart `DASHBOARD_CARDS` üzerinden render ediliyor.
+
+#### Modern UI Yenileme
+- Emoji ikonlar inline SVG'lere dönüştürüldü (kart başlıklarında).
+- Logo bileşenleri: `frontend/app/_components/Logos.tsx` — `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo`. PNG dosyaları (`public/images/kfinans-logo.png`, `mayotek-logo.png`) hâlâ erişilebilir ama UI artık SVG bileşenleri kullanıyor.
+- Container `max-w-5xl`, formlar `flex-wrap` ile mobile uyumlu.
+- Paylaşılan `_components/`: `Logos.tsx`, `MkkHint.tsx`, `PageHeader.tsx`.
+- Excel import (Expenses + Income) için Türkçe label → İngilizce key haritası eklendi.
 
 > Detaylı yol haritası ve TODO'lar her alt dokümanın sonundadır.

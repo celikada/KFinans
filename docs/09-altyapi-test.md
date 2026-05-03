@@ -15,8 +15,8 @@
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
 ### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
-- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%50) — **159 test**
-- ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build — 3 unit test
+- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%50)
+- ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build
 - ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
 - ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
 
@@ -327,7 +327,10 @@ frontend/
 - MSW 2.6 (mock service worker — kurulu, henüz kullanılmadı)
 
 **Frontend runtime bağımlılıkları (son eklenenler):**
-- `recharts ^3.8.1` — `/dashboard/history` line chart'ları için (toplam portföy + varlık tipi kırılımı)
+- `recharts ^3.8.1` — `/dashboard/history`, `/dashboard/expenses`, `/dashboard/income` chart'ları için
+
+**Backend runtime bağımlılıkları (son eklenenler):**
+- `xlrd==1.2.0` — MKK e-Yatırımcı eski .xls binary parse için. **Sürüm pin'lendi:** xlrd 2.0+ xlsx desteğini kaldırdı; MKK dosyaları için 1.2.0 (xls binary destekli son sürüm) zorunlu. Yeni endpoint'ler: `POST /portfolio/tefas/import-mkk` + `POST /portfolio/stocks/import-mkk`.
 
 **npm scripts:**
 ```

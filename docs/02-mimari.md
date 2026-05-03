@@ -87,13 +87,19 @@ backend/app/
 ├── api/v1/                # HTTP arayüz katmanı
 │   ├── router.py          # Tüm router'ları birleştirir
 │   ├── auth.py            # /auth (login, register, refresh, logout, verify-email, resend-verification) + rate limit + JWT blacklist
+│   ├── user.py            # /user (me, profile, password, soft-delete) — Faz 3
 │   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking) + POST /snapshot manuel tetik
-│   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel)
-│   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel)
+│   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel + import-mkk)
+│   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel + import-mkk)
 │   ├── bes.py             # /portfolio/bes/* (manuel giriş + Excel)
+│   ├── commodity.py       # /portfolio/commodities/* (altın/gümüş — gram/BiGA/sikke + Excel) — Faz 3
 │   ├── wallets.py         # /wallets (blockchain adres CRUD + Excel)
 │   ├── integrations.py    # /integrations (exchange API key)
-│   ├── expenses.py        # /expenses (manuel harcama CRUD + summary — Faz 3 MVP)
+│   ├── expenses.py        # /expenses (manuel harcama CRUD + summary + Excel) — Faz 3 MVP
+│   ├── planned_expenses.py # /planned-expenses (CRUD + 12 aylık tahmin) — Faz 3
+│   ├── income.py          # /income (gelir CRUD + summary + Excel) — Faz 3
+│   ├── budget.py          # /budgets (UPSERT + comparison) — Faz 3
+│   ├── goal.py            # /goals/me (finansal hedef + para birimi) — Faz 3
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
 │
 ├── core/                  # Çekirdek altyapı
@@ -113,30 +119,39 @@ backend/app/
 │   │   └── ethereum.py    # EVM RPC + Etherscan
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
+│   ├── commodity.py       # Altın/Gümüş — TCMB USD/TRY + Yahoo XAU/XAG fallback chain + 5 dk cache
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
-│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES)
+│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES). MKK import sonrası best-effort tetiklenir
 │   ├── email.py           # Resend SDK — verify_email + HTML şablon
 │   └── advisor.py         # Anthropic SDK — model + max_tokens settings'ten
 │
 ├── models/                # SQLAlchemy ORM
-│   ├── user.py            # users (+ credit_balance, email_verified)
+│   ├── user.py            # users (+ credit_balance, email_verified, deleted_at, goal_amount, goal_currency)
 │   ├── integration.py     # integrations + wallet_addresses
-│   ├── tefas.py           # tefas_holdings
-│   ├── stock.py           # stock_holdings
-│   ├── bes.py             # bes_holdings (plan_name, total_value_tl)
+│   ├── tefas.py           # tefas_holdings (+ avg_cost_tl, distributor)
+│   ├── stock.py           # stock_holdings (+ avg_cost_tl, distributor)
+│   ├── bes.py             # bes_holdings (plan_name, 4 metric)
 │   ├── revoked_token.py   # revoked_tokens (jti PK, JWT blacklist)
 │   ├── portfolio.py       # portfolio_snapshots + asset_positions
 │   ├── advice.py          # investment_advice
 │   ├── expense.py         # expenses (manuel harcama — Faz 3 MVP)
-│   └── credit.py          # credit_transactions (Faz 3)
+│   ├── planned_expense.py # planned_expenses (Faz 3)
+│   ├── income.py          # incomes (manuel gelir — Faz 3)
+│   ├── budget.py          # budgets (UPSERT: user_id+category UNIQUE — Faz 3)
+│   └── commodity.py       # commodity_holdings (gram/biga/coin — Faz 3)
 │
 └── schemas/               # Pydantic — request/response sözleşmeleri
     ├── auth.py            # RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest
+    ├── user.py            # UserMeOut, ProfileUpdate, PasswordChange — Faz 3
     ├── portfolio.py       # SnapshotOut, PortfolioChanges, CryptoPositionOut, WalletPositionOut
-    ├── tefas.py           # TefasHolding, TefasPositionOut
-    ├── stocks.py          # StockHolding, StockPositionOut
-    ├── bes.py             # BesHolding (plan_name, total_value_tl)
+    ├── tefas.py           # TefasHolding, TefasPositionOut (+ avg_cost_tl + distributor + gain_loss_*)
+    ├── stocks.py          # StockHolding, StockPositionOut (+ avg_cost_tl + distributor + gain_loss_*)
+    ├── bes.py             # BesHolding (plan_name, 4 metric)
     ├── expense.py         # ExpenseCategory, ExpenseCreate/Update/Out, ExpenseSummary, CategoryBreakdown
+    ├── planned_expense.py # PlannedCategory, PlannedRecurrence, PlannedExpenseCreate/Out, PlannedForecast
+    ├── income.py          # IncomeCategory (7), IncomeCreate/Update/Out, IncomeSummary
+    ├── budget.py          # BudgetUpsert, BudgetOut, BudgetComparison
+    ├── commodity.py       # CommodityCreate/Update/Out, CommodityPositionOut, CommoditySummaryOut
     └── integration.py
 ```
 
@@ -287,12 +302,16 @@ credit_balance           INT NOT NULL DEFAULT 0           -- CHECK (credit_balan
 email_verified           BOOLEAN NOT NULL DEFAULT FALSE
 verify_token             TEXT                              -- e-posta doğrulama tokeni (secrets.token_urlsafe(32))
 verify_token_expires_at  TIMESTAMPTZ                       -- token ömrü (default 24 saat)
-deleted_at               TIMESTAMPTZ                       -- soft delete (Faz 3'te aktif)
+deleted_at               TIMESTAMPTZ                       -- soft delete (DELETE /user/me Faz 3'te aktif)
+goal_amount              NUMERIC(18, 2)                   -- finansal hedef (pasif gelir hedefi)
+goal_currency            VARCHAR(3) NOT NULL DEFAULT 'TRY' -- 'TRY'|'USD'|'EUR'|'GBP'
 created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 
 INDEX ix_users_email (email)
 INDEX ix_users_verify_token (verify_token)
 ```
+
+> Migration `6e7f8a9b0c1d` ilk hâli `monthly_expense_goal` ekledi; `7f8a9b0c1d2e` bunu `goal_amount` + `goal_currency` (TRY/USD/EUR/GBP) lehine değiştirdi (mevcut TRY değerleri otomatik taşınır). `DELETE /user/me` `deleted_at = now()` set eder; hard-delete cron job henüz yok.
 
 #### `integrations` (Exchange API key'ler)
 ```sql
@@ -326,27 +345,33 @@ INDEX ix_wallet_addresses_user_id (user_id)
 
 #### `tefas_holdings`
 ```sql
-id       UUID PK
-user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-code     VARCHAR(10) NOT NULL                    -- 'GO3', 'TI2' vb.
-quantity NUMERIC(20, 8) NOT NULL
-name     TEXT NOT NULL DEFAULT ''
+id           BIGSERIAL PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+code         VARCHAR(10) NOT NULL                    -- 'GO3', 'TI2' vb.
+quantity     NUMERIC(18, 6) NOT NULL
+name         TEXT NOT NULL DEFAULT ''
+avg_cost_tl  NUMERIC(18, 6)                          -- TRY/adet ortalama maliyet (nullable; 0 → None)
+distributor  VARCHAR(50)                             -- Aracı kurum (örn. 'Ziraat', 'Foneria') — aynı fonun farklı kurumlardan ayrı satırı
 
 INDEX ix_tefas_holdings_user_id (user_id)
 ```
 
+> Migration `b1c2d3e4f5a6`: `avg_cost_tl` eklendi. Migration `c2d3e4f5a6b7`: `distributor` eklendi. Schema validator: kullanıcı 0 girerse `avg_cost_tl` `None`'a çevrilir (maliyet bilinmiyor).
+
 #### `stock_holdings`
 ```sql
-id       UUID PK
-user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-ticker   VARCHAR(20) NOT NULL                    -- 'THYAO.IS', 'AAPL', 'BP.L'
-quantity NUMERIC(20, 8) NOT NULL
-name     TEXT NOT NULL DEFAULT ''
+id           BIGSERIAL PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+ticker       VARCHAR(20) NOT NULL                    -- 'THYAO.IS', 'AAPL', 'BP.L'
+quantity     NUMERIC(18, 6) NOT NULL
+name         TEXT NOT NULL DEFAULT ''
+avg_cost_tl  NUMERIC(18, 6)                          -- TRY/adet ortalama maliyet (nullable; 0 → None)
+distributor  VARCHAR(50)                             -- Aracı kurum (örn. 'İş Yatırım', 'Garanti BBVA Yatırım')
 
 INDEX ix_stock_holdings_user_id (user_id)
 ```
 
-> Hisse fiyatları **DB'de saklanmaz**. Her preview/dashboard isteğinde Yahoo Finance'tan çekilir; TRY dışı fiyatlar Binance USDTTRY kuru ile normalize edilir.
+> Hisse fiyatları **DB'de saklanmaz**. Her preview/dashboard isteğinde Yahoo Finance'tan çekilir; TRY dışı fiyatlar TCMB USD/TRY (ve gerekirse GBP/USD) kuru ile normalize edilir. `avg_cost_tl` girilmişse preview response'unda `cost_basis_tl`, `gain_loss_tl`, `gain_loss_pct` döner.
 
 #### `bes_holdings`
 ```sql
@@ -396,6 +421,51 @@ INDEX ix_planned_expenses_user_id (user_id)
 ```
 
 > 7 kategori: `loan`, `tax`, `insurance`, `subscription`, `rent`, `utility`, `other`. 6 tekrar tipi: `one_time`, `monthly`, `quarterly`, `biannual`, `yearly`, `custom`. Schema'da `Literal` tipi ile zorlanır. `_applies_in_month()` fonksiyonu `start_date`, `end_date`, `recurrence`, `months` değerlerini birlikte değerlendirerek 12 aylık nakit akışı breakdown'ı üretir. `User.planned_expenses` ilişkisi cascade all, delete-orphan.
+
+#### `incomes` (Faz 3 — manuel gelir takibi)
+```sql
+id           BIGSERIAL PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+category     VARCHAR(20) NOT NULL                    -- IncomeCategory enum (7 sabit kategori)
+date         DATE NOT NULL
+description  TEXT
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_incomes_user_date (user_id, date)
+```
+
+> 7 kategori: `salary`, `freelance`, `rental`, `dividend`, `bonus`, `sale`, `other`. Şablon `expenses` ile birebir paralel; aylık summary ve Excel import/export desteklenir. `User.incomes` ilişkisi cascade all, delete-orphan.
+
+#### `budgets` (Faz 3 — kategori bazlı aylık bütçe)
+```sql
+id          BIGSERIAL PK
+user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+category    VARCHAR(20) NOT NULL                     -- ExpenseCategory enum (10 kategori)
+amount      NUMERIC(18, 2) NOT NULL
+updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()       -- onupdate=now()
+
+UNIQUE (user_id, category) -- uq_budget_user_category
+```
+
+> Migration `9b0c1d2e3f4a`. `PUT /budgets/{category}` PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` ile UPSERT yapar (`uq_budget_user_category` constraint'i hedefler). `GET /budgets/comparison?year=&month=` her kategori için bütçe vs. gerçekleşen + kalan + yüzde + over_budget flag döndürür. `User.budgets` ilişkisi cascade all, delete-orphan.
+
+#### `commodity_holdings` (Faz 3 — altın/gümüş)
+```sql
+id          BIGSERIAL PK
+user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+unit_type   VARCHAR(10) NOT NULL                     -- 'gram'|'biga'|'coin'
+metal       VARCHAR(10) NOT NULL                     -- 'gold'|'silver' (sikke için her zaman 'gold')
+biga_code   VARCHAR(5)                               -- 'A01'..'A08' (altın), 'G01'..'G07' (gümüş) — sadece unit_type='biga'
+coin_type   VARCHAR(20)                              -- 'ceyrek'|'yarim'|'tam'|'cumhuriyet'|'resat'|'ata' — sadece unit_type='coin'
+quantity    NUMERIC(18, 4) NOT NULL                  -- gram için gram, BiGA/sikke için adet
+notes       TEXT
+created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_commodity_holdings_user_id (user_id)
+```
+
+> Migration `a0b1c2d3e4f5`. Pydantic `model_validator` `unit_type`, `metal`, `biga_code`, `coin_type` uyumunu zorlar. Anlık fiyat: `services/commodity.py::fetch_metal_prices()` TCMB USD/TRY (kritik) + Yahoo Finance XAU=X→GC=F + XAG=X→SI=F fallback. 5 dakikalık in-memory cache; Yahoo fail durumunda TTL 30 saniyeye düşer. Metal fiyatı 0 ise dashboard banner uyarı gösterir, etkilenen pozisyonlar `total_value_tl` toplama dahil edilmez. `User.commodity_holdings` ilişkisi cascade all, delete-orphan.
 
 #### `revoked_tokens` (JWT blacklist)
 ```sql
@@ -491,6 +561,13 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `3b4c5d6e7f8a` | ✅ `bes_holdings` 4 metric genişletme (paid_principal, paid_returns, govt_contribution, govt_returns + contract_number; eski `total_value_tl` kolonu kaldırıldı) |
 | `4c5d6e7f8a9b` | ✅ `expenses` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_expenses_user_date` — Faz 3 MVP harcama takibi                       |
 | `5d6e7f8a9b0c` | ✅ `planned_expenses` tablosu (id, user_id, title, amount, is_estimated, category, recurrence, months[], day_of_month, start_date, end_date, remaining_count, notes, created_at) + `ix_planned_expenses_user_id` — Faz 3 planlı ödemeler & nakit akışı tahmini |
+| `6e7f8a9b0c1d` | ✅ `users.monthly_expense_goal` (NUMERIC 18,2 nullable) — Faz 3 finansal hedef (ilk hâl, sonra yerine `goal_amount` + `goal_currency` eklendi) |
+| `7f8a9b0c1d2e` | ✅ `users.goal_amount` + `users.goal_currency` (VARCHAR 3 default 'TRY') — `monthly_expense_goal` kaldırılır, mevcut TRY değerleri taşınır |
+| `8a9b0c1d2e3f` | ✅ `incomes` tablosu (id, user_id, amount, category, date, description?, created_at) + `ix_incomes_user_date` — Faz 3 gelir takibi |
+| `9b0c1d2e3f4a` | ✅ `budgets` tablosu (id, user_id, category, amount, updated_at) + `uq_budget_user_category` UNIQUE — Faz 3 kategori bazlı aylık bütçe |
+| `a0b1c2d3e4f5` | ✅ `commodity_holdings` tablosu (id, user_id, unit_type, metal, biga_code?, coin_type?, quantity, notes?, created_at) + `ix_commodity_holdings_user_id` — Faz 3 altın/gümüş |
+| `b1c2d3e4f5a6` | ✅ `tefas_holdings.avg_cost_tl` + `stock_holdings.avg_cost_tl` (NUMERIC 18,6 nullable) — Faz 3 maliyet bazı / kâr-zarar |
+| `c2d3e4f5a6b7` | ✅ `tefas_holdings.distributor` + `stock_holdings.distributor` (VARCHAR 50 nullable) — Faz 3 aracı kurum (aynı varlığı farklı kurumlardan ayrı satır) |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -502,6 +579,8 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_bes_holdings_user_id`
 - `ix_expenses_user_date` (user_id + date)
 - `ix_planned_expenses_user_id` (user_id)
+- `ix_incomes_user_date` (user_id + date)
+- `ix_commodity_holdings_user_id` (user_id)
 - `ix_revoked_tokens_expires_at`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
@@ -509,15 +588,21 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `uq_integrations_user_provider` (UNIQUE)
 - `uq_snapshot_user_date` (UNIQUE)
 - `uq_wallet_user_chain_address` (UNIQUE)
+- `uq_budget_user_category` (UNIQUE — `(user_id, category)`)
 
 ### Eksik (Faz 2-3'te Yapılacak)
 - [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
-- [x] `expenses` tablosu (Faz 3 MVP — migration `4c5d6e7f8a9b` ile eklendi; 10 sabit kategori `Literal` ile schema'da, ayrı `expense_categories` tablosuna gerek yok)
-- [x] `planned_expenses` tablosu (Faz 3 — migration `5d6e7f8a9b0c` ile eklendi; 7 kategori + 6 tekrar tipi `Literal` ile schema'da; `_applies_in_month()` tahmin motoru)
+- [x] `expenses` tablosu (Faz 3 MVP — migration `4c5d6e7f8a9b` ile eklendi; 10 sabit kategori `Literal` ile schema'da)
+- [x] `planned_expenses` tablosu (Faz 3 — migration `5d6e7f8a9b0c`; 7 kategori + 6 tekrar tipi)
+- [x] `incomes` tablosu (Faz 3 — migration `8a9b0c1d2e3f`; 7 sabit kategori)
+- [x] `budgets` tablosu (Faz 3 — migration `9b0c1d2e3f4a`; UPSERT pattern, kategori UNIQUE)
+- [x] `commodity_holdings` tablosu (Faz 3 — migration `a0b1c2d3e4f5`; gram/BiGA/sikke)
+- [x] `users.goal_amount` + `goal_currency` (Faz 3 — migration `7f8a9b0c1d2e`; USD/EUR/GBP/TRY)
+- [x] TEFAS + Stocks `avg_cost_tl` + `distributor` (Faz 3 — migration `b1c2d3e4f5a6` + `c2d3e4f5a6b7`)
 - [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
-- [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f` ile eklendi
+- [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f`
 - [ ] `revoked_tokens` cleanup cron job (`expires_at < now()` olanları sil — Faz 3)
-- [ ] Soft delete cron — 30 gün sonra hard delete
+- [ ] Soft delete cron — 30 gün sonra hard delete (`users.deleted_at`'a göre)
 
 ---
 
@@ -554,8 +639,9 @@ class Asset:
 | TEFAS             | `TefasService`                              | httpx + JSON API                                                                                                                                                             |
 | Yahoo Finance     | `fetch_stock_quotes()`                      | httpx (`v8/finance/chart/{ticker}`)                                                                                                                                          |
 | BES               | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")`                                                                                             |
+| Kıymetli madenler | `commodity.py::fetch_metal_prices()`        | TCMB USD/TRY (kritik) + Yahoo Finance Chart API XAU=X→GC=F + XAG=X→SI=F fallback chain. 5 dk in-memory cache; Yahoo fail durumunda TTL 30 sn'ye düşer; metaller best-effort (0 dönerse UI banner) |
 | Aggregator        | `aggregator.py`                             | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
-| Snapshot          | `snapshot.py::compute_and_save_snapshot()`  | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent)                                                                                               |
+| Snapshot          | `snapshot.py::compute_and_save_snapshot()`  | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent). MKK import endpoint'lerinden best-effort tetiklenir                                          |
 | E-posta           | `email.py::send_verification_email()`       | Resend SDK + HTML şablon                                                                                                                                                     |
 
 > Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)
@@ -588,6 +674,41 @@ VERIFY_TOKEN_EXPIRE_HOURS=24
 - TEFAS fiyatları için günlük cache (gün içinde değişmez)
 - Yahoo Finance quotes için 5 dakika cache
 - PostgreSQL connection pool: `pool_size=10, max_overflow=20` (default'tan artır)
+
+---
+
+## 8.3 Fault-Tolerance Pattern (Yeni)
+
+KFinans dış API kaynaklarını **kritik** ve **best-effort** olarak ayırır.
+
+| Kaynak | Sınıflandırma | Davranış |
+|--------|---------------|----------|
+| TCMB USD/TRY | Kritik | Snapshot iptal (503), kıymetli maden sayfası açılmaz |
+| TCMB GBP/USD | Best-effort | UK hisseleri 0 değerle devam eder, log warning |
+| Yahoo Finance hisse kotasyonu | Per-ticker | Bir ticker fail olursa sadece o pozisyon eksik |
+| Yahoo Finance XAU=X / XAG=X (altın/gümüş) | Best-effort + fallback | Önce primary (XAU=X / XAG=X), sonra futures (GC=F / SI=F); ikisi de fail ise 0 dön + UI uyarı banner |
+| Binance / iCrypex / blockchain | Per-source | Her kaynak izole, biri fail diğerleri devam |
+
+**Cache stratejisi:** Yahoo Finance metal sembolleri başarısız olursa cache TTL 5 dakikadan 30 saniyeye düşer — geçici 404 hızla telafi olur, sürekli sayfa açıldığında 5 dakika boyunca aynı 0 değer takılı kalmaz.
+
+## 8.4 MKK e-Yatırımcı Excel Import Pattern (Yeni)
+
+MKK "Tüm Kıymetler" raporu eski .xls binary formatındadır. KFinans `xlrd==1.2.0` (xlsx desteği kaldırılmadan önceki son sürüm) ile parse eder.
+
+**Pattern:**
+1. `xlrd.open_workbook(file_contents=content)` ile workbook aç
+2. Header satırını "Üye" sütunundan tespit et (ilk 20 satırı tara)
+3. Sınıfa göre filtrele:
+   - `POST /portfolio/tefas/import-mkk` → `Kıymet Sınıfı = 'Fon'`
+   - `POST /portfolio/stocks/import-mkk` → `Kıymet Sınıfı = 'HS'` AND `Ek Tanım = 'A'` (aktif tradeable)
+4. Her satır için: kod + ad + adet + fiyat (TL) + üye → `TefasHolding` veya `StockHolding`
+   - Hisse için BIST kodları otomatik `.IS` suffix ile Yahoo Finance ticker formatına çevrilir
+   - `Üye` sütunu `distributor` alanına yazılır (max 50 karakter)
+   - Fiyat 0 ise `avg_cost_tl` `None` olur
+5. Mevcut kullanıcı kayıtları **silinir** (replace-all), yeni kayıtlar eklenir
+6. **Best-effort snapshot:** `compute_and_save_snapshot()` `try/except` ile çağrılır — fail olsa bile import korunur (history/finansal hedef güncel kalsın diye dener)
+
+> Frontend: paylaşılan `_components/MkkHint.tsx` bileşeni info kart + opsiyonel `onUpload` prop ile MKK xls upload butonu (Stocks + TEFAS sayfalarında).
 
 ---
 

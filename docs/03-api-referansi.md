@@ -287,14 +287,20 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
 ### `GET /portfolio/tefas/holdings`
 Kayıtlı holding listesi.
 ```json
-[{ "code": "GO3", "quantity": 1500.5, "name": "Garanti Portföy 3" }]
+[{
+  "code":         "GO3",
+  "quantity":     1500.5,
+  "name":         "Garanti Portföy 3",
+  "avg_cost_tl":  1.10,        // Opsiyonel, TRY/adet (Faz 3)
+  "distributor": "Ziraat"      // Opsiyonel, aracı kurum (Faz 3)
+}]
 ```
 
 ### `PUT /portfolio/tefas/holdings`
-Tüm holdinglari değiştir (replace-all). Body: holding listesi.
+Tüm holdinglari değiştir (replace-all). Body: holding listesi (avg_cost_tl + distributor opsiyonel).
 
 ### `POST /portfolio/tefas/preview`
-TEFAS'tan **anlık fiyat** çek, kaydetme.
+TEFAS'tan **anlık fiyat** çek, kaydetme. Avg cost girilmişse kâr/zarar hesaplanır.
 ```json
 // Request: holding listesi
 // Response
@@ -303,13 +309,18 @@ TEFAS'tan **anlık fiyat** çek, kaydetme.
   "name":           "Garanti Portföy 3",
   "quantity":       "1500.5",
   "unit_price_tl":  "1.2345",
-  "total_value_tl": "1852.42"
+  "total_value_tl": "1852.42",
+  "avg_cost_tl":    "1.10",       // Opsiyonel
+  "cost_basis_tl":  "1650.55",    // qty * avg_cost
+  "gain_loss_tl":   "201.87",     // total - cost_basis
+  "gain_loss_pct":  12.23,        // (gain_loss / cost_basis) * 100
+  "distributor":    "Ziraat"
 }]
 422: { "detail": "Geçersiz fon kodu: XYZ" }
 ```
 
 ### `GET /portfolio/tefas/export`
-Tüm holdinglari xlsx olarak indir (canlı fiyat dahil).
+Tüm holdinglari xlsx olarak indir (canlı fiyat + Ort. Maliyet + Kâr/Zarar + Kurum kolonları dahil).
 
 ### `POST /portfolio/tefas/import`
 xlsx yükle, mevcut holdinglari **siler**, yenilerini ekler.
@@ -318,6 +329,23 @@ multipart/form-data: file=tefas.xlsx
 422: "Sadece .xlsx dosyası kabul edilir" | "Geçerli holding bulunamadı"
 ```
 
+### `POST /portfolio/tefas/import-mkk` — MKK e-Yatırımcı Excel Import (Faz 3)
+MKK e-Yatırımcı "Tüm Kıymetler" raporundan TEFAS fonlarını içe aktarır.
+
+**Filtre:** `Kıymet Sınıfı = 'Fon'` (case-insensitive).
+**Mapping:** `Üye` → `distributor`, `Menkul Kıymet Kodu` → `code`, `Adet` → `quantity`, `Fiyat (TL)` → `avg_cost_tl`, `Kıymet Adı` → `name`.
+
+```
+multipart/form-data: file=hesap-portfoy-bakiyesi.xls
+200 OK — kaydedilen liste (replace-all)
+422: "Sadece .xls veya .xlsx dosyası kabul edilir"
+422: "MKK Excel dosyası okunamadı (.xls binary formatında olmalı)"
+422: "MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı"
+422: "Dosyada 'Fon' kıymet sınıfında geçerli kayıt bulunamadı"
+```
+
+> Import sonrası `compute_and_save_snapshot()` best-effort tetiklenir (fail olsa bile import korunur).
+
 ---
 
 ## 6. Hisse Senedi (`/api/v1/portfolio/stocks`)
@@ -325,13 +353,20 @@ multipart/form-data: file=tefas.xlsx
 API yapısı TEFAS ile aynı:
 - `GET    /portfolio/stocks/holdings` — listele
 - `PUT    /portfolio/stocks/holdings` — replace-all
-- `POST   /portfolio/stocks/preview` — Yahoo Finance anlık fiyat
-- `GET    /portfolio/stocks/export` — xlsx indir
+- `POST   /portfolio/stocks/preview` — Yahoo Finance anlık fiyat (kâr/zarar dahil)
+- `GET    /portfolio/stocks/export` — xlsx indir (Ort. Maliyet + Kâr/Zarar + Kurum kolonları dahil)
 - `POST   /portfolio/stocks/import` — xlsx yükle
+- `POST   /portfolio/stocks/import-mkk` — **MKK e-Yatırımcı .xls** dosyası direkt yükle (Faz 3)
 
 ```json
-// Holding
-{ "ticker": "THYAO.IS", "quantity": 100, "name": "Türk Hava Yolları" }
+// Holding (Faz 3: avg_cost_tl + distributor opsiyonel)
+{
+  "ticker":      "THYAO.IS",
+  "quantity":    100,
+  "name":        "Türk Hava Yolları",
+  "avg_cost_tl": 285.50,        // Opsiyonel, TRY/adet (0 → None)
+  "distributor": "İş Yatırım"   // Opsiyonel, aracı kurum (max 50)
+}
 
 // Preview response
 {
@@ -341,11 +376,35 @@ API yapısı TEFAS ile aynı:
   "currency":            "USD",
   "unit_price_original": "180.50",
   "unit_price_tl":       "6318.00",
-  "total_value_tl":      "63180.00"
+  "total_value_tl":      "63180.00",
+  "avg_cost_tl":         "5500.00",      // Opsiyonel
+  "cost_basis_tl":       "55000.00",     // qty * avg_cost
+  "gain_loss_tl":         "8180.00",     // total - cost_basis
+  "gain_loss_pct":        14.87,         // (gain_loss / cost_basis) * 100
+  "distributor":         "İş Yatırım"
 }
 ```
 
 > Ticker formatı: BIST = `THYAO.IS`, ABD = `AAPL`, UK = `BP.L` (GBp döner, ÷100 → GBP).
+> `avg_cost_tl=0` veya negatif girilince schema validator `None`'a çevirir (maliyet bilinmiyor).
+> `distributor` aynı ticker'ı farklı kurumlardan ayrı satır olarak izlemek için kullanılır.
+
+### `POST /portfolio/stocks/import-mkk` — MKK e-Yatırımcı Excel Import (Faz 3)
+MKK e-Yatırımcı "Tüm Kıymetler" raporu (`.xls` binary) → hisse senedi pozisyonları.
+
+**Filtre:** `Kıymet Sınıfı = 'HS'` AND `Ek Tanım = 'A'` (aktif tradeable pozisyonlar).
+**Mapping:** `Üye` → `distributor`, `Menkul Kıymet Kodu` → `ticker` (otomatik `.IS` suffix), `Adet` → `quantity`, `Fiyat (TL)` → `avg_cost_tl`, `Kıymet Adı` → `name`.
+
+```
+multipart/form-data: file=hesap-portfoy-bakiyesi.xls
+200 OK — kaydedilen liste (replace-all)
+422: "Sadece .xls veya .xlsx dosyası kabul edilir"
+422: "MKK Excel dosyası okunamadı (.xls binary formatında olmalı)"
+422: "MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı"
+422: "Dosyada 'HS' kıymet sınıfında ve 'A' ek tanımında geçerli kayıt bulunamadı"
+```
+
+> Import sonrası `compute_and_save_snapshot()` best-effort tetiklenir (fail olsa bile import korunur).
 
 ---
 
@@ -576,9 +635,194 @@ Belirli ayın toplamı + kategori kırılımı. `year` ve `month` zorunlu.
 
 > Boş ayda `total="0"`, `count=0`, `by_category=[]` döner (404 değil).
 
+### `GET /expenses/export?year=&month=`
+Harcamaları Excel dosyası olarak indir (kırmızı başlık tema). `year` + `month` opsiyonel — verilirse o ayın kayıtları, verilmezse tüm geçmiş.
+
+### `POST /expenses/import`
+Excel dosyasından **append** (mevcut kayıtlar silinmez). Türkçe label haritası içerir (`yiyecek` → `food` vb.); geçersiz/parse edilemeyen satırlar atlanır.
+```
+multipart/form-data: file=harcamalar.xlsx
+201 Created — eklenen kayıtlar
+400: { "detail": "Geçersiz Excel dosyası" }
+```
+
 ---
 
-## 12. Geliştirme İpuçları
+## 12. Gelirler (`/api/v1/income`) — Faz 3
+
+Manuel gelir takibi modülü. 7 sabit kategori (`salary`, `freelance`, `rental`, `dividend`, `bonus`, `sale`, `other`); kategori dışı değer 422 döndürür. Auth + IDOR koruması.
+
+### `GET /income`
+Gelir listesi. Tarihe göre **azalan** sıralı. Opsiyonel filtreler: `year` + `month`, `category`.
+
+### `POST /income`
+```json
+// Request — IncomeCreate
+{
+  "amount":      "45000.00",
+  "category":    "salary",
+  "date":        "2026-05-01",
+  "description": "Mayıs maaşı"
+}
+// 201 Created — IncomeOut
+```
+
+### `PUT /income/{id}` — partial update (4 alan opsiyonel)
+### `DELETE /income/{id}` — 204
+### `GET /income/summary?year=&month=` — `IncomeSummary` (toplam + kategori kırılımı, harcama summary ile aynı yapı)
+### `GET /income/export?year=&month=` — yeşil başlık temalı xlsx
+### `POST /income/import` — Excel'den append, Türkçe label haritası (`maaş` → `salary` vb.)
+
+---
+
+## 13. Bütçe (`/api/v1/budgets`) — Faz 3
+
+Kategori bazlı aylık bütçe. Kategori seti `Expense` ile aynı (10 sabit kategori).
+
+### `GET /budgets`
+Kullanıcının tanımlı bütçeleri (kategori sıralı).
+```json
+[{ "id": 1, "category": "groceries", "amount": "3500.00", "updated_at": "2026-05-01T10:00:00Z" }]
+```
+
+### `PUT /budgets/{category}`
+**UPSERT** (PostgreSQL `INSERT ... ON CONFLICT DO UPDATE`, hedef constraint `uq_budget_user_category`).
+```json
+// Request — BudgetUpsert
+{ "amount": "3500.00" }   // Decimal, gt=0, le=99_999_999.99
+
+// 200 OK — BudgetOut
+{ "id": 1, "category": "groceries", "amount": "3500.00", "updated_at": "2026-05-03T..." }
+
+422: { "detail": "Geçersiz kategori: ..." }   // EXPENSE_CATEGORIES dışı
+```
+
+### `DELETE /budgets/{category}`
+```
+204 No Content
+404: { "detail": "Bütçe bulunamadı" }
+```
+
+### `GET /budgets/comparison?year=&month=`
+Belirli ayın bütçe vs. gerçekleşen (bütçesi olan veya harcaması olan tüm kategoriler).
+```json
+200 OK
+[{
+  "category":      "groceries",
+  "budget_amount": "3500.00",   // null → bütçe tanımlı değil ama harcama var
+  "actual_amount": "4200.50",   // 0 olabilir
+  "remaining":     "-700.50",   // null → budget_amount null
+  "pct_used":       120.01,     // null → budget_amount null veya 0
+  "over_budget":    true        // actual > budget
+}]
+```
+
+---
+
+## 14. Kıymetli Madenler (`/api/v1/portfolio/commodities`) — Faz 3
+
+Altın ve gümüş varlık takibi. 3 birim tipi: `gram`, `biga` (5 + 8 = 13 standart kod), `coin` (6 sikke türü).
+
+### `GET /portfolio/commodities`
+Tüm varlıklar + anlık fiyatlar + summary.
+```json
+200 OK — CommoditySummaryOut
+{
+  "positions": [{
+    "id":              1,
+    "unit_type":       "gram",
+    "metal":           "gold",
+    "biga_code":       null,
+    "coin_type":       null,
+    "quantity":        "10.5000",
+    "notes":           "Banka kasası",
+    "created_at":      "...",
+    "gram_equivalent": "10.5000",
+    "total_value_tl":  "45120.50",
+    "gold_price_tl":   "4297.19",
+    "silver_price_tl": "53.42"
+  }],
+  "total_gold_gram":         "10.5000",
+  "total_silver_gram":        "0.0000",
+  "total_value_tl":         "45120.50",
+  "gold_price_tl":           "4297.19",
+  "silver_price_tl":           "53.42",
+  "gold_price_available":      true,
+  "silver_price_available":    true     // false → Yahoo fail; pozisyonlar toplama dahil değil
+}
+```
+
+### `POST /portfolio/commodities`
+```json
+// Request — CommodityCreate (Pydantic model_validator unit/metal/biga/coin uyumu zorlar)
+{
+  "unit_type": "biga",     // 'gram' | 'biga' | 'coin'
+  "metal":     "gold",     // 'biga' veya 'coin' için biga_code/coin_type'tan otomatik set
+  "biga_code": "A05",      // Sadece biga için (A01-A08 altın, G01-G07 gümüş)
+  "coin_type": null,       // Sadece coin için (ceyrek/yarim/tam/cumhuriyet/resat/ata)
+  "quantity":  "2",
+  "notes":     "100g BiGA"
+}
+// 201 Created — CommodityOut
+422: { "detail": "Geçerli bir BiGA kodu girin" } | { "detail": "Geçerli bir sikke türü girin" }
+```
+
+### `PUT /portfolio/commodities/{id}`
+Partial update — `quantity` + `notes` opsiyonel.
+
+### `DELETE /portfolio/commodities/{id}` — 204
+### `GET /portfolio/commodities/export` — altın sarısı başlık temalı xlsx
+### `POST /portfolio/commodities/import` — Excel'den **append** (mevcut kayıtlar silinmez)
+
+> Anlık fiyat servisi `services/commodity.py::fetch_metal_prices()` TCMB USD/TRY (kritik) + Yahoo Finance XAU=X→GC=F + XAG=X→SI=F fallback chain'i kullanır. 5 dakika in-memory cache; Yahoo başarısız olursa TTL 30 sn'ye düşer. TCMB başarısız olursa endpoint 500 döner; metal fiyatı 0 ise pozisyonlar toplama dahil edilmez ama listelenmeye devam eder.
+
+---
+
+## 15. Kullanıcı Hesap (`/api/v1/user`) — Faz 3
+
+### `GET /user/me`
+```json
+200 OK — UserMeOut
+{
+  "email":           "user@example.com",
+  "risk_profile":    "balanced",
+  "created_at":      "2026-04-29T...",
+  "email_verified":  true,
+  "credit_balance":  0
+}
+```
+
+### `PUT /user/profile`
+Risk profili güncelle.
+```json
+// Request — ProfileUpdate
+{ "risk_profile": "aggressive" }   // Literal['conservative','balanced','aggressive']
+// 200 OK — UserMeOut (güncel)
+```
+
+### `PUT /user/password`
+Mevcut şifre doğrulamalı şifre değiştirme.
+```json
+// Request — PasswordChange
+{ "current_password": "...", "new_password": "12345678" }   // new_password min_length=8
+// 200 OK
+{ "detail": "Şifre güncellendi" }
+// 400 Bad Request
+{ "detail": "Mevcut şifre hatalı" }
+```
+
+### `DELETE /user/me`
+Hesabı **soft-delete** eder (`users.deleted_at = now()`). Hard-delete cron job (Faz 3 TODO) `deleted_at + 30 gün` sonra fiziksel silme yapacak.
+```json
+200 OK
+{ "detail": "Hesap silindi" }
+```
+
+> KVKK uyumu için `/me/data-export` (kullanıcı verisi indirme) ayrı endpoint olarak Faz 3'te eklenecek.
+
+---
+
+## 16. Geliştirme İpuçları
 
 ### OpenAPI Dokümantasyonu
 Otomatik Swagger UI: `http://localhost:8000/docs`
@@ -601,7 +845,7 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 
 ---
 
-## 13. Eksik / Eklenecek (TODO)
+## 17. Eksik / Eklenecek (TODO)
 
 - [x] `POST /auth/register` testleri (14 yeni test test_auth.py'da)
 - [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri
@@ -610,8 +854,14 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 - [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
 - [x] BES manuel giriş endpoint'leri (`/portfolio/bes/*` — GET, PUT, export, import)
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3
-- [x] Harcama endpoint'leri (`/expenses/*`) — Faz 3 MVP (5 endpoint: list/create/update/delete/summary)
+- [x] Harcama endpoint'leri (`/expenses/*`) — Faz 3 MVP (5 endpoint: list/create/update/delete/summary + Excel export/import)
+- [x] Gelir endpoint'leri (`/income/*`) — Faz 3
+- [x] Bütçe endpoint'leri (`/budgets/*`) — Faz 3 (UPSERT + comparison)
+- [x] Kıymetli maden endpoint'leri (`/portfolio/commodities/*`) — Faz 3
+- [x] Kullanıcı yönetimi (`/user/me`, `PUT /user/profile`, `PUT /user/password`, `DELETE /user/me` soft-delete) — Faz 3
+- [x] Finansal hedef (`/goals/me`) — Faz 3 (USD/EUR/GBP/TRY)
+- [x] MKK e-Yatırımcı Excel import (`/portfolio/tefas/import-mkk` + `/portfolio/stocks/import-mkk`) — Faz 3
 - [ ] Harcama analizi AI (`/expenses/analysis/generate`) — Faz 3 (3 kredi)
-- [ ] `/me/data-export` (KVKK) ve `/me/account` (DELETE) endpoint'leri
+- [ ] `/user/data-export` (KVKK) — Faz 3
 - [ ] Pagination (cursor-based) `/portfolio/history` ve `/advice` için
 - [ ] Server-Sent Events `/portfolio/stream` (anlık fiyat) — Faz 4

@@ -14,14 +14,20 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
 | Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
 | E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
-| Ana Dashboard (6 kart + grand total + "Snapshot al" + "Geçmiş" butonu) | `/dashboard` | ✅ Aktif |
+| Ana Dashboard (11 kart, kullanıcı tarafından gizlenebilir) | `/dashboard` | ✅ Aktif |
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
-| Hisse senedi portföyü (Yahoo Finance + Excel) | `/dashboard/stocks` | ✅ Aktif |
+| Hisse senedi portföyü (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/stocks` | ✅ Aktif |
 | Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
-| TEFAS holdings (preview + Excel) | `/dashboard/tefas` | ✅ Aktif |
+| TEFAS holdings (preview + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/tefas` | ✅ Aktif |
 | BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
-| Harcama takibi (form + tablo + pasta grafik + ay seçici) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |
+| Harcama takibi (form + tablo + pasta grafik + ay seçici + Excel) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |
+| Planlı ödemeler & yıllık nakit akışı tahmini | `/dashboard/planned` | ✅ Aktif (Faz 3) |
+| Gelir takibi (form + tablo + pasta grafik + Excel) | `/dashboard/income` | ✅ Aktif (Faz 3) |
+| Bütçe takibi (kategori bazlı bütçe + comparison) | `/dashboard/budget` | ✅ Aktif (Faz 3) |
+| Kıymetli madenler (altın/gümüş — gram/BiGA/sikke + Excel) | `/dashboard/commodities` | ✅ Aktif (Faz 3) |
+| Finansal hedef (pasif gelir hedefi + USD/EUR/GBP/TRY) | `/dashboard/goal` | ✅ Aktif (Faz 3) |
+| Ayarlar (hesap özeti + risk + şifre + kart gizleme + hesap silme) | `/dashboard/settings` | ✅ Aktif (Faz 3) |
 
 ### Auth Davranışı (Korunmalı)
 - Token yoksa `/dashboard/*` → `/login`'e redirect
@@ -39,12 +45,14 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - `/dashboard` üst kısmında "Snapshot al" butonu — `POST /portfolio/snapshot` çağrılır
 - Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
 
-### Dashboard Yenileme (Yeni)
-- 6 kart yapısı: TEFAS, Kripto, **Hisse Senedi** (`/dashboard/stocks`'a link), **Blockchain Cüzdanlar** (`/dashboard/wallets`'a link — eski "yakında" pasif kart aktive edildi), BES, **Harcamalar (bu ay)** (`/dashboard/expenses`'e link — kırmızı tema, 💸 ikonu)
-- Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL): TEFAS top 3 fund kodu, Kripto top 3 coin, Hisse top 3 ticker, Blockchain top 3 sembol, BES top 3 plan, Harcamalar top 3 kategori (bu ayın toplamı + en yüksek 3 kategori)
-- Üstte **"Toplam: X ₺"** (varlık kartlarının toplamı / grand total — harcama kartı toplama dahil değil)
-- Sağ üstte **"Geçmiş"** butonu → `/dashboard/history`
-- Reusable `Card` component (6 kart için ortak); `COLOR_MAP`'e `red` rengi eklendi (harcama kartı için)
+### Dashboard Yenileme (Faz 3 ile Genişletildi)
+- **11 kart yapısı** (`DASHBOARD_CARDS` `lib/format.ts` üzerinden render edilir): TEFAS, Kripto, Hisse Senedi, Blockchain Cüzdanlar, BES, Harcamalar (bu ay), Planlı Ödemeler (bu yıl), Gelirler (bu ay), Finansal Hedef, Altın & Gümüş, Bütçe Takibi
+- Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL) ve özet sayaç (fon sayısı, plan sayısı vb.)
+- Üstte **"Toplam: X ₺"** (yatırım varlık kartlarının toplamı; harcama/gelir/bütçe sayaçları dahil değil)
+- Sağ üstte **"Snapshot al"** + **"Geçmiş"** + **"Ayarlar"** butonları
+- **Modern UI:** emoji ikonlar inline SVG'lere çevrildi; container `max-w-5xl`; satırlar `flex-wrap` ile mobile uyumlu
+- **Logo bileşenleri:** `_components/Logos.tsx` `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo` (PNG dosyaları arşivlik kaldı)
+- **Kart gizleme:** Settings sayfasında her kart için toggle; `localStorage.kfinans_hidden_cards` (JSON `DashboardCardId[]`) ile saklanır
 
 ### Snapshot History Grafiği (Yeni)
 - `/dashboard/history` — `recharts ^3.8.1` ile iki line chart
@@ -61,15 +69,66 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Footer'da toplam tutar gösterimi
 - Dashboard kartı: önceki "Bireysel emeklilik — yakında" pasif kartı silindi, yerine `/dashboard/bes`'e link veren aktif buton geldi; `besTotal` ve `besPlanCount` state'leri ile özet TL gösteriliyor
 
-### Harcama Takibi Akışı (Yeni — Faz 3 MVP)
-- `/dashboard/expenses` (~100 satır page.tsx, sadece composition); 4 component pattern uygulanmış (sayfa parçalama refactor'ünün ilk tam örneği):
-  - `_components/ExpenseForm.tsx` — Tutar + Kategori + Tarih + Açıklama (4 sütunlu grid). Submit `POST /expenses`
-  - `_components/ExpenseTable.tsx` — Aylık liste, sil butonu (confirm), footer'da toplam. `DELETE /expenses/{id}`
+### Harcama Takibi Akışı (Faz 3 MVP)
+- `/dashboard/expenses` (~100 satır page.tsx, sadece composition); 4 component pattern (sayfa parçalama refactor'ünün ilk tam örneği):
+  - `_components/ExpenseForm.tsx` — Tutar + Kategori + Tarih + Açıklama. Submit `POST /expenses`
+  - `_components/ExpenseTable.tsx` — Aylık liste, sil butonu (confirm), footer'da toplam
   - `_components/CategoryPieChart.tsx` — `recharts` PieChart, 10 kategori için sabit renk paleti
-  - `_components/MonthSelector.tsx` — Ay (1-12) + Yıl dropdown (önceki / mevcut / sonraki yıl)
-- API katmanı (`lib/api.ts`): `listExpenses`, `createExpense`, `updateExpense`, `deleteExpense`, `getExpenseSummary` + DTO'lar (`ExpenseDTO`, `ExpenseInput`, `ExpenseSummaryDTO`, `CategoryBreakdownDTO`)
-- Sabitler: `EXPENSE_CATEGORIES` (10 kategori) + `EXPENSE_CATEGORY_LABELS` (TR çeviriler — backend Literal değerleriyle eşleşir)
-- Dashboard kartı: 6. kart "Harcamalar (bu ay)" — kırmızı tema (💸), bu ayın toplamı + top 3 kategori. Backend `GET /expenses/summary?year=&month=` ile beslenir
+  - `_components/MonthSelector.tsx` — Ay (1-12) + Yıl dropdown
+- API katmanı: `listExpenses`, `createExpense`, `updateExpense`, `deleteExpense`, `getExpenseSummary`, **`exportExpenses`**, **`importExpenses`** + DTO'lar
+- Sabitler: `EXPENSE_CATEGORIES` (10) + `EXPENSE_CATEGORY_LABELS` (TR)
+- Dashboard kartı: kırmızı tema (SVG ikonu), bu ayın toplamı + top 3 kategori
+- **Faz 3 ekleme:** Excel İndir / Yükle butonları (Excel import Türkçe label haritası ile)
+
+### Yeni Dashboard Sayfaları (Faz 3)
+
+**`/dashboard/income` — Gelir Takibi**
+- Expenses ile birebir paralel pattern (4 component: form + tablo + pasta grafik + ay seçici + Excel butonları)
+- 7 kategori: salary, freelance, rental, dividend, bonus, sale, other (TR etiketler `INCOME_CATEGORY_LABELS`)
+- Dashboard kartı: yeşil tema, bu ayın toplamı + top 3 kategori
+
+**`/dashboard/budget` — Bütçe Takibi**
+- 2 component: `BudgetForm` (kategori + tutar UPSERT — `PUT /budgets/{category}`) + `ComparisonTable` (ay seçici + bütçe vs. gerçekleşen + over_budget kırmızı renk)
+- Dashboard kartı: aşılan bütçe sayısı sayacı
+
+**`/dashboard/commodities` — Kıymetli Madenler**
+- 2 component: `CommodityForm` (unit_type seçimi gram/biga/coin → conditional alanlar) + `CommodityList` (anlık fiyat + gram eşdeğeri + ₺)
+- Excel İndir / Yükle butonları
+- **UI fault-tolerance uyarı bandı:** `gold_price_available=false` veya `silver_price_available=false` ise sayfa üstünde info banner ("Yahoo Finance'tan altın fiyatı alınamadı, etkilenen pozisyonlar toplama dahil değil")
+- Dashboard kartı: toplam ₺ + adet sayısı
+
+**`/dashboard/goal` — Finansal Hedef**
+- Hedef tutar + para birimi (USD/EUR/GBP/TRY) seçimi + ilerleme barı
+- Dashboard kartı: pasif gelir yüzdesi göstergesi
+
+**`/dashboard/planned` — Planlı Ödemeler**
+- 3 component: `PlannedForm` + `PlannedList` + `YearlyForecast` (12 aylık bar chart stili nakit akışı tahmini)
+- Dashboard kartı: violet tema, bu yıl toplam tutar
+
+**`/dashboard/settings` — Ayarlar**
+- 5 bölüm:
+  1. **Hesap özeti:** email, oluşturma tarihi, kredi bakiyesi, doğrulama durumu (`GET /user/me`)
+  2. **Risk profili:** dropdown + kaydet (`PUT /user/profile`)
+  3. **Şifre değiştir:** mevcut + yeni + tekrar (`PUT /user/password`)
+  4. **Dashboard kart gizleme:** 11 kart için checkbox toggle (`localStorage.kfinans_hidden_cards`)
+  5. **Hesap silme:** confirm dialog + `DELETE /user/me` (soft-delete) → `clearAuth()` + `/login` yönlendirme
+
+### TEFAS + Stocks Sayfaları (Faz 3 Genişletme)
+- `HoldingsForm` bileşenlerine "Ort. maliyet ₺" + "Kurum" inputları eklendi
+- `StockPositionsTable` ve TEFAS tablosu: yeni kolonlar Ort. Maliyet (₺) + **Kâr/Zarar (₺ + %)** (yeşil/kırmızı renk) + **Kurum** (mavi pill badge)
+- **MKK Excel Import:** paylaşılan `MkkHint` bileşeni info kart + opsiyonel `onUpload` prop ile doğrudan upload butonu (`POST /portfolio/{tefas|stocks}/import-mkk`)
+- Container `max-w-5xl`, form satırları `flex-wrap`
+
+### Paylaşılan Bileşenler (`app/_components/`)
+- `Logos.tsx` — `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo` (inline SVG)
+- `MkkHint.tsx` — MKK e-Yatırımcı bilgi kartı + opsiyonel `onUpload?: (file: File) => Promise<void>` prop ile MKK xls upload butonu
+- `PageHeader.tsx` — sayfa başlığı + opsiyonel açıklama
+
+### `lib/format.ts` (Genişletildi)
+- `fmtTL`, `fmtNum`, `fmtDate`, `shortAddr` formatlama yardımcıları
+- `INPUT_CLS`, `TOOLBAR_BTN_CLS` paylaşılan Tailwind sınıfları
+- `DASHBOARD_CARDS` (11 kart × `{id, label}`) + `DashboardCardId` type union
+- `getHiddenCards()` / `saveHiddenCards()` localStorage helper'ları (`kfinans_hidden_cards` anahtarı)
 
 ---
 
@@ -80,41 +139,53 @@ frontend/
 ├── app/                          # Next.js App Router
 │   ├── layout.tsx                # Root layout (Türkçe locale)
 │   ├── globals.css               # Tailwind import + CSS variables
-│   ├── login/
-│   │   └── page.tsx              # Giriş sayfası ("Kayıt ol" linki dahil)
-│   ├── register/
-│   │   └── page.tsx              # Kayıt formu + risk profili dropdown + "tekrar gönder"
-│   ├── verify-email/
-│   │   └── page.tsx              # Token landing (Suspense + useSearchParams)
+│   ├── _components/              # Paylaşılan bileşenler (Faz 3)
+│   │   ├── Logos.tsx             # KFinansLogo (4 size) + MayotekLogo (inline SVG)
+│   │   ├── MkkHint.tsx           # MKK e-Yatırımcı info kart + opsiyonel upload butonu
+│   │   └── PageHeader.tsx        # Sayfa başlığı + açıklama
+│   ├── login/page.tsx            # Giriş ("Kayıt ol" linki + 403 doğrulama mesajı)
+│   ├── register/page.tsx         # Kayıt + risk profili + "tekrar gönder"
+│   ├── verify-email/page.tsx     # Token landing (Suspense + useSearchParams)
+│   ├── legal/                    # KVKK / gizlilik / kullanım şartları / çerez
 │   └── dashboard/
-│       ├── layout.tsx            # Dashboard chrome (header + sidebar)
-│       ├── page.tsx              # Ana dashboard (5 kart + grand total + Snapshot al + Geçmiş)
-│       ├── history/              # Snapshot geçmişi (recharts 2 line chart)
-│       │   └── page.tsx
-│       ├── crypto/page.tsx       # Kripto pozisyonları
-│       ├── stocks/               # Hisse senedi (Yahoo Finance + Excel)
-│       │   └── page.tsx
-│       ├── wallets/              # Blockchain cüzdanları (ekle/sil + Excel)
-│       │   └── page.tsx
-│       ├── tefas/page.tsx        # TEFAS
-│       ├── bes/                  # BES manuel giriş (plan adı + ₺ + Excel)
-│       │   └── page.tsx
-│       └── expenses/             # Harcama takibi (Faz 3 MVP — 4 component pattern)
-│           ├── page.tsx          # ~100 satır, composition only
-│           └── _components/
-│               ├── ExpenseForm.tsx
-│               ├── ExpenseTable.tsx
-│               ├── CategoryPieChart.tsx   # recharts PieChart
-│               └── MonthSelector.tsx
+│       ├── page.tsx              # Ana dashboard (11 kart + grand total + Snapshot al + Geçmiş + Ayarlar)
+│       ├── history/page.tsx      # Snapshot geçmişi (recharts 2 line chart)
+│       ├── crypto/page.tsx
+│       ├── stocks/               # Hisse senedi (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum)
+│       │   ├── page.tsx
+│       │   └── _components/
+│       │       ├── HoldingsForm.tsx
+│       │       └── StockPositionsTable.tsx
+│       ├── tefas/page.tsx        # TEFAS (Excel + MKK + maliyet/kâr-zarar + kurum)
+│       ├── wallets/page.tsx
+│       ├── bes/page.tsx
+│       ├── expenses/             # Harcama (4 component + Excel)
+│       │   ├── page.tsx
+│       │   └── _components/{ExpenseForm,ExpenseTable,CategoryPieChart,MonthSelector}.tsx
+│       ├── planned/              # Planlı ödemeler (Faz 3)
+│       │   ├── page.tsx
+│       │   └── _components/{PlannedForm,PlannedList,YearlyForecast}.tsx
+│       ├── income/               # Gelir takibi (Faz 3)
+│       │   ├── page.tsx
+│       │   └── _components/...
+│       ├── budget/               # Bütçe takibi (Faz 3)
+│       │   ├── page.tsx
+│       │   └── _components/{BudgetForm,ComparisonTable}.tsx
+│       ├── commodities/          # Altın & Gümüş (Faz 3)
+│       │   ├── page.tsx
+│       │   └── _components/{CommodityForm,CommodityList}.tsx
+│       ├── goal/page.tsx         # Finansal hedef (Faz 3)
+│       └── settings/page.tsx     # Hesap + risk + şifre + kart gizleme + hesap silme (Faz 3)
 │
 ├── lib/
-│   └── api.ts                    # Tüm API çağrıları + TypeScript DTO'ları
+│   ├── api.ts                    # Tüm API çağrıları + TypeScript DTO'ları
+│   └── format.ts                 # fmtTL/fmtNum/fmtDate + INPUT_CLS + DASHBOARD_CARDS + getHiddenCards/saveHiddenCards
 │
 ├── proxy.ts                      # Auth yönlendirme (Next.js 16: middleware → proxy)
 │
 ├── public/images/
-│   ├── kfinans-logo.png
-│   └── mayotek-logo.png
+│   ├── kfinans-logo.png          # Arşivlik (UI artık inline SVG kullanıyor)
+│   └── mayotek-logo.png          # Arşivlik
 │
 ├── next.config.ts                # output: "standalone", watchOptions
 ├── tsconfig.json                 # strict: true
@@ -335,7 +406,15 @@ npm run e2e:ui        # Playwright UI mode
 ### Orta Vade (Faz 3)
 - [ ] Kredi yönetimi sayfası (bakiye + paket satın alma)
 - [ ] AI tavsiye ekranı (Markdown render — `react-markdown`)
-- [x] Harcama takibi sayfaları (Faz 3 MVP — `/dashboard/expenses` + 4 component + dashboard kartı)
+- [x] Harcama takibi sayfaları (Faz 3 MVP — `/dashboard/expenses` + 4 component + dashboard kartı + Excel import/export)
+- [x] Planlı ödemeler & yıllık nakit akışı (`/dashboard/planned` + 3 component)
+- [x] Gelir takibi sayfaları (`/dashboard/income`)
+- [x] Bütçe takibi (`/dashboard/budget` — UPSERT + comparison)
+- [x] Kıymetli madenler (`/dashboard/commodities` — gram/BiGA/sikke + Excel + UI fault-tolerance banner)
+- [x] Finansal hedef (`/dashboard/goal` — USD/EUR/GBP/TRY)
+- [x] Ayarlar sayfası (`/dashboard/settings` — risk + şifre + kart gizleme + hesap silme)
+- [x] MKK e-Yatırımcı Excel import (TEFAS + Stocks sayfalarına `MkkHint` bileşeni)
+- [x] Modern UI (emoji → SVG, container max-w-5xl, flex-wrap satırlar, inline logolar)
 - [ ] Harcama AI analizi ekranı (kredi tüketimli — `/expenses/analysis/generate`)
 - [ ] PDF export (jsPDF veya server-side Puppeteer)
 - [ ] Bildirim merkezi (toast + notification panel)
