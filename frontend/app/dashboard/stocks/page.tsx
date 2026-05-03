@@ -6,13 +6,14 @@ import { PageHeader } from "@/app/_components/PageHeader";
 import { HoldingsForm, StockHoldingRow } from "./_components/HoldingsForm";
 import { Toolbar } from "./_components/Toolbar";
 import { StockPositionsTable } from "./_components/StockPositionsTable";
+import { MkkHint } from "@/app/_components/MkkHint";
 
 function toDTO(holdings: StockHoldingRow[]): StockHoldingDTO[] {
   return holdings
-    .filter((h) => h.ticker.trim() && parseFloat(h.quantity) > 0)
+    .filter((h) => h.ticker.trim() && Number.parseFloat(h.quantity) > 0)
     .map((h) => ({
       ticker: h.ticker.trim().toUpperCase(),
-      quantity: parseFloat(h.quantity),
+      quantity: Number.parseFloat(h.quantity),
       name: h.name.trim(),
       avg_cost_tl: h.avg_cost_tl.trim() ? Number.parseFloat(h.avg_cost_tl) : null,
       distributor: h.distributor.trim() || null,
@@ -130,10 +131,11 @@ export default function StocksPage() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-1">Hisse Holdingleri</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-gray-400 mb-2">
             BIST için <span className="font-mono bg-gray-50 px-1 rounded">THYAO.IS</span> formatını,
             ABD için <span className="font-mono bg-gray-50 px-1 rounded">AAPL</span> formatını kullanın.
           </p>
+          <MkkHint />
 
           <HoldingsForm
             holdings={holdings}

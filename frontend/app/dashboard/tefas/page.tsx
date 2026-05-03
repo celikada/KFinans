@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
+import { MkkHint } from "@/app/_components/MkkHint";
 
 interface Holding {
   code: string;
@@ -159,7 +160,9 @@ export default function TefasPage() {
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Fon Holdingleri</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">Fon Holdingleri</h2>
+          <MkkHint />
+          <div className="mb-4" />
 
           {initialLoad ? (
             <p className="text-sm text-gray-400">Yükleniyor...</p>
