@@ -1,0 +1,27 @@
+# Non-secret konfigurasyon. Production'da degerleri kendi domain'lerinize gore guncelleyin.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kfinans-config
+  namespace: kfinans
+data:
+  # Backend
+  ALGORITHM: "HS256"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "480"
+  REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  SONIC_RPC_URL: "https://rpc.soniclabs.com"
+  AVALANCHE_P_API_URL: "https://api.avax.network/ext/bc/P"
+  AVALANCHE_C_RPC_URL: "https://api.avax.network/ext/bc/C/rpc"
+  CORS_ORIGINS: '["https://app.kfinans.app"]'
+
+  # E-posta (Resend) — RESEND_API_KEY secret'ta
+  EMAIL_FROM: "KFinans <noreply@kfinans.app>"
+  FRONTEND_URL: "https://app.kfinans.app"
+  VERIFY_TOKEN_EXPIRE_HOURS: "24"
+
+  # Claude
+  CLAUDE_MODEL: "claude-sonnet-4-6"
+  CLAUDE_MAX_TOKENS: "1024"
+
+  # Frontend (build-time'da gerek; runtime ENV de okunabilir)
+  NEXT_PUBLIC_API_URL: "https://api.kfinans.app"

@@ -18,12 +18,23 @@ class Settings(BaseSettings):
 
     # Claude API — finansal tavsiye özelliği etkinleştirilene kadar opsiyonel
     anthropic_api_key: str = ""
+    claude_model: str = "claude-sonnet-4-6"
+    claude_max_tokens: int = 1024
 
     # Blockchain RPC
     sonic_rpc_url: str = "https://rpc.soniclabs.com"
     avalanche_p_api_url: str = "https://api.avax.network/ext/bc/P"
     avalanche_c_rpc_url: str = "https://api.avax.network/ext/bc/C/rpc"
     infura_api_key: str = ""
+
+    # CORS — production'da frontend domain'i ekle
+    cors_origins: list[str] = ["http://localhost:3000"]
+
+    # E-posta (Resend) — kullanıcı kayıt doğrulama
+    resend_api_key: str = ""
+    email_from: str = "KFinans <noreply@kfinans.app>"
+    frontend_url: str = "http://localhost:3000"
+    verify_token_expire_hours: int = 24
 
     @property
     def ethereum_rpc_url(self) -> str:

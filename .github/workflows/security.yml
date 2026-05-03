@@ -1,0 +1,41 @@
+name: Security — Dependency & Image Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: "0 6 * * 1"   # her Pazartesi 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    name: Python bağımlılık zafiyet taraması
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit yükle
+        run: pip install pip-audit
+      - name: Audit
+        working-directory: backend
+        run: pip-audit -r <(pip compile pyproject.toml 2>/dev/null || cat pyproject.toml) --strict || pip-audit --strict
+        continue-on-error: true
+
+  npm-audit:
+    name: NPM bağımlılık zafiyet taraması
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit
+        working-directory: frontend
+        run: npm audit --audit-level=high
+        continue-on-error: true

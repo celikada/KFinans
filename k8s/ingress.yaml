@@ -1,0 +1,46 @@
+---
+# Iki host: api.kfinans.app -> backend, app.kfinans.app -> frontend.
+# Production'a uyarlama: domain isimleri ve TLS issuer'i kendinize gore guncelleyin.
+#
+# Gereksinimler (cluster'da kurulu olmali):
+#   - ingress-nginx-controller
+#   - cert-manager + ClusterIssuer (letsencrypt-prod)
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kfinans
+  namespace: kfinans
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.kfinans.app
+        - app.kfinans.app
+      secretName: kfinans-tls
+  rules:
+    - host: api.kfinans.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+    - host: app.kfinans.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

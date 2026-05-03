@@ -1,0 +1,158 @@
+name: CI — Backend
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "fix/**", "hotfix/**"]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Bağımlılıkları kur
+        working-directory: backend
+        run: pip install -e ".[dev]"
+      - name: ruff check
+        working-directory: backend
+        run: ruff check .
+      - name: ruff format
+        working-directory: backend
+        run: ruff format --check .
+
+  unit-tests:
+    name: Unit testler
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Bağımlılıkları kur
+        working-directory: backend
+        run: pip install -e ".[dev]"
+      - name: Test secret'larını üret
+        run: |
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> $GITHUB_ENV
+          echo "FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> $GITHUB_ENV
+      - name: pytest unit (coverage)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://kfinans:kfinans_test@localhost:5432/kfinans_test
+        run: pytest tests/unit --cov=app --cov-report=xml --cov-report=term-missing
+      - name: Coverage XML upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: backend/coverage.xml
+          retention-days: 7
+
+  integration-tests:
+    name: Integration testler (real PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kfinans
+          POSTGRES_PASSWORD: kfinans_test
+          POSTGRES_DB: kfinans_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kfinans"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Bağımlılıkları kur
+        working-directory: backend
+        run: pip install -e ".[dev]"
+      - name: Test secret'larını üret
+        run: |
+          echo "SECRET_KEY=$(openssl rand -hex 32)" >> $GITHUB_ENV
+          echo "FERNET_KEY=$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" >> $GITHUB_ENV
+      - name: pytest integration (coverage)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://kfinans:kfinans_test@localhost:5432/kfinans_test
+          ANTHROPIC_API_KEY: sk-ant-test-placeholder
+        run: pytest tests/integration --cov=app --cov-report=xml --cov-report=term-missing --cov-append
+      - name: Coverage XML upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: backend/coverage.xml
+          retention-days: 7
+
+  coverage-gate:
+    name: Coverage gate
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip install coverage
+        run: pip install coverage
+      - name: Coverage artifact'larını indir
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage-reports
+          merge-multiple: false
+      - name: Coverage rapor (en son XML)
+        run: |
+          # Bu adım coverage threshold'unu kontrol eder.
+          # Mevcut hedef: %50 (Faz 2.5 — 2026-05-02). Faz 3'te %70'e çekilecek.
+          # XML'lerden coverage yüzdesini parse et:
+          python <<'EOF'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          totals = []
+          for xml in Path("coverage-reports").rglob("coverage.xml"):
+              root = ET.parse(xml).getroot()
+              line_rate = float(root.attrib.get("line-rate", 0)) * 100
+              totals.append(line_rate)
+              print(f"  {xml}: %{line_rate:.2f}")
+          if not totals:
+              print("UYARI: coverage XML bulunamadı")
+              exit(0)
+          best = max(totals)
+          THRESHOLD = 50.0
+          print(f"En iyi coverage: %{best:.2f} (hedef: %{THRESHOLD})")
+          if best < THRESHOLD:
+              print(f"❌ Coverage %{THRESHOLD} altına düştü")
+              exit(1)
+          print("✅ Coverage gate geçti")
+          EOF

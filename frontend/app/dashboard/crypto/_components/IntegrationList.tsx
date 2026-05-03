@@ -1,0 +1,40 @@
+"use client";
+import { IntegrationDTO } from "@/lib/api";
+import { PROVIDER_LABELS } from "./constants";
+
+interface Props {
+  integrations: IntegrationDTO[];
+  removing: string | null;
+  onRemove: (provider: string) => void;
+}
+
+export function IntegrationList({ integrations, removing, onRemove }: Props) {
+  if (integrations.length === 0) {
+    return <p className="text-sm text-gray-400">Henüz borsa eklenmedi.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {integrations.map((intg) => (
+        <div
+          key={intg.provider}
+          className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            <span className="text-sm font-medium text-gray-800">
+              {PROVIDER_LABELS[intg.provider] ?? intg.provider}
+            </span>
+          </div>
+          <button
+            onClick={() => onRemove(intg.provider)}
+            disabled={removing === intg.provider}
+            className="text-xs text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40"
+          >
+            {removing === intg.provider ? "Siliniyor..." : "Kaldır"}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}

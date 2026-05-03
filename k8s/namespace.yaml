@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kfinans
+  labels:
+    name: kfinans
+    app.kubernetes.io/part-of: kfinans

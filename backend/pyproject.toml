@@ -25,6 +25,9 @@ dependencies = [
     "anthropic>=0.40",
     "python-multipart",
     "openpyxl>=3.1",
+    "xlrd==1.2.0",
+    "slowapi>=0.1.9",
+    "resend>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +35,9 @@ dev = [
     "pytest>=8",
     "pytest-asyncio",
     "httpx",
+    "respx>=0.21",
     "ruff",
+    "pytest-cov",
 ]
 
 [tool.setuptools.packages.find]
@@ -48,3 +53,44 @@ select = ["E", "F", "I"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+]
+markers = [
+    "slow: yavas testler (selectivelye atlanabilir)",
+    "external: gercek dis servis cagrisi yapan testler (CI'da atlanir)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.*",
+    "ignore::pydantic.PydanticDeprecatedSince20",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = [
+    "app/main.py",
+    "app/scheduler.py",
+    "*/tests/*",
+    "*/__init__.py",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

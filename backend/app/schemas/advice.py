@@ -17,6 +17,7 @@ class AdviceOut(BaseModel):
     content: str
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
+    credits_used: int
     generated_at: datetime
 
     class Config:

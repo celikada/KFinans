@@ -1,7 +1,10 @@
+import logging
 import httpx
 from datetime import date, timedelta
 from decimal import Decimal
 from app.services.base import BaseIntegration, AssetData
+
+logger = logging.getLogger(__name__)
 
 _EXPORT_URL = "https://www.tefas.gov.tr/api/fund-returns/export"
 _HEADERS = {

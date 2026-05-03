@@ -2,11 +2,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
+import { MkkHint } from "@/app/_components/MkkHint";
 
 interface Holding {
   code: string;
   quantity: string;
   name: string;
+  avg_cost_tl: string;
+  distributor: string;
 }
 
 const INPUT_CLS =
@@ -22,13 +25,19 @@ function fmtTL(val: string | number) {
 
 function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
   return holdings
-    .filter((h) => h.code.trim() && parseFloat(h.quantity) > 0)
-    .map((h) => ({ code: h.code.trim().toUpperCase(), quantity: parseFloat(h.quantity), name: h.name.trim() }));
+    .filter((h) => h.code.trim() && Number.parseFloat(h.quantity) > 0)
+    .map((h) => ({
+      code: h.code.trim().toUpperCase(),
+      quantity: Number.parseFloat(h.quantity),
+      name: h.name.trim(),
+      avg_cost_tl: h.avg_cost_tl.trim() ? Number.parseFloat(h.avg_cost_tl) : null,
+      distributor: h.distributor.trim() || null,
+    }));
 }
 
 export default function TefasPage() {
   const router = useRouter();
-  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "" }]);
+  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   const [result, setResult] = useState<TefasPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,7 +55,7 @@ export default function TefasPage() {
     api.getTefasHoldings()
       .then((data) => {
         if (data.length > 0) {
-          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name })));
+          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
           fetchPricesFor(data);
         }
       })
@@ -106,6 +115,21 @@ export default function TefasPage() {
     }
   }
 
+  async function handleMkkUpload(file: File) {
+    setError("");
+    const imported = await api.importTefasMkk(file);
+    setHoldings(imported.map((h) => ({
+      code: h.code,
+      quantity: h.quantity.toString(),
+      name: h.name,
+      avg_cost_tl: h.avg_cost_tl?.toString() ?? "",
+      distributor: h.distributor ?? "",
+    })));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    fetchPricesFor(imported);
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -113,7 +137,7 @@ export default function TefasPage() {
     setError("");
     try {
       const imported = await api.importTefasHoldings(file);
-      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name })));
+      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
@@ -127,7 +151,7 @@ export default function TefasPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { code: "", quantity: "", name: "" }]);
+    setHoldings((h) => [...h, { code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   }
 
   function removeRow(i: number) {
@@ -149,16 +173,18 @@ export default function TefasPage() {
         <h1 className="text-lg font-semibold text-gray-900">TEFAS Fon Portföyü</h1>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Fon Holdingleri</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">Fon Holdingleri</h2>
+          <MkkHint onUpload={handleMkkUpload} />
+          <div className="mb-4" />
 
           {initialLoad ? (
             <p className="text-sm text-gray-400">Yükleniyor...</p>
           ) : (
             <div className="space-y-3">
               {holdings.map((row, i) => (
-                <div key={i} className="flex gap-2 items-center">
+                <div key={i} className="flex gap-2 items-center flex-wrap">
                   <input
                     placeholder="Fon Kodu (YAC)"
                     value={row.code}
@@ -175,10 +201,28 @@ export default function TefasPage() {
                     className={`w-32 ${INPUT_CLS}`}
                   />
                   <input
+                    placeholder="Ort. maliyet ₺"
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={row.avg_cost_tl}
+                    onChange={(e) => updateRow(i, "avg_cost_tl", e.target.value)}
+                    className={`w-36 ${INPUT_CLS}`}
+                    title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
+                  />
+                  <input
+                    placeholder="Kurum (Ziraat, Foneria...)"
+                    value={row.distributor}
+                    onChange={(e) => updateRow(i, "distributor", e.target.value)}
+                    className={`w-44 ${INPUT_CLS}`}
+                    maxLength={50}
+                    title="Portföy yönetici kurum — aynı fonu farklı kurumlardan ayrı satır olarak izle"
+                  />
+                  <input
                     placeholder="İsim (opsiyonel)"
                     value={row.name}
                     onChange={(e) => updateRow(i, "name", e.target.value)}
-                    className={`flex-1 ${INPUT_CLS}`}
+                    className={`flex-1 min-w-[160px] ${INPUT_CLS}`}
                   />
                   {holdings.length > 1 && (
                     <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1">
@@ -240,16 +284,26 @@ export default function TefasPage() {
                   <th className="px-6 py-3 text-right">Adet</th>
                   <th className="px-6 py-3 text-right">Birim Fiyat</th>
                   <th className="px-6 py-3 text-right">Toplam Değer</th>
+                  {result.some((p) => p.gain_loss_tl !== null) && (
+                    <th className="px-6 py-3 text-right">Kâr / Zarar</th>
+                  )}
                   <th className="px-6 py-3 text-right">Ağırlık</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {result.map((pos) => {
-                  const weight = totalTL > 0 ? (parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
+                {result.map((pos, idx) => {
+                  const weight = totalTL > 0 ? (Number.parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
+                  const gl = pos.gain_loss_tl !== null ? Number.parseFloat(pos.gain_loss_tl) : null;
+                  const glPct = pos.gain_loss_pct;
+                  const isPositive = gl !== null && gl >= 0;
+                  const hasAnyGainLoss = result.some((p) => p.gain_loss_tl !== null);
                   return (
-                    <tr key={pos.code} className="hover:bg-gray-50 transition-colors">
+                    <tr key={`${pos.code}-${pos.distributor ?? "default"}-${idx}`} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <span className="font-mono font-semibold text-gray-900">{pos.code}</span>
+                        {pos.distributor && (
+                          <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">{pos.distributor}</span>
+                        )}
                         {pos.name && (
                           <p className="text-xs text-gray-400 mt-0.5 truncate max-w-48">{pos.name}</p>
                         )}
@@ -257,6 +311,22 @@ export default function TefasPage() {
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.quantity)}</td>
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.unit_price_tl)} ₺</td>
                       <td className="px-6 py-4 text-right font-semibold text-gray-900">{fmtTL(pos.total_value_tl)} ₺</td>
+                      {hasAnyGainLoss && (
+                        <td className="px-6 py-4 text-right">
+                          {gl !== null ? (
+                            <span className={`font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                              {isPositive ? "+" : ""}{fmtTL(gl)} ₺
+                              {glPct !== null && (
+                                <p className="text-xs font-normal">
+                                  {isPositive ? "+" : ""}{glPct.toFixed(2)}%
+                                </p>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 bg-gray-100 rounded-full h-1.5">

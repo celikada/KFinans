@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -5,7 +6,7 @@ from pydantic import BaseModel
 
 
 class AssetPositionOut(BaseModel):
-    id: str
+    id: uuid.UUID
     source_type: str
     provider: str
     asset_type: str
@@ -23,7 +24,7 @@ class AssetPositionOut(BaseModel):
 
 
 class SnapshotOut(BaseModel):
-    id: str
+    id: uuid.UUID
     snapshot_date: date
     total_value_tl: Decimal
     asset_positions: list[AssetPositionOut] = []
@@ -58,3 +59,37 @@ class StakingPosition(BaseModel):
     pending_rewards: Decimal
     staked_value_tl: Decimal
     rewards_value_tl: Decimal
+
+
+class CryptoPositionOut(BaseModel):
+    provider: str
+    symbol: str
+    liquid_quantity: Decimal
+    staked_quantity: Decimal
+    unit_price_usd: Decimal
+    unit_price_tl: Decimal
+    total_value_tl: Decimal
+
+
+class CryptoResponse(BaseModel):
+    positions: list[CryptoPositionOut]
+    errors: dict[str, str]
+
+
+class WalletPositionOut(BaseModel):
+    wallet_id: str
+    chain: str
+    address: str
+    label: str | None
+    symbol: str
+    liquid_quantity: Decimal
+    staked_quantity: Decimal
+    pending_rewards: Decimal
+    unit_price_usd: Decimal
+    unit_price_tl: Decimal
+    total_value_tl: Decimal
+
+
+class WalletResponse(BaseModel):
+    positions: list[WalletPositionOut]
+    errors: dict[str, str]

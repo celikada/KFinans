@@ -43,8 +43,8 @@ class AdvisorService:
 {HORIZON_LABELS[horizon]} için yatırım tavsiyesi ver."""
 
         message = await self._client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
+            model=settings.claude_model,
+            max_tokens=settings.claude_max_tokens,
             system=[
                 {
                     "type": "text",

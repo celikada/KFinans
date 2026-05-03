@@ -20,6 +20,7 @@ class InvestmentAdvice(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     completion_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    credits_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     generated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="investment_advice")

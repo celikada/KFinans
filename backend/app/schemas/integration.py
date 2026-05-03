@@ -1,9 +1,10 @@
+import uuid
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
 
-EXCHANGE_PROVIDERS = {"binance", "icrypex", "tefas", "bes"}
+EXCHANGE_PROVIDERS = {"binance", "binancetr", "icrypex", "tefas", "bes"}
 CHAINS = {"ethereum", "sonic", "avalanche_c", "avalanche_p"}
 
 
@@ -18,7 +19,7 @@ class IntegrationCreate(BaseModel):
 
 
 class IntegrationOut(BaseModel):
-    id: str
+    id: uuid.UUID
     provider: str
     is_active: bool
     last_synced_at: Optional[datetime]
@@ -38,7 +39,7 @@ class WalletCreate(BaseModel):
 
 
 class WalletOut(BaseModel):
-    id: str
+    id: uuid.UUID
     chain: str
     address: str
     label: Optional[str]
