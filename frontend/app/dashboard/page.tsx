@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
+import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 
 
 function fmtTL(val: number) {
@@ -226,7 +226,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between">
-        <Image src="/images/kfinans-logo.png" alt="KFinans" width={80} height={85} />
+        <KFinansLogo />
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/dashboard/settings")}
@@ -406,7 +406,7 @@ export default function DashboardPage() {
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">
         <div className="flex justify-center items-center gap-2">
           <span className="text-xs text-gray-300">Bir</span>
-          <Image src="/images/mayotek-logo.png" alt="Mayotek" width={64} height={22} />
+          <MayotekLogo />
           <span className="text-xs text-gray-300">ürünüdür</span>
         </div>
         <div className="flex gap-3 text-xs text-gray-300">
