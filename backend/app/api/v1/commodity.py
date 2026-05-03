@@ -48,6 +48,7 @@ async def list_commodities(
     prices = await fetch_metal_prices()
     gold_price = prices["gold"]
     silver_price = prices["silver"]
+    silver_price_available = silver_price > 0
 
     positions: list[CommodityPositionOut] = []
     total_gold_gram = Decimal("0")
@@ -94,6 +95,7 @@ async def list_commodities(
         total_value_tl=total_value_tl.quantize(Decimal("0.01")),
         gold_price_tl=gold_price,
         silver_price_tl=silver_price,
+        silver_price_available=silver_price_available,
     )
 
 

@@ -64,12 +64,28 @@ export default function CommoditiesPage() {
   const totalTL = summary ? parseFloat(summary.total_value_tl) : 0;
   const goldPrice = summary ? parseFloat(summary.gold_price_tl) : null;
   const silverPrice = summary ? parseFloat(summary.silver_price_tl) : null;
+  const hasSilverPositions = summary ? summary.positions.some(p => p.metal === "silver") : false;
+  const silverUnavailable = summary ? !summary.silver_price_available && hasSilverPositions : false;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Altın & Gümüş" />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        {silverUnavailable && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold">Gümüş fiyatı şu an çekilemiyor</p>
+              <p className="text-xs mt-0.5 text-amber-700">
+                Yahoo Finance gümüş endpoint&apos;i geçici olarak yanıt vermiyor. Gümüş pozisyonlarınız toplam portföy değerine dahil edilmedi — toplam, gerçek değerden düşük gözüküyor olabilir. 5 dakika sonra tekrar deneyin.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Özet panel */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex flex-wrap gap-6 justify-between items-start">

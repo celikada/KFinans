@@ -98,11 +98,29 @@ async def _fetch_yahoo_price_usd(symbol: str) -> Decimal:
         raise RuntimeError(f"Yahoo Finance'ten {symbol} fiyatı alınamadı") from exc
 
 
+async def _fetch_silver_usd() -> Decimal:
+    """Gümüş için XAG=X dener, başarısız olursa SI=F (futures) fallback eder.
+
+    Her ikisi de başarısız olursa Decimal('0') döner — gümüş eksik olabilir,
+    sayfa altın için çalışmaya devam etmeli.
+    """
+    for symbol in ("XAG=X", "SI=F"):
+        try:
+            return await _fetch_yahoo_price_usd(symbol)
+        except Exception as exc:
+            logger.warning("Gümüş fiyatı %s sembolünden alınamadı: %s", symbol, exc)
+    logger.error("Tüm gümüş sembolleri başarısız — silver=0 dönülüyor")
+    return Decimal("0")
+
+
 async def fetch_metal_prices() -> dict[str, Decimal]:
     """Anlık altın ve gümüş fiyatlarını TRY/gram cinsinden döndürür.
 
     Sonuç 5 dakika in-memory cache'de tutulur.
     Dönüş: {"gold": Decimal, "silver": Decimal}
+
+    Altın ve USD/TRY kritik — başarısız olursa exception yükselir.
+    Gümüş best-effort — başarısız olursa 0 döner.
     """
     global _price_cache
 
@@ -114,15 +132,19 @@ async def fetch_metal_prices() -> dict[str, Decimal]:
         try:
             xau_usd, xag_usd, usd_try = await asyncio.gather(
                 _fetch_yahoo_price_usd("XAU=X"),
-                _fetch_yahoo_price_usd("XAG=X"),
+                _fetch_silver_usd(),
                 _fetch_tcmb_usd_try(),
             )
         except Exception as exc:
-            logger.error("Metal fiyatları çekilemedi: %s", exc)
+            logger.error("Altın veya USD/TRY çekilemedi: %s", exc)
             raise
 
         gold_try_per_gram = (xau_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001"))
-        silver_try_per_gram = (xag_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001"))
+        silver_try_per_gram = (
+            (xag_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001"))
+            if xag_usd > 0
+            else Decimal("0")
+        )
 
         prices = {"gold": gold_try_per_gram, "silver": silver_try_per_gram}
         _price_cache = (now, prices)
