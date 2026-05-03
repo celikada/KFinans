@@ -9,17 +9,17 @@
 
 ## A.1 Mevcut Fonksiyonel Gereksinimler
 
-| Bileşen | Durum |
-|---------|-------|
-| Anthropic SDK entegrasyonu (`AsyncAnthropic`) | ✅ Aktif |
-| `claude-sonnet-4-6` model kullanımı | ✅ Aktif |
-| System prompt + prompt caching (`cache_control: ephemeral`) | ✅ Aktif |
-| Token sayımı `investment_advice` tablosuna kayıt | ✅ Aktif |
-| Türkçe Markdown çıktı | ✅ Aktif |
-| Risk profili + portföy dağılımı + staking pozisyonları prompt'a dahil | ✅ Aktif |
-| Vade etiketi (`medium` / `long`) | ✅ Aktif |
-| Kredi tüketimi | ❌ Eksik (Faz 3) |
-| Endpoint aktif (`POST /advice/generate`) | ⚠️ Kodda var ama frontend kullanmıyor |
+| Bileşen                                                               | Durum                                 |
+| --------------------------------------------------------------------- | ------------------------------------- |
+| Anthropic SDK entegrasyonu (`AsyncAnthropic`)                         | ✅ Aktif                               |
+| `claude-sonnet-4-6` model kullanımı                                   | ✅ Aktif                               |
+| System prompt + prompt caching (`cache_control: ephemeral`)           | ✅ Aktif                               |
+| Token sayımı `investment_advice` tablosuna kayıt                      | ✅ Aktif                               |
+| Türkçe Markdown çıktı                                                 | ✅ Aktif                               |
+| Risk profili + portföy dağılımı + staking pozisyonları prompt'a dahil | ✅ Aktif                               |
+| Vade etiketi (`medium` / `long`)                                      | ✅ Aktif                               |
+| Kredi tüketimi                                                        | ❌ Eksik (Faz 3)                       |
+| Endpoint aktif (`POST /advice/generate`)                              | ⚠️ Kodda var ama frontend kullanmıyor |
 
 **Bu davranışlar regresyon kabul etmez.**
 
@@ -47,11 +47,11 @@ services/advisor.py: AdvisorService.generate(user, snapshot, horizon)
 
 ## A.3 Model Seçimi
 
-| Görev | Model | Gerekçe |
-|-------|-------|---------|
-| Standart tavsiye, vade analizi | `claude-sonnet-4-6` | Hız + kalite dengesi, maliyet uygun |
-| Karmaşık portföy (20+ varlık) | `claude-opus-4-7` | Çok varlık + staking + döviz; derin akıl yürütme |
-| Hızlı sınıflandırma, etiketleme | `claude-haiku-4-5-20251001` | Düşük maliyet, basit görev |
+| Görev                           | Model                       | Gerekçe                                          |
+| ------------------------------- | --------------------------- | ------------------------------------------------ |
+| Standart tavsiye, vade analizi  | `claude-sonnet-4-6`         | Hız + kalite dengesi, maliyet uygun              |
+| Karmaşık portföy (20+ varlık)   | `claude-opus-4-7`           | Çok varlık + staking + döviz; derin akıl yürütme |
+| Hızlı sınıflandırma, etiketleme | `claude-haiku-4-5-20251001` | Düşük maliyet, basit görev                       |
 
 **Çözüldü (2026-05-01):** Model adı ve max_tokens config'e taşındı:
 ```python
@@ -91,13 +91,13 @@ Portföy özeti:
 - ~150-300 token (portföy büyüklüğüne göre)
 
 ### A.4.3 Token Bütçesi
-| Bileşen | Token |
-|---------|-------|
+| Bileşen                   | Token            |
+| ------------------------- | ---------------- |
 | System prompt (cache hit) | ~5 (cache okuma) |
-| User prompt | ~200 |
-| Output (max) | 1024 |
-| **Toplam (cache hit)** | ~1230 |
-| **Toplam (cache miss)** | ~1305 |
+| User prompt               | ~200             |
+| Output (max)              | 1024             |
+| **Toplam (cache hit)**    | ~1230            |
+| **Toplam (cache miss)**   | ~1305            |
 
 ## A.5 Eklenecek İyileştirmeler
 
@@ -175,17 +175,17 @@ Onay zaman damgası `users.anthropic_consent_at` kolonuna kayıt.
 
 ## B.1 Mevcut Fonksiyonel Gereksinimler
 
-| Hesaplama | Durum |
-|-----------|-------|
-| USD/TRY kuru çekme (Binance USDTTRY) | ✅ Aktif |
-| Spot fiyat çekme (Binance) | ✅ Aktif |
-| Kripto pozisyonu TL değer hesabı | ✅ Aktif |
-| Staking + pending rewards ayrımı | ✅ Aktif |
+| Hesaplama                                       | Durum   |
+| ----------------------------------------------- | ------- |
+| USD/TRY kuru çekme (Binance USDTTRY)            | ✅ Aktif |
+| Spot fiyat çekme (Binance)                      | ✅ Aktif |
+| Kripto pozisyonu TL değer hesabı                | ✅ Aktif |
+| Staking + pending rewards ayrımı                | ✅ Aktif |
 | TEFAS fon fiyatı (sonPortfoyDegeri/sonPayAdedi) | ✅ Aktif |
-| Yahoo Finance hisse fiyatı (TRY/USD/GBp) | ✅ Aktif |
-| WoW + MoM değişim hesabı | ✅ Aktif |
-| Varlık türü dağılımı (breakdown) | ✅ Aktif |
-| Ağırlık yüzdesi (`weight_pct`) | ✅ Aktif |
+| Yahoo Finance hisse fiyatı (TRY/USD/GBp)        | ✅ Aktif |
+| WoW + MoM değişim hesabı                        | ✅ Aktif |
+| Varlık türü dağılımı (breakdown)                | ✅ Aktif |
+| Ağırlık yüzdesi (`weight_pct`)                  | ✅ Aktif |
 
 ## B.2 Para Birimi Normalizasyonu
 
@@ -247,10 +247,10 @@ Sonic SFC ödüllerini ve Avalanche P-Chain `potentialReward` alanını kapsar.
 ## B.4 Staking Hesabı
 
 ### B.4.1 Konsept
-| Alan | Anlamı |
-|------|--------|
+| Alan              | Anlamı                        |
+| ----------------- | ----------------------------- |
 | `liquid_quantity` | Cüzdandaki çekilebilir miktar |
-| `staked_quantity` | Validator'da kilitli miktar |
+| `staked_quantity` | Validator'da kilitli miktar   |
 | `pending_rewards` | Henüz claim edilmemiş ödüller |
 
 ### B.4.2 Sonic SFC
