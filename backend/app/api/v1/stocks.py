@@ -199,6 +199,101 @@ async def export_stock_holdings(
     )
 
 
+@router.post("/import-mkk", response_model=list[StockHolding])
+async def import_stocks_mkk(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """MKK e-Yatırımcı 'Tüm Kıymetler' raporundan hisse senetlerini içe aktarır.
+
+    Filtre:
+      Kıymet Sınıfı = 'HS' AND Ek Tanım = 'A' (aktif tradeable pozisyonlar)
+    Mapping:
+      Üye → distributor, Menkul Kıymet Kodu → ticker (.IS suffix ekleniyor),
+      Adet → quantity, Fiyat (TL) → avg_cost_tl, Kıymet Adı → name
+    """
+    import xlrd
+
+    if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Sadece .xls veya .xlsx dosyası kabul edilir",
+        )
+    content = await file.read()
+    try:
+        wb = xlrd.open_workbook(file_contents=content)
+        sh = wb.sheet_by_index(0)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MKK Excel dosyası okunamadı (.xls binary formatında olmalı)",
+        )
+
+    header_row = None
+    for r in range(min(sh.nrows, 20)):
+        if str(sh.cell_value(r, 0)).strip().lower() == "üye":
+            header_row = r
+            break
+    if header_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
+        )
+
+    parsed: list[StockHolding] = []
+    for r in range(header_row + 1, sh.nrows):
+        kind = str(sh.cell_value(r, 2)).strip()
+        ek_tanim = str(sh.cell_value(r, 5)).strip().upper()
+        if kind != "HS" or ek_tanim != "A":
+            continue
+        code_raw = sh.cell_value(r, 3)
+        bist_code = str(code_raw).strip().upper() if code_raw else ""
+        if not bist_code:
+            continue
+        # MKK BIST kodlarını Yahoo Finance ticker formatına çevir
+        ticker = bist_code if "." in bist_code else f"{bist_code}.IS"
+        name_raw = sh.cell_value(r, 4)
+        name = str(name_raw).strip() if name_raw else ""
+        try:
+            qty = float(sh.cell_value(r, 7))
+            price_raw = sh.cell_value(r, 8)
+            price = float(price_raw) if price_raw not in ("", "-") else 0
+        except (TypeError, ValueError):
+            continue
+        if qty <= 0:
+            continue
+        member = str(sh.cell_value(r, 0)).strip() or None
+        if member:
+            member = member[:50]
+        parsed.append(StockHolding(
+            ticker=ticker,
+            quantity=qty,
+            name=name,
+            avg_cost_tl=price if price > 0 else None,
+            distributor=member,
+        ))
+
+    if not parsed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Dosyada 'HS' kıymet sınıfında ve 'A' ek tanımında geçerli kayıt bulunamadı",
+        )
+
+    await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
+    for h in parsed:
+        db.add(StockHoldingModel(
+            user_id=current_user.id,
+            ticker=h.ticker,
+            quantity=h.quantity,
+            name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
+            distributor=h.distributor,
+        ))
+    await db.commit()
+    return parsed
+
+
 @router.post("/import", response_model=list[StockHolding])
 async def import_stock_holdings(
     file: UploadFile = File(...),

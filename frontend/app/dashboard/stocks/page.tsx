@@ -98,6 +98,21 @@ export default function StocksPage() {
     }
   }
 
+  async function handleMkkUpload(file: File) {
+    setError("");
+    const imported = await api.importStockMkk(file);
+    setHoldings(imported.map((h) => ({
+      ticker: h.ticker,
+      quantity: h.quantity.toString(),
+      name: h.name,
+      avg_cost_tl: h.avg_cost_tl?.toString() ?? "",
+      distributor: h.distributor ?? "",
+    })));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    fetchPricesFor(imported);
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -135,7 +150,7 @@ export default function StocksPage() {
             BIST için <span className="font-mono bg-gray-50 px-1 rounded">THYAO.IS</span> formatını,
             ABD için <span className="font-mono bg-gray-50 px-1 rounded">AAPL</span> formatını kullanın.
           </p>
-          <MkkHint />
+          <MkkHint onUpload={handleMkkUpload} />
 
           <HoldingsForm
             holdings={holdings}
