@@ -2,8 +2,8 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { api, setAuth } from "@/lib/api";
+import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
         <div className="flex justify-center mb-6">
-          <Image src="/images/kfinans-logo.png" alt="KFinans" width={140} height={148} priority />
+          <KFinansLogo size="xl" />
         </div>
         <p className="text-sm text-gray-500 mb-8 text-center">Portföyünüze giriş yapın</p>
 
@@ -93,7 +93,7 @@ export default function LoginPage() {
 
       <div className="mt-8 flex flex-col items-center gap-2">
         <p className="text-xs text-gray-400">Bir</p>
-        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={90} height={30} />
+        <MayotekLogo />
         <p className="text-xs text-gray-400">ürünüdür</p>
       </div>
 

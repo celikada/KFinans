@@ -1,8 +1,8 @@
 "use client";
 import { useState, FormEvent } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { api } from "@/lib/api";
+import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 
 type RiskProfile = "conservative" | "balanced" | "aggressive";
 
@@ -83,7 +83,7 @@ export default function RegisterPage() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
           <div className="flex justify-center mb-6">
-            <Image src="/images/kfinans-logo.png" alt="KFinans" width={140} height={148} priority />
+            <KFinansLogo size="xl" />
           </div>
           <h2 className="text-base font-semibold text-gray-900 mb-2">
             {emailSent ? "E-postanı kontrol et" : "Kayıt tamamlandı"}
@@ -121,7 +121,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-8">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
         <div className="flex justify-center mb-6">
-          <Image src="/images/kfinans-logo.png" alt="KFinans" width={140} height={148} priority />
+          <KFinansLogo size="xl" />
         </div>
         <p className="text-sm text-gray-500 mb-8 text-center">Hesap oluştur</p>
 
@@ -264,7 +264,7 @@ export default function RegisterPage() {
 
       <div className="mt-8 flex flex-col items-center gap-2">
         <p className="text-xs text-gray-400">Bir</p>
-        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={90} height={30} />
+        <MayotekLogo />
         <p className="text-xs text-gray-400">ürünüdür</p>
       </div>
 

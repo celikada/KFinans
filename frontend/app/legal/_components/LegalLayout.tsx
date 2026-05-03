@@ -1,7 +1,7 @@
 "use client";
 import { ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { MayotekLogo } from "@/app/_components/Logos";
 
 interface LegalLayoutProps {
   title: string;
@@ -35,7 +35,7 @@ export function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) 
 
       <footer className="mt-auto py-6 flex justify-center items-center gap-2 border-t border-gray-100">
         <span className="text-xs text-gray-300">Bir</span>
-        <Image src="/images/mayotek-logo.png" alt="Mayotek" width={64} height={22} />
+        <MayotekLogo />
         <span className="text-xs text-gray-300">ürünüdür</span>
       </footer>
     </div>
