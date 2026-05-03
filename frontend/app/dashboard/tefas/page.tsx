@@ -158,7 +158,7 @@ export default function TefasPage() {
         <h1 className="text-lg font-semibold text-gray-900">TEFAS Fon Portföyü</h1>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-2">Fon Holdingleri</h2>
           <MkkHint />
@@ -169,7 +169,7 @@ export default function TefasPage() {
           ) : (
             <div className="space-y-3">
               {holdings.map((row, i) => (
-                <div key={i} className="flex gap-2 items-center">
+                <div key={i} className="flex gap-2 items-center flex-wrap">
                   <input
                     placeholder="Fon Kodu (YAC)"
                     value={row.code}
@@ -207,7 +207,7 @@ export default function TefasPage() {
                     placeholder="İsim (opsiyonel)"
                     value={row.name}
                     onChange={(e) => updateRow(i, "name", e.target.value)}
-                    className={`flex-1 ${INPUT_CLS}`}
+                    className={`flex-1 min-w-[160px] ${INPUT_CLS}`}
                   />
                   {holdings.length > 1 && (
                     <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1">

@@ -128,7 +128,7 @@ export default function StocksPage() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Hisse Senedi Portföyü" />
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-1">Hisse Holdingleri</h2>
           <p className="text-xs text-gray-400 mb-2">
