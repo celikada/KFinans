@@ -64,5 +64,6 @@ class CommoditySummaryOut(BaseModel):
     total_value_tl: Decimal
     gold_price_tl: Decimal
     silver_price_tl: Decimal
-    # False ise gümüş fiyatı çekilemedi → gümüş pozisyonları toplam değere dahil değil
+    # False ise ilgili metal fiyatı çekilemedi → o pozisyonlar toplam değere dahil değil
+    gold_price_available: bool = True
     silver_price_available: bool = True

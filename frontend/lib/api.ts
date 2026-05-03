@@ -855,6 +855,7 @@ export interface CommoditySummaryDTO {
   total_value_tl: string;
   gold_price_tl: string;
   silver_price_tl: string;
+  gold_price_available: boolean;
   silver_price_available: boolean;
 }
 
