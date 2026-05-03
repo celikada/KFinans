@@ -29,7 +29,7 @@ export function StockPositionsTable({ positions }: Props) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {positions.map((pos) => {
+          {positions.map((pos, idx) => {
             const weight = totalTL > 0 ? (parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
             const isTRY = pos.currency === "TRY";
             const gl = pos.gain_loss_tl !== null ? parseFloat(pos.gain_loss_tl) : null;
@@ -37,9 +37,12 @@ export function StockPositionsTable({ positions }: Props) {
             const isPositive = gl !== null && gl >= 0;
 
             return (
-              <tr key={pos.ticker} className="hover:bg-gray-50 transition-colors">
+              <tr key={`${pos.ticker}-${pos.distributor ?? "default"}-${idx}`} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4">
                   <span className="font-mono font-semibold text-gray-900">{pos.ticker}</span>
+                  {pos.distributor && (
+                    <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">{pos.distributor}</span>
+                  )}
                   {pos.name && (
                     <p className="text-xs text-gray-400 mt-0.5 truncate max-w-48">{pos.name}</p>
                   )}

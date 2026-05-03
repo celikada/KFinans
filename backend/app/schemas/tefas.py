@@ -7,6 +7,7 @@ class TefasHolding(BaseModel):
     quantity: float
     name: str = ""
     avg_cost_tl: float | None = None  # TRY/adet
+    distributor: str | None = None     # Örn: "Ziraat", "Foneria", "İş Bankası"
 
     @field_validator("avg_cost_tl")
     @classmethod
@@ -26,3 +27,4 @@ class TefasPositionOut(BaseModel):
     cost_basis_tl: Decimal | None = None
     gain_loss_tl: Decimal | None = None
     gain_loss_pct: float | None = None
+    distributor: str | None = None

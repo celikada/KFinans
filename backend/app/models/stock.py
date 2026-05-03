@@ -15,5 +15,6 @@ class StockHolding(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     avg_cost_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    distributor: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="stock_holdings")

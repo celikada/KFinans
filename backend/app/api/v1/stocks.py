@@ -50,6 +50,7 @@ async def get_stock_holdings(
             quantity=float(r.quantity),
             name=r.name,
             avg_cost_tl=float(r.avg_cost_tl) if r.avg_cost_tl is not None else None,
+            distributor=r.distributor,
         )
         for r in rows
     ]
@@ -69,6 +70,7 @@ async def save_stock_holdings(
             quantity=h.quantity,
             name=h.name,
             avg_cost_tl=h.avg_cost_tl,
+            distributor=h.distributor,
         ))
     await db.commit()
     return holdings
@@ -121,6 +123,7 @@ async def stock_preview(
             cost_basis_tl=cost_basis,
             gain_loss_tl=gain_loss,
             gain_loss_pct=gain_loss_pct,
+            distributor=h.distributor,
         ))
     return out
 
@@ -157,7 +160,7 @@ async def export_stock_holdings(
     wb = Workbook()
     ws = wb.active
     ws.title = "Hisse Senedi"
-    headers = ["Ticker", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)"]
+    headers = ["Ticker", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)", "Kurum"]
     header_fill = PatternFill("solid", fgColor="059669")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -181,8 +184,9 @@ async def export_stock_holdings(
         ws.cell(row=row_idx, column=5, value=total if total is not None else "")
         ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
         ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
+        ws.cell(row=row_idx, column=8, value=holding.distributor or "")
 
-    for col, width in zip("ABCDEFG", [12, 14, 30, 18, 18, 18, 18]):
+    for col, width in zip("ABCDEFGH", [12, 14, 30, 18, 18, 18, 18, 20]):
         ws.column_dimensions[col].width = width
 
     buf = io.BytesIO()
@@ -219,6 +223,7 @@ async def import_stock_holdings(
         qty_raw = row[1]
         name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
         avg_cost_raw = row[3] if len(row) > 3 else None
+        distributor_raw = row[7] if len(row) > 7 else None
         if not ticker or ticker == "NONE":
             continue
         try:
@@ -235,7 +240,13 @@ async def import_stock_holdings(
                     avg_cost_tl = None
             except (TypeError, ValueError):
                 avg_cost_tl = None
-        parsed.append(StockHolding(ticker=ticker, quantity=qty, name=name, avg_cost_tl=avg_cost_tl))
+        distributor: str | None = None
+        if distributor_raw:
+            distributor = str(distributor_raw).strip()[:50] or None
+        parsed.append(StockHolding(
+            ticker=ticker, quantity=qty, name=name,
+            avg_cost_tl=avg_cost_tl, distributor=distributor,
+        ))
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
@@ -248,6 +259,7 @@ async def import_stock_holdings(
             quantity=h.quantity,
             name=h.name,
             avg_cost_tl=h.avg_cost_tl,
+            distributor=h.distributor,
         ))
     await db.commit()
     return parsed

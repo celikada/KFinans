@@ -15,12 +15,13 @@ function toDTO(holdings: StockHoldingRow[]): StockHoldingDTO[] {
       quantity: parseFloat(h.quantity),
       name: h.name.trim(),
       avg_cost_tl: h.avg_cost_tl.trim() ? Number.parseFloat(h.avg_cost_tl) : null,
+      distributor: h.distributor.trim() || null,
     }));
 }
 
 export default function StocksPage() {
   const router = useRouter();
-  const [holdings, setHoldings] = useState<StockHoldingRow[]>([{ ticker: "", quantity: "", name: "", avg_cost_tl: "" }]);
+  const [holdings, setHoldings] = useState<StockHoldingRow[]>([{ ticker: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   const [result, setResult] = useState<StockPositionDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -37,7 +38,7 @@ export default function StocksPage() {
     api.getStockHoldings()
       .then((data) => {
         if (data.length > 0) {
-          setHoldings(data.map((h) => ({ ticker: h.ticker, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
+          setHoldings(data.map((h) => ({ ticker: h.ticker, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
           fetchPricesFor(data);
         }
       })
@@ -103,7 +104,7 @@ export default function StocksPage() {
     setError("");
     try {
       const imported = await api.importStockHoldings(file);
-      setHoldings(imported.map((h) => ({ ticker: h.ticker, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
+      setHoldings(imported.map((h) => ({ ticker: h.ticker, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
@@ -116,7 +117,7 @@ export default function StocksPage() {
     }
   }
 
-  function addRow() { setHoldings((h) => [...h, { ticker: "", quantity: "", name: "", avg_cost_tl: "" }]); }
+  function addRow() { setHoldings((h) => [...h, { ticker: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]); }
   function removeRow(i: number) { setHoldings((h) => h.filter((_, idx) => idx !== i)); }
   function updateRow(i: number, field: keyof StockHoldingRow, val: string) {
     setHoldings((h) => h.map((row, idx) => idx === i ? { ...row, [field]: val } : row));

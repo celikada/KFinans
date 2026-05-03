@@ -581,6 +581,7 @@ export interface StockHoldingDTO {
   quantity: number;
   name: string;
   avg_cost_tl?: number | null;
+  distributor?: string | null;
 }
 
 export interface StockPositionDTO {
@@ -595,6 +596,7 @@ export interface StockPositionDTO {
   cost_basis_tl: string | null;
   gain_loss_tl: string | null;
   gain_loss_pct: number | null;
+  distributor: string | null;
 }
 
 export interface WalletDTO {
@@ -624,6 +626,7 @@ export interface TefasHoldingDTO {
   quantity: number;
   name: string;
   avg_cost_tl?: number | null;
+  distributor?: string | null;
 }
 
 export interface BesHoldingDTO {
@@ -645,6 +648,7 @@ export interface TefasPosition {
   cost_basis_tl: string | null;
   gain_loss_tl: string | null;
   gain_loss_pct: number | null;
+  distributor: string | null;
 }
 
 export type IncomeCategory =

@@ -7,6 +7,7 @@ class StockHolding(BaseModel):
     quantity: float
     name: str = ""
     avg_cost_tl: float | None = None  # TRY/adet
+    distributor: str | None = None     # Örn: "İş Yatırım", "Garanti BBVA Yatırım"
 
     @field_validator("avg_cost_tl")
     @classmethod
@@ -29,3 +30,4 @@ class StockPositionOut(BaseModel):
     cost_basis_tl: Decimal | None = None
     gain_loss_tl: Decimal | None = None
     gain_loss_pct: float | None = None
+    distributor: str | None = None

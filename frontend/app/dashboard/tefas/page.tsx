@@ -8,6 +8,7 @@ interface Holding {
   quantity: string;
   name: string;
   avg_cost_tl: string;
+  distributor: string;
 }
 
 const INPUT_CLS =
@@ -29,12 +30,13 @@ function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
       quantity: Number.parseFloat(h.quantity),
       name: h.name.trim(),
       avg_cost_tl: h.avg_cost_tl.trim() ? Number.parseFloat(h.avg_cost_tl) : null,
+      distributor: h.distributor.trim() || null,
     }));
 }
 
 export default function TefasPage() {
   const router = useRouter();
-  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "" }]);
+  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   const [result, setResult] = useState<TefasPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,7 +54,7 @@ export default function TefasPage() {
     api.getTefasHoldings()
       .then((data) => {
         if (data.length > 0) {
-          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
+          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
           fetchPricesFor(data);
         }
       })
@@ -119,7 +121,7 @@ export default function TefasPage() {
     setError("");
     try {
       const imported = await api.importTefasHoldings(file);
-      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
+      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
@@ -133,7 +135,7 @@ export default function TefasPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { code: "", quantity: "", name: "", avg_cost_tl: "" }]);
+    setHoldings((h) => [...h, { code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   }
 
   function removeRow(i: number) {
@@ -189,6 +191,14 @@ export default function TefasPage() {
                     onChange={(e) => updateRow(i, "avg_cost_tl", e.target.value)}
                     className={`w-36 ${INPUT_CLS}`}
                     title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
+                  />
+                  <input
+                    placeholder="Kurum (Ziraat, Foneria...)"
+                    value={row.distributor}
+                    onChange={(e) => updateRow(i, "distributor", e.target.value)}
+                    className={`w-44 ${INPUT_CLS}`}
+                    maxLength={50}
+                    title="Portföy yönetici kurum — aynı fonu farklı kurumlardan ayrı satır olarak izle"
                   />
                   <input
                     placeholder="İsim (opsiyonel)"
@@ -263,16 +273,19 @@ export default function TefasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {result.map((pos) => {
+                {result.map((pos, idx) => {
                   const weight = totalTL > 0 ? (Number.parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
                   const gl = pos.gain_loss_tl !== null ? Number.parseFloat(pos.gain_loss_tl) : null;
                   const glPct = pos.gain_loss_pct;
                   const isPositive = gl !== null && gl >= 0;
                   const hasAnyGainLoss = result.some((p) => p.gain_loss_tl !== null);
                   return (
-                    <tr key={pos.code} className="hover:bg-gray-50 transition-colors">
+                    <tr key={`${pos.code}-${pos.distributor ?? "default"}-${idx}`} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <span className="font-mono font-semibold text-gray-900">{pos.code}</span>
+                        {pos.distributor && (
+                          <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">{pos.distributor}</span>
+                        )}
                         {pos.name && (
                           <p className="text-xs text-gray-400 mt-0.5 truncate max-w-48">{pos.name}</p>
                         )}
