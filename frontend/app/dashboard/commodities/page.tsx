@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, type CommoditySummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
+import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { CommodityForm } from "./_components/CommodityForm";
 import { CommodityList } from "./_components/CommodityList";
 
@@ -12,6 +12,8 @@ export default function CommoditiesPage() {
   const [summary, setSummary] = useState<CommoditySummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -30,6 +32,30 @@ export default function CommoditiesPage() {
     if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
   }, [refresh, router]);
+
+  async function handleExport() {
+    try {
+      await api.exportCommodities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export başarısız");
+    }
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setError("");
+    try {
+      await api.importCommodities(file);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import başarısız");
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
 
   const goldTotal = summary ? parseFloat(summary.total_value_tl) > 0
     ? summary.positions.filter(p => p.metal === "gold").reduce((s, p) => s + parseFloat(p.total_value_tl), 0)
@@ -54,7 +80,7 @@ export default function CommoditiesPage() {
                 <p className="text-xs text-gray-400 mt-1">{summary.positions.length} pozisyon</p>
               )}
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-wrap items-center gap-4">
               {goldTotal > 0 && (
                 <div className="text-right">
                   <p className="text-xs text-gray-400 mb-1">Altın</p>
@@ -69,6 +95,25 @@ export default function CommoditiesPage() {
                   <p className="text-xs text-gray-400">{parseFloat(summary?.total_silver_gram ?? "0").toFixed(2)} g</p>
                 </div>
               )}
+              <div className="flex gap-2">
+                <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
+                  Excel İndir
+                </button>
+                <button
+                  onClick={() => importRef.current?.click()}
+                  disabled={importing}
+                  className={TOOLBAR_BTN_CLS}
+                >
+                  {importing ? "Yükleniyor..." : "Excel Yükle"}
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </div>
             </div>
           </div>
 

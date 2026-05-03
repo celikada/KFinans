@@ -36,6 +36,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
+export interface UserMeDTO {
+  email: string;
+  risk_profile: "conservative" | "balanced" | "aggressive";
+  created_at: string;
+  email_verified: boolean;
+  credit_balance: number;
+}
+
+export const RISK_PROFILE_LABELS: Record<"conservative" | "balanced" | "aggressive", string> = {
+  conservative: "Muhafazakâr",
+  balanced: "Dengeli",
+  aggressive: "Agresif",
+};
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ access_token: string; refresh_token: string; token_type: string }>(
@@ -304,6 +318,105 @@ export const api = {
     }),
   deleteCommodity: (id: number) =>
     request<void>(`/portfolio/commodities/${id}`, { method: "DELETE" }),
+  exportCommodities: async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/portfolio/commodities/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "altin-gumus.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importCommodities: async (file: File): Promise<CommodityDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/portfolio/commodities/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+
+  // Harcama Excel export/import
+  exportExpenses: async (year?: number, month?: number) => {
+    const token = getToken();
+    const q = new URLSearchParams();
+    if (year !== undefined) q.set("year", String(year));
+    if (month !== undefined) q.set("month", String(month));
+    const qs = q.toString();
+    const res = await fetch(`${BASE}/expenses/export${qs ? `?${qs}` : ""}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "harcamalar.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importExpenses: async (file: File): Promise<ExpenseDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/expenses/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+
+  // Gelir Excel export/import
+  exportIncomes: async (year?: number, month?: number) => {
+    const token = getToken();
+    const q = new URLSearchParams();
+    if (year !== undefined) q.set("year", String(year));
+    if (month !== undefined) q.set("month", String(month));
+    const qs = q.toString();
+    const res = await fetch(`${BASE}/income/export${qs ? `?${qs}` : ""}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gelirler.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importIncomes: async (file: File): Promise<IncomeDTO[]> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/income/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? res.statusText);
+    }
+    return res.json();
+  },
 
   // Bütçe vs. Gerçekleşen
   listBudgets: () => request<BudgetDTO[]>("/budgets"),
@@ -316,6 +429,21 @@ export const api = {
     request<void>(`/budgets/${category}`, { method: "DELETE" }),
   getBudgetComparison: (year: number, month: number) =>
     request<BudgetComparisonDTO[]>(`/budgets/comparison?year=${year}&month=${month}`),
+
+  // Kullanıcı profili & ayarlar
+  getMe: () => request<UserMeDTO>("/user/me"),
+  updateProfile: (risk_profile: string) =>
+    request<UserMeDTO>("/user/profile", {
+      method: "PUT",
+      body: JSON.stringify({ risk_profile }),
+    }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ detail: string }>("/user/password", {
+      method: "PUT",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+  deleteAccount: () =>
+    request<{ detail: string }>("/user/me", { method: "DELETE" }),
 
   getBesHoldings: () => request<BesHoldingDTO[]>("/portfolio/bes/holdings"),
 
@@ -452,6 +580,7 @@ export interface StockHoldingDTO {
   ticker: string;
   quantity: number;
   name: string;
+  avg_cost_tl?: number | null;
 }
 
 export interface StockPositionDTO {
@@ -462,6 +591,10 @@ export interface StockPositionDTO {
   unit_price_original: string;
   unit_price_tl: string;
   total_value_tl: string;
+  avg_cost_tl: string | null;
+  cost_basis_tl: string | null;
+  gain_loss_tl: string | null;
+  gain_loss_pct: number | null;
 }
 
 export interface WalletDTO {
@@ -490,6 +623,7 @@ export interface TefasHoldingDTO {
   code: string;
   quantity: number;
   name: string;
+  avg_cost_tl?: number | null;
 }
 
 export interface BesHoldingDTO {
@@ -507,6 +641,10 @@ export interface TefasPosition {
   quantity: string;
   unit_price_tl: string;
   total_value_tl: string;
+  avg_cost_tl: string | null;
+  cost_basis_tl: string | null;
+  gain_loss_tl: string | null;
+  gain_loss_pct: number | null;
 }
 
 export type IncomeCategory =

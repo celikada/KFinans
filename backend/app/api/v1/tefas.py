@@ -1,5 +1,6 @@
 import io
 import logging
+from decimal import Decimal
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import StreamingResponse
@@ -23,7 +24,15 @@ async def get_tefas_holdings(
         select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id)
     )
     rows = result.scalars().all()
-    return [TefasHolding(code=r.code, quantity=float(r.quantity), name=r.name) for r in rows]
+    return [
+        TefasHolding(
+            code=r.code,
+            quantity=float(r.quantity),
+            name=r.name,
+            avg_cost_tl=float(r.avg_cost_tl) if r.avg_cost_tl is not None else None,
+        )
+        for r in rows
+    ]
 
 
 @router.put("/holdings", response_model=list[TefasHolding])
@@ -34,9 +43,30 @@ async def save_tefas_holdings(
 ):
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in holdings:
-        db.add(TefasHoldingModel(user_id=current_user.id, code=h.code.upper(), quantity=h.quantity, name=h.name))
+        db.add(TefasHoldingModel(
+            user_id=current_user.id,
+            code=h.code.upper(),
+            quantity=h.quantity,
+            name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
+        ))
     await db.commit()
     return holdings
+
+
+def _calc_gain_loss(
+    total_value_tl: Decimal,
+    qty: Decimal,
+    avg_cost_tl: float | None,
+) -> tuple[Decimal | None, Decimal | None, float | None]:
+    """Kâr/zarar hesaplar. (cost_basis, gain_loss_tl, gain_loss_pct) döner."""
+    if avg_cost_tl is None:
+        return None, None, None
+    avg_cost = Decimal(str(avg_cost_tl))
+    cost_basis = (qty * avg_cost).quantize(Decimal("0.01"))
+    gain_loss = (total_value_tl - cost_basis).quantize(Decimal("0.01"))
+    gain_loss_pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
+    return cost_basis, gain_loss, gain_loss_pct
 
 
 @router.post("/preview", response_model=list[TefasPositionOut])
@@ -45,21 +75,38 @@ async def tefas_preview(
     _: Annotated[User, Depends(get_current_user)],
 ):
     from app.services.tefas import TefasService
+
+    # avg_cost_tl'yi tefas servisine geçirmek için sadece gerekli alanları ver
     svc = TefasService([{"code": h.code, "quantity": h.quantity, "name": h.name} for h in holdings])
     try:
         assets = await svc.fetch()
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    return [
-        TefasPositionOut(
+
+    # avg_cost_tl lookup — code -> float | None
+    cost_map: dict[str, float | None] = {h.code.upper(): h.avg_cost_tl for h in holdings}
+
+    out = []
+    for a in assets:
+        qty = a.liquid_quantity
+        total_value_tl = (qty * a.unit_price_tl).quantize(Decimal("0.01"))
+        avg_cost_raw = cost_map.get(a.symbol.upper())
+
+        avg_cost_dec = Decimal(str(avg_cost_raw)) if avg_cost_raw is not None else None
+        cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(total_value_tl, qty, avg_cost_raw)
+
+        out.append(TefasPositionOut(
             code=a.symbol,
             name=a.name,
-            quantity=a.liquid_quantity,
+            quantity=qty,
             unit_price_tl=a.unit_price_tl,
-            total_value_tl=a.liquid_quantity * a.unit_price_tl,
-        )
-        for a in assets
-    ]
+            total_value_tl=total_value_tl,
+            avg_cost_tl=avg_cost_dec,
+            cost_basis_tl=cost_basis,
+            gain_loss_tl=gain_loss,
+            gain_loss_pct=gain_loss_pct,
+        ))
+    return out
 
 
 @router.get("/export")
@@ -67,7 +114,6 @@ async def export_tefas_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from decimal import Decimal
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
     from app.services.tefas import TefasService
@@ -89,7 +135,7 @@ async def export_tefas_holdings(
     wb = Workbook()
     ws = wb.active
     ws.title = "TEFAS Holdingleri"
-    headers = ["Fon Kodu", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)"]
+    headers = ["Fon Kodu", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)"]
     header_fill = PatternFill("solid", fgColor="1D4ED8")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -100,14 +146,21 @@ async def export_tefas_holdings(
 
     for row_idx, holding in enumerate(rows, 2):
         unit_price = prices.get(holding.code, Decimal("0"))
-        total = float(holding.quantity) * float(unit_price)
+        total = float(holding.quantity) * float(unit_price) if unit_price else None
+        avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
+        gain_loss = None
+        if total is not None and avg_cost is not None:
+            cost_basis = float(holding.quantity) * avg_cost
+            gain_loss = round(total - cost_basis, 2)
         ws.cell(row=row_idx, column=1, value=holding.code)
         ws.cell(row=row_idx, column=2, value=float(holding.quantity))
         ws.cell(row=row_idx, column=3, value=holding.name)
         ws.cell(row=row_idx, column=4, value=float(unit_price) if unit_price else "")
-        ws.cell(row=row_idx, column=5, value=total if unit_price else "")
+        ws.cell(row=row_idx, column=5, value=total if total is not None else "")
+        ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
+        ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
 
-    for col, width in zip("ABCDE", [12, 14, 30, 18, 18]):
+    for col, width in zip("ABCDEFG", [12, 14, 30, 18, 18, 18, 18]):
         ws.column_dimensions[col].width = width
 
     buf = io.BytesIO()
@@ -143,6 +196,7 @@ async def import_tefas_holdings(
         code = str(row[0]).strip().upper() if row[0] else ""
         qty_raw = row[1]
         name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+        avg_cost_raw = row[3] if len(row) > 3 else None
         if not code or code == "NONE":
             continue
         try:
@@ -151,13 +205,27 @@ async def import_tefas_holdings(
             continue
         if qty <= 0:
             continue
-        parsed.append(TefasHolding(code=code, quantity=qty, name=name))
+        avg_cost_tl: float | None = None
+        if avg_cost_raw is not None:
+            try:
+                avg_cost_tl = float(avg_cost_raw)
+                if avg_cost_tl <= 0:
+                    avg_cost_tl = None
+            except (TypeError, ValueError):
+                avg_cost_tl = None
+        parsed.append(TefasHolding(code=code, quantity=qty, name=name, avg_cost_tl=avg_cost_tl))
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
 
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(TefasHoldingModel(user_id=current_user.id, code=h.code, quantity=h.quantity, name=h.name))
+        db.add(TefasHoldingModel(
+            user_id=current_user.id,
+            code=h.code,
+            quantity=h.quantity,
+            name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
+        ))
     await db.commit()
     return parsed

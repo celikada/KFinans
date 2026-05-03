@@ -5,6 +5,7 @@ export interface StockHoldingRow {
   ticker: string;
   quantity: string;
   name: string;
+  avg_cost_tl: string;
 }
 
 interface Props {
@@ -36,7 +37,17 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
             min="0"
             value={row.quantity}
             onChange={(e) => onUpdate(i, "quantity", e.target.value)}
-            className={`w-32 ${INPUT_CLS}`}
+            className={`w-28 ${INPUT_CLS}`}
+          />
+          <input
+            placeholder="Ort. maliyet ₺"
+            type="number"
+            min="0"
+            step="0.01"
+            value={row.avg_cost_tl}
+            onChange={(e) => onUpdate(i, "avg_cost_tl", e.target.value)}
+            className={`w-36 ${INPUT_CLS}`}
+            title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
           />
           <input
             placeholder="İsim (opsiyonel)"

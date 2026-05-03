@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
+import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { ExpenseForm } from "./_components/ExpenseForm";
 import { ExpenseTable } from "./_components/ExpenseTable";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
@@ -19,6 +19,8 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [overBudget, setOverBudget] = useState<BudgetComparisonDTO[]>([]);
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
@@ -61,6 +63,30 @@ export default function ExpensesPage() {
     refresh();
   }
 
+  async function handleExport() {
+    try {
+      await api.exportExpenses(year, month);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export başarısız");
+    }
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setError("");
+    try {
+      await api.importExpenses(file);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import başarısız");
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
+
   const total = summary ? parseFloat(summary.total) : 0;
 
   return (
@@ -68,7 +94,7 @@ export default function ExpensesPage() {
       <PageHeader title="Harcamalar" />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        {/* Üst panel: ay seçici + toplam */}
+        {/* Üst panel: ay seçici + toplam + toolbar */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">Bu ay toplam</p>
@@ -77,7 +103,26 @@ export default function ExpensesPage() {
               <p className="text-xs text-gray-400 mt-1">{summary.count} kayıt</p>
             )}
           </div>
-          <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
+          <div className="flex flex-wrap items-center gap-3">
+            <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
+            <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
+              Excel İndir
+            </button>
+            <button
+              onClick={() => importRef.current?.click()}
+              disabled={importing}
+              className={TOOLBAR_BTN_CLS}
+            >
+              {importing ? "Yükleniyor..." : "Excel Yükle"}
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </div>
         </div>
 
         {/* Bütçe aşım uyarısı */}

@@ -76,7 +76,7 @@ export function CommodityForm({ onAdded }: Props) {
           <select
             value={metal}
             onChange={(e) => setMetal(e.target.value as CommodityMetal)}
-            className="flex-1 min-w-[140px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="flex-1 min-w-[140px] border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="gold">Altın (gram)</option>
             <option value="silver">Gümüş (gram)</option>
@@ -92,7 +92,7 @@ export function CommodityForm({ onAdded }: Props) {
                 setMetal(e.target.value as CommodityMetal);
                 setBigaCode(e.target.value === "gold" ? "A01" : "G01");
               }}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
             >
               <option value="gold">Altın</option>
               <option value="silver">Gümüş</option>
@@ -100,7 +100,7 @@ export function CommodityForm({ onAdded }: Props) {
             <select
               value={bigaCode}
               onChange={(e) => setBigaCode(e.target.value)}
-              className="flex-1 min-w-[120px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="flex-1 min-w-[120px] border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
             >
               {bigaCodes.map((c) => (
                 <option key={c} value={c}>{c} — {BIGA_GRAM_WEIGHTS[c]}g</option>
@@ -114,7 +114,7 @@ export function CommodityForm({ onAdded }: Props) {
           <select
             value={coinType}
             onChange={(e) => setCoinType(e.target.value as CoinType)}
-            className="flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="flex-1 min-w-[200px] border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             {COIN_TYPES.map((c) => (
               <option key={c} value={c}>{COIN_LABELS[c]}</option>
@@ -131,7 +131,7 @@ export function CommodityForm({ onAdded }: Props) {
             placeholder={unitType === "gram" ? "Gram" : "Adet"}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="flex-1 text-sm focus:outline-none w-24"
+            className="flex-1 text-sm text-gray-900 focus:outline-none placeholder:text-gray-400 w-24"
           />
           <span className="text-gray-400 text-sm ml-1">{unitType === "gram" ? "g" : "adet"}</span>
         </div>
@@ -147,13 +147,15 @@ export function CommodityForm({ onAdded }: Props) {
 
       <input
         type="text"
-        placeholder="Not (opsiyonel)"
+        placeholder="Not (opsiyonel — örn. Ziraat Bankası)"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-gray-400"
       />
 
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && (
+        <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+      )}
     </form>
   );
 }

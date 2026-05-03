@@ -46,7 +46,7 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                 {budget !== null && (
                   <button
                     onClick={() => onDelete(row.category)}
-                    className="text-gray-300 hover:text-red-400 text-xs transition-colors"
+                    className="text-gray-400 hover:text-red-500 text-sm font-medium transition-colors"
                     title="Bütçeyi kaldır"
                   >
                     ✕

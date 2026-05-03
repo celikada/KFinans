@@ -8,6 +8,7 @@ interface Props {
 
 export function StockPositionsTable({ positions }: Props) {
   const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+  const hasGainLoss = positions.some((p) => p.gain_loss_tl !== null);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -23,6 +24,7 @@ export function StockPositionsTable({ positions }: Props) {
             <th className="px-6 py-3 text-right">Adet</th>
             <th className="px-6 py-3 text-right">Birim Fiyat</th>
             <th className="px-6 py-3 text-right">Toplam Değer</th>
+            {hasGainLoss && <th className="px-6 py-3 text-right">Kâr / Zarar</th>}
             <th className="px-6 py-3 text-right">Ağırlık</th>
           </tr>
         </thead>
@@ -30,6 +32,10 @@ export function StockPositionsTable({ positions }: Props) {
           {positions.map((pos) => {
             const weight = totalTL > 0 ? (parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
             const isTRY = pos.currency === "TRY";
+            const gl = pos.gain_loss_tl !== null ? parseFloat(pos.gain_loss_tl) : null;
+            const glPct = pos.gain_loss_pct;
+            const isPositive = gl !== null && gl >= 0;
+
             return (
               <tr key={pos.ticker} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4">
@@ -53,6 +59,22 @@ export function StockPositionsTable({ positions }: Props) {
                 <td className="px-6 py-4 text-right font-semibold text-gray-900">
                   {fmtTL(pos.total_value_tl)} ₺
                 </td>
+                {hasGainLoss && (
+                  <td className="px-6 py-4 text-right">
+                    {gl !== null ? (
+                      <span className={`font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                        {isPositive ? "+" : ""}{fmtTL(gl)} ₺
+                        {glPct !== null && (
+                          <p className="text-xs font-normal">
+                            {isPositive ? "+" : ""}{glPct.toFixed(2)}%
+                          </p>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <div className="w-16 bg-gray-100 rounded-full h-1.5">

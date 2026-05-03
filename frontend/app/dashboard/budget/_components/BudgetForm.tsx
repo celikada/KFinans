@@ -36,7 +36,7 @@ export function BudgetForm({ onSaved }: Props) {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="flex-1 min-w-[160px] border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="flex-1 min-w-[160px] border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
         >
           {EXPENSE_CATEGORIES.map((c) => (
             <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>
@@ -50,7 +50,7 @@ export function BudgetForm({ onSaved }: Props) {
             placeholder="Aylık limit (₺)"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="flex-1 text-sm focus:outline-none"
+            className="flex-1 text-sm text-gray-900 focus:outline-none placeholder:text-gray-400"
           />
           <span className="text-gray-400 text-sm ml-1">₺</span>
         </div>

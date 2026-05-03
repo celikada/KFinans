@@ -1,12 +1,14 @@
 import uuid
 from typing import AsyncGenerator
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import AsyncSessionLocal
+
 from app.core.security import decode_token
+from app.database import AsyncSessionLocal
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -46,5 +48,7 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
     if user is None:
+        raise credentials_exception
+    if user.deleted_at is not None:
         raise credentials_exception
     return user

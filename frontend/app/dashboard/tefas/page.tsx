@@ -7,6 +7,7 @@ interface Holding {
   code: string;
   quantity: string;
   name: string;
+  avg_cost_tl: string;
 }
 
 const INPUT_CLS =
@@ -22,13 +23,18 @@ function fmtTL(val: string | number) {
 
 function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
   return holdings
-    .filter((h) => h.code.trim() && parseFloat(h.quantity) > 0)
-    .map((h) => ({ code: h.code.trim().toUpperCase(), quantity: parseFloat(h.quantity), name: h.name.trim() }));
+    .filter((h) => h.code.trim() && Number.parseFloat(h.quantity) > 0)
+    .map((h) => ({
+      code: h.code.trim().toUpperCase(),
+      quantity: Number.parseFloat(h.quantity),
+      name: h.name.trim(),
+      avg_cost_tl: h.avg_cost_tl.trim() ? Number.parseFloat(h.avg_cost_tl) : null,
+    }));
 }
 
 export default function TefasPage() {
   const router = useRouter();
-  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "" }]);
+  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "" }]);
   const [result, setResult] = useState<TefasPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,7 +52,7 @@ export default function TefasPage() {
     api.getTefasHoldings()
       .then((data) => {
         if (data.length > 0) {
-          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name })));
+          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
           fetchPricesFor(data);
         }
       })
@@ -113,7 +119,7 @@ export default function TefasPage() {
     setError("");
     try {
       const imported = await api.importTefasHoldings(file);
-      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name })));
+      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "" })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
@@ -127,7 +133,7 @@ export default function TefasPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { code: "", quantity: "", name: "" }]);
+    setHoldings((h) => [...h, { code: "", quantity: "", name: "", avg_cost_tl: "" }]);
   }
 
   function removeRow(i: number) {
@@ -173,6 +179,16 @@ export default function TefasPage() {
                     value={row.quantity}
                     onChange={(e) => updateRow(i, "quantity", e.target.value)}
                     className={`w-32 ${INPUT_CLS}`}
+                  />
+                  <input
+                    placeholder="Ort. maliyet ₺"
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={row.avg_cost_tl}
+                    onChange={(e) => updateRow(i, "avg_cost_tl", e.target.value)}
+                    className={`w-36 ${INPUT_CLS}`}
+                    title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
                   />
                   <input
                     placeholder="İsim (opsiyonel)"
@@ -240,12 +256,19 @@ export default function TefasPage() {
                   <th className="px-6 py-3 text-right">Adet</th>
                   <th className="px-6 py-3 text-right">Birim Fiyat</th>
                   <th className="px-6 py-3 text-right">Toplam Değer</th>
+                  {result.some((p) => p.gain_loss_tl !== null) && (
+                    <th className="px-6 py-3 text-right">Kâr / Zarar</th>
+                  )}
                   <th className="px-6 py-3 text-right">Ağırlık</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {result.map((pos) => {
-                  const weight = totalTL > 0 ? (parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
+                  const weight = totalTL > 0 ? (Number.parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
+                  const gl = pos.gain_loss_tl !== null ? Number.parseFloat(pos.gain_loss_tl) : null;
+                  const glPct = pos.gain_loss_pct;
+                  const isPositive = gl !== null && gl >= 0;
+                  const hasAnyGainLoss = result.some((p) => p.gain_loss_tl !== null);
                   return (
                     <tr key={pos.code} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
@@ -257,6 +280,22 @@ export default function TefasPage() {
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.quantity)}</td>
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.unit_price_tl)} ₺</td>
                       <td className="px-6 py-4 text-right font-semibold text-gray-900">{fmtTL(pos.total_value_tl)} ₺</td>
+                      {hasAnyGainLoss && (
+                        <td className="px-6 py-4 text-right">
+                          {gl !== null ? (
+                            <span className={`font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                              {isPositive ? "+" : ""}{fmtTL(gl)} ₺
+                              {glPct !== null && (
+                                <p className="text-xs font-normal">
+                                  {isPositive ? "+" : ""}{glPct.toFixed(2)}%
+                                </p>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 bg-gray-100 rounded-full h-1.5">

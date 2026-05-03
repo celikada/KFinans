@@ -44,7 +44,15 @@ async def get_stock_holdings(
         select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id)
     )
     rows = result.scalars().all()
-    return [StockHolding(ticker=r.ticker, quantity=float(r.quantity), name=r.name) for r in rows]
+    return [
+        StockHolding(
+            ticker=r.ticker,
+            quantity=float(r.quantity),
+            name=r.name,
+            avg_cost_tl=float(r.avg_cost_tl) if r.avg_cost_tl is not None else None,
+        )
+        for r in rows
+    ]
 
 
 @router.put("/holdings", response_model=list[StockHolding])
@@ -60,6 +68,7 @@ async def save_stock_holdings(
             ticker=h.ticker.upper(),
             quantity=h.quantity,
             name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
         ))
     await db.commit()
     return holdings
@@ -89,6 +98,17 @@ async def stock_preview(
         price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd)
 
         qty = Decimal(str(h.quantity))
+        total_value_tl = (qty * price_tl).quantize(Decimal("0.01"))
+
+        if h.avg_cost_tl is not None:
+            avg_cost = Decimal(str(h.avg_cost_tl))
+            cost_basis = (qty * avg_cost).quantize(Decimal("0.01"))
+            gain_loss = (total_value_tl - cost_basis).quantize(Decimal("0.01"))
+            gain_loss_pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
+        else:
+            avg_cost = cost_basis = gain_loss = None
+            gain_loss_pct = None
+
         out.append(StockPositionOut(
             ticker=ticker,
             name=h.name or q.name,
@@ -96,7 +116,11 @@ async def stock_preview(
             currency=q.currency,
             unit_price_original=q.price,
             unit_price_tl=price_tl,
-            total_value_tl=(qty * price_tl).quantize(Decimal("0.01")),
+            total_value_tl=total_value_tl,
+            avg_cost_tl=avg_cost,
+            cost_basis_tl=cost_basis,
+            gain_loss_tl=gain_loss,
+            gain_loss_pct=gain_loss_pct,
         ))
     return out
 
@@ -133,7 +157,7 @@ async def export_stock_holdings(
     wb = Workbook()
     ws = wb.active
     ws.title = "Hisse Senedi"
-    headers = ["Ticker", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)"]
+    headers = ["Ticker", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)"]
     header_fill = PatternFill("solid", fgColor="059669")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -144,14 +168,21 @@ async def export_stock_holdings(
 
     for row_idx, holding in enumerate(rows, 2):
         price_tl, _ = quotes.get(holding.ticker, (None, None))
-        total = float(holding.quantity) * float(price_tl) if price_tl else ""
+        total = float(holding.quantity) * float(price_tl) if price_tl else None
+        avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
+        gain_loss = None
+        if total is not None and avg_cost is not None:
+            cost_basis = float(holding.quantity) * avg_cost
+            gain_loss = round(total - cost_basis, 2)
         ws.cell(row=row_idx, column=1, value=holding.ticker)
         ws.cell(row=row_idx, column=2, value=float(holding.quantity))
         ws.cell(row=row_idx, column=3, value=holding.name)
         ws.cell(row=row_idx, column=4, value=float(price_tl) if price_tl else "")
-        ws.cell(row=row_idx, column=5, value=total)
+        ws.cell(row=row_idx, column=5, value=total if total is not None else "")
+        ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
+        ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
 
-    for col, width in zip("ABCDE", [12, 14, 30, 18, 18]):
+    for col, width in zip("ABCDEFG", [12, 14, 30, 18, 18, 18, 18]):
         ws.column_dimensions[col].width = width
 
     buf = io.BytesIO()
@@ -187,6 +218,7 @@ async def import_stock_holdings(
         ticker = str(row[0]).strip().upper() if row[0] else ""
         qty_raw = row[1]
         name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+        avg_cost_raw = row[3] if len(row) > 3 else None
         if not ticker or ticker == "NONE":
             continue
         try:
@@ -195,13 +227,27 @@ async def import_stock_holdings(
             continue
         if qty <= 0:
             continue
-        parsed.append(StockHolding(ticker=ticker, quantity=qty, name=name))
+        avg_cost_tl: float | None = None
+        if avg_cost_raw is not None:
+            try:
+                avg_cost_tl = float(avg_cost_raw)
+                if avg_cost_tl <= 0:
+                    avg_cost_tl = None
+            except (TypeError, ValueError):
+                avg_cost_tl = None
+        parsed.append(StockHolding(ticker=ticker, quantity=qty, name=name, avg_cost_tl=avg_cost_tl))
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
 
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(StockHoldingModel(user_id=current_user.id, ticker=h.ticker, quantity=h.quantity, name=h.name))
+        db.add(StockHoldingModel(
+            user_id=current_user.id,
+            ticker=h.ticker,
+            quantity=h.quantity,
+            name=h.name,
+            avg_cost_tl=h.avg_cost_tl,
+        ))
     await db.commit()
     return parsed
