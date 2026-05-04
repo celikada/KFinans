@@ -39,8 +39,11 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
 | **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri ✅ | ✅ Tamamlandı (Faz 2.5: test coverage + frontend parçalama) |
-| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi | 🚧 MVP başladı (harcama takibi tamam; AI/kredi/iyzico açık) |
-| **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı |
+| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi, çoklu zincir cüzdan desteği (Solana/Cardano/Algorand/Polkadot/Litecoin), ERC-20 token tarama | 🚧 Devam ediyor (harcama/bütçe/emtia/MKK import/Solana/ERC-20 tamam; AI/kredi/iyzico + Cardano/Algorand/Polkadot/Litecoin servisleri açık) |
+| **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı (web tamamlandıktan sonra) |
+| **Faz 5** | MCP Server — Claude Desktop ve diğer MCP istemcilerinden KFinans verilerine erişim (read-only portföy + manuel kayıt ekleme) | Planlı (mobil tamamlandıktan sonra) |
+
+> **Yol haritası kuralı (2026-05-04):** Sıralı ilerleme — web tam stabilize olmadan mobil/MCP'ye dağılma. Tek backend, çoklu istemci stratejisi.
 
 ---
 
@@ -93,6 +96,15 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 
 ### 3.3 Mobile (Faz 4)
 - Flutter, http, flutter_secure_storage, riverpod
+- Backend API'sini birebir tüketir (REST). Push bildirim + biyometrik auth (FaceID/TouchID) eklenecek
+- Hem Android (Play Store) hem iOS (App Store) hedefleniyor
+
+### 3.5 MCP Server (Faz 5)
+- Model Context Protocol server — Claude Desktop, Anthropic Workbench, Cursor gibi istemcilerden KFinans verilerine erişim
+- Tools (örnek): `get_portfolio`, `get_holdings`, `get_changes`, `add_expense`, `analyze_spending`
+- Auth: kullanıcı kendisi için ayrı **MCP API key** üretir (revocable, scope-limited)
+- Stack: Python `mcp` SDK, backend ile aynı service katmanını paylaşır (yeni `/mcp/*` endpoint grubu veya ayrı sidecar)
+- Use case: "Claude'a 'bu ay portföyüm nasıl performans gösterdi?' diye sor, KFinans gerçek verilerle yanıtlasın"
 
 ### 3.4 Altyapı
 - Docker + Docker Compose (geliştirme — bilinçli teknik borç)
