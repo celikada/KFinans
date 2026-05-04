@@ -28,6 +28,19 @@ export const CHAIN_SYMBOLS: Record<string, string> = {
   litecoin: "LTC",
 };
 
+export const CHAIN_PLACEHOLDERS: Record<string, string> = {
+  sonic: "0x...",
+  avalanche_c: "0x...",
+  avalanche_p: "P-avax1...",
+  ethereum: "0x...",
+  bitcoin: "bc1q... / 1... / 3... / xpub... / zpub...",
+  solana: "Solana base58 adresi (~44 karakter)",
+  cardano: "addr1... veya stake1...",
+  algorand: "58 karakterlik büyük harf adres",
+  polkadot: "1... ile başlayan SS58 adresi",
+  litecoin: "ltc1... veya xpub (Ltub.../Ltpv...)",
+};
+
 /**
  * Her zincir için adres formatı + nereden bulunacağı bilgisi.
  * WalletForm'daki (i) tooltip'inde gösterilir.

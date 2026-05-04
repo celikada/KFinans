@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, WalletDTO } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
-import { CHAIN_ADDRESS_HINTS, Chain } from "./constants";
+import { CHAIN_ADDRESS_HINTS, CHAIN_LABELS, CHAIN_PLACEHOLDERS, Chain } from "./constants";
 
 interface Props {
   hasWallets: boolean;
@@ -65,11 +65,7 @@ export function WalletForm({
       {showHint && (
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-gray-700 space-y-1">
           <p className="font-semibold text-blue-700">
-            {chain === "sonic" ? "Sonic (S)" :
-             chain === "avalanche_c" ? "Avalanche C-Chain" :
-             chain === "avalanche_p" ? "Avalanche P-Chain" :
-             chain === "ethereum" ? "Ethereum" :
-             "Bitcoin"} adresi nereden alınır?
+            {CHAIN_LABELS[chain]} adresi nereden alınır?
           </p>
           <p>
             <span className="font-medium text-gray-600">Format: </span>
@@ -98,11 +94,7 @@ export function WalletForm({
           <option value="litecoin">Litecoin</option>
         </select>
         <input
-          placeholder={
-            chain === "avalanche_p" ? "P-avax1..." :
-            chain === "bitcoin" ? "bc1q... / 1... / 3... / xpub... / zpub..." :
-            "0x..."
-          }
+          placeholder={CHAIN_PLACEHOLDERS[chain] ?? "Adres..."}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}
