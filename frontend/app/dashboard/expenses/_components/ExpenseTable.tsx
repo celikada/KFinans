@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { api, EXPENSE_CATEGORY_LABELS, ExpenseDTO } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   expenses: ExpenseDTO[];
@@ -38,7 +39,7 @@ export function ExpenseTable({ expenses, onDeleted }: Props) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-700">Harcama Listesi</h2>
-        <span className="text-lg font-bold text-gray-900">{fmtTL(total)} ₺</span>
+        <TLValue tl={total} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
 
       <table className="w-full text-sm">

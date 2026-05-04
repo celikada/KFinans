@@ -5,7 +5,7 @@ import {
   PLANNED_CATEGORY_LABELS,
   PLANNED_RECURRENCE_LABELS,
 } from "@/lib/api";
-import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   items: PlannedExpenseDTO[];
@@ -57,9 +57,7 @@ export function PlannedList({ items, onDeleted }: Props) {
               {pe.notes && <p className="text-xs text-gray-400 mt-1 italic">{pe.notes}</p>}
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm font-semibold text-gray-900 tabular-nums">
-                {fmtTL(parseFloat(pe.amount))} ₺
-              </span>
+              <TLValue tl={pe.amount} className="text-sm font-semibold text-gray-900 tabular-nums" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
               <button
                 onClick={() => handleDelete(pe.id, pe.title)}
                 className="text-xs text-red-400 hover:text-red-600 transition-colors"

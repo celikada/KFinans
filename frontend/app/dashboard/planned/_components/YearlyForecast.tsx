@@ -1,6 +1,7 @@
 "use client";
 import { ForecastResultDTO, PLANNED_CATEGORY_LABELS, MONTH_NAMES } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   data: ForecastResultDTO;
@@ -24,8 +25,8 @@ export function YearlyForecast({ data, year }: Props) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">{year} yılı nakit akışı tahmini</h3>
-        <span className="text-sm font-bold text-gray-900">
-          Toplam: {fmtTL(parseFloat(data.year_total))} ₺
+        <span className="text-sm font-bold text-gray-900 flex items-center gap-1">
+          Toplam: <TLValue tl={data.year_total} className="text-sm font-bold text-gray-900" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums" />
         </span>
       </div>
 

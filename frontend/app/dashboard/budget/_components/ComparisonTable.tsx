@@ -1,6 +1,7 @@
 "use client";
 import { api, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   rows: BudgetComparisonDTO[];
@@ -40,9 +41,11 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                 {budget !== null && (
                   <span className="text-gray-500 text-xs">Limit: {fmtTL(budget)} ₺</span>
                 )}
-                <span className={`font-semibold ${row.over_budget ? "text-red-600" : "text-gray-900"}`}>
-                  {fmtTL(actual)} ₺
-                </span>
+                <TLValue
+                  tl={actual}
+                  className={`font-semibold ${row.over_budget ? "text-red-600" : "text-gray-900"}`}
+                  usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right"
+                />
                 {budget !== null && (
                   <button
                     onClick={() => onDelete(row.category)}

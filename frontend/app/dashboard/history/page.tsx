@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { api, SnapshotHistoryDTO } from "@/lib/api";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface ChartPoint {
   date: string;          // "2026-04-26" formatında
@@ -118,7 +119,7 @@ export default function HistoryPage() {
             {latest && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <p className="text-xs text-gray-400 mb-1">Son snapshot ({fmtDate(latest.date)})</p>
-                <p className="text-3xl font-bold text-gray-900">{fmtTL(latest.total)} ₺</p>
+                <TLValue tl={latest.total} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
               </div>
             )}
 

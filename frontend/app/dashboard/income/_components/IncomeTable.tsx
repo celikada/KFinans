@@ -1,6 +1,7 @@
 "use client";
 import { api, IncomeDTO, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL, fmtDate } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   incomes: IncomeDTO[];
@@ -28,7 +29,7 @@ export function IncomeTable({ incomes, onDeleted }: Props) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
         <h3 className="text-sm font-semibold text-gray-700">Gelir kayıtları</h3>
-        <span className="text-sm font-bold text-emerald-600">{fmtTL(runningTotal)} ₺</span>
+        <TLValue tl={runningTotal} className="text-sm font-bold text-emerald-600" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
       <ul className="divide-y divide-gray-50">
         {incomes.map((inc) => (

@@ -1,6 +1,6 @@
 "use client";
 import { CryptoPositionDTO } from "@/lib/api";
-import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { PROVIDER_LABELS } from "./constants";
 
 interface Props {
@@ -37,9 +37,11 @@ export function ProviderSummaryCards({ positions, hidden, onToggle }: Props) {
               {PROVIDER_LABELS[prov] ?? prov}
               <span className="ml-auto text-gray-300">{isHidden ? "gizli" : "✓"}</span>
             </p>
-            <p className={`text-sm font-bold ${isHidden ? "text-gray-400" : "text-gray-900"}`}>
-              {fmtTL(total)} ₺
-            </p>
+            <TLValue
+              tl={total}
+              className={`text-sm font-bold ${isHidden ? "text-gray-400" : "text-gray-900"}`}
+              usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums"
+            />
           </button>
         );
       })}
