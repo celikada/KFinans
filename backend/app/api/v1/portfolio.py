@@ -38,6 +38,44 @@ from app.services.snapshot import compute_and_save_snapshot
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
+# Token sembolü → fiyat lookup için kullanılacak Binance USDT pariteli sembol.
+# ETH-staking türevleri ETH fiyatıyla yaklaşık aynı (1:1 peg veya yakın).
+# Stablecoin türevleri için 1:1 USD varsayılır.
+_SYMBOL_PRICE_ALIASES: dict[str, str] = {
+    # ETH peg'li staking tokenları
+    "STETH": "ETH",       # Lido Staked ETH
+    "stETH": "ETH",
+    "psETH": "ETH",       # Pooled Staked ETH
+    "PSETH": "ETH",
+    "lcETH": "ETH",       # Liquid Collective Staked ETH
+    "LCETH": "ETH",
+    "rETH": "ETH",        # Rocket Pool
+    "cbETH": "ETH",       # Coinbase
+    "wstETH": "ETH",      # Lido wrapped
+    "WBTC": "BTC",
+    # AVAX peg'li
+    "sAVAX": "AVAX",
+    "SAVAX": "AVAX",
+}
+# 1:1 USD varsayılan stablecoin / yield bearing wrapper'lar
+_USD_STABLE_SYMBOLS: set[str] = {
+    "USDT", "USDC", "DAI", "BUSD", "TUSD", "FRAX",
+    "mstkeUSDT", "MSTKEUSDT",  # Morpho yield-bearing USDT
+}
+
+
+def _lookup_usd_price(symbol: str, prices: dict, usd_tl: Decimal) -> Decimal:
+    """Token symbol → USD fiyat. Curated alias + stablecoin desteği."""
+    if symbol in _USD_STABLE_SYMBOLS:
+        return Decimal("1")
+    direct = prices.get(symbol)
+    if direct and direct > 0:
+        return direct
+    aliased = _SYMBOL_PRICE_ALIASES.get(symbol)
+    if aliased:
+        return prices.get(aliased, Decimal(0))
+    return Decimal(0)
+
 
 @router.get("/usd-rate")
 async def get_usd_rate(
@@ -256,7 +294,7 @@ async def get_wallet_positions(
             assets = await svc.fetch()
             out = []
             for a in assets:
-                usd = prices.get(a.symbol, Decimal(0))
+                usd = _lookup_usd_price(a.symbol, prices, usd_tl)
                 total_qty = a.liquid_quantity + a.staked_quantity
                 out.append(WalletPositionOut(
                     wallet_id=wid,
