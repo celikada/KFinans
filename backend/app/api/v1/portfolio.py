@@ -20,7 +20,7 @@ from app.schemas.portfolio import (
     WalletPositionOut,
     WalletResponse,
 )
-from app.services.aggregator import fetch_usd_to_tl, fetch_spot_prices
+from app.services.aggregator import fetch_usd_to_tl, fetch_spot_prices, lookup_usd_price
 from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
@@ -38,44 +38,6 @@ from app.services.snapshot import compute_and_save_snapshot
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
-# Token sembolü → fiyat lookup için kullanılacak Binance USDT pariteli sembol.
-# ETH-staking türevleri ETH fiyatıyla yaklaşık aynı (1:1 peg veya yakın).
-# Stablecoin türevleri için 1:1 USD varsayılır.
-_SYMBOL_PRICE_ALIASES: dict[str, str] = {
-    # ETH peg'li staking tokenları
-    "STETH": "ETH",       # Lido Staked ETH
-    "stETH": "ETH",
-    "psETH": "ETH",       # Pooled Staked ETH
-    "PSETH": "ETH",
-    "lcETH": "ETH",       # Liquid Collective Staked ETH
-    "LCETH": "ETH",
-    "rETH": "ETH",        # Rocket Pool
-    "cbETH": "ETH",       # Coinbase
-    "wstETH": "ETH",      # Lido wrapped
-    "WBTC": "BTC",
-    # AVAX peg'li
-    "sAVAX": "AVAX",
-    "SAVAX": "AVAX",
-}
-# 1:1 USD varsayılan stablecoin / yield bearing wrapper'lar
-_USD_STABLE_SYMBOLS: set[str] = {
-    "USDT", "USDC", "DAI", "BUSD", "TUSD", "FRAX",
-    "mstkeUSDT", "MSTKEUSDT",  # Morpho yield-bearing USDT
-}
-
-
-def _lookup_usd_price(symbol: str, prices: dict, usd_tl: Decimal) -> Decimal:
-    """Token symbol → USD fiyat. Curated alias + stablecoin desteği."""
-    if symbol in _USD_STABLE_SYMBOLS:
-        return Decimal("1")
-    direct = prices.get(symbol)
-    if direct and direct > 0:
-        return direct
-    aliased = _SYMBOL_PRICE_ALIASES.get(symbol)
-    if aliased:
-        return prices.get(aliased, Decimal(0))
-    return Decimal(0)
-
 
 @router.get("/usd-rate")
 async def get_usd_rate(
@@ -87,8 +49,41 @@ async def get_usd_rate(
     return {"usd_try": str(rate)}
 
 
+@router.post("/snapshot/preview")
+async def preview_snapshot(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Snapshot öncesi sağlık kontrolü.
+
+    Tüm kaynakları gather edip toplam + issues döndürür ama **DB'ye yazmaz**.
+    Frontend bunu kullanır: issue varsa kullanıcıya popup gösterip onay alır.
+    Onay sonrası `POST /portfolio/snapshot` (force=True) ile gerçek kayıt.
+
+    Issues yoksa frontend doğrudan kayıt yapabilir (popup atlanabilir).
+    """
+    try:
+        result = await compute_and_save_snapshot(current_user.id, db, dry_run=True)
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Snapshot ön kontrol başarısız: {e}",
+        )
+    # dry_run=True + issues=False ise normal SnapshotOut döner — onu da dict'e çevir
+    if not isinstance(result, dict):
+        return {
+            "total_value_tl": str(result.total_value_tl),
+            "asset_count": len(result.asset_positions),
+            "issues": result.health_issues or [],
+            "usd_try_rate": str(result.usd_try_rate) if result.usd_try_rate else None,
+            "saved": True,  # Issues yoktu, doğrudan kaydedildi
+        }
+    return result
+
+
 @router.post("/snapshot", response_model=SnapshotOut, status_code=status.HTTP_201_CREATED)
 async def create_snapshot(
+    force: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -96,14 +91,21 @@ async def create_snapshot(
 
     Otomatik haftalik job (Pazar 23:00) ile ayni mantigi calistirir; ayni gun
     icinde tekrar cagrilirsa eski snapshot silinip yenisi olusturulur.
+
+    `force=true` query parametresi: kullanıcı uyarıları onayladıktan sonra
+    bu endpoint çağrılır. force=false (varsayılan) için preview endpoint'i
+    önce çağrılmalı; issue varsa popup'ta onay alınır.
     """
     try:
-        snapshot = await compute_and_save_snapshot(current_user.id, db)
+        snapshot = await compute_and_save_snapshot(current_user.id, db, force=force)
     except RuntimeError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Snapshot alinamadi: {e}",
         )
+    if isinstance(snapshot, dict):
+        # dry_run değil ama somehow dict döndü — beklenmeyen durum
+        raise HTTPException(status_code=500, detail="Snapshot kaydedilemedi")
     # Asset position'lari donulen response icin tekrar yukle
     result = await db.execute(
         select(PortfolioSnapshot)
@@ -294,7 +296,7 @@ async def get_wallet_positions(
             assets = await svc.fetch()
             out = []
             for a in assets:
-                usd = _lookup_usd_price(a.symbol, prices, usd_tl)
+                usd = lookup_usd_price(a.symbol, prices)
                 total_qty = a.liquid_quantity + a.staked_quantity
                 out.append(WalletPositionOut(
                     wallet_id=wid,

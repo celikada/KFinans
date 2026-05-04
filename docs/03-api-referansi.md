@@ -208,6 +208,26 @@ Varlık türü dağılımı.
 }
 ```
 
+### `POST /portfolio/snapshot/preview`
+Snapshot ön kontrolü — gather yapar, issues + toplam döndürür ama **DB'ye yazmaz** (sorunlar varsa kullanıcıya popup gösterip onay almak için).
+```json
+200 OK
+{
+  "total_value_tl": "8164975.87",
+  "asset_count": 163,
+  "issues": [
+    { "source": "wallet", "chain": "ethereum", "address": "0x6d6be9eBE75De3…", "code": "fetch_failed", "msg": "..." }
+  ],
+  "usd_try_rate": "44.969200",
+  "saved": false
+}
+```
+- `saved=false`: issues vardı, DB'ye yazılmadı; frontend kullanıcıya popup gösterir, onay sonrası `POST /portfolio/snapshot?force=true` çağrılır.
+- `saved=true`: issues yoktu, snapshot zaten kaydedildi.
+
+### `POST /portfolio/snapshot?force=false|true`
+`force=true` query parametresi: kullanıcı uyarıları onayladıktan sonra bu endpoint çağrılır. issues olsa bile `health_issues` JSONB kolonuna kaydedilip snapshot saklanır.
+
 ### `GET /portfolio/usd-rate`
 Anlık USD/TRY kuru (TCMB → Yahoo Finance fallback). Frontend `TLValue` bileşeni USD karşılığı göstermek için kullanır. 5 dk in-memory cache (aggregator katmanı).
 ```json

@@ -7,6 +7,7 @@ import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { TLValue, useUsdRate } from "@/app/_components/TLValue";
+import type { SnapshotHealthIssue } from "@/lib/api";
 
 
 function fmtTL(val: number) {
@@ -84,6 +85,11 @@ export default function DashboardPage() {
 
   const usdRate = useUsdRate();
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
+  // Snapshot uyarı popup state
+  const [pendingIssues, setPendingIssues] = useState<{
+    issues: SnapshotHealthIssue[];
+    total: number;
+  } | null>(null);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -214,30 +220,64 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
+  function buildSnapshotMsg(total: number, count: number, issuesLen: number): string {
+    const usdPart = usdRate && usdRate > 0
+      ? ` ≈ $${(total / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+      : "";
+    let diffPart = "";
+    if (prevSnapshot !== null && prevSnapshot > 0) {
+      const diffTL = total - prevSnapshot;
+      const sign = diffTL >= 0 ? "+" : "";
+      const diffUsd = usdRate && usdRate > 0
+        ? ` (${sign}$${(diffTL / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`
+        : "";
+      diffPart = `, değişim: ${sign}${fmtTL(diffTL)} ₺${diffUsd}`;
+    }
+    const warnPart = issuesLen > 0
+      ? ` ⚠ ${issuesLen} sorun kaydedildi`
+      : "";
+    return `✓ Snapshot: ${fmtTL(total)} ₺${usdPart} (${count} pozisyon)${diffPart}${warnPart}`;
+  }
+
+  async function saveConfirmedSnapshot() {
+    setSnapshotting(true);
+    setSnapshotMsg("");
+    try {
+      const snap = await api.createSnapshot(true);
+      const total = parseFloat(snap.total_value_tl);
+      setPrevSnapshot(total);
+      const issues = snap.health_issues ?? [];
+      setSnapshotMsg(buildSnapshotMsg(total, snap.asset_positions.length, issues.length));
+      setPendingIssues(null);
+    } catch (err) {
+      setSnapshotMsg(err instanceof Error ? `Hata: ${err.message}` : "Snapshot başarısız");
+    } finally {
+      setSnapshotting(false);
+    }
+  }
+
   async function takeSnapshot() {
     setSnapshotting(true);
     setSnapshotMsg("");
     try {
-      const snap = await api.createSnapshot();
-      const total = parseFloat(snap.total_value_tl);
-      const usdPart = usdRate && usdRate > 0
-        ? ` ≈ $${(total / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-        : "";
-      let diffPart = "";
-      if (prevSnapshot !== null && prevSnapshot > 0) {
-        const diffTL = total - prevSnapshot;
-        const sign = diffTL >= 0 ? "+" : "";
-        const diffUsd = usdRate && usdRate > 0
-          ? ` (${sign}$${(diffTL / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`
-          : "";
-        diffPart = `, değişim: ${sign}${fmtTL(diffTL)} ₺${diffUsd}`;
+      // 1) Preview — issues var mı?
+      const preview = await api.previewSnapshot();
+      const total = parseFloat(preview.total_value_tl);
+      if (preview.issues.length > 0 && !preview.saved) {
+        // Onay popup'ı göster, kullanıcı evet derse saveConfirmedSnapshot çağırır
+        setPendingIssues({ issues: preview.issues, total });
+        setSnapshotting(false);
+        return;
       }
-      setPrevSnapshot(total);
-      const issues = snap.health_issues ?? [];
-      const warnPart = issues.length > 0
-        ? ` ⚠ ${issues.length} sorun kaydedildi (Geçmiş sayfasında detay)`
-        : "";
-      setSnapshotMsg(`✓ Snapshot: ${fmtTL(total)} ₺${usdPart} (${snap.asset_positions.length} pozisyon)${diffPart}${warnPart}`);
+      // 2) Sorunsuz → preview zaten kaydetmiş olabilir veya kayıt etmemiş; her durumda
+      //    saved=false ise force=false ile create çağır (issues yok zaten)
+      if (preview.saved) {
+        // Backend dry_run=True, no issues → snapshot zaten kaydedildi
+        setPrevSnapshot(total);
+        setSnapshotMsg(buildSnapshotMsg(total, preview.asset_count, 0));
+      } else {
+        await saveConfirmedSnapshot();
+      }
     } catch (err) {
       setSnapshotMsg(err instanceof Error ? `Hata: ${err.message}` : "Snapshot başarısız");
     } finally {
@@ -448,6 +488,62 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {/* Snapshot uyarı popup'ı */}
+      {pendingIssues && (
+        <button
+          type="button"
+          aria-label="Kapat"
+          onClick={() => setPendingIssues(null)}
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        >
+          <div
+            role="dialog"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
+          >
+            <h3 className="text-base font-semibold text-gray-900 mb-1">
+              ⚠ Snapshot uyarıları ({pendingIssues.issues.length})
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Bazı kaynaklardan veri alınamadı veya 0 değer döndü.
+              Toplam: <span className="font-semibold text-gray-700">{fmtTL(pendingIssues.total)} ₺</span>.
+              Yine de kaydetmek ister misiniz? (Sorunlar geçmişte de görünür kalır.)
+            </p>
+            <ul className="space-y-2 max-h-72 overflow-y-auto mb-4">
+              {pendingIssues.issues.map((iss, i) => (
+                <li key={i} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs">
+                  <p className="font-semibold text-amber-800">
+                    {iss.source}
+                    {iss.chain && ` · ${iss.chain}`}
+                    {iss.provider && ` · ${iss.provider}`}
+                    {iss.label && ` · ${iss.label}`}
+                  </p>
+                  <p className="text-gray-700 mt-0.5">{iss.msg}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingIssues(null)}
+                className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={saveConfirmedSnapshot}
+                disabled={snapshotting}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {snapshotting ? "Kaydediliyor..." : "Yine de kaydet"}
+              </button>
+            </div>
+          </div>
+        </button>
+      )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">
         <div className="flex justify-center items-center gap-2">

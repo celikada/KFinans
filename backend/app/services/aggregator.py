@@ -123,6 +123,34 @@ async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
     return result
 
 
+# ETH peg'li staking tokenları + WBTC + AVAX peg'li → Binance USDT pariteli base symbol
+SYMBOL_PRICE_ALIASES: dict[str, str] = {
+    "STETH": "ETH", "stETH": "ETH",
+    "psETH": "ETH", "PSETH": "ETH",
+    "lcETH": "ETH", "LCETH": "ETH",
+    "rETH": "ETH", "cbETH": "ETH", "wstETH": "ETH",
+    "WBTC": "BTC",
+    "sAVAX": "AVAX", "SAVAX": "AVAX",
+}
+USD_STABLE_SYMBOLS: set[str] = {
+    "USDT", "USDC", "DAI", "BUSD", "TUSD", "FRAX",
+    "mstkeUSDT", "MSTKEUSDT",
+}
+
+
+def lookup_usd_price(symbol: str, prices: dict) -> Decimal:
+    """Token symbol → USD fiyat. Curated alias + stablecoin desteği."""
+    if symbol in USD_STABLE_SYMBOLS:
+        return Decimal("1")
+    direct = prices.get(symbol)
+    if direct and direct > 0:
+        return direct
+    aliased = SYMBOL_PRICE_ALIASES.get(symbol)
+    if aliased:
+        return prices.get(aliased, Decimal(0))
+    return Decimal(0)
+
+
 def to_asset_position(asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal) -> AssetPosition:
     if asset.unit_price_tl > 0:
         price_tl = asset.unit_price_tl

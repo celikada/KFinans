@@ -23,7 +23,9 @@ from app.models.stock import StockHolding
 from app.models.tefas import TefasHolding
 from app.services.aggregator import (
     fetch_gbp_to_usd,
+    fetch_spot_prices,
     fetch_usd_to_tl,
+    lookup_usd_price,
     to_asset_position,
 )
 from app.services.base import AssetData
@@ -302,11 +304,24 @@ async def _gather_stock_assets(
     return out
 
 
-async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> PortfolioSnapshot:
+async def compute_and_save_snapshot(
+    user_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+) -> PortfolioSnapshot | dict:
     """Tek bir kullanici icin tum varlik kaynaklarindan snapshot alir.
 
     Ayni gune ait mevcut snapshot varsa silinir (idempotent — manuel
     tetiklemeler veya yeniden cagri durumunda zincirleme kayit olusmaz).
+
+    dry_run=True: gather yapar, total + issues döndürür ama DB'ye yazmaz
+                  (kullanıcıya onay popup'ı için).
+                  Dönüş: {"total_value_tl", "asset_count", "issues",
+                          "usd_try_rate"}
+    force=True:   issues olsa bile DB'ye yaz (kullanıcı onayladı).
+                  dry_run=False ise zaten yazılır; force, semantik flag.
     """
     today = date.today()
 
@@ -387,12 +402,47 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         + list(cash_assets)
     )
 
+    # Blockchain ve kripto asset'lerine spot fiyat enjekte et
+    # (servisler sadece miktar döner, fiyat ayrıca lookup'lanır)
+    needs_pricing = [a for a in all_assets if a.unit_price_tl == 0 and a.unit_price_usd == 0]
+    if needs_pricing:
+        unique_symbols = list({a.symbol for a in needs_pricing})
+        try:
+            spot_prices = await fetch_spot_prices(unique_symbols)
+        except Exception as exc:
+            logger.warning("Snapshot: spot fiyat çekilemedi: %s", exc)
+            spot_prices = {}
+        for a in needs_pricing:
+            usd_price = lookup_usd_price(a.symbol, spot_prices)
+            if usd_price > 0:
+                a.unit_price_usd = usd_price
+            else:
+                # Fiyatsız blockchain pozisyonu = sıfır değer = sağlık uyarısı
+                qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
+                if qty > 0:
+                    issues.append({
+                        "source": a.provider,
+                        "symbol": a.symbol,
+                        "code": "no_spot_price",
+                        "msg": f"{a.symbol} için Binance USDT pariteni bulunamadı, snapshot'a 0 değerle eklendi",
+                    })
+
     # Toplam degeri hesapla (weight_pct icin gerekli)
     total_tl = Decimal(0)
     for a in all_assets:
         price_tl = a.unit_price_tl if a.unit_price_tl > 0 else a.unit_price_usd * usd_tl
         qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
         total_tl += qty * price_tl
+
+    # Dry-run: önce kullanıcıya issues göster, onay bekle (DB'ye yazma)
+    if dry_run and issues and not force:
+        return {
+            "total_value_tl": str(total_tl.quantize(Decimal("0.01"))),
+            "asset_count": len(all_assets),
+            "issues": issues,
+            "usd_try_rate": str(usd_tl.quantize(Decimal("0.000001"))) if usd_tl > 0 else None,
+            "saved": False,
+        }
 
     # Snapshot olustur — usd_try_rate snapshot anındaki kuru saklar (geçmiş USD eğimi için)
     snapshot = PortfolioSnapshot(
