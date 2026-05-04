@@ -52,6 +52,7 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Sağ üstte **"Snapshot al"** + **"Geçmiş"** + **"Ayarlar"** butonları
 - **Modern UI:** emoji ikonlar inline SVG'lere çevrildi; container `max-w-5xl`; satırlar `flex-wrap` ile mobile uyumlu
 - **Logo bileşenleri:** `_components/Logos.tsx` `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo` (PNG dosyaları arşivlik kaldı)
+- **TL/USD bileşeni:** `_components/TLValue.tsx` — `<TLValue tl={n} />` `1.234,56 ₺` gösterir; ayar açıksa altında `≈ $369.30`. Hook `useUsdRate()` `GET /portfolio/usd-rate`'i 5 dk localStorage cache ile çeker. Toggle: Settings sayfası "Genel Tercihler > USD karşılığı göster" — `localStorage.kfinans_show_usd` boolean. Değişiklik `kfinans-show-usd-changed` custom event ile tüm bileşenlere yayılır (storage event aynı sekmede tetiklenmez)
 - **Kart gizleme:** Settings sayfasında her kart için toggle; `localStorage.kfinans_hidden_cards` (JSON `DashboardCardId[]`) ile saklanır
 
 ### Snapshot History Grafiği (Yeni)

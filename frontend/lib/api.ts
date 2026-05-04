@@ -488,6 +488,8 @@ export const api = {
 
   // Kullanıcı profili & ayarlar
   getMe: () => request<UserMeDTO>("/user/me"),
+
+  getUsdRate: () => request<{ usd_try: string }>("/portfolio/usd-rate"),
   updateProfile: (risk_profile: string) =>
     request<UserMeDTO>("/user/profile", {
       method: "PUT",

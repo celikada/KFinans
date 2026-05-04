@@ -6,6 +6,7 @@ import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from 
 import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
+import { TLValue } from "@/app/_components/TLValue";
 
 
 function fmtTL(val: number) {
@@ -245,7 +246,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Toplam Portföy</p>
             {grandTotal > 0 ? (
-              <p className="text-3xl font-bold text-gray-900 tabular-nums">{fmtTL(grandTotal)} ₺</p>
+              <TLValue tl={grandTotal} className="text-3xl font-bold text-gray-900 tabular-nums" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             ) : (
               <p className="text-3xl font-bold text-gray-300">—</p>
             )}
@@ -608,7 +609,7 @@ function Card({ href, icon, color, title, total, count, countLabel, loading, top
       <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
 
       {hasTotal ? (
-        <p className={`text-base font-bold tabular-nums ${c.text}`}>{fmtTL(total)} ₺</p>
+        <TLValue tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />
       ) : (count ?? 0) > 0 ? (
         <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>
       ) : loading ? (

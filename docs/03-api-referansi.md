@@ -208,6 +208,13 @@ Varlık türü dağılımı.
 }
 ```
 
+### `GET /portfolio/usd-rate`
+Anlık USD/TRY kuru (TCMB → Yahoo Finance fallback). Frontend `TLValue` bileşeni USD karşılığı göstermek için kullanır. 5 dk in-memory cache (aggregator katmanı).
+```json
+200 OK
+{ "usd_try": "33.45" }
+```
+
 ### `GET /portfolio/staking`
 Tüm staking pozisyonları (Sonic, Avalanche).
 ```json

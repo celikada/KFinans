@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
+import { getShowUsd, setShowUsd } from "@/app/_components/TLValue";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
   { key: "conservative", label: RISK_PROFILE_LABELS.conservative },
@@ -26,9 +27,12 @@ export default function SettingsPage() {
 
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
+  // Genel: USD karşılığı göster
+  const [showUsd, setShowUsdState] = useState(false);
 
   useEffect(() => {
     setHiddenCards(getHiddenCards());
+    setShowUsdState(getShowUsd());
   }, []);
 
   // Şifre değiştir
@@ -242,7 +246,33 @@ export default function SettingsPage() {
           </button>
         </section>
 
-        {/* Bölüm 4: Dashboard Görünümü */}
+        {/* Bölüm 4: Genel Tercihler */}
+        <section className={CARD_CLS}>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Genel Tercihler</h2>
+          <p className="text-xs text-gray-500 mb-4">Görünüm ayarları.</p>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-gray-700">USD karşılığı göster</p>
+              <p className="text-xs text-gray-400 mt-0.5">TL değerlerin altında anlık $ karşılığı (TCMB kuru, 5 dk önbellek)</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !showUsd;
+                setShowUsdState(next);
+                setShowUsd(next);
+              }}
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${showUsd ? "bg-blue-600" : "bg-gray-200"}`}
+              aria-label={showUsd ? "USD karşılığını kapat" : "USD karşılığını aç"}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showUsd ? "translate-x-5" : ""}`}
+              />
+            </button>
+          </div>
+        </section>
+
+        {/* Bölüm 5: Dashboard Görünümü */}
         <section className={CARD_CLS}>
           <h2 className="text-base font-semibold text-gray-900 mb-1">Dashboard Görünümü</h2>
           <p className="text-xs text-gray-500 mb-4">Görmek istemediğiniz kartları gizleyin.</p>

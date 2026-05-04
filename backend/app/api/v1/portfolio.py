@@ -35,6 +35,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
+@router.get("/usd-rate")
+async def get_usd_rate(
+    _: User = Depends(get_current_user),
+):
+    """Anlık USD/TRY kuru (TCMB → Yahoo Finance fallback). Frontend USD karşılığı
+    göstermek için kullanır. 5 dk in-memory cache (aggregator katmanında)."""
+    rate = await fetch_usd_to_tl()
+    return {"usd_try": str(rate)}
+
+
 @router.post("/snapshot", response_model=SnapshotOut, status_code=status.HTTP_201_CREATED)
 async def create_snapshot(
     current_user: User = Depends(get_current_user),
