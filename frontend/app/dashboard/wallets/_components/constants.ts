@@ -1,4 +1,6 @@
-export type Chain = "sonic" | "avalanche_c" | "avalanche_p" | "ethereum" | "bitcoin";
+export type Chain =
+  | "sonic" | "avalanche_c" | "avalanche_p" | "ethereum" | "bitcoin"
+  | "solana" | "cardano" | "algorand" | "polkadot" | "litecoin";
 
 export const CHAIN_LABELS: Record<string, string> = {
   sonic: "Sonic (S)",
@@ -6,6 +8,11 @@ export const CHAIN_LABELS: Record<string, string> = {
   avalanche_p: "Avalanche P-Chain",
   ethereum: "Ethereum",
   bitcoin: "Bitcoin",
+  solana: "Solana",
+  cardano: "Cardano",
+  algorand: "Algorand",
+  polkadot: "Polkadot",
+  litecoin: "Litecoin",
 };
 
 export const CHAIN_SYMBOLS: Record<string, string> = {
@@ -14,6 +21,11 @@ export const CHAIN_SYMBOLS: Record<string, string> = {
   avalanche_p: "AVAX",
   ethereum: "ETH",
   bitcoin: "BTC",
+  solana: "SOL",
+  cardano: "ADA",
+  algorand: "ALGO",
+  polkadot: "DOT",
+  litecoin: "LTC",
 };
 
 /**
@@ -53,5 +65,37 @@ export const CHAIN_ADDRESS_HINTS: Record<string, { format: string; howTo: string
       "HD WALLET (önerilir) için: Ledger Live → Bitcoin hesabı → ⚙ ayarlar → 'Edit account' → 'Show xpub' " +
       "(veya Receive ekranında 'Show advanced details' → xpub görünür). " +
       "Native SegWit hesaplarda xpub aslında BIP-84 path'inde olur — KFinans bunu otomatik tespit eder.",
+  },
+  solana: {
+    format: "Base58 ed25519 public key (~44 karakter)",
+    howTo:
+      "Ledger Live → Solana hesabı → 'Receive' butonu → açılan ekrandaki adresi kopyalayın. " +
+      "Phantom/Solflare cüzdanı için: hesap adresine tıklayın → 'Copy address'.",
+  },
+  cardano: {
+    format: "addr1... (Shelley payment) veya stake1... (stake address — daha iyi)",
+    howTo:
+      "Ledger Live → Cardano hesabı → 'Receive' butonu → addr1... ile başlayan adres. " +
+      "Stake adresi (stake1...) varsa onu tercih edin — tüm türetilmiş adreslerin toplam bakiyesi + " +
+      "ödülleri tek seferde gözükür.",
+  },
+  algorand: {
+    format: "58 karakterlik base32 büyük harf adres",
+    howTo:
+      "Ledger Live → Algorand hesabı → 'Receive' butonu → uzun büyük harf adresi kopyalayın. " +
+      "Pera Wallet için: Cüzdan listesi → adres ikonuna tıklayın.",
+  },
+  polkadot: {
+    format: "1 ile başlayan SS58 adresi (~47 karakter)",
+    howTo:
+      "Ledger Live → Polkadot hesabı → 'Receive' butonu → 1... ile başlayan SS58 adresi. " +
+      "Talisman / Polkadot.js cüzdanı için: hesap adı altındaki adresi kopyalayın.",
+  },
+  litecoin: {
+    format: "ltc1... (Native SegWit) veya HD için xpub (Ltub.../Ltpv...)",
+    howTo:
+      "TEK ADRES için: Ledger Live → Litecoin hesabı → 'Receive' → ltc1... adresi.\n" +
+      "HD WALLET (önerilir) için: Ledger Live → Litecoin hesabı → ⚙ ayarlar → 'Edit account' → " +
+      "'Show xpub' (Ltub... ile başlar — Litecoin xpub formatı).",
   },
 };

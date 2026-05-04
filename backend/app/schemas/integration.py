@@ -5,7 +5,10 @@ from pydantic import BaseModel
 
 
 EXCHANGE_PROVIDERS = {"binance", "binancetr", "icrypex", "tefas", "bes"}
-CHAINS = {"ethereum", "sonic", "avalanche_c", "avalanche_p", "bitcoin"}
+CHAINS = {
+    "ethereum", "sonic", "avalanche_c", "avalanche_p", "bitcoin",
+    "solana", "cardano", "algorand", "polkadot", "litecoin",
+}
 
 
 class IntegrationCreate(BaseModel):
