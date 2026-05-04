@@ -1,10 +1,10 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy import String, Text, Date, Boolean, ForeignKey, UniqueConstraint, Numeric, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP, JSONB
 from app.models.base import Base
 
 
@@ -17,6 +17,10 @@ class PortfolioSnapshot(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     total_value_tl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    # Snapshot anındaki TCMB USD/TRY kuru — geçmiş USD eğimi için (anlık kur değil)
+    usd_try_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
+    # 0/hata veren kaynaklar listesi: [{"source": "ethereum", "code": "rpc_failed", "msg": "..."}]
+    health_issues: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("user_id", "snapshot_date", name="uq_snapshot_user_date"),)

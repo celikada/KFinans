@@ -45,7 +45,10 @@ from app.services.tefas import TefasService
 logger = logging.getLogger(__name__)
 
 
-async def _gather_crypto_assets(integrations: list[Integration]) -> list[AssetData]:
+async def _gather_crypto_assets(
+    integrations: list[Integration],
+    issues: list[dict],
+) -> list[AssetData]:
     out: list[AssetData] = []
     for intg in integrations:
         try:
@@ -63,10 +66,19 @@ async def _gather_crypto_assets(integrations: list[Integration]) -> list[AssetDa
             out.extend(await svc.fetch())
         except Exception as e:
             logger.warning("Snapshot: kripto fetch hatasi [%s]: %s", intg.provider, e)
+            issues.append({
+                "source": "crypto",
+                "provider": intg.provider,
+                "code": "fetch_failed",
+                "msg": str(e)[:200],
+            })
     return out
 
 
-async def _gather_wallet_assets(wallets: list[WalletAddress]) -> list[AssetData]:
+async def _gather_wallet_assets(
+    wallets: list[WalletAddress],
+    issues: list[dict],
+) -> list[AssetData]:
     async def _fetch_one(wallet: WalletAddress) -> list[AssetData]:
         wid = str(wallet.id)
         try:
@@ -92,16 +104,36 @@ async def _gather_wallet_assets(wallets: list[WalletAddress]) -> list[AssetData]
                 svc = PolkadotService(wallet.address, wid)
             else:
                 return []
-            return await svc.fetch()
+            assets = await svc.fetch()
+            if not assets:
+                # Servis exception fırlatmadı ama 0 asset döndü — uyarı kaydet
+                issues.append({
+                    "source": "wallet",
+                    "chain": wallet.chain,
+                    "address": wallet.address[:14] + "…",
+                    "code": "empty_result",
+                    "msg": "Cüzdan bakiyesi 0 veya tarama tamamlanamadı",
+                })
+            return assets
         except Exception as e:
             logger.warning("Snapshot: cuzdan fetch hatasi [%s:%s]: %s", wallet.chain, wallet.address[:10], e)
+            issues.append({
+                "source": "wallet",
+                "chain": wallet.chain,
+                "address": wallet.address[:14] + "…",
+                "code": "fetch_failed",
+                "msg": str(e)[:200],
+            })
             return []
 
     results = await asyncio.gather(*[_fetch_one(w) for w in wallets])
     return [a for r in results for a in r]
 
 
-async def _gather_tefas_assets(holdings: list[TefasHolding]) -> list[AssetData]:
+async def _gather_tefas_assets(
+    holdings: list[TefasHolding],
+    issues: list[dict],
+) -> list[AssetData]:
     if not holdings:
         return []
     payload = [{"code": h.code, "quantity": float(h.quantity), "name": h.name} for h in holdings]
@@ -109,10 +141,17 @@ async def _gather_tefas_assets(holdings: list[TefasHolding]) -> list[AssetData]:
         return await TefasService(payload).fetch()
     except Exception as e:
         logger.warning("Snapshot: tefas fetch hatasi: %s", e)
+        issues.append({
+            "source": "tefas",
+            "code": "fetch_failed",
+            "msg": str(e)[:200],
+        })
         return []
 
 
-async def _gather_cash_assets(holdings: list, usd_tl: Decimal) -> list[AssetData]:
+async def _gather_cash_assets(
+    holdings: list, usd_tl: Decimal, issues: list[dict],
+) -> list[AssetData]:
     """Nakit/banka hesabı bakiyelerini AssetData'ya çevirir.
     USD/EUR/GBP → TRY dönüşümü USD/TRY üzerinden yapılır (basit yaklaşım)."""
     if not holdings:
@@ -125,6 +164,12 @@ async def _gather_cash_assets(holdings: list, usd_tl: Decimal) -> list[AssetData
         elif usd_tl > 0:
             tl = (amount * usd_tl).quantize(Decimal("0.01"))
         else:
+            issues.append({
+                "source": "cash",
+                "label": h.label,
+                "code": "rate_unavailable",
+                "msg": f"USD kuru alınamadığı için {h.currency} hesabı dahil edilmedi",
+            })
             continue
         if tl <= 0:
             continue
@@ -137,7 +182,9 @@ async def _gather_cash_assets(holdings: list, usd_tl: Decimal) -> list[AssetData
     return out
 
 
-async def _gather_commodity_assets(holdings: list) -> list[AssetData]:
+async def _gather_commodity_assets(
+    holdings: list, issues: list[dict],
+) -> list[AssetData]:
     """CommodityHolding'leri (altın/gümüş gram/BiGA/sikke) AssetData'ya çevirir.
     Anlık metal fiyatlarıyla TL değer hesaplanır. Yahoo başarısız olursa
     metal fiyatı 0 → o pozisyon snapshot'a eklenmez (uyarı log).
@@ -150,10 +197,19 @@ async def _gather_commodity_assets(holdings: list) -> list[AssetData]:
         prices = await fetch_metal_prices()
     except Exception as exc:
         logger.warning("Snapshot: metal fiyatları çekilemedi: %s", exc)
+        issues.append({
+            "source": "commodity",
+            "code": "metal_price_failed",
+            "msg": f"Altın/Gümüş fiyatı çekilemedi: {str(exc)[:150]}",
+        })
         return []
 
     gold_price = prices.get("gold", Decimal("0"))
     silver_price = prices.get("silver", Decimal("0"))
+    if gold_price <= 0:
+        issues.append({"source": "commodity", "code": "gold_zero", "msg": "Altın fiyatı 0 — pozisyonlar dahil edilmedi"})
+    if silver_price <= 0 and any(h.metal == "silver" for h in holdings):
+        issues.append({"source": "commodity", "code": "silver_zero", "msg": "Gümüş fiyatı 0 — gümüş pozisyonlar dahil edilmedi"})
 
     out: list[AssetData] = []
     for h in holdings:
@@ -206,7 +262,8 @@ def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
 
 
 async def _gather_stock_assets(
-    holdings: list[StockHolding], usd_tl: Decimal, gbp_usd: Decimal
+    holdings: list[StockHolding], usd_tl: Decimal, gbp_usd: Decimal,
+    issues: list[dict],
 ) -> list[AssetData]:
     if not holdings:
         return []
@@ -215,6 +272,11 @@ async def _gather_stock_assets(
         quotes = await fetch_stock_quotes(tickers)
     except Exception as e:
         logger.warning("Snapshot: hisse fetch hatasi: %s", e)
+        issues.append({
+            "source": "stocks",
+            "code": "fetch_failed",
+            "msg": str(e)[:200],
+        })
         return []
 
     out: list[AssetData] = []
@@ -305,13 +367,14 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         gbp_usd = Decimal("0")
 
     # Tum kaynaklardan asset'leri topla (paralel)
+    issues: list[dict] = []
     crypto_assets, wallet_assets, tefas_assets, stock_assets, commodity_assets, cash_assets = await asyncio.gather(
-        _gather_crypto_assets(integrations),
-        _gather_wallet_assets(wallets),
-        _gather_tefas_assets(tefas_holdings),
-        _gather_stock_assets(stock_holdings, usd_tl, gbp_usd),
-        _gather_commodity_assets(commodity_holdings),
-        _gather_cash_assets(cash_holdings, usd_tl),
+        _gather_crypto_assets(integrations, issues),
+        _gather_wallet_assets(wallets, issues),
+        _gather_tefas_assets(tefas_holdings, issues),
+        _gather_stock_assets(stock_holdings, usd_tl, gbp_usd, issues),
+        _gather_commodity_assets(commodity_holdings, issues),
+        _gather_cash_assets(cash_holdings, usd_tl, issues),
     )
     bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
     all_assets: list[AssetData] = (
@@ -331,11 +394,13 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
         total_tl += qty * price_tl
 
-    # Snapshot olustur
+    # Snapshot olustur — usd_try_rate snapshot anındaki kuru saklar (geçmiş USD eğimi için)
     snapshot = PortfolioSnapshot(
         user_id=user_id,
         snapshot_date=today,
         total_value_tl=total_tl.quantize(Decimal("0.01")),
+        usd_try_rate=usd_tl.quantize(Decimal("0.000001")) if usd_tl > 0 else None,
+        health_issues=issues if issues else None,
     )
     db.add(snapshot)
     await db.flush()

@@ -27,10 +27,29 @@ class SnapshotOut(BaseModel):
     id: uuid.UUID
     snapshot_date: date
     total_value_tl: Decimal
+    usd_try_rate: Decimal | None = None
+    health_issues: list[dict] | None = None
     asset_positions: list[AssetPositionOut] = []
 
     class Config:
         from_attributes = True
+
+
+class SnapshotHealthIssue(BaseModel):
+    source: str
+    code: str
+    msg: str
+    chain: str | None = None
+    address: str | None = None
+    provider: str | None = None
+    label: str | None = None
+
+
+class SnapshotPreflightOut(BaseModel):
+    """Snapshot öncesi sağlık kontrolü — herhangi bir kaynak fail olursa
+    kullanıcıya uyarı gösterilir."""
+    issues: list[SnapshotHealthIssue]
+    can_proceed: bool  # Her zaman True — kullanıcı yine de devam edebilir
 
 
 class PortfolioChanges(BaseModel):

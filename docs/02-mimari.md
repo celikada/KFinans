@@ -131,7 +131,7 @@ backend/app/
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── commodity.py       # Altın/Gümüş — TCMB USD/TRY + Yahoo XAU/XAG fallback chain + 5 dk cache
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
-│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES, kıymetli madenler, nakit). MKK import sonrası best-effort tetiklenir
+│   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES, kıymetli madenler, nakit). Her gather fonksiyonu issues listesine fail/0-değer kaynakları ekler → portfolio_snapshots.health_issues JSONB. usd_try_rate kayıt anındaki TCMB kuru (geçmiş USD eğimi için). MKK import sonrası best-effort tetiklenir
 │   ├── email.py           # Resend SDK — verify_email + HTML şablon
 │   └── advisor.py         # Anthropic SDK — model + max_tokens settings'ten
 │

@@ -233,7 +233,11 @@ export default function DashboardPage() {
         diffPart = `, değişim: ${sign}${fmtTL(diffTL)} ₺${diffUsd}`;
       }
       setPrevSnapshot(total);
-      setSnapshotMsg(`✓ Snapshot: ${fmtTL(total)} ₺${usdPart} (${snap.asset_positions.length} pozisyon)${diffPart}`);
+      const issues = snap.health_issues ?? [];
+      const warnPart = issues.length > 0
+        ? ` ⚠ ${issues.length} sorun kaydedildi (Geçmiş sayfasında detay)`
+        : "";
+      setSnapshotMsg(`✓ Snapshot: ${fmtTL(total)} ₺${usdPart} (${snap.asset_positions.length} pozisyon)${diffPart}${warnPart}`);
     } catch (err) {
       setSnapshotMsg(err instanceof Error ? `Hata: ${err.message}` : "Snapshot başarısız");
     } finally {

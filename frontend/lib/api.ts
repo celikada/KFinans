@@ -116,7 +116,14 @@ export const api = {
   getCryptoPositions: () => request<{ positions: CryptoPositionDTO[]; errors: Record<string, string> }>("/portfolio/crypto"),
 
   createSnapshot: () =>
-    request<{ id: string; snapshot_date: string; total_value_tl: string; asset_positions: unknown[] }>(
+    request<{
+      id: string;
+      snapshot_date: string;
+      total_value_tl: string;
+      usd_try_rate?: string | null;
+      health_issues?: SnapshotHealthIssue[] | null;
+      asset_positions: unknown[];
+    }>(
       "/portfolio/snapshot",
       { method: "POST" }
     ),
@@ -552,10 +559,22 @@ export const api = {
   },
 };
 
+export interface SnapshotHealthIssue {
+  source: string;
+  code: string;
+  msg: string;
+  chain?: string | null;
+  address?: string | null;
+  provider?: string | null;
+  label?: string | null;
+}
+
 export interface SnapshotHistoryDTO {
   id: string;
   snapshot_date: string;
   total_value_tl: string;
+  usd_try_rate?: string | null;
+  health_issues?: SnapshotHealthIssue[] | null;
   asset_positions: Array<{
     id: string;
     asset_type: string;
