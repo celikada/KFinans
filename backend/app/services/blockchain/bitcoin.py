@@ -12,6 +12,7 @@ chain'i taranır ve gerçek bakiye veren chain otomatik bulunur.
 """
 import asyncio
 import logging
+import time
 from decimal import Decimal
 
 import httpx
@@ -30,17 +31,36 @@ _MEMPOOL_API = "https://mempool.space/api/address/{addr}"
 _XPUB_PREFIXES = ("xpub", "ypub", "zpub", "Xpub", "Ypub", "Zpub")
 _GAP_LIMIT = 20  # BIP-44 standardı: 20 ardışık boş adres → chain biter
 
+# In-memory cache: xpub/adres → (timestamp, btc_balance)
+# Dashboard her yenilendiğinde mempool.space rate limit'ine takılmasın diye.
+# Snapshot servisi cache'i bypass etmez — her snapshot fresh fetch yapar.
+_BALANCE_CACHE: dict[str, tuple[float, Decimal]] = {}
+_CACHE_TTL_SEC = 600  # 10 dk
+_cache_lock = asyncio.Lock()
+
 
 class BitcoinService(BaseBlockchainIntegration):
     async def fetch(self) -> list[AssetData]:
-        try:
-            if self.address.startswith(_XPUB_PREFIXES):
-                btc_balance = await self._fetch_xpub_balance(self.address)
+        # Cache lookup: dashboard yenileme rate limit yememesin diye 10dk
+        async with _cache_lock:
+            cached = _BALANCE_CACHE.get(self.address)
+            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
+                btc_balance = cached[1]
             else:
-                btc_balance = await self._fetch_single_balance(self.address)
-        except Exception as exc:
-            logger.warning("Bitcoin bakiye alınamadı [%s]: %s", self.address[:16], exc)
-            return []
+                cached = None
+
+        if cached is None:
+            try:
+                if self.address.startswith(_XPUB_PREFIXES):
+                    btc_balance = await self._fetch_xpub_balance(self.address)
+                else:
+                    btc_balance = await self._fetch_single_balance(self.address)
+            except Exception as exc:
+                logger.warning("Bitcoin bakiye alınamadı [%s]: %s", self.address[:16], exc)
+                return []
+
+            async with _cache_lock:
+                _BALANCE_CACHE[self.address] = (time.monotonic(), btc_balance)
 
         if btc_balance <= 0:
             return []
