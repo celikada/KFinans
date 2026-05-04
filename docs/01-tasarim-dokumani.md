@@ -309,6 +309,22 @@ Kubernetes Ingress (nginx)
 - [ ] Background job kuyruğu (Celery/RQ)
 - [ ] **Bitcoin xpub/zpub Fernet şifreleme** — `wallet_addresses.address` kolonu Bitcoin için xpub içerebiliyor. xpub bilen biri kullanıcının tüm işlem geçmişini ve gelecekteki adreslerini görebilir (private key değil ama gizlilik açığı). Production'da `address` kolonunu (ya da Bitcoin chain için ayrı `encrypted_xpub` kolonu) `encrypt_secret`/`decrypt_secret` ile sarmak gerekli — borsa API key'lerinde kullanılan Fernet pattern (`app/core/security.py`).
 
+#### Sonraki Sprint Öncelikleri (2026-05-04)
+
+- [ ] **Snapshot Sağlık Uyarıları + Hata Kayıtları**
+  - Snapshot öncesi her kaynak için ön kontrol; 0 değer veya hata varsa kullanıcıya onay popup'ı
+  - Onaylanırsa snapshot yine alınır + `portfolio_snapshots.health_issues` (JSONB veya TEXT[] nullable) kolonuna problemler kaydedilir
+  - History sayfasında problemli snapshot'lar `⚠` rozetli; hover/tıklayınca popup → mesajlar
+- [ ] **Snapshot Çift Para Birimi Kaydı**
+  - `portfolio_snapshots.usd_try_rate NUMERIC(18,6)` kolonu — snapshot anındaki TCMB USD/TRY kuru kaydedilsin
+  - Geçmiş USD karşılığı = `total_value_tl / snapshot.usd_try_rate` (anlık kur değil, kayıt anındaki kur)
+  - Sebep: TL enflasyonu, USD bazında portföy büyümesi yanıltıcı görünmesin
+- [ ] **History Grafiği TL/USD Toggle**
+  - `/dashboard/history` sayfasına segmented control: `[TL] [USD]`
+  - USD seçilince Y ekseni `$` formatına geçer, her snapshot için `tl / saved_rate` ile dönüştürür
+  - Settings'teki "USD karşılığı göster" toggle'ından bağımsız; history özelinde grafik para birimi seçimi
+  - Amaç: TL eğimi enflasyonlu, USD eğimi gerçek satın alma gücü değişimini gösterir
+
 ---
 
 ### Faz 3 #2 — Planlı Ödemeler & Yıllık Nakit Akışı Tahmini (2026-05-03)
