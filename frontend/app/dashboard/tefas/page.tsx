@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
 import { MkkHint } from "@/app/_components/MkkHint";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Holding {
   code: string;
@@ -274,7 +275,7 @@ export default function TefasPage() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-700">Portföy</h2>
-              <span className="text-lg font-bold text-gray-900">{fmtTL(totalTL)} ₺</span>
+              <TLValue tl={totalTL} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
             </div>
 
             <table className="w-full text-sm">
@@ -310,7 +311,7 @@ export default function TefasPage() {
                       </td>
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.quantity)}</td>
                       <td className="px-6 py-4 text-right text-gray-600">{fmt(pos.unit_price_tl)} ₺</td>
-                      <td className="px-6 py-4 text-right font-semibold text-gray-900">{fmtTL(pos.total_value_tl)} ₺</td>
+                      <td className="px-6 py-4 text-right"><TLValue tl={pos.total_value_tl} className="font-semibold text-gray-900" /></td>
                       {hasAnyGainLoss && (
                         <td className="px-6 py-4 text-right">
                           {gl !== null ? (

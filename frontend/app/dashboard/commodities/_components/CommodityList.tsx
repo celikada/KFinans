@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api, COIN_LABELS, BIGA_GRAM_WEIGHTS, type CommodityPositionDTO } from "@/lib/api";
-import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Props {
   positions: CommodityPositionDTO[];
@@ -59,8 +59,8 @@ export function CommodityList({ positions, onDeleted }: Props) {
               <td className="px-4 py-3 text-right text-gray-500 tabular-nums">
                 {parseFloat(pos.gram_equivalent).toFixed(2)} g
               </td>
-              <td className="px-4 py-3 text-right font-semibold text-amber-700 tabular-nums">
-                {fmtTL(parseFloat(pos.total_value_tl))} ₺
+              <td className="px-4 py-3 text-right">
+                <TLValue tl={pos.total_value_tl} className="font-semibold text-amber-700 tabular-nums" />
               </td>
               <td className="px-3 py-3 text-right">
                 <button

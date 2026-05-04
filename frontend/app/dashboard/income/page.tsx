@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, IncomeDTO, IncomeSummaryDTO, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { IncomeForm } from "./_components/IncomeForm";
 import { IncomeTable } from "./_components/IncomeTable";
@@ -92,7 +93,7 @@ export default function IncomePage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">Bu ay toplam gelir</p>
-            <p className="text-3xl font-bold text-emerald-600">{fmtTL(total)} ₺</p>
+            <TLValue tl={total} className="text-3xl font-bold text-emerald-600" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             {summary && summary.count > 0 && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} kayıt</p>
             )}

@@ -1,6 +1,7 @@
 "use client";
 import { WalletPositionDTO } from "@/lib/api";
-import { fmtNum, fmtTL, shortAddr } from "@/lib/format";
+import { fmtNum, shortAddr } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { CHAIN_LABELS } from "./constants";
 
 interface Props {
@@ -18,7 +19,7 @@ export function WalletPositionsTable({ positions }: Props) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-700">Pozisyonlar</h2>
-        <span className="text-lg font-bold text-gray-900">{fmtTL(totalTL)} ₺</span>
+        <TLValue tl={totalTL} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
       <table className="w-full text-sm">
         <thead>
@@ -57,8 +58,8 @@ export function WalletPositionsTable({ positions }: Props) {
                 <td className="px-6 py-4 text-right text-gray-600">
                   ${fmtNum(pos.unit_price_usd, 2)}
                 </td>
-                <td className="px-6 py-4 text-right font-semibold text-gray-900">
-                  {fmtTL(pos.total_value_tl)} ₺
+                <td className="px-6 py-4 text-right">
+                  <TLValue tl={pos.total_value_tl} className="font-semibold text-gray-900" />
                 </td>
               </tr>
             );

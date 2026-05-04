@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, type CommoditySummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { CommodityForm } from "./_components/CommodityForm";
 import { CommodityList } from "./_components/CommodityList";
 
@@ -106,7 +107,7 @@ export default function CommoditiesPage() {
           <div className="flex flex-wrap gap-6 justify-between items-start">
             <div>
               <p className="text-xs text-gray-400 mb-1">Toplam değer</p>
-              <p className="text-3xl font-bold text-amber-600">{fmtTL(totalTL)} ₺</p>
+              <TLValue tl={totalTL} className="text-3xl font-bold text-amber-600" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
               {summary && (
                 <p className="text-xs text-gray-400 mt-1">{summary.positions.length} pozisyon</p>
               )}

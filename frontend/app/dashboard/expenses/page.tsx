@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { ExpenseForm } from "./_components/ExpenseForm";
 import { ExpenseTable } from "./_components/ExpenseTable";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
@@ -98,7 +99,7 @@ export default function ExpensesPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">Bu ay toplam</p>
-            <p className="text-3xl font-bold text-gray-900">{fmtTL(total)} ₺</p>
+            <TLValue tl={total} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             {summary && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} kayıt</p>
             )}
