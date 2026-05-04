@@ -3,6 +3,7 @@ from decimal import Decimal
 import httpx
 from web3 import AsyncWeb3
 from app.services.base import BaseBlockchainIntegration, AssetData
+from app.services.blockchain.evm_tokens import AVALANCHE_C_TOKENS, fetch_token_balances
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,19 @@ class AvalancheCChainService(BaseBlockchainIntegration):
                 liquid_quantity=liquid,
                 wallet_address_id=self.wallet_address_id,
             ))
+
+        # ERC-20 tokens (sAVAX, USDT.e, USDC.e)
+        try:
+            token_balances = await fetch_token_balances(self._w3, self.address, AVALANCHE_C_TOKENS)
+            for token, amount in token_balances:
+                assets.append(AssetData(
+                    symbol=token.symbol, name=token.name,
+                    provider="avalanche_c", asset_type="crypto", source_type="blockchain",
+                    liquid_quantity=amount,
+                    wallet_address_id=self.wallet_address_id,
+                ))
+        except Exception as exc:
+            logger.warning("Avalanche C ERC-20 tarama hatası [%s]: %s", self.address[:12], exc)
         return assets
 
     async def health_check(self) -> bool:

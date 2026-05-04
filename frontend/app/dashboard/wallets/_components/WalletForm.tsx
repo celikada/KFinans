@@ -86,11 +86,16 @@ export function WalletForm({
           onChange={(e) => setChain(e.target.value as Chain)}
           className={`w-44 ${INPUT_CLS}`}
         >
+          <option value="bitcoin">Bitcoin</option>
+          <option value="ethereum">Ethereum</option>
           <option value="sonic">Sonic (S)</option>
           <option value="avalanche_c">Avalanche C-Chain</option>
           <option value="avalanche_p">Avalanche P-Chain</option>
-          <option value="ethereum">Ethereum</option>
-          <option value="bitcoin">Bitcoin</option>
+          <option value="solana">Solana</option>
+          <option value="cardano">Cardano</option>
+          <option value="algorand">Algorand</option>
+          <option value="polkadot">Polkadot</option>
+          <option value="litecoin">Litecoin</option>
         </select>
         <input
           placeholder={
