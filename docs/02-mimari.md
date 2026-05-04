@@ -121,7 +121,7 @@ backend/app/
 │   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM, multi-RPC fallback)
 │   │   ├── ethereum.py    # EVM RPC (multi-RPC fallback) + Etherscan + Ethplorer ERC-20 discovery
 │   │   ├── bitcoin.py     # mempool.space (UTXO chain_stats) + xpub HD (bip-utils) + 10 dk cache + single-flight
-│   │   ├── solana.py      # JSON-RPC `getBalance` + `getProgramAccounts` (Stake program filter offset 12=staker, 44=withdrawer)
+│   │   ├── solana.py      # JSON-RPC `getBalance` + `getProgramAccounts` (Stake program filter offset 12=staker, 44=withdrawer) + 10 dk cache + single-flight + 429 retry/backoff
 │   │   ├── algorand.py    # Algonode public API (`/v2/accounts/{addr}`) — native ALGO + pending rewards
 │   │   ├── litecoin.py    # litecoinspace.org + Ltub→xpub version-byte swap (base58check) + bip-utils derivation + cache/single-flight
 │   │   ├── cardano.py     # Koios `/account_info` ile stake1 üzerinden toplam — addr1 girilirse Bech32 ile içinden stake1 türetilir (utxo + rewards_available)

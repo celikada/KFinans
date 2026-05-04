@@ -6,8 +6,12 @@ Native SOL bakiyesi + stake hesaplarındaki delegasyonu toplar.
   açılmış stake hesapları taranır, her birinin delegated stake'i toplanır.
 
 Public RPC: api.mainnet-beta.solana.com (rate limit ~10 req/s).
+Cache + single-flight pattern (Bitcoin servisinden) — dashboard'ın paralel
+yenilemeleri RPC'ye yağmasın.
 """
+import asyncio
 import logging
+import time
 from decimal import Decimal
 
 import httpx
@@ -20,18 +24,22 @@ LAMPORTS_PER_SOL = Decimal("1000000000")  # 10^9
 _RPC_URL = "https://api.mainnet-beta.solana.com"
 _STAKE_PROGRAM = "Stake11111111111111111111111111111111111111"
 
+# Cache: address → (timestamp, (liquid_lamports, staked_lamports))
+_BALANCE_CACHE: dict[str, tuple[float, tuple[Decimal, Decimal]]] = {}
+_CACHE_TTL_SEC = 600  # 10 dk
+_cache_lock = asyncio.Lock()
+_INFLIGHT: dict[str, asyncio.Future] = {}
+
 
 class SolanaService(BaseBlockchainIntegration):
     async def fetch(self) -> list[AssetData]:
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                native_lamports = await self._get_balance(client, self.address)
-                staked_lamports = await self._get_staked_total(client, self.address)
+            liquid_lamports, staked_lamports = await self._cached_balance()
         except Exception as exc:
             logger.warning("Solana bakiye alınamadı [%s]: %s", self.address[:16], exc)
             return []
 
-        liquid_sol = (native_lamports / LAMPORTS_PER_SOL).quantize(Decimal("0.000000001"))
+        liquid_sol = (liquid_lamports / LAMPORTS_PER_SOL).quantize(Decimal("0.000000001"))
         staked_sol = (staked_lamports / LAMPORTS_PER_SOL).quantize(Decimal("0.000000001"))
 
         if liquid_sol <= 0 and staked_sol <= 0:
@@ -50,43 +58,74 @@ class SolanaService(BaseBlockchainIntegration):
             )
         ]
 
-    @staticmethod
-    async def _get_balance(client: httpx.AsyncClient, address: str) -> Decimal:
-        resp = await client.post(_RPC_URL, json={
-            "jsonrpc": "2.0", "id": 1, "method": "getBalance", "params": [address],
-        })
-        resp.raise_for_status()
-        data = resp.json()
-        if "error" in data:
-            raise RuntimeError(f"Solana RPC error: {data['error']}")
-        return Decimal(str(data["result"]["value"]))
+    async def _cached_balance(self) -> tuple[Decimal, Decimal]:
+        loop = asyncio.get_running_loop()
+        is_owner = False
+        async with _cache_lock:
+            cached = _BALANCE_CACHE.get(self.address)
+            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
+                return cached[1]
+            inflight = _INFLIGHT.get(self.address)
+            if inflight is None:
+                inflight = loop.create_future()
+                _INFLIGHT[self.address] = inflight
+                is_owner = True
+
+        if not is_owner:
+            return await inflight
+
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                liquid = await self._get_balance(client, self.address)
+                staked = await self._get_staked_total(client, self.address)
+            result = (liquid, staked)
+            async with _cache_lock:
+                _BALANCE_CACHE[self.address] = (time.monotonic(), result)
+                _INFLIGHT.pop(self.address, None)
+            inflight.set_result(result)
+            return result
+        except Exception as exc:
+            async with _cache_lock:
+                _INFLIGHT.pop(self.address, None)
+            inflight.set_exception(exc)
+            raise
 
     @staticmethod
-    async def _get_staked_total(client: httpx.AsyncClient, address: str) -> Decimal:
-        """Adresin withdrawer/staker authority olduğu stake hesaplarını topla.
-
-        getProgramAccounts iki memcmp filter ile çağırılır (offset 12 = staker,
-        offset 44 = withdrawer). Native Ledger staking'de ikisi de aynı kullanıcı
-        olur. Aşırı eşleşme durumunda set ile dedup yapılır.
-        """
-        accounts: dict[str, Decimal] = {}
-        for offset in (12, 44):
+    async def _rpc_call(client: httpx.AsyncClient, method: str, params: list) -> dict:
+        """Rate limit (429) için 3 retry exponential backoff."""
+        for attempt in range(3):
             resp = await client.post(_RPC_URL, json={
-                "jsonrpc": "2.0", "id": 1, "method": "getProgramAccounts",
-                "params": [
-                    _STAKE_PROGRAM,
-                    {
-                        "encoding": "jsonParsed",
-                        "filters": [
-                            {"memcmp": {"offset": offset, "bytes": address}},
-                        ],
-                    },
-                ],
+                "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
             })
+            if resp.status_code == 429:
+                await asyncio.sleep(1.0 * (attempt + 1))
+                continue
             resp.raise_for_status()
             data = resp.json()
             if "error" in data:
-                logger.debug("Solana stake offset %d hata: %s", offset, data["error"])
+                raise RuntimeError(f"Solana RPC error ({method}): {data['error']}")
+            return data
+        raise RuntimeError(f"Solana {method} 3 deneme sonrası 429 kaldı")
+
+    @classmethod
+    async def _get_balance(cls, client: httpx.AsyncClient, address: str) -> Decimal:
+        data = await cls._rpc_call(client, "getBalance", [address])
+        return Decimal(str(data["result"]["value"]))
+
+    @classmethod
+    async def _get_staked_total(cls, client: httpx.AsyncClient, address: str) -> Decimal:
+        accounts: dict[str, Decimal] = {}
+        for offset in (12, 44):
+            try:
+                data = await cls._rpc_call(client, "getProgramAccounts", [
+                    _STAKE_PROGRAM,
+                    {
+                        "encoding": "jsonParsed",
+                        "filters": [{"memcmp": {"offset": offset, "bytes": address}}],
+                    },
+                ])
+            except Exception as exc:
+                logger.debug("Solana stake offset %d hata: %s", offset, exc)
                 continue
             for acc in data.get("result", []) or []:
                 pubkey = acc.get("pubkey")
