@@ -5,6 +5,7 @@ from app.models.portfolio import PortfolioSnapshot, AssetPosition
 from app.models.advice import InvestmentAdvice
 from app.models.tefas import TefasHolding
 from app.models.commodity import CommodityHolding
+from app.models.cash import CashHolding
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "InvestmentAdvice",
     "TefasHolding",
     "CommodityHolding",
+    "CashHolding",
 ]

@@ -44,6 +44,7 @@ export const DASHBOARD_CARDS = [
   { id: "goal",        label: "Finansal Hedef" },
   { id: "commodities", label: "Altın & Gümüş" },
   { id: "budget",      label: "Bütçe Takibi" },
+  { id: "cash",        label: "Nakit / Banka" },
 ] as const;
 
 export type DashboardCardId = typeof DASHBOARD_CARDS[number]["id"];

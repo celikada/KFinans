@@ -490,6 +490,15 @@ export const api = {
   getMe: () => request<UserMeDTO>("/user/me"),
 
   getUsdRate: () => request<{ usd_try: string }>("/portfolio/usd-rate"),
+
+  // Nakit (Faz 3 — manuel giriş)
+  listCash: () => request<CashSummaryDTO>("/cash"),
+  createCash: (payload: CashCreateInput) =>
+    request<CashDTO>("/cash", { method: "POST", body: JSON.stringify(payload) }),
+  updateCash: (id: number, payload: Partial<CashCreateInput>) =>
+    request<CashDTO>(`/cash/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteCash: (id: number) =>
+    request<void>(`/cash/${id}`, { method: "DELETE" }),
   updateProfile: (risk_profile: string) =>
     request<UserMeDTO>("/user/profile", {
       method: "PUT",
@@ -904,6 +913,30 @@ export interface CommodityPositionDTO extends CommodityDTO {
   total_value_tl: string;
   gold_price_tl: string;
   silver_price_tl: string;
+}
+
+export type CashCurrency = "TRY" | "USD" | "EUR" | "GBP";
+
+export interface CashCreateInput {
+  label: string;
+  amount: number;
+  currency: CashCurrency;
+  notes?: string | null;
+}
+
+export interface CashDTO {
+  id: number;
+  label: string;
+  amount: string;
+  currency: string;
+  notes: string | null;
+  updated_at: string;
+  amount_tl: string;
+}
+
+export interface CashSummaryDTO {
+  holdings: CashDTO[];
+  total_tl: string;
 }
 
 export interface CommoditySummaryDTO {

@@ -68,6 +68,8 @@ export default function DashboardPage() {
 
   // Kıymetli madenler
   const [commodityTotal, setCommodityTotal] = useState<number | null>(null);
+  const [cashTotal, setCashTotal] = useState<number | null>(null);
+  const [cashCount, setCashCount] = useState(0);
   const [commodityCount, setCommodityCount] = useState(0);
 
   // Bütçe
@@ -166,6 +168,14 @@ export default function DashboardPage() {
       }
     }).catch(() => {});
 
+    api.listCash().then((s) => {
+      const total = parseFloat(s.total_tl);
+      if (s.holdings.length > 0) {
+        setCashTotal(total);
+        setCashCount(s.holdings.length);
+      }
+    }).catch(() => {});
+
     api.getBudgetComparison(now.getFullYear(), now.getMonth() + 1).then((rows) => {
       const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
       setBudgetOverCount(overCount);
@@ -238,7 +248,8 @@ export default function DashboardPage() {
     (stockTotal ?? 0) +
     (walletTotal ?? 0) +
     (besTotal ?? 0) +
-    (commodityTotal ?? 0);
+    (commodityTotal ?? 0) +
+    (cashTotal ?? 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -417,6 +428,20 @@ export default function DashboardPage() {
           {!hiddenCards.includes("budget") && (
             <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
           )}
+
+          {!hiddenCards.includes("cash") && (
+            <Card
+              href="/dashboard/cash"
+              icon="cash"
+              color="green"
+              title="Nakit / Banka"
+              total={cashTotal}
+              count={cashCount}
+              countLabel="hesap"
+              top={[]}
+              placeholder="Banka hesabı + nakit (manuel)"
+            />
+          )}
         </div>
       </main>
 
@@ -449,7 +474,7 @@ const COLOR_MAP: Record<string, { bg: string; border: string; text: string; acce
   amber:   { bg: "bg-amber-50",   border: "hover:border-amber-200",   text: "text-amber-600",   accent: "bg-amber-500" },
 };
 
-type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget";
+type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget" | "cash";
 
 const ICONS: Record<IconName, React.ReactNode> = {
   tefas: (
@@ -517,6 +542,13 @@ const ICONS: Record<IconName, React.ReactNode> = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
       <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
       <path d="M22 12A10 10 0 0 0 12 2v10z" />
+    </svg>
+  ),
+  cash: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M6 12h.01M18 12h.01" />
     </svg>
   ),
 };

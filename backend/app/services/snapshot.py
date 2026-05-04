@@ -112,6 +112,77 @@ async def _gather_tefas_assets(holdings: list[TefasHolding]) -> list[AssetData]:
         return []
 
 
+async def _gather_cash_assets(holdings: list, usd_tl: Decimal) -> list[AssetData]:
+    """Nakit/banka hesabı bakiyelerini AssetData'ya çevirir.
+    USD/EUR/GBP → TRY dönüşümü USD/TRY üzerinden yapılır (basit yaklaşım)."""
+    if not holdings:
+        return []
+    out: list[AssetData] = []
+    for h in holdings:
+        amount = Decimal(str(h.amount))
+        if h.currency == "TRY":
+            tl = amount
+        elif usd_tl > 0:
+            tl = (amount * usd_tl).quantize(Decimal("0.01"))
+        else:
+            continue
+        if tl <= 0:
+            continue
+        out.append(AssetData(
+            symbol=h.currency, name=h.label,
+            provider="cash", asset_type="cash", source_type="manual",
+            liquid_quantity=Decimal("1"),
+            unit_price_tl=tl,
+        ))
+    return out
+
+
+async def _gather_commodity_assets(holdings: list) -> list[AssetData]:
+    """CommodityHolding'leri (altın/gümüş gram/BiGA/sikke) AssetData'ya çevirir.
+    Anlık metal fiyatlarıyla TL değer hesaplanır. Yahoo başarısız olursa
+    metal fiyatı 0 → o pozisyon snapshot'a eklenmez (uyarı log).
+    """
+    if not holdings:
+        return []
+    from app.services.commodity import calculate_holding_value, fetch_metal_prices
+
+    try:
+        prices = await fetch_metal_prices()
+    except Exception as exc:
+        logger.warning("Snapshot: metal fiyatları çekilemedi: %s", exc)
+        return []
+
+    gold_price = prices.get("gold", Decimal("0"))
+    silver_price = prices.get("silver", Decimal("0"))
+
+    out: list[AssetData] = []
+    for h in holdings:
+        try:
+            val = calculate_holding_value(h, gold_price, silver_price)
+        except Exception as exc:
+            logger.warning("Snapshot: commodity %d hesaplanamadı: %s", h.id, exc)
+            continue
+        if val["total_value_tl"] <= 0:
+            continue
+        symbol = "XAU" if h.metal == "gold" else "XAG"
+        name = "Altın" if h.metal == "gold" else "Gümüş"
+        if h.unit_type == "biga" and h.biga_code:
+            name = f"{name} ({h.biga_code})"
+        elif h.unit_type == "coin" and h.coin_type:
+            coin_label = {
+                "ceyrek": "Çeyrek", "yarim": "Yarım", "tam": "Tam",
+                "cumhuriyet": "Cumhuriyet", "resat": "Reşat", "ata": "Ata",
+            }.get(h.coin_type, h.coin_type)
+            name = f"{coin_label} Altın"
+        out.append(AssetData(
+            symbol=symbol, name=name,
+            provider="commodity", asset_type="commodity", source_type="manual",
+            liquid_quantity=Decimal("1"),
+            unit_price_tl=val["total_value_tl"],
+        ))
+    return out
+
+
 def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
     """BES holdinglerini AssetData'ya cevirir.
 
@@ -189,7 +260,10 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
     await db.flush()
 
     # Tum kaynaklari paralel cek
-    intg_q, wallet_q, tefas_q, stock_q, bes_q = await asyncio.gather(
+    from app.models.cash import CashHolding
+    from app.models.commodity import CommodityHolding
+
+    intg_q, wallet_q, tefas_q, stock_q, bes_q, commodity_q, cash_q = await asyncio.gather(
         db.execute(
             select(Integration).where(
                 Integration.user_id == user_id, Integration.is_active.is_(True)
@@ -203,12 +277,16 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         db.execute(select(TefasHolding).where(TefasHolding.user_id == user_id)),
         db.execute(select(StockHolding).where(StockHolding.user_id == user_id)),
         db.execute(select(BesHolding).where(BesHolding.user_id == user_id)),
+        db.execute(select(CommodityHolding).where(CommodityHolding.user_id == user_id)),
+        db.execute(select(CashHolding).where(CashHolding.user_id == user_id)),
     )
     integrations = intg_q.scalars().all()
     wallets = wallet_q.scalars().all()
     tefas_holdings = tefas_q.scalars().all()
     stock_holdings = stock_q.scalars().all()
     bes_holdings = bes_q.scalars().all()
+    commodity_holdings = commodity_q.scalars().all()
+    cash_holdings = cash_q.scalars().all()
 
     # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
@@ -227,11 +305,13 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         gbp_usd = Decimal("0")
 
     # Tum kaynaklardan asset'leri topla (paralel)
-    crypto_assets, wallet_assets, tefas_assets, stock_assets = await asyncio.gather(
+    crypto_assets, wallet_assets, tefas_assets, stock_assets, commodity_assets, cash_assets = await asyncio.gather(
         _gather_crypto_assets(integrations),
         _gather_wallet_assets(wallets),
         _gather_tefas_assets(tefas_holdings),
         _gather_stock_assets(stock_holdings, usd_tl, gbp_usd),
+        _gather_commodity_assets(commodity_holdings),
+        _gather_cash_assets(cash_holdings, usd_tl),
     )
     bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
     all_assets: list[AssetData] = (
@@ -240,6 +320,8 @@ async def compute_and_save_snapshot(user_id: uuid.UUID, db: AsyncSession) -> Por
         + list(tefas_assets)
         + list(stock_assets)
         + list(bes_assets)
+        + list(commodity_assets)
+        + list(cash_assets)
     )
 
     # Toplam degeri hesapla (weight_pct icin gerekli)

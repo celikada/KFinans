@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     bes,
     budget,
+    cash,
     commodity,
     expenses,
     goal,
@@ -33,4 +34,5 @@ api_router.include_router(goal.router)
 api_router.include_router(income.router)
 api_router.include_router(budget.router)
 api_router.include_router(commodity.router)
+api_router.include_router(cash.router)
 api_router.include_router(advice.router)
