@@ -332,6 +332,24 @@ frontend/
 **Backend runtime bağımlılıkları (son eklenenler):**
 - `xlrd==1.2.0` — MKK e-Yatırımcı eski .xls binary parse için. **Sürüm pin'lendi:** xlrd 2.0+ xlsx desteğini kaldırdı; MKK dosyaları için 1.2.0 (xls binary destekli son sürüm) zorunlu. Yeni endpoint'ler: `POST /portfolio/tefas/import-mkk` + `POST /portfolio/stocks/import-mkk`.
 
+**Yeni dış bağımlılıklar (10 zincir + ERC-20 discovery):**
+
+| Servis | URL | Kullanım | Limit / Not |
+|--------|-----|----------|-------------|
+| mempool.space | `https://mempool.space/api` | Bitcoin UTXO `chain_stats` (xpub HD tarama) | Public, key yok; 10 dk in-memory cache + single-flight |
+| Solana JSON-RPC | `https://api.mainnet-beta.solana.com` | `getBalance` + `getProgramAccounts` (Stake program filter) | Public RPC, key yok |
+| Ethplorer | `https://api.ethplorer.io` (key='freekey') | Ethereum mainnet ERC-20 token discovery (dinamik) | Free tier ~50 istek/gün |
+| Cardano / Algorand / Polkadot / Litecoin | Public REST API'ler | Adres bakiyesi (Faz A) | Single query / adres |
+
+**Multi-RPC fallback listesi:**
+
+| Zincir | RPC Sırası |
+|--------|-----------|
+| Ethereum | `settings.ethereum_rpc_url` → publicnode → merkle → 1rpc → ankr |
+| Avalanche C | `settings.avalanche_c_rpc_url` → public-rpc → drpc → 1rpc |
+
+İlk başarılı RPC seçilir; tümü fail olursa servis 0 döner ve snapshot bu kaynak için 0 değerle devam eder (best-effort).
+
 **npm scripts:**
 ```
 npm test           # Vitest run

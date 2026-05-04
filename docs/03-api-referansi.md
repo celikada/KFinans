@@ -16,6 +16,8 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 { "detail": "İnsan okunabilir Türkçe açıklama" }
 ```
 
+> **422 Validation Logger:** `main.py` `RequestValidationError` exception handler 422 hata detayını (`exc.errors()`) sunucu log'una yazar — frontend response formatı değişmez. Geliştirme sırasında schema doğrulama hatasının hangi alandan kaynaklandığı log'dan görülebilir.
+
 ### 1.3 Standart HTTP Kodları
 | Kod | Anlamı               | Örnek                                   |
 | --- | -------------------- | --------------------------------------- |
@@ -260,7 +262,7 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
 > Döviz kuru: USD/TL kritik — TCMB primary, exchangerate-api fallback; ikisi de fail ise snapshot iptal (503). GBP/USD opsiyonel — fail ise UK hisseleri 0 değerle devam eder (201).
 
 ### `GET /portfolio/wallets`
-**Anlık** blockchain pozisyonları (Sonic, Avalanche, Ethereum).
+**Anlık** blockchain pozisyonları (10 zincir: Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin).
 ```json
 {
   "positions": [{
@@ -279,6 +281,10 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
   "errors": {}
 }
 ```
+
+> Aynı response'ta zincire göre çeşitli `symbol` değerleri görülebilir: native token (`BTC`, `ETH`, `S`, `AVAX`, `SOL`, `ADA`, `DOT`, `ALGO`, `LTC`) + ERC-20 token'lar (Ethplorer dinamik discovery: `LINK`, `USDT`, `USDC` vb.) + curated AVAX list (`sAVAX`, `USDT.e`, `USDC.e`). Spot fiyatlar `aggregator.fetch_spot_prices()` 12 sembol için çekilir (`S`, `AVAX`, `ETH`, `BTC`, `SOL`, `ADA`, `DOT`, `ALGO`, `LTC`, `LINK`, `USDT`, `USDC`).
+> Solana için `staked_quantity` Stake program (`getProgramAccounts`) sonucuyla doldurulur.
+> Bitcoin için 10 dk in-memory cache + single-flight pattern (paralel cache miss'lerde tek tarama paylaşılır).
 
 ---
 
@@ -484,12 +490,28 @@ Tüm aktif cüzdan adresleri.
 ### `POST /wallets`
 ```json
 {
-  "chain":   "sonic",       // 'ethereum'|'sonic'|'avalanche_p'|'avalanche_c'|'bitcoin'
-  "address": "0x... | bc1q... | 1... | 3... | xpub... | zpub... (Bitcoin HD)",
+  "chain":   "sonic",       // 10 zincir: 'bitcoin'|'ethereum'|'sonic'|'avalanche_c'|'avalanche_p'|'solana'|'cardano'|'algorand'|'polkadot'|'litecoin'
+  "address": "...",         // Aşağıdaki tabloda zincir bazlı format
   "label":   "Ana cüzdan"
 }
 409: { "detail": "Bu cüzdan zaten kayıtlı" }
+422: { "detail": "..." }   // Geçersiz chain veya format — main.py validation handler log'a yazar
 ```
+
+**Chain başına adres formatı:**
+
+| Chain | Format | Örnek |
+|-------|--------|-------|
+| `bitcoin` | `bc1q...` (Bech32) / `1...` / `3...` / `xpub...` / `zpub...` (HD) | `bc1q...` |
+| `ethereum` | EVM `0x...` (40 hex) | `0x742d35Cc...` |
+| `sonic` | EVM `0x...` (40 hex) | `0x...` |
+| `avalanche_c` | EVM `0x...` (40 hex) | `0x...` |
+| `avalanche_p` | `P-avax1...` (Bech32) | `P-avax1...` |
+| `solana` | Base58 (32-44 karakter) | `So11111111111111111111111111111111111111112` |
+| `cardano` | `addr1...` (Bech32) | `addr1q...` |
+| `algorand` | Base32 (58 karakter) | `XYZ...` |
+| `polkadot` | SS58 (`1...`) | `1FRMM8PE...` |
+| `litecoin` | `ltc1...` / `L...` / `M...` | `ltc1q...` |
 
 ### `DELETE /wallets/{id}`
 

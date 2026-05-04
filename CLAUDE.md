@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje Hakkında
 
-KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve blockchain cüzdanları (Sonic, Avalanche, Ethereum, Bitcoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.
+KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve **10 zincir blockchain cüzdanları** (Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.
 
 ## Tech Stack
 
@@ -12,9 +12,12 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 |--------|-----------|
 | Backend API | Python 3.12 + FastAPI |
 | Exchange entegrasyonu | CCXT (Binance, iCrypex) |
-| Blockchain entegrasyonu | web3.py (Sonic SFC, Avalanche C-Chain, Ethereum) |
+| Blockchain — EVM | web3.py (Ethereum, Sonic SFC, Avalanche C-Chain) — multi-RPC fallback (publicnode, merkle, 1rpc, ankr, drpc) |
 | Avalanche P-Chain | httpx + Avalanche REST API |
-| Bitcoin | httpx + mempool.space public API (no key) + bip-utils (xpub HD derivation) |
+| Bitcoin | httpx + mempool.space public API (no key) + bip-utils (xpub HD derivation) — 10 dk in-memory cache + single-flight pattern |
+| Solana | httpx + `api.mainnet-beta.solana.com` JSON-RPC (`getBalance` + `getProgramAccounts` Stake program filter) |
+| Cardano / Algorand / Polkadot / Litecoin | Public REST API'ler (Faz A taraması) |
+| ERC-20 token discovery | Ethplorer free API (`api.ethplorer.io`, key='freekey'); Avalanche için curated list (sAVAX, USDT.e, USDC.e) |
 | TEFAS | httpx + JSON API |
 | Hisse senedi | Yahoo Finance Chart API (httpx) |
 | Kıymetli madenler | TCMB USD/TRY + Yahoo Finance XAU=X / XAG=X (GC=F / SI=F fallback) |
@@ -39,7 +42,9 @@ KFinans/
 │   │   │                          # advice)
 │   │   ├── services/
 │   │   │   ├── exchange/          # CCXT tabanlı (Binance, iCrypex, BinanceTR)
-│   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C, Ethereum (web3.py) + Bitcoin (mempool.space)
+│   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C, Ethereum (web3.py multi-RPC),
+│   │   │   │                      # Bitcoin (mempool.space + cache), Solana (JSON-RPC),
+│   │   │   │                      # evm_tokens.py (ERC-20 discovery — Ethplorer + curated list + spam filter)
 │   │   │   ├── tefas.py
 │   │   │   ├── stocks.py
 │   │   │   ├── commodity.py       # TCMB + Yahoo XAU/XAG fallback chain + 5 dk cache
@@ -101,6 +106,14 @@ cd frontend && npm install && npm run dev
 **BES:** Manuel giriş + Excel import/export. 4 metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Snapshot servisi `_gather_bes_assets()` ile `asset_type="pension"` olarak entegre eder.
 
 **Fault-tolerance pattern:** Dış servisler **kritik** ve **best-effort** olarak ayrılır. TCMB USD/TRY kritik (fail → 503); GBP/USD opsiyonel (fail → 0 + log warning). Yahoo Finance metal sembolleri için fallback chain (XAU=X→GC=F, XAG=X→SI=F); ikisi de fail ise 0 dön + UI uyarı banner. Cache TTL Yahoo fail durumunda 5 dk → 30 sn'ye düşer (geçici 404 hızla telafi edilir).
+
+**Multi-RPC fallback (EVM zincirler):** Ethereum ve Avalanche C-Chain `settings.{ethereum,avalanche_c}_rpc_url` → publicnode → merkle → 1rpc → ankr → drpc sırasıyla denenir; upstream patladığında self-heal sağlar. Servisler ilk başarılı RPC'yi seçer.
+
+**Bitcoin xpub cache + single-flight:** `bitcoin.py` modül seviyesinde `_BALANCE_CACHE` (10 dk TTL) ve `_INFLIGHT` dict + `asyncio.Future` tutar. Dashboard yenileme rate limit'e takılmasın diye paralel cache miss'lerde tek tarama paylaşılır; tüm metal 0 dönerse TTL 30 sn'ye düşer (geçici 404 hızla recovery).
+
+**Ethereum ERC-20 token discovery (Ethplorer):** Ethereum mainnet için `evm_tokens.py::fetch_ethereum_tokens_via_ethplorer()` `api.ethplorer.io` free tier (key='freekey', ~50 istek/gün) ile kullanıcının tüm ERC-20 token bakiyelerini dinamik bulur. **Spam filter:** domain TLD'leri (.io/.com/.finance), Cherokee/Math Alphanumeric Unicode spoofing, "Visit/claim rewards" pattern'leri ve >1e12 miktar token'lar `_looks_like_spam()` ile atılır. Avalanche C-Chain için curated `AVALANCHE_C_TOKENS` (sAVAX, USDT.e, USDC.e) — sequential `balanceOf` (Infura/RPC rate limit), 3 retry + 0.5 sn backoff.
+
+**422 Validation log handler:** `main.py` `RequestValidationError` exception handler 422 hata detayını (`exc.errors()`) log'a yazar; frontend'e mevcut formatta dönüş — debug ipucu.
 
 **MKK e-Yatırımcı Excel import:** `xlrd 1.2.0` ile eski .xls binary parse. Header satırı "Üye" sütunundan otomatik tespit. Sınıfa göre filtre: TEFAS için `Kıymet Sınıfı=Fon`, hisse için `Kıymet Sınıfı=HS AND Ek Tanım=A`. BIST kodları otomatik `.IS` suffix ile Yahoo Finance ticker'ına çevrilir. Mevcut kayıtlar replace-all silinir.
 

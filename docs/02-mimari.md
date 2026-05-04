@@ -115,9 +115,11 @@ backend/app/
 │   │   └── icrypex.py     # CCXT wrapper
 │   ├── blockchain/
 │   │   ├── sonic.py       # SFC staking contract, Semaphore(20) paralel
-│   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM)
-│   │   ├── ethereum.py    # EVM RPC + Etherscan
-│   │   └── bitcoin.py     # mempool.space public API (UTXO chain_stats) + xpub HD desteği (bip-utils, BIP-84/44 chain tarama)
+│   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM, multi-RPC fallback)
+│   │   ├── ethereum.py    # EVM RPC (multi-RPC fallback) + Etherscan + Ethplorer ERC-20 discovery
+│   │   ├── bitcoin.py     # mempool.space (UTXO chain_stats) + xpub HD (bip-utils) + 10 dk cache + single-flight
+│   │   ├── solana.py      # JSON-RPC `getBalance` + `getProgramAccounts` (Stake program filter offset 12=staker, 44=withdrawer)
+│   │   └── evm_tokens.py  # ERC-20 discovery: Ethplorer (ETH dinamik) + curated AVAX list + spam filter
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── commodity.py       # Altın/Gümüş — TCMB USD/TRY + Yahoo XAU/XAG fallback chain + 5 dk cache
@@ -334,7 +336,7 @@ UNIQUE (user_id, provider)
 ```sql
 id         UUID PK
 user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-chain      TEXT NOT NULL                         -- 'sonic'|'avalanche_p'|'avalanche_c'|'ethereum'|'bitcoin'
+chain      TEXT NOT NULL                         -- 'bitcoin'|'ethereum'|'sonic'|'avalanche_c'|'avalanche_p'|'solana'|'cardano'|'algorand'|'polkadot'|'litecoin' (10 zincir)
 address    TEXT NOT NULL
 label      TEXT
 is_active  BOOLEAN NOT NULL DEFAULT TRUE
@@ -635,8 +637,11 @@ class Asset:
 | iCrypex           | `ICrypexService`                            | CCXT wrapper                                                                                                                                                                 |
 | Sonic             | `SonicService`                              | web3.py + SFC staking contract; `Semaphore(20)` ile paralel validator sorgu                                                                                                  |
 | Avalanche P-Chain | `AvalanchePChainService`                    | `platform.getStake` REST API, httpx                                                                                                                                          |
-| Avalanche C-Chain | `AvalancheCChainService`                    | EVM RPC, web3.py                                                                                                                                                             |
-| Ethereum          | `EthereumService`                           | EVM RPC + Etherscan                                                                                                                                                          |
+| Avalanche C-Chain | `AvalancheCChainService`                    | EVM RPC, web3.py — multi-RPC fallback (settings → public-rpc → drpc → 1rpc); curated 3 ERC-20 (sAVAX, USDT.e, USDC.e)                                                       |
+| Ethereum          | `EthereumService`                           | EVM RPC (multi-RPC fallback: settings → publicnode → merkle → 1rpc → ankr) + Etherscan + Ethplorer ERC-20 discovery                                                          |
+| Solana            | `SolanaService`                             | `api.mainnet-beta.solana.com` JSON-RPC; liquid (native SOL `getBalance`) + staked (`getProgramAccounts` Stake program, offset 12=staker, 44=withdrawer)                       |
+| Cardano / Algorand / Polkadot / Litecoin | (Faz A — public REST API'ler) | Adres bakiyesi tek query; staking ayrımı yok                                                                                                                                |
+| ERC-20 token discovery | `evm_tokens.py`                       | `fetch_ethereum_tokens_via_ethplorer()` (free key='freekey', ~50 istek/gün); `fetch_token_balances()` curated AVAX list — sequential `balanceOf` + 3 retry + 0.5 sn backoff; `_looks_like_spam()` filter |
 | TEFAS             | `TefasService`                              | httpx + JSON API                                                                                                                                                             |
 | Yahoo Finance     | `fetch_stock_quotes()`                      | httpx (`v8/finance/chart/{ticker}`)                                                                                                                                          |
 | BES               | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")`                                                                                             |
@@ -691,6 +696,41 @@ KFinans dış API kaynaklarını **kritik** ve **best-effort** olarak ayırır.
 | Binance / iCrypex / blockchain | Per-source | Her kaynak izole, biri fail diğerleri devam |
 
 **Cache stratejisi:** Yahoo Finance metal sembolleri başarısız olursa cache TTL 5 dakikadan 30 saniyeye düşer — geçici 404 hızla telafi olur, sürekli sayfa açıldığında 5 dakika boyunca aynı 0 değer takılı kalmaz.
+
+### 8.3.1 Multi-RPC Fallback Pattern (EVM)
+
+`EthereumService` ve `AvalancheCChainService` upstream RPC patladığında self-heal sağlar:
+
+| Servis | RPC Sırası |
+|--------|-----------|
+| Ethereum | `settings.ethereum_rpc_url` → publicnode → merkle → 1rpc → ankr |
+| Avalanche C | `settings.avalanche_c_rpc_url` → public-rpc → drpc → 1rpc |
+
+İlk başarılı RPC seçilir; tümü fail olursa servis hata döner ve snapshot bu kaynak için 0 değerle devam eder.
+
+### 8.3.2 Bitcoin Cache + Single-Flight Pattern
+
+`bitcoin.py` modül seviyesinde iki paylaşılan yapı tutar:
+
+| Yapı | Amaç |
+|------|------|
+| `_BALANCE_CACHE` (dict, 10 dk TTL) | Dashboard yenileme rate limit'e takılmasın |
+| `_INFLIGHT` (dict[address, asyncio.Future]) | Paralel cache miss'lerde tek tarama paylaşılır (single-flight) |
+
+xpub HD tarama maliyetli olduğu için cache hit oranını yüksek tutar. **Düşürülmüş TTL:** Tüm metal 0 dönerse cache TTL 30 saniyeye düşer — geçici 404 sonrası hızlı recovery sağlar.
+
+### 8.3.3 ERC-20 Token Discovery (Ethplorer + Spam Filter)
+
+| Zincir | Yöntem |
+|--------|--------|
+| Ethereum | `fetch_ethereum_tokens_via_ethplorer()` — Ethplorer free API (`api.ethplorer.io`, key='freekey'); dinamik discovery |
+| Avalanche C | Curated `AVALANCHE_C_TOKENS` listesi (sAVAX, USDT.e, USDC.e); sequential `balanceOf` + 3 retry + 0.5 sn backoff (Infura/RPC rate limit) |
+
+**Spam filter (`_looks_like_spam()`):** ad/sembolde domain TLD'leri (.io/.com/.finance), Cherokee veya Math Alphanumeric Unicode spoofing, "Visit/claim rewards" pattern'leri ve >1e12 miktar token'lar atılır. Saldırgan ERC-20 airdrop'larının dashboard'a kirletmesini engeller.
+
+### 8.3.4 422 Validation Log Handler
+
+`main.py` `RequestValidationError` exception handler 422 hata detayını (`exc.errors()`) log'a yazar — frontend'e mevcut formatta dönüş; geliştirme sırasında schema validation hatasının hangi alanda kaynaklandığı log'dan görülür.
 
 ## 8.4 MKK e-Yatırımcı Excel Import Pattern (Yeni)
 

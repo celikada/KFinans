@@ -18,7 +18,7 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
 | Hisse senedi portföyü (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/stocks` | ✅ Aktif |
-| Blockchain cüzdanları (5 zincir: Sonic, Avalanche P/C, Ethereum, Bitcoin) | `/dashboard/wallets` | ✅ Aktif |
+| Blockchain cüzdanları (10 zincir: BTC, ETH, Sonic, AVAX C/P, SOL, ADA, ALGO, DOT, LTC) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/tefas` | ✅ Aktif |
 | BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
 | Harcama takibi (form + tablo + pasta grafik + ay seçici + Excel) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |
@@ -113,6 +113,27 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
   4. **Dashboard kart gizleme:** 11 kart için checkbox toggle (`localStorage.kfinans_hidden_cards`)
   5. **Hesap silme:** confirm dialog + `DELETE /user/me` (soft-delete) → `clearAuth()` + `/login` yönlendirme
 
+### Wallets Sayfası — 10 Zincir (Yeni)
+
+`/dashboard/wallets` `WalletForm` bileşeni (`_components/WalletForm.tsx`) 10 zincirli dropdown ile cüzdan ekleme formu sunar.
+
+- **Zincir sırası (dropdown):** Bitcoin → Ethereum → Sonic → AVAX C → AVAX P → Solana → Cardano → Algorand → Polkadot → Litecoin
+- **Dinamik placeholder:** Seçilen zincire göre adres formatı (`bc1q...` / `0x...` / `P-avax1...` / Base58 / `addr1...` vb.)
+- **Dinamik hint başlığı:** `CHAIN_LABELS` üzerinden seçili zincirin adı kullanılır
+- **(i) Info butonu:** Tıklayınca açılır panel — chain'e özel `format` (kabul edilen adres formatları) + `howTo` (örn. Ledger Live'da nereden alınır) bilgisi
+
+**`_components/constants.ts` (yeni/genişletilmiş):**
+
+| Sabit | İçerik |
+|-------|--------|
+| `Chain` (type) | 10 zincir union: `'bitcoin' \| 'ethereum' \| 'sonic' \| 'avalanche_c' \| 'avalanche_p' \| 'solana' \| 'cardano' \| 'algorand' \| 'polkadot' \| 'litecoin'` |
+| `CHAIN_LABELS` | Her zincir için Türkçe etiket (örn. "Bitcoin", "Solana", "Avalanche C-Chain") |
+| `CHAIN_SYMBOLS` | Native sembol: `BTC`, `ETH`, `S`, `AVAX`, `SOL`, `ADA`, `ALGO`, `DOT`, `LTC` |
+| `CHAIN_PLACEHOLDERS` | Her zincir için spesifik input placeholder |
+| `CHAIN_ADDRESS_HINTS` | `{ format, howTo }` — info panelinde gösterilen format + Ledger Live yönlendirmesi |
+
+> ERC-20 token'ları (LINK/USDT/USDC) ve curated AVAX listesi (sAVAX/USDT.e/USDC.e) wallet response'unda otomatik görünür — formdan ayrıca eklenmez.
+
 ### TEFAS + Stocks Sayfaları (Faz 3 Genişletme)
 - `HoldingsForm` bileşenlerine "Ort. maliyet ₺" + "Kurum" inputları eklendi
 - `StockPositionsTable` ve TEFAS tablosu: yeni kolonlar Ort. Maliyet (₺) + **Kâr/Zarar (₺ + %)** (yeşil/kırmızı renk) + **Kurum** (mavi pill badge)
@@ -157,7 +178,11 @@ frontend/
 │       │       ├── HoldingsForm.tsx
 │       │       └── StockPositionsTable.tsx
 │       ├── tefas/page.tsx        # TEFAS (Excel + MKK + maliyet/kâr-zarar + kurum)
-│       ├── wallets/page.tsx
+│       ├── wallets/                # 10 zincir cüzdan formu (Faz A)
+│       │   ├── page.tsx
+│       │   └── _components/
+│       │       ├── WalletForm.tsx  # 10 dropdown + (i) info paneli + dinamik placeholder/hint
+│       │       └── constants.ts    # Chain, CHAIN_LABELS, CHAIN_SYMBOLS, CHAIN_PLACEHOLDERS, CHAIN_ADDRESS_HINTS
 │       ├── bes/page.tsx
 │       ├── expenses/             # Harcama (4 component + Excel)
 │       │   ├── page.tsx
