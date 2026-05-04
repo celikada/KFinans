@@ -122,6 +122,9 @@ backend/app/
 │   │   ├── ethereum.py    # EVM RPC (multi-RPC fallback) + Etherscan + Ethplorer ERC-20 discovery
 │   │   ├── bitcoin.py     # mempool.space (UTXO chain_stats) + xpub HD (bip-utils) + 10 dk cache + single-flight
 │   │   ├── solana.py      # JSON-RPC `getBalance` + `getProgramAccounts` (Stake program filter offset 12=staker, 44=withdrawer)
+│   │   ├── algorand.py    # Algonode public API (`/v2/accounts/{addr}`) — native ALGO + pending rewards
+│   │   ├── litecoin.py    # litecoinspace.org + Ltub→xpub version-byte swap (base58check) + bip-utils derivation + cache/single-flight
+│   │   ├── cardano.py     # Koios `/account_info` ile stake1 üzerinden toplam — addr1 girilirse Bech32 ile içinden stake1 türetilir (utxo + rewards_available)
 │   │   └── evm_tokens.py  # ERC-20 discovery: Ethplorer (ETH dinamik) + curated AVAX list + spam filter
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API

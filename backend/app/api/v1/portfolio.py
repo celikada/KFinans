@@ -27,7 +27,10 @@ from app.services.exchange.icrypex import ICrypexService
 from app.services.blockchain.sonic import SonicService
 from app.services.blockchain.avalanche import AvalanchePChainService, AvalancheCChainService
 from app.services.blockchain.ethereum import EthereumService
+from app.services.blockchain.algorand import AlgorandService
 from app.services.blockchain.bitcoin import BitcoinService
+from app.services.blockchain.cardano import CardanoService
+from app.services.blockchain.litecoin import LitecoinService
 from app.services.blockchain.solana import SolanaService
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -239,6 +242,12 @@ async def get_wallet_positions(
                 svc = BitcoinService(wallet.address, wid)
             elif wallet.chain == "solana":
                 svc = SolanaService(wallet.address, wid)
+            elif wallet.chain == "litecoin":
+                svc = LitecoinService(wallet.address, wid)
+            elif wallet.chain == "algorand":
+                svc = AlgorandService(wallet.address, wid)
+            elif wallet.chain == "cardano":
+                svc = CardanoService(wallet.address, wid)
             else:
                 return []
             assets = await svc.fetch()
