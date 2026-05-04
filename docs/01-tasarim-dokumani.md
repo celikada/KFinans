@@ -295,6 +295,7 @@ Kubernetes Ingress (nginx)
 - [ ] `audit_logs` tablosu
 - [ ] Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
 - [ ] Background job kuyruğu (Celery/RQ)
+- [ ] **Bitcoin xpub/zpub Fernet şifreleme** — `wallet_addresses.address` kolonu Bitcoin için xpub içerebiliyor. xpub bilen biri kullanıcının tüm işlem geçmişini ve gelecekteki adreslerini görebilir (private key değil ama gizlilik açığı). Production'da `address` kolonunu (ya da Bitcoin chain için ayrı `encrypted_xpub` kolonu) `encrypt_secret`/`decrypt_secret` ile sarmak gerekli — borsa API key'lerinde kullanılan Fernet pattern (`app/core/security.py`).
 
 ---
 
