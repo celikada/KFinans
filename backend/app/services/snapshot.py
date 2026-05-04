@@ -28,6 +28,7 @@ from app.services.aggregator import (
 )
 from app.services.base import AssetData
 from app.services.blockchain.avalanche import AvalancheCChainService, AvalanchePChainService
+from app.services.blockchain.bitcoin import BitcoinService
 from app.services.blockchain.ethereum import EthereumService
 from app.services.blockchain.sonic import SonicService
 from app.services.exchange.binance import BinanceService
@@ -72,6 +73,8 @@ async def _gather_wallet_assets(wallets: list[WalletAddress]) -> list[AssetData]
                 svc = AvalancheCChainService(wallet.address, wid)
             elif wallet.chain == "ethereum":
                 svc = EthereumService(wallet.address, wid)
+            elif wallet.chain == "bitcoin":
+                svc = BitcoinService(wallet.address, wid)
             else:
                 return []
             return await svc.fetch()

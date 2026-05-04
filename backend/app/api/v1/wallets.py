@@ -12,7 +12,7 @@ from app.schemas.integration import WalletCreate, WalletOut
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
-VALID_CHAINS = {"sonic", "avalanche_c", "avalanche_p", "ethereum"}
+VALID_CHAINS = {"sonic", "avalanche_c", "avalanche_p", "ethereum", "bitcoin"}
 
 
 @router.get("", response_model=list[WalletOut])

@@ -57,9 +57,14 @@ export function WalletForm({
           <option value="avalanche_c">Avalanche C-Chain</option>
           <option value="avalanche_p">Avalanche P-Chain</option>
           <option value="ethereum">Ethereum</option>
+          <option value="bitcoin">Bitcoin</option>
         </select>
         <input
-          placeholder={chain === "avalanche_p" ? "P-avax1..." : "0x..."}
+          placeholder={
+            chain === "avalanche_p" ? "P-avax1..." :
+            chain === "bitcoin" ? "bc1q... / 1... / 3..." :
+            "0x..."
+          }
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}

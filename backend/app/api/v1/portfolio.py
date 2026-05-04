@@ -27,6 +27,7 @@ from app.services.exchange.icrypex import ICrypexService
 from app.services.blockchain.sonic import SonicService
 from app.services.blockchain.avalanche import AvalanchePChainService, AvalancheCChainService
 from app.services.blockchain.ethereum import EthereumService
+from app.services.blockchain.bitcoin import BitcoinService
 from app.services.snapshot import compute_and_save_snapshot
 
 logger = logging.getLogger(__name__)
@@ -203,7 +204,7 @@ async def get_wallet_positions(
 
     usd_tl, prices = await asyncio.gather(
         fetch_usd_to_tl(),
-        fetch_spot_prices(["S", "AVAX", "ETH"]),
+        fetch_spot_prices(["S", "AVAX", "ETH", "BTC"]),
     )
 
     all_positions: list[WalletPositionOut] = []
@@ -220,6 +221,8 @@ async def get_wallet_positions(
                 svc = AvalancheCChainService(wallet.address, wid)
             elif wallet.chain == "ethereum":
                 svc = EthereumService(wallet.address, wid)
+            elif wallet.chain == "bitcoin":
+                svc = BitcoinService(wallet.address, wid)
             else:
                 return []
             assets = await svc.fetch()
