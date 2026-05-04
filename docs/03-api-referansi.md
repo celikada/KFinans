@@ -485,7 +485,7 @@ Tüm aktif cüzdan adresleri.
 ```json
 {
   "chain":   "sonic",       // 'ethereum'|'sonic'|'avalanche_p'|'avalanche_c'|'bitcoin'
-  "address": "0x... | bc1q... | 1... | 3...",
+  "address": "0x... | bc1q... | 1... | 3... | xpub... | zpub... (Bitcoin HD)",
   "label":   "Ana cüzdan"
 }
 409: { "detail": "Bu cüzdan zaten kayıtlı" }

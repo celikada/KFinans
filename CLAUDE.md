@@ -14,7 +14,7 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 | Exchange entegrasyonu | CCXT (Binance, iCrypex) |
 | Blockchain entegrasyonu | web3.py (Sonic SFC, Avalanche C-Chain, Ethereum) |
 | Avalanche P-Chain | httpx + Avalanche REST API |
-| Bitcoin | httpx + mempool.space public API (no key) |
+| Bitcoin | httpx + mempool.space public API (no key) + bip-utils (xpub HD derivation) |
 | TEFAS | httpx + JSON API |
 | Hisse senedi | Yahoo Finance Chart API (httpx) |
 | Kıymetli madenler | TCMB USD/TRY + Yahoo Finance XAU=X / XAG=X (GC=F / SI=F fallback) |

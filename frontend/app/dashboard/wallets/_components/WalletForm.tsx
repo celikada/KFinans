@@ -62,7 +62,7 @@ export function WalletForm({
         <input
           placeholder={
             chain === "avalanche_p" ? "P-avax1..." :
-            chain === "bitcoin" ? "bc1q... / 1... / 3..." :
+            chain === "bitcoin" ? "bc1q... / 1... / 3... / xpub... / zpub..." :
             "0x..."
           }
           value={address}

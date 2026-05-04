@@ -117,7 +117,7 @@ backend/app/
 │   │   ├── sonic.py       # SFC staking contract, Semaphore(20) paralel
 │   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM)
 │   │   ├── ethereum.py    # EVM RPC + Etherscan
-│   │   └── bitcoin.py     # mempool.space public API (UTXO chain_stats), API key gerektirmez
+│   │   └── bitcoin.py     # mempool.space public API (UTXO chain_stats) + xpub HD desteği (bip-utils, BIP-84/44 chain tarama)
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── commodity.py       # Altın/Gümüş — TCMB USD/TRY + Yahoo XAU/XAG fallback chain + 5 dk cache

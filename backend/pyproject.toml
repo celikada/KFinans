@@ -26,6 +26,7 @@ dependencies = [
     "python-multipart",
     "openpyxl>=3.1",
     "xlrd==1.2.0",
+    "bip-utils>=2.9",
     "slowapi>=0.1.9",
     "resend>=2.0",
 ]
