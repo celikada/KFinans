@@ -69,15 +69,7 @@ async def preview_snapshot(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Snapshot ön kontrol başarısız: {e}",
         )
-    # dry_run=True + issues=False ise normal SnapshotOut döner — onu da dict'e çevir
-    if not isinstance(result, dict):
-        return {
-            "total_value_tl": str(result.total_value_tl),
-            "asset_count": len(result.asset_positions),
-            "issues": result.health_issues or [],
-            "usd_try_rate": str(result.usd_try_rate) if result.usd_try_rate else None,
-            "saved": True,  # Issues yoktu, doğrudan kaydedildi
-        }
+    # dry_run=True her zaman dict döner, asla DB'ye yazmaz
     return result
 
 

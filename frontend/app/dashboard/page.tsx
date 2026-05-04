@@ -260,24 +260,20 @@ export default function DashboardPage() {
     setSnapshotting(true);
     setSnapshotMsg("");
     try {
-      // 1) Preview — issues var mı?
+      // 1) Preview — issues var mı? (preview ASLA DB'ye yazmaz)
       const preview = await api.previewSnapshot();
-      const total = parseFloat(preview.total_value_tl);
-      if (preview.issues.length > 0 && !preview.saved) {
-        // Onay popup'ı göster, kullanıcı evet derse saveConfirmedSnapshot çağırır
+      if (preview.issues.length > 0) {
+        // Onay popup'ı — kullanıcı 'Yine de kaydet' derse saveConfirmedSnapshot çağırır
+        const total = parseFloat(preview.total_value_tl);
         setPendingIssues({ issues: preview.issues, total });
         setSnapshotting(false);
         return;
       }
-      // 2) Sorunsuz → preview zaten kaydetmiş olabilir veya kayıt etmemiş; her durumda
-      //    saved=false ise force=false ile create çağır (issues yok zaten)
-      if (preview.saved) {
-        // Backend dry_run=True, no issues → snapshot zaten kaydedildi
-        setPrevSnapshot(total);
-        setSnapshotMsg(buildSnapshotMsg(total, preview.asset_count, 0));
-      } else {
-        await saveConfirmedSnapshot();
-      }
+      // Sorunsuz → doğrudan kaydet (force gerekmez)
+      const snap = await api.createSnapshot(false);
+      const total = parseFloat(snap.total_value_tl);
+      setPrevSnapshot(total);
+      setSnapshotMsg(buildSnapshotMsg(total, snap.asset_positions.length, 0));
     } catch (err) {
       setSnapshotMsg(err instanceof Error ? `Hata: ${err.message}` : "Snapshot başarısız");
     } finally {

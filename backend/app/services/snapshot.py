@@ -434,8 +434,8 @@ async def compute_and_save_snapshot(
         qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
         total_tl += qty * price_tl
 
-    # Dry-run: önce kullanıcıya issues göster, onay bekle (DB'ye yazma)
-    if dry_run and issues and not force:
+    # Dry-run her zaman dict döndürür, asla DB'ye yazmaz
+    if dry_run:
         return {
             "total_value_tl": str(total_tl.quantize(Decimal("0.01"))),
             "asset_count": len(all_assets),
