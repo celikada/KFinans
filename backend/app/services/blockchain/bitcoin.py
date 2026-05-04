@@ -38,29 +38,19 @@ _BALANCE_CACHE: dict[str, tuple[float, Decimal]] = {}
 _CACHE_TTL_SEC = 600  # 10 dk
 _cache_lock = asyncio.Lock()
 
+# Single-flight: aynı xpub için aynı anda birden fazla tarama başlatma.
+# Dashboard'ın paralel çağrıları (örn. iki ayrı wallet için /portfolio/wallets)
+# aynı xpub'ı sorguladığında ilkinin tamamlanmasını beklerler.
+_INFLIGHT: dict[str, asyncio.Future] = {}
+
 
 class BitcoinService(BaseBlockchainIntegration):
     async def fetch(self) -> list[AssetData]:
-        # Cache lookup: dashboard yenileme rate limit yememesin diye 10dk
-        async with _cache_lock:
-            cached = _BALANCE_CACHE.get(self.address)
-            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
-                btc_balance = cached[1]
-            else:
-                cached = None
-
-        if cached is None:
-            try:
-                if self.address.startswith(_XPUB_PREFIXES):
-                    btc_balance = await self._fetch_xpub_balance(self.address)
-                else:
-                    btc_balance = await self._fetch_single_balance(self.address)
-            except Exception as exc:
-                logger.warning("Bitcoin bakiye alınamadı [%s]: %s", self.address[:16], exc)
-                return []
-
-            async with _cache_lock:
-                _BALANCE_CACHE[self.address] = (time.monotonic(), btc_balance)
+        try:
+            btc_balance = await self._cached_balance()
+        except Exception as exc:
+            logger.warning("Bitcoin bakiye alınamadı [%s]: %s", self.address[:16], exc)
+            return []
 
         if btc_balance <= 0:
             return []
@@ -76,6 +66,39 @@ class BitcoinService(BaseBlockchainIntegration):
                 wallet_address_id=self.wallet_address_id,
             )
         ]
+
+    async def _cached_balance(self) -> Decimal:
+        """Cache + single-flight: aynı address için tek paralel tarama."""
+        loop = asyncio.get_running_loop()
+        is_owner = False
+        async with _cache_lock:
+            cached = _BALANCE_CACHE.get(self.address)
+            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
+                return cached[1]
+            inflight = _INFLIGHT.get(self.address)
+            if inflight is None:
+                inflight = loop.create_future()
+                _INFLIGHT[self.address] = inflight
+                is_owner = True
+
+        if not is_owner:
+            return await inflight
+
+        try:
+            if self.address.startswith(_XPUB_PREFIXES):
+                bal = await self._fetch_xpub_balance(self.address)
+            else:
+                bal = await self._fetch_single_balance(self.address)
+            async with _cache_lock:
+                _BALANCE_CACHE[self.address] = (time.monotonic(), bal)
+                _INFLIGHT.pop(self.address, None)
+            inflight.set_result(bal)
+            return bal
+        except Exception as exc:
+            async with _cache_lock:
+                _INFLIGHT.pop(self.address, None)
+            inflight.set_exception(exc)
+            raise
 
     async def _fetch_single_balance(self, addr: str) -> Decimal:
         async with httpx.AsyncClient(timeout=15) as client:
