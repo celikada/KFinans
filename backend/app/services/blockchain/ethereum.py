@@ -1,4 +1,8 @@
-"""Ethereum cüzdan: native ETH + ERC-20 token bakiyeleri."""
+"""Ethereum cüzdan: native ETH + ERC-20 token bakiyeleri.
+
+Birincil RPC `settings.ethereum_rpc_url`. Başarısız olursa public fallback
+RPC'leri sırayla denenir. Bir RPC çalışınca o session ile devam edilir.
+"""
 import logging
 from decimal import Decimal
 
@@ -12,18 +16,37 @@ logger = logging.getLogger(__name__)
 
 WEI = Decimal("1e18")
 
+# Birincil + fallback public RPC'ler. settings.ethereum_rpc_url öncelikli.
+_FALLBACK_RPCS = (
+    "https://ethereum.publicnode.com",
+    "https://eth.merkle.io",
+    "https://1rpc.io/eth",
+    "https://rpc.ankr.com/eth",
+)
+
 
 class EthereumService(BaseBlockchainIntegration):
 
-    def __init__(self, address: str, wallet_address_id: str | None = None):
-        super().__init__(address, wallet_address_id)
-        self._w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(settings.ethereum_rpc_url))
-
     async def fetch(self) -> list[AssetData]:
-        checksum = AsyncWeb3.to_checksum_address(self.address)
-        balance_wei = await self._w3.eth.get_balance(checksum)
-        eth_balance = Decimal(balance_wei) / WEI
+        # Çalışan RPC bul (native balance ile test ediyoruz)
+        balance_wei = None
+        for rpc in (settings.ethereum_rpc_url, *_FALLBACK_RPCS):
+            if not rpc:
+                continue
+            try:
+                w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc))
+                checksum = AsyncWeb3.to_checksum_address(self.address)
+                balance_wei = await w3.eth.get_balance(checksum)
+                self._w3 = w3
+                break
+            except Exception as exc:
+                logger.warning("ETH RPC %s başarısız: %s", rpc[:40], exc)
 
+        if balance_wei is None:
+            logger.error("Tüm ETH RPC'leri başarısız [%s]", self.address[:12])
+            return []
+
+        eth_balance = Decimal(balance_wei) / WEI
         assets: list[AssetData] = []
         if eth_balance > 0:
             assets.append(AssetData(
@@ -33,7 +56,7 @@ class EthereumService(BaseBlockchainIntegration):
                 wallet_address_id=self.wallet_address_id,
             ))
 
-        # ERC-20 token bakiyeleri — Ethplorer dynamic discovery
+        # ERC-20 tokens — Ethplorer (RPC'den bağımsız)
         try:
             for token, amount in await fetch_ethereum_tokens_via_ethplorer(self.address):
                 assets.append(AssetData(
@@ -48,7 +71,7 @@ class EthereumService(BaseBlockchainIntegration):
 
     async def health_check(self) -> bool:
         try:
-            await self._w3.eth.get_balance(AsyncWeb3.to_checksum_address(self.address))
+            await self.fetch()
             return True
         except Exception:
             return False

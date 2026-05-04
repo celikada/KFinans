@@ -60,16 +60,35 @@ class AvalanchePChainService(BaseBlockchainIntegration):
             return False
 
 
-class AvalancheCChainService(BaseBlockchainIntegration):
-    """C-Chain liquid AVAX (EVM)."""
+_AVAX_FALLBACK_RPCS = (
+    "https://api.avax.network/ext/bc/C/rpc",
+    "https://avalanche.public-rpc.com",
+    "https://avalanche.drpc.org",
+    "https://1rpc.io/avax/c",
+)
 
-    def __init__(self, address: str, wallet_address_id: str | None = None):
-        super().__init__(address, wallet_address_id)
-        self._w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(settings.avalanche_c_rpc_url))
+
+class AvalancheCChainService(BaseBlockchainIntegration):
+    """C-Chain liquid AVAX (EVM) + ERC-20 tokens."""
 
     async def fetch(self) -> list[AssetData]:
         checksum = AsyncWeb3.to_checksum_address(self.address)
-        balance_wei = await self._w3.eth.get_balance(checksum)
+        balance_wei = None
+        for rpc in (settings.avalanche_c_rpc_url, *_AVAX_FALLBACK_RPCS):
+            if not rpc:
+                continue
+            try:
+                w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc))
+                balance_wei = await w3.eth.get_balance(checksum)
+                self._w3 = w3
+                break
+            except Exception as exc:
+                logger.warning("AVAX C RPC %s başarısız: %s", rpc[:40], exc)
+
+        if balance_wei is None:
+            logger.error("Tüm AVAX C RPC'leri başarısız [%s]", self.address[:12])
+            return []
+
         liquid = Decimal(balance_wei) / WEI
 
         assets = []
