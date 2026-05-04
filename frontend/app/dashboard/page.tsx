@@ -6,7 +6,7 @@ import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from 
 import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
-import { TLValue } from "@/app/_components/TLValue";
+import { TLValue, useUsdRate } from "@/app/_components/TLValue";
 
 
 function fmtTL(val: number) {
@@ -79,6 +79,9 @@ export default function DashboardPage() {
 
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
+
+  const usdRate = useUsdRate();
+  const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -207,7 +210,20 @@ export default function DashboardPage() {
     try {
       const snap = await api.createSnapshot();
       const total = parseFloat(snap.total_value_tl);
-      setSnapshotMsg(`✓ Snapshot alındı: ${fmtTL(total)} ₺ (${snap.asset_positions.length} pozisyon)`);
+      const usdPart = usdRate && usdRate > 0
+        ? ` ≈ $${(total / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+        : "";
+      let diffPart = "";
+      if (prevSnapshot !== null && prevSnapshot > 0) {
+        const diffTL = total - prevSnapshot;
+        const sign = diffTL >= 0 ? "+" : "";
+        const diffUsd = usdRate && usdRate > 0
+          ? ` (${sign}$${(diffTL / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})`
+          : "";
+        diffPart = `, değişim: ${sign}${fmtTL(diffTL)} ₺${diffUsd}`;
+      }
+      setPrevSnapshot(total);
+      setSnapshotMsg(`✓ Snapshot: ${fmtTL(total)} ₺${usdPart} (${snap.asset_positions.length} pozisyon)${diffPart}`);
     } catch (err) {
       setSnapshotMsg(err instanceof Error ? `Hata: ${err.message}` : "Snapshot başarısız");
     } finally {

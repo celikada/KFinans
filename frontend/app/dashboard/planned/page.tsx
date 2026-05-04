@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, PlannedExpenseDTO, ForecastResultDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
+import { TLValue } from "@/app/_components/TLValue";
 import { PlannedForm } from "./_components/PlannedForm";
 import { PlannedList } from "./_components/PlannedList";
 import { YearlyForecast } from "./_components/YearlyForecast";
@@ -62,7 +63,7 @@ export default function PlannedPage() {
           <div className="flex gap-8">
             <div>
               <p className="text-xs text-gray-400 mb-1">Yıllık toplam</p>
-              <p className="text-3xl font-bold text-gray-900">{fmtTL(yearTotal)} ₺</p>
+              <TLValue tl={yearTotal} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-1">Aylık ortalama</p>

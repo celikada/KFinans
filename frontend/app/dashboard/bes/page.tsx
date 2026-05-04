@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, BesHoldingDTO } from "@/lib/api";
+import { TLValue } from "@/app/_components/TLValue";
 
 interface Holding {
   plan_name: string;
@@ -269,7 +270,7 @@ export default function BesPage() {
           {grandTotal > 0 && (
             <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
               <span className="text-sm text-gray-500">Toplam BES Değeri</span>
-              <span className="text-lg font-bold text-gray-900">{fmtTL(grandTotal)} ₺</span>
+              <TLValue tl={grandTotal} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
             </div>
           )}
         </div>
