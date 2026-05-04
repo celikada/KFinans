@@ -116,7 +116,8 @@ backend/app/
 │   ├── blockchain/
 │   │   ├── sonic.py       # SFC staking contract, Semaphore(20) paralel
 │   │   ├── avalanche.py   # P-Chain (REST) + C-Chain (EVM)
-│   │   └── ethereum.py    # EVM RPC + Etherscan
+│   │   ├── ethereum.py    # EVM RPC + Etherscan
+│   │   └── bitcoin.py     # mempool.space public API (UTXO chain_stats), API key gerektirmez
 │   ├── tefas.py           # TefasService (httpx + JSON API)
 │   ├── stocks.py          # Yahoo Finance Chart API
 │   ├── commodity.py       # Altın/Gümüş — TCMB USD/TRY + Yahoo XAU/XAG fallback chain + 5 dk cache
@@ -333,7 +334,7 @@ UNIQUE (user_id, provider)
 ```sql
 id         UUID PK
 user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-chain      TEXT NOT NULL                         -- 'sonic'|'avalanche_p'|'avalanche_c'|'ethereum'
+chain      TEXT NOT NULL                         -- 'sonic'|'avalanche_p'|'avalanche_c'|'ethereum'|'bitcoin'
 address    TEXT NOT NULL
 label      TEXT
 is_active  BOOLEAN NOT NULL DEFAULT TRUE

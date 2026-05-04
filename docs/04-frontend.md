@@ -18,7 +18,7 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
 | Hisse senedi portföyü (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/stocks` | ✅ Aktif |
-| Blockchain cüzdanları (ekle/sil + Excel) | `/dashboard/wallets` | ✅ Aktif |
+| Blockchain cüzdanları (5 zincir: Sonic, Avalanche P/C, Ethereum, Bitcoin) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/tefas` | ✅ Aktif |
 | BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
 | Harcama takibi (form + tablo + pasta grafik + ay seçici + Excel) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |

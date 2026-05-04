@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje Hakkında
 
-KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve blockchain cüzdanları (Sonic, Avalanche, Ethereum) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.
+KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve blockchain cüzdanları (Sonic, Avalanche, Ethereum, Bitcoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.
 
 ## Tech Stack
 
@@ -14,6 +14,7 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 | Exchange entegrasyonu | CCXT (Binance, iCrypex) |
 | Blockchain entegrasyonu | web3.py (Sonic SFC, Avalanche C-Chain, Ethereum) |
 | Avalanche P-Chain | httpx + Avalanche REST API |
+| Bitcoin | httpx + mempool.space public API (no key) |
 | TEFAS | httpx + JSON API |
 | Hisse senedi | Yahoo Finance Chart API (httpx) |
 | Kıymetli madenler | TCMB USD/TRY + Yahoo Finance XAU=X / XAG=X (GC=F / SI=F fallback) |
@@ -38,7 +39,7 @@ KFinans/
 │   │   │                          # advice)
 │   │   ├── services/
 │   │   │   ├── exchange/          # CCXT tabanlı (Binance, iCrypex, BinanceTR)
-│   │   │   ├── blockchain/        # web3.py tabanlı (Sonic SFC, Avalanche P/C, Ethereum)
+│   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C, Ethereum (web3.py) + Bitcoin (mempool.space)
 │   │   │   ├── tefas.py
 │   │   │   ├── stocks.py
 │   │   │   ├── commodity.py       # TCMB + Yahoo XAU/XAG fallback chain + 5 dk cache

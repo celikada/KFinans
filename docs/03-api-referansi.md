@@ -484,8 +484,8 @@ Tüm aktif cüzdan adresleri.
 ### `POST /wallets`
 ```json
 {
-  "chain":   "sonic",       // 'ethereum'|'sonic'|'avalanche_p'|'avalanche_c'
-  "address": "0x...",
+  "chain":   "sonic",       // 'ethereum'|'sonic'|'avalanche_p'|'avalanche_c'|'bitcoin'
+  "address": "0x... | bc1q... | 1... | 3...",
   "label":   "Ana cüzdan"
 }
 409: { "detail": "Bu cüzdan zaten kayıtlı" }

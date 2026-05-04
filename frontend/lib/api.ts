@@ -14,6 +14,30 @@ export function clearAuth() {
   document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 }
 
+/**
+ * FastAPI hata yanıtlarındaki "detail" alanı string, obje veya
+ * Pydantic validation listesi olabilir. Hepsini insan-okunaklı string'e çevir.
+ */
+function formatErrorDetail(detail: unknown): string {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          const it = item as { msg?: string; loc?: unknown[] };
+          const loc = Array.isArray(it.loc) ? it.loc.join(".") : "";
+          return loc ? `${loc}: ${it.msg}` : String(it.msg);
+        }
+        return JSON.stringify(item);
+      })
+      .join(" · ");
+  }
+  if (typeof detail === "object") return JSON.stringify(detail);
+  return String(detail);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
@@ -30,7 +54,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       window.location.replace("/login");
     }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? res.statusText);
+    throw new Error(formatErrorDetail(err.detail) || res.statusText);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
