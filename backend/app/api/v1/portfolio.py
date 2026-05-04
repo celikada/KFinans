@@ -31,6 +31,7 @@ from app.services.blockchain.algorand import AlgorandService
 from app.services.blockchain.bitcoin import BitcoinService
 from app.services.blockchain.cardano import CardanoService
 from app.services.blockchain.litecoin import LitecoinService
+from app.services.blockchain.polkadot import PolkadotService
 from app.services.blockchain.solana import SolanaService
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -248,6 +249,8 @@ async def get_wallet_positions(
                 svc = AlgorandService(wallet.address, wid)
             elif wallet.chain == "cardano":
                 svc = CardanoService(wallet.address, wid)
+            elif wallet.chain == "polkadot":
+                svc = PolkadotService(wallet.address, wid)
             else:
                 return []
             assets = await svc.fetch()

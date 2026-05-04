@@ -33,6 +33,7 @@ from app.services.blockchain.bitcoin import BitcoinService
 from app.services.blockchain.cardano import CardanoService
 from app.services.blockchain.ethereum import EthereumService
 from app.services.blockchain.litecoin import LitecoinService
+from app.services.blockchain.polkadot import PolkadotService
 from app.services.blockchain.solana import SolanaService
 from app.services.blockchain.sonic import SonicService
 from app.services.exchange.binance import BinanceService
@@ -87,6 +88,8 @@ async def _gather_wallet_assets(wallets: list[WalletAddress]) -> list[AssetData]
                 svc = AlgorandService(wallet.address, wid)
             elif wallet.chain == "cardano":
                 svc = CardanoService(wallet.address, wid)
+            elif wallet.chain == "polkadot":
+                svc = PolkadotService(wallet.address, wid)
             else:
                 return []
             return await svc.fetch()
