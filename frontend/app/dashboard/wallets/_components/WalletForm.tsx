@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, WalletDTO } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
-import { Chain } from "./constants";
+import { CHAIN_ADDRESS_HINTS, Chain } from "./constants";
 
 interface Props {
   hasWallets: boolean;
@@ -24,6 +24,7 @@ export function WalletForm({
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [showHint, setShowHint] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,9 +45,41 @@ export function WalletForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-5 space-y-3 border-t border-gray-50 pt-5">
-      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-        Cüzdan Ekle
-      </h3>
+      <div className="flex items-center gap-2">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          Cüzdan Ekle
+        </h3>
+        <button
+          type="button"
+          onClick={() => setShowHint((s) => !s)}
+          className="text-blue-500 hover:text-blue-700 transition-colors"
+          aria-label="Adres nereden bulunur?"
+          title="Adres nereden bulunur?"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-4 h-4">
+            <circle cx="12" cy="12" r="10" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4M12 8h.01" />
+          </svg>
+        </button>
+      </div>
+      {showHint && (
+        <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-gray-700 space-y-1">
+          <p className="font-semibold text-blue-700">
+            {chain === "sonic" ? "Sonic (S)" :
+             chain === "avalanche_c" ? "Avalanche C-Chain" :
+             chain === "avalanche_p" ? "Avalanche P-Chain" :
+             chain === "ethereum" ? "Ethereum" :
+             "Bitcoin"} adresi nereden alınır?
+          </p>
+          <p>
+            <span className="font-medium text-gray-600">Format: </span>
+            <span className="font-mono text-[11px]">{CHAIN_ADDRESS_HINTS[chain].format}</span>
+          </p>
+          <p className="whitespace-pre-line text-gray-600 leading-relaxed">
+            {CHAIN_ADDRESS_HINTS[chain].howTo}
+          </p>
+        </div>
+      )}
       <div className="flex gap-3 flex-wrap">
         <select
           value={chain}
