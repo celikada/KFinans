@@ -29,6 +29,9 @@ class ManualCryptoHolding(Base):
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(28, 12), nullable=False)
     avg_cost_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    # 'auto' (Binance+CoinGecko), 'manual' (kullanıcı), 'gold_gram', 'silver_gram'
+    price_source: Mapped[str] = mapped_column(String(20), nullable=False, default="auto", server_default="auto")
+    manual_unit_price_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,

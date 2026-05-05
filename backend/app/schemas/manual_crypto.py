@@ -1,8 +1,11 @@
 """API'siz borsa hesapları için manuel kripto pozisyon şemaları."""
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+PriceSource = Literal["auto", "manual", "gold_gram", "silver_gram"]
 
 
 class ManualCryptoCreate(BaseModel):
@@ -11,6 +14,8 @@ class ManualCryptoCreate(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=20)
     quantity: Decimal = Field(..., gt=0, le=Decimal("9999999999999999.999999999999"))
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    price_source: PriceSource = "auto"
+    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("symbol")
@@ -33,6 +38,8 @@ class ManualCryptoUpdate(BaseModel):
     symbol: str | None = Field(default=None, min_length=1, max_length=20)
     quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("9999999999999999.999999999999"))
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    price_source: PriceSource | None = None
+    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("symbol")
@@ -55,6 +62,8 @@ class ManualCryptoOut(BaseModel):
     symbol: str
     quantity: Decimal
     avg_cost_tl: Decimal | None
+    price_source: str
+    manual_unit_price_tl: Decimal | None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -70,6 +79,8 @@ class ManualCryptoPositionOut(BaseModel):
     symbol: str
     quantity: Decimal
     avg_cost_tl: Decimal | None
+    price_source: str
+    manual_unit_price_tl: Decimal | None
     unit_price_usd: Decimal
     unit_price_tl: Decimal
     total_value_tl: Decimal

@@ -44,10 +44,15 @@ _COINGECKO_PRICES: dict = {}
 
 @pytest.fixture(autouse=True)
 def mock_external_http():
-    """Binance + TCMB + CoinGecko mock'ları, aggregator cache temizle."""
+    """Binance + TCMB + CoinGecko + Yahoo (commodity) mock'ları, cache temizle.
+
+    XAU=X 3000 USD/oz → ~3861 TRY/g, XAG=X 35 USD/oz → ~45 TRY/g (USD/TRY=40).
+    """
     import app.services.aggregator as agg
+    import app.services.commodity as com
     agg._tcmb_cache = None
     agg._coingecko_list_cache = None
+    com._price_cache = None
 
     with respx.mock(assert_all_called=False) as mock:
         mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
@@ -61,6 +66,13 @@ def mock_external_http():
         )
         mock.get(url__regex=r"https://api\.coingecko\.com/api/v3/simple/price.*").mock(
             return_value=Response(200, json=_COINGECKO_PRICES)
+        )
+        # Yahoo Finance — altın & gümüş
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(
+            return_value=Response(200, json={"chart": {"result": [{"meta": {"regularMarketPrice": 3000.0, "currency": "USD"}}], "error": None}})
+        )
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*").mock(
+            return_value=Response(200, json={"chart": {"result": [{"meta": {"regularMarketPrice": 35.0, "currency": "USD"}}], "error": None}})
         )
         yield mock
 
@@ -246,6 +258,94 @@ async def test_export_excel(client: AsyncClient):
     assert float(ws.cell(2, 4).value) == 0.5
 
 
+# ---------------------------------------------------------------------------
+# price_source testleri (manual / gold_gram / silver_gram)
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_manual_price_used(client: AsyncClient):
+    """price_source='manual' → manual_unit_price_tl kullanılır, Binance lookup'lanmaz.
+    100 adet × 50 TL = 5000 TL toplam."""
+    headers = await _make_user(client, "mc_manual_price@example.com")
+    payload = {
+        "exchange": "icrypex", "symbol": "XAGX", "quantity": 100,
+        "price_source": "manual", "manual_unit_price_tl": 50,
+    }
+    create = await client.post(BASE, json=payload, headers=headers)
+    assert create.status_code == 201
+    assert create.json()["price_source"] == "manual"
+    assert float(create.json()["manual_unit_price_tl"]) == 50.0
+
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    assert float(pos["unit_price_tl"]) == 50.0
+    assert float(pos["total_value_tl"]) == 5000.0
+    # XAGX hala "auto" sınıfında olmadığı için unknown_symbols listesinde olmamalı
+    assert "XAGX" not in resp.json()["unknown_symbols"]
+
+
+@pytest.mark.asyncio
+async def test_silver_gram_uses_commodity_price(client: AsyncClient):
+    """price_source='silver_gram' → commodity service'ten anlık fiyat (TRY/g).
+    35 USD/oz / 31.10 × 40 ≈ 45 TRY/g. 10 birim → ~450 TL."""
+    headers = await _make_user(client, "mc_silver_gram@example.com")
+    payload = {
+        "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
+        "price_source": "silver_gram",
+    }
+    await client.post(BASE, json=payload, headers=headers)
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    # Silver: 35/31.1034768*40 ≈ 45.01 TRY/g
+    assert 44 < float(pos["unit_price_tl"]) < 46
+    assert 440 < float(pos["total_value_tl"]) < 460
+
+
+@pytest.mark.asyncio
+async def test_gold_gram_uses_commodity_price(client: AsyncClient):
+    """price_source='gold_gram' → 3000/31.10×40 ≈ 3861 TRY/g."""
+    headers = await _make_user(client, "mc_gold_gram@example.com")
+    payload = {
+        "exchange": "icrypex", "symbol": "XAUT", "quantity": 1,
+        "price_source": "gold_gram",
+    }
+    await client.post(BASE, json=payload, headers=headers)
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    assert 3850 < float(pos["unit_price_tl"]) < 3870
+
+
+@pytest.mark.asyncio
+async def test_manual_without_price_zero(client: AsyncClient):
+    """price_source='manual' ama manual_unit_price_tl boş → 0 değer + unknown_symbols'da."""
+    headers = await _make_user(client, "mc_manual_empty@example.com")
+    payload = {
+        "exchange": "other", "symbol": "FAKECOIN", "quantity": 100,
+        "price_source": "manual",  # manual_unit_price_tl gönderilmiyor
+    }
+    await client.post(BASE, json=payload, headers=headers)
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    assert float(pos["unit_price_tl"]) == 0.0
+    assert "FAKECOIN" in resp.json()["unknown_symbols"]
+
+
+@pytest.mark.asyncio
+async def test_update_price_source_clears_manual(client: AsyncClient):
+    """price_source 'manual'dan 'auto'ya geçince manual_unit_price_tl temizlenir."""
+    headers = await _make_user(client, "mc_clear_manual@example.com")
+    create = await client.post(BASE, json={
+        "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
+        "price_source": "manual", "manual_unit_price_tl": 100,
+    }, headers=headers)
+    holding_id = create.json()["id"]
+
+    # Auto'ya geçir
+    update = await client.put(f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers)
+    assert update.status_code == 200
+    assert update.json()["price_source"] == "auto"
+    assert update.json()["manual_unit_price_tl"] is None
+
+
 @pytest.mark.asyncio
 async def test_import_replaces_existing(client: AsyncClient):
     """Import replace-all: mevcut silinir, yeniler eklenir."""
@@ -256,8 +356,8 @@ async def test_import_replaces_existing(client: AsyncClient):
     # Excel hazırla — sadece BTC içerir, ETH silinmeli
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)", "Notlar"])
-    ws.append(["binancetr", "Spot", "BTC", 0.25, "", "test"])
+    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)", "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Notlar"])
+    ws.append(["binancetr", "Spot", "BTC", 0.25, "", "auto", "", "test"])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

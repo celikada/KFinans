@@ -39,22 +39,55 @@ def _calc_gain_loss(
 async def _enrich_positions(
     holdings: list[ManualCryptoHolding],
 ) -> ManualCryptoSummaryOut:
-    """Holdings listesini anlık fiyatlarla zenginleştirir (Binance USDT pariteleri)."""
+    """Holdings listesini anlık fiyatlarla zenginleştirir.
+
+    price_source bazlı 4 yol:
+    - 'auto'         → Binance USDT + CoinGecko fallback (ortak)
+    - 'manual'       → kullanıcının `manual_unit_price_tl` alanı (TL/adet)
+    - 'gold_gram'    → commodity servisten anlık altın gr fiyatı
+    - 'silver_gram'  → commodity servisten anlık gümüş gr fiyatı
+    """
     if not holdings:
         return ManualCryptoSummaryOut(positions=[], total_value_tl=Decimal(0), unknown_symbols=[])
 
-    unique_symbols = list({h.symbol for h in holdings})
-    prices, usd_tl = await _fetch_prices_safe(unique_symbols)
+    auto_holdings = [h for h in holdings if h.price_source == "auto"]
+    needs_metal = any(h.price_source in ("gold_gram", "silver_gram") for h in holdings)
+
+    # Sadece auto kayıtlar için Binance/CoinGecko çağrısı; USD/TL her durumda gerekli.
+    auto_symbols = list({h.symbol for h in auto_holdings})
+    prices, usd_tl = await _fetch_prices_safe(auto_symbols) if auto_symbols else ({}, await fetch_usd_to_tl())
+
+    metal_prices: dict[str, Decimal] = {}
+    if needs_metal:
+        try:
+            from app.services.commodity import fetch_metal_prices
+            metal_prices = await fetch_metal_prices()
+        except Exception:
+            metal_prices = {"gold": Decimal(0), "silver": Decimal(0)}
 
     positions: list[ManualCryptoPositionOut] = []
     total_tl = Decimal(0)
     unknown: list[str] = []
     for h in holdings:
-        usd = lookup_usd_price(h.symbol, prices)
-        unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
+        usd = Decimal(0)
+        unit_tl = Decimal(0)
+
+        if h.price_source == "manual":
+            unit_tl = h.manual_unit_price_tl or Decimal(0)
+            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
+        elif h.price_source == "gold_gram":
+            unit_tl = metal_prices.get("gold", Decimal(0))
+            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
+        elif h.price_source == "silver_gram":
+            unit_tl = metal_prices.get("silver", Decimal(0))
+            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
+        else:  # auto
+            usd = lookup_usd_price(h.symbol, prices)
+            unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
+
         value_tl = (h.quantity * unit_tl).quantize(Decimal("0.01"))
         total_tl += value_tl
-        if usd <= 0:
+        if unit_tl <= 0:
             unknown.append(h.symbol)
         cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(
             h.quantity, value_tl, h.avg_cost_tl
@@ -66,6 +99,8 @@ async def _enrich_positions(
             symbol=h.symbol,
             quantity=h.quantity,
             avg_cost_tl=h.avg_cost_tl,
+            price_source=h.price_source,
+            manual_unit_price_tl=h.manual_unit_price_tl,
             unit_price_usd=usd,
             unit_price_tl=unit_tl,
             total_value_tl=value_tl,
@@ -127,6 +162,8 @@ async def create_manual_crypto(
         symbol=payload.symbol,
         quantity=payload.quantity,
         avg_cost_tl=payload.avg_cost_tl,
+        price_source=payload.price_source,
+        manual_unit_price_tl=payload.manual_unit_price_tl if payload.price_source == "manual" else None,
         notes=payload.notes,
     )
     db.add(holding)
@@ -160,6 +197,13 @@ async def update_manual_crypto(
         holding.quantity = payload.quantity
     if payload.avg_cost_tl is not None:
         holding.avg_cost_tl = payload.avg_cost_tl
+    if payload.price_source is not None:
+        holding.price_source = payload.price_source
+        # auto/gold/silver'a geçildiyse manual fiyatı temizle
+        if payload.price_source != "manual":
+            holding.manual_unit_price_tl = None
+    if payload.manual_unit_price_tl is not None and holding.price_source == "manual":
+        holding.manual_unit_price_tl = payload.manual_unit_price_tl
     if payload.notes is not None:
         holding.notes = payload.notes
     await db.commit()
@@ -199,7 +243,10 @@ async def export_manual_crypto(
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Manuel Kripto"
-    headers = ["Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)", "Notlar"]
+    headers = [
+        "Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)",
+        "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Notlar",
+    ]
     ws.append(headers)
     # Header stilini biraz belirginleştir
     for cell in ws[1]:
@@ -213,6 +260,8 @@ async def export_manual_crypto(
             r.symbol,
             float(r.quantity),
             float(r.avg_cost_tl) if r.avg_cost_tl else "",
+            r.price_source,
+            float(r.manual_unit_price_tl) if r.manual_unit_price_tl else "",
             r.notes or "",
         ])
 
@@ -266,7 +315,9 @@ async def import_manual_crypto(
             symbol = str(row[2]).strip().upper() if row[2] else ""
             qty_raw = row[3]
             avg_cost_raw = row[4] if len(row) > 4 else None
-            notes = str(row[5]).strip() if len(row) > 5 and row[5] else None
+            price_src_raw = str(row[5]).strip().lower() if len(row) > 5 and row[5] else "auto"
+            manual_price_raw = row[6] if len(row) > 6 else None
+            notes = str(row[7]).strip() if len(row) > 7 and row[7] else None
 
             if not exchange or not symbol or qty_raw in (None, ""):
                 errors.append(f"Satır {idx}: Borsa, Sembol ve Miktar zorunlu")
@@ -280,6 +331,15 @@ async def import_manual_crypto(
                 avg_cost = Decimal(str(avg_cost_raw))
                 if avg_cost <= 0:
                     avg_cost = None
+            price_source = price_src_raw if price_src_raw in ("auto", "manual", "gold_gram", "silver_gram") else "auto"
+            manual_price = None
+            if price_source == "manual" and manual_price_raw not in (None, ""):
+                try:
+                    manual_price = Decimal(str(manual_price_raw))
+                    if manual_price <= 0:
+                        manual_price = None
+                except Exception:
+                    manual_price = None
             new_rows.append(ManualCryptoHolding(
                 user_id=current_user.id,
                 exchange=exchange[:40],
@@ -287,6 +347,8 @@ async def import_manual_crypto(
                 symbol=symbol[:20],
                 quantity=quantity,
                 avg_cost_tl=avg_cost,
+                price_source=price_source,
+                manual_unit_price_tl=manual_price,
                 notes=notes[:500] if notes else None,
             ))
         except Exception as e:

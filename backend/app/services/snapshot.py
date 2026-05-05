@@ -247,17 +247,74 @@ async def _gather_commodity_assets(
     return out
 
 
-def _gather_manual_crypto_assets(
+async def _gather_manual_crypto_assets(
     holdings: list[ManualCryptoHolding],
+    issues: list[dict],
 ) -> list[AssetData]:
     """Manuel girilmiş kripto bakiyeleri AssetData'ya çevirir.
 
-    Fiyat enjekte edilmez — `compute_and_save_snapshot` içindeki ortak fiyat
-    enrichment loop'u (fetch_spot_prices + lookup_usd_price) bunu da yakalar.
-    Provider 'manual:{exchange}' formatında saklanır (ör. 'manual:binancetr').
+    price_source bazlı fiyat injection:
+    - 'auto'         → unit_price_tl=0; ortak enrichment loop'u Binance+CoinGecko ile doldurur
+    - 'manual'       → unit_price_tl = h.manual_unit_price_tl (kullanıcı girdisi)
+    - 'gold_gram'    → commodity service anlık altın gr fiyatı (TRY/g)
+    - 'silver_gram'  → commodity service anlık gümüş gr fiyatı
+
+    Bu sırada her durumda doğrulama yapılır, eksiklerse `issues`'a uyarı eklenir.
+    Provider 'manual:{exchange}' formatında saklanır.
     """
+    if not holdings:
+        return []
+
+    needs_metal = any(h.price_source in ("gold_gram", "silver_gram") for h in holdings)
+    metal_prices: dict[str, Decimal] = {}
+    if needs_metal:
+        try:
+            from app.services.commodity import fetch_metal_prices
+            metal_prices = await fetch_metal_prices()
+        except Exception as exc:
+            logger.warning("Snapshot manuel kripto: metal fiyatları çekilemedi: %s", exc)
+            issues.append({
+                "source": "manual_crypto",
+                "code": "metal_price_failed",
+                "msg": f"Altın/Gümüş fiyatı çekilemedi: {str(exc)[:150]}",
+            })
+
     out: list[AssetData] = []
     for h in holdings:
+        unit_tl = Decimal(0)
+        if h.price_source == "manual":
+            if h.manual_unit_price_tl and h.manual_unit_price_tl > 0:
+                unit_tl = Decimal(str(h.manual_unit_price_tl))
+            else:
+                issues.append({
+                    "source": "manual_crypto",
+                    "exchange": h.exchange,
+                    "symbol": h.symbol,
+                    "code": "manual_price_missing",
+                    "msg": f"{h.exchange} {h.symbol}: 'manual' fiyat seçili ama manual_unit_price_tl boş — 0 değerle kaydedildi",
+                })
+        elif h.price_source == "gold_gram":
+            unit_tl = metal_prices.get("gold", Decimal(0))
+            if unit_tl <= 0:
+                issues.append({
+                    "source": "manual_crypto",
+                    "exchange": h.exchange,
+                    "symbol": h.symbol,
+                    "code": "gold_price_unavailable",
+                    "msg": f"{h.exchange} {h.symbol}: gold_gram seçili ama altın fiyatı çekilemedi — 0 değerle kaydedildi",
+                })
+        elif h.price_source == "silver_gram":
+            unit_tl = metal_prices.get("silver", Decimal(0))
+            if unit_tl <= 0:
+                issues.append({
+                    "source": "manual_crypto",
+                    "exchange": h.exchange,
+                    "symbol": h.symbol,
+                    "code": "silver_price_unavailable",
+                    "msg": f"{h.exchange} {h.symbol}: silver_gram seçili ama gümüş fiyatı çekilemedi — 0 değerle kaydedildi",
+                })
+        # auto için unit_tl=0 → ortak enrichment loop yakalar; eksikse oradan uyarı yazılır
+
         out.append(AssetData(
             symbol=h.symbol,
             name=h.label or f"{h.exchange} {h.symbol}",
@@ -265,6 +322,7 @@ def _gather_manual_crypto_assets(
             asset_type="crypto",
             source_type="manual",
             liquid_quantity=Decimal(str(h.quantity)),
+            unit_price_tl=unit_tl,
         ))
     return out
 
@@ -422,7 +480,7 @@ async def compute_and_save_snapshot(
         _gather_cash_assets(cash_holdings, usd_tl, issues),
     )
     bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
-    manual_crypto_assets = _gather_manual_crypto_assets(manual_crypto_holdings)  # Sync
+    manual_crypto_assets = await _gather_manual_crypto_assets(manual_crypto_holdings, issues)
     all_assets: list[AssetData] = (
         list(crypto_assets)
         + list(wallet_assets)

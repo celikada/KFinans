@@ -1009,12 +1009,16 @@ export interface CashSummaryDTO {
 }
 
 // Manuel kripto (API'siz borsalar — BinanceTR, iCrypex vs.)
+export type ManualCryptoPriceSource = "auto" | "manual" | "gold_gram" | "silver_gram";
+
 export interface ManualCryptoCreateInput {
   exchange: string;
   label?: string | null;
   symbol: string;
   quantity: number | string;
   avg_cost_tl?: number | string | null;
+  price_source?: ManualCryptoPriceSource;
+  manual_unit_price_tl?: number | string | null;
   notes?: string | null;
 }
 
@@ -1025,6 +1029,8 @@ export interface ManualCryptoDTO {
   symbol: string;
   quantity: string;
   avg_cost_tl: string | null;
+  price_source: ManualCryptoPriceSource;
+  manual_unit_price_tl: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -1037,6 +1043,8 @@ export interface ManualCryptoPositionDTO {
   symbol: string;
   quantity: string;
   avg_cost_tl: string | null;
+  price_source: ManualCryptoPriceSource;
+  manual_unit_price_tl: string | null;
   unit_price_usd: string;
   unit_price_tl: string;
   total_value_tl: string;

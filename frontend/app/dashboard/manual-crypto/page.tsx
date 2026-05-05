@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { api, ManualCryptoSummaryDTO } from "@/lib/api";
+import { api, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
@@ -16,6 +16,20 @@ const EXCHANGE_OPTIONS = [
   { value: "bitget", label: "Bitget" },
   { value: "other", label: "Diğer" },
 ];
+
+const PRICE_SOURCE_OPTIONS: { value: ManualCryptoPriceSource; label: string; hint: string }[] = [
+  { value: "auto",        label: "Otomatik",       hint: "Binance USDT + CoinGecko fallback (varsayılan)" },
+  { value: "manual",      label: "Manuel fiyat",   hint: "Birim fiyatı TL olarak kendin gir" },
+  { value: "gold_gram",   label: "Altın gr",       hint: "1 birim = 1 gr altın (anlık TL/g)" },
+  { value: "silver_gram", label: "Gümüş gr",       hint: "1 birim = 1 gr gümüş (anlık TL/g) — örn. XAGX" },
+];
+
+const PRICE_SOURCE_LABEL: Record<ManualCryptoPriceSource, string> = {
+  auto: "Otomatik",
+  manual: "Manuel",
+  gold_gram: "Altın gr",
+  silver_gram: "Gümüş gr",
+};
 
 export default function ManualCryptoPage() {
   const router = useRouter();
@@ -32,6 +46,8 @@ export default function ManualCryptoPage() {
   const [symbol, setSymbol] = useState("");
   const [quantity, setQuantity] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [priceSource, setPriceSource] = useState<ManualCryptoPriceSource>("auto");
+  const [manualPrice, setManualPrice] = useState("");
   const [notes, setNotes] = useState("");
 
   const refresh = useCallback(async () => {
@@ -64,6 +80,10 @@ export default function ManualCryptoPage() {
       setError("Borsa, sembol ve miktar zorunlu");
       return;
     }
+    if (priceSource === "manual" && (!manualPrice.trim() || parseFloat(manualPrice) <= 0)) {
+      setError("Manuel fiyat seçildiğinde TL fiyat alanı zorunludur (>0)");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -73,12 +93,16 @@ export default function ManualCryptoPage() {
         symbol: symbol.trim().toUpperCase(),
         quantity: parseFloat(quantity),
         avg_cost_tl: avgCost.trim() ? parseFloat(avgCost) : null,
+        price_source: priceSource,
+        manual_unit_price_tl: priceSource === "manual" ? parseFloat(manualPrice) : null,
         notes: notes.trim() || null,
       });
       setLabel("");
       setSymbol("");
       setQuantity("");
       setAvgCost("");
+      setPriceSource("auto");
+      setManualPrice("");
       setNotes("");
       await refresh();
     } catch (err) {
@@ -249,6 +273,46 @@ export default function ManualCryptoPage() {
               maxLength={500}
             />
           </div>
+
+          {/* Fiyat kaynağı seçimi */}
+          <div className="space-y-2 pt-2 border-t border-gray-50">
+            <label className="text-xs font-medium text-gray-600">Fiyat Kaynağı</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {PRICE_SOURCE_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`cursor-pointer text-xs px-3 py-2 rounded-lg border ${
+                    priceSource === opt.value
+                      ? "bg-blue-50 border-blue-400 text-blue-900"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                  }`}
+                  title={opt.hint}
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="price_source"
+                    value={opt.value}
+                    checked={priceSource === opt.value}
+                    onChange={() => setPriceSource(opt.value)}
+                  />
+                  <p className="font-medium">{opt.label}</p>
+                  <p className="text-[10px] text-gray-400 leading-tight mt-0.5">{opt.hint}</p>
+                </label>
+              ))}
+            </div>
+            {priceSource === "manual" && (
+              <input
+                type="number"
+                placeholder="Birim fiyat (TL)"
+                value={manualPrice}
+                onChange={(e) => setManualPrice(e.target.value)}
+                min="0"
+                step="0.000001"
+                className={`w-full ${INPUT_CLS}`}
+              />
+            )}
+          </div>
           {error && (
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
           )}
@@ -293,6 +357,11 @@ export default function ManualCryptoPage() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900 tabular-nums">{p.symbol}</p>
+                        {p.price_source !== "auto" && (
+                          <span className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                            {PRICE_SOURCE_LABEL[p.price_source]}
+                          </span>
+                        )}
                         {p.notes && <p className="text-xs text-gray-400 mt-0.5">{p.notes}</p>}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
