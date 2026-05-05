@@ -641,9 +641,11 @@ type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" |
 
 const ICONS: Record<IconName, React.ReactNode> = {
   tefas: (
+    // Pie chart — yatırım fonu portföy dağılımını çağrıştırır
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-      <polyline points="16 7 22 7 22 13" />
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2v10h10" />
+      <path d="M12 12L4.93 19.07" />
     </svg>
   ),
   crypto: (
@@ -652,10 +654,14 @@ const ICONS: Record<IconName, React.ReactNode> = {
     </svg>
   ),
   stocks: (
+    // Candlestick chart — hisse senedi göstergesi (wick + body)
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <line x1="18" y1="20" x2="18" y2="10" />
-      <line x1="12" y1="20" x2="12" y2="4" />
-      <line x1="6"  y1="20" x2="6"  y2="14" />
+      <line x1="6"  y1="3"  x2="6"  y2="21" />
+      <rect x="4"  y="7"  width="4" height="7" fill="currentColor" stroke="none" />
+      <line x1="12" y1="5"  x2="12" y2="19" />
+      <rect x="10" y="13" width="4" height="4" fill="currentColor" stroke="none" />
+      <line x1="18" y1="2"  x2="18" y2="22" />
+      <rect x="16" y="6"  width="4" height="9" fill="currentColor" stroke="none" />
     </svg>
   ),
   wallets: (
@@ -697,8 +703,12 @@ const ICONS: Record<IconName, React.ReactNode> = {
     </svg>
   ),
   commodities: (
+    // Coin stack — üst üste 3 madeni para (altın/gümüş)
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+      <ellipse cx="12" cy="5"  rx="8" ry="2.5" />
+      <path d="M4 5v3.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5" />
+      <path d="M4 11v3.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V11" />
+      <path d="M4 17v2c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-2" />
     </svg>
   ),
   budget: (
