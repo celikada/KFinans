@@ -28,8 +28,8 @@ from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.models.stock import StockHolding
 from app.models.tefas import TefasHolding
 from app.services.aggregator import (
+    fetch_combined_prices,
     fetch_gbp_to_usd,
-    fetch_spot_prices,
     fetch_usd_to_tl,
     lookup_usd_price,
     to_asset_position,
@@ -440,7 +440,7 @@ async def compute_and_save_snapshot(
     if needs_pricing:
         unique_symbols = list({a.symbol for a in needs_pricing})
         try:
-            spot_prices = await fetch_spot_prices(unique_symbols)
+            spot_prices = await fetch_combined_prices(unique_symbols)
         except Exception as exc:
             logger.warning("Snapshot: spot fiyat çekilemedi: %s", exc)
             spot_prices = {}

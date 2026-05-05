@@ -33,15 +33,21 @@ _BINANCE_PRICES = [
     {"symbol": "SOLUSDT", "price": "150.00"},
 ]
 
+# CoinGecko mock — gerçek /coins/list 5MB, testlerde mocklanır.
+_COINGECKO_LIST = [
+    {"id": "bitcoin",  "symbol": "btc", "name": "Bitcoin"},
+    {"id": "ethereum", "symbol": "eth", "name": "Ethereum"},
+]
+# /simple/price?ids=...&vs_currencies=usd → testlerde sadece bilinen ID'ler
+_COINGECKO_PRICES: dict = {}
+
 
 @pytest.fixture(autouse=True)
 def mock_external_http():
-    """Binance ticker + TCMB her test için mock'lanır.
-
-    Aggregator'daki TCMB cache'i temizle ki her test temiz başlasın.
-    """
+    """Binance + TCMB + CoinGecko mock'ları, aggregator cache temizle."""
     import app.services.aggregator as agg
     agg._tcmb_cache = None
+    agg._coingecko_list_cache = None
 
     with respx.mock(assert_all_called=False) as mock:
         mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
@@ -49,6 +55,12 @@ def mock_external_http():
         )
         mock.get("https://api.binance.com/api/v3/ticker/price").mock(
             return_value=Response(200, json=_BINANCE_PRICES)
+        )
+        mock.get("https://api.coingecko.com/api/v3/coins/list").mock(
+            return_value=Response(200, json=_COINGECKO_LIST)
+        )
+        mock.get(url__regex=r"https://api\.coingecko\.com/api/v3/simple/price.*").mock(
+            return_value=Response(200, json=_COINGECKO_PRICES)
         )
         yield mock
 

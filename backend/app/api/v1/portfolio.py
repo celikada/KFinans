@@ -21,7 +21,7 @@ from app.schemas.portfolio import (
     WalletPositionOut,
     WalletResponse,
 )
-from app.services.aggregator import fetch_usd_to_tl, fetch_spot_prices, lookup_usd_price
+from app.services.aggregator import fetch_usd_to_tl, fetch_combined_prices, lookup_usd_price
 from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
@@ -273,7 +273,7 @@ async def get_wallet_positions(
 
     usd_tl, prices = await asyncio.gather(
         fetch_usd_to_tl(),
-        fetch_spot_prices([
+        fetch_combined_prices([
             "S", "AVAX", "ETH", "BTC", "SOL", "ADA", "DOT", "ALGO", "LTC",
             "LINK", "USDT", "USDC",
         ]),

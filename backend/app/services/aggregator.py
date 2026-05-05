@@ -123,6 +123,113 @@ async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
     return result
 
 
+# CoinGecko fallback — Binance USDT paritesi bulunmayan token'lar için
+# (iCrypex'e özel ICPX, XAGX gibi). Free tier ~30 istek/dk, /coins/list
+# 24 saat cache'lenir (yaklaşık 17K coin, ~5MB), /simple/price her çağrıda.
+_COINGECKO_LIST_URL = "https://api.coingecko.com/api/v3/coins/list"
+_COINGECKO_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
+_COINGECKO_LIST_TTL_SEC = 24 * 3600
+_coingecko_list_cache: tuple[float, dict[str, str]] | None = None
+
+# Çoklu eşleşmelerde (örn. "BTC" birden fazla coin'de) bu override öncelikli.
+# Genel kural: id_map'te ilk gelen kabul edilir (CoinGecko alfabetik dönüyor).
+COINGECKO_SYMBOL_OVERRIDES: dict[str, str] = {
+    "ICPX": "icrypex-token",
+    # XAGX/OILX gibi diğerleri /coins/list'te yakalanırsa orada — yoksa
+    # eklemek için: https://api.coingecko.com/api/v3/search?query=XAGX
+}
+
+
+async def _get_coingecko_id_map() -> dict[str, str]:
+    """CoinGecko /coins/list → uppercase symbol → coin id mapping. 24 saat cache."""
+    global _coingecko_list_cache
+    now = time.time()
+    if _coingecko_list_cache and now - _coingecko_list_cache[0] < _COINGECKO_LIST_TTL_SEC:
+        return _coingecko_list_cache[1]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(_COINGECKO_LIST_URL)
+        resp.raise_for_status()
+        data = resp.json()
+
+    # Çoklu eşleşmelerde ilkini al (CoinGecko sıralaması market cap odaklı değil ama
+    # popüler coinler genelde önce gelir). Override map ile ezilebilir.
+    mapping: dict[str, str] = {}
+    for c in data:
+        sym = c.get("symbol", "").upper()
+        if sym and sym not in mapping:
+            mapping[sym] = c.get("id", "")
+    mapping.update(COINGECKO_SYMBOL_OVERRIDES)
+
+    _coingecko_list_cache = (now, mapping)
+    return mapping
+
+
+async def fetch_coingecko_prices(symbols: list[str]) -> dict[str, Decimal]:
+    """Verilen sembollerin USD fiyatlarını CoinGecko'dan çeker.
+    Bulunmayanlar dict'te yer almaz (0 anlamına gelir).
+    """
+    if not symbols:
+        return {}
+    try:
+        id_map = await _get_coingecko_id_map()
+    except Exception as e:
+        logger.warning("CoinGecko /coins/list çekilemedi: %s", e)
+        return {}
+
+    symbol_to_id = {}
+    for s in symbols:
+        cg_id = id_map.get(s.upper())
+        if cg_id:
+            symbol_to_id[s] = cg_id
+
+    if not symbol_to_id:
+        return {}
+
+    unique_ids = ",".join(sorted(set(symbol_to_id.values())))
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _COINGECKO_PRICE_URL,
+                params={"ids": unique_ids, "vs_currencies": "usd"},
+            )
+            resp.raise_for_status()
+            prices = resp.json()
+    except Exception as e:
+        logger.warning("CoinGecko fiyat çekilemedi: %s", e)
+        return {}
+
+    result: dict[str, Decimal] = {}
+    for sym, cg_id in symbol_to_id.items():
+        usd = prices.get(cg_id, {}).get("usd")
+        if usd:
+            result[sym] = Decimal(str(usd))
+    return result
+
+
+async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
+    """Binance + CoinGecko fallback. Binance'te bulunamayanlar CoinGecko'dan denenir.
+    Snapshot ve manuel kripto preview'unde kullanılır.
+    """
+    if not symbols:
+        return {}
+    binance = await fetch_spot_prices(symbols)
+    missing = [
+        s for s in symbols
+        if binance.get(s, Decimal(0)) <= 0
+        and s not in USD_STABLE_SYMBOLS
+        and s not in SYMBOL_PRICE_ALIASES
+    ]
+    if not missing:
+        return binance
+
+    cg = await fetch_coingecko_prices(missing)
+    for sym, price in cg.items():
+        if price > 0:
+            binance[sym] = price
+    return binance
+
+
 # ETH peg'li staking tokenları + WBTC + AVAX peg'li → Binance USDT pariteli base symbol
 SYMBOL_PRICE_ALIASES: dict[str, str] = {
     "STETH": "ETH", "stETH": "ETH",

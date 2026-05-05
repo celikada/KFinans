@@ -19,7 +19,7 @@ from app.schemas.manual_crypto import (
     ManualCryptoSummaryOut,
     ManualCryptoUpdate,
 )
-from app.services.aggregator import fetch_spot_prices, fetch_usd_to_tl, lookup_usd_price
+from app.services.aggregator import fetch_combined_prices, fetch_usd_to_tl, lookup_usd_price
 
 router = APIRouter(prefix="/manual-crypto", tags=["manual-crypto"])
 
@@ -82,13 +82,13 @@ async def _enrich_positions(
 
 
 async def _fetch_prices_safe(symbols: list[str]) -> tuple[dict[str, Decimal], Decimal]:
-    """Binance + USD/TL — hata durumunda boş dict + 0 dönmek yerine 503."""
+    """Binance + CoinGecko fallback + USD/TL — hata durumunda 503."""
     try:
-        prices = await fetch_spot_prices(symbols)
+        prices = await fetch_combined_prices(symbols)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Binance fiyatları çekilemedi: {e}",
+            detail=f"Fiyatlar çekilemedi: {e}",
         )
     try:
         usd_tl = await fetch_usd_to_tl()
