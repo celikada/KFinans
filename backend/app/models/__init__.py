@@ -7,6 +7,7 @@ from app.models.tefas import TefasHolding
 from app.models.commodity import CommodityHolding
 from app.models.cash import CashHolding
 from app.models.manual_crypto import ManualCryptoHolding
+from app.models.recurring_income import RecurringIncome
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "CommodityHolding",
     "CashHolding",
     "ManualCryptoHolding",
+    "RecurringIncome",
 ]

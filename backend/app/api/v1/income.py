@@ -11,14 +11,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
 from app.models.income import Income
+from app.models.recurring_income import RecurringIncome
 from app.models.user import User
 from app.schemas.income import (
     INCOME_CATEGORIES,
     IncomeCategoryBreakdown,
     IncomeCreate,
+    IncomeDashboard,
     IncomeOut,
     IncomeSummary,
     IncomeUpdate,
+    RecurringIncomeCreate,
+    RecurringIncomeOut,
+    RecurringIncomeUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -293,3 +298,188 @@ async def import_incomes(
         await db.refresh(inc)
 
     return added
+
+
+# ---------------------------------------------------------------------------
+# Periyodik gelir (recurring_incomes) CRUD + dashboard hesaplama
+# ---------------------------------------------------------------------------
+def _applies_in_month(ri: RecurringIncome, year: int, month: int) -> bool:
+    """Bir periyodik gelirin verilen ay içinde geçerli olup olmadığı."""
+    last_day = calendar.monthrange(year, month)[1]
+    first_of_month = date_type(year, month, 1)
+    last_of_month = date_type(year, month, last_day)
+
+    if ri.start_date > last_of_month:
+        return False
+    if ri.end_date is not None and ri.end_date < first_of_month:
+        return False
+
+    rec = ri.recurrence
+    months_since = (year * 12 + month) - (ri.start_date.year * 12 + ri.start_date.month)
+
+    if rec == "one_time":
+        return ri.start_date.year == year and ri.start_date.month == month
+    if rec == "monthly":
+        return months_since >= 0
+    if rec == "quarterly":
+        return months_since >= 0 and months_since % 3 == 0
+    if rec == "biannual":
+        return months_since >= 0 and months_since % 6 == 0
+    if rec == "yearly":
+        return ri.start_date.month == month and ri.start_date.year <= year
+    if rec == "custom":
+        return ri.months is not None and month in ri.months and ri.start_date.year <= year
+    return False
+
+
+@router.get("/recurring", response_model=list[RecurringIncomeOut])
+async def list_recurring_incomes(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(RecurringIncome)
+        .where(RecurringIncome.user_id == current_user.id)
+        .order_by(RecurringIncome.start_date.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/recurring", response_model=RecurringIncomeOut, status_code=status.HTTP_201_CREATED)
+async def create_recurring_income(
+    payload: RecurringIncomeCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.recurrence == "custom" and not payload.months:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="custom recurrence için 'months' alanı zorunlu (1-12 arası ay listesi)",
+        )
+    ri = RecurringIncome(
+        user_id=current_user.id,
+        title=payload.title,
+        amount=payload.amount,
+        category=payload.category,
+        recurrence=payload.recurrence,
+        months=payload.months,
+        day_of_month=payload.day_of_month,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        notes=payload.notes,
+    )
+    db.add(ri)
+    await db.commit()
+    await db.refresh(ri)
+    return ri
+
+
+@router.put("/recurring/{rid}", response_model=RecurringIncomeOut)
+async def update_recurring_income(
+    rid: int,
+    payload: RecurringIncomeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(RecurringIncome).where(
+            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
+        )
+    )
+    ri = result.scalar_one_or_none()
+    if not ri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+
+    for attr in ("title", "amount", "category", "recurrence", "months",
+                 "day_of_month", "start_date", "end_date", "notes"):
+        v = getattr(payload, attr)
+        if v is not None:
+            setattr(ri, attr, v)
+
+    await db.commit()
+    await db.refresh(ri)
+    return ri
+
+
+@router.delete("/recurring/{rid}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_recurring_income(
+    rid: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(RecurringIncome).where(
+            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
+        )
+    )
+    ri = result.scalar_one_or_none()
+    if not ri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+    await db.delete(ri)
+    await db.commit()
+
+
+@router.get("/dashboard", response_model=IncomeDashboard)
+async def get_income_dashboard(
+    year: int = Query(..., ge=2020, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Gelir özet paneli: gerçekleşen + tahmini metrikler.
+
+    - this_month_actual: incomes(bu ay)
+    - ytd_actual: incomes(yıl başı..son gün dahil)
+    - this_month_recurring: bu ay aktif olan recurring_incomes toplamı
+    - ytd_recurring: yıl başı..bu ay (dahil) geçen recurring
+    - remaining_year_recurring: bu aydan sonraki ay..yıl sonu recurring
+    - year_total_estimate: ytd_actual + remaining_year_recurring
+    """
+    first_day_year = date_type(year, 1, 1)
+    first_day_month = date_type(year, month, 1)
+    last_day_month = date_type(year, month, calendar.monthrange(year, month)[1])
+
+    # Gerçekleşen
+    actual_month_q = await db.execute(
+        select(func.coalesce(func.sum(Income.amount), 0))
+        .where(Income.user_id == current_user.id, Income.date >= first_day_month, Income.date <= last_day_month)
+    )
+    actual_ytd_q = await db.execute(
+        select(func.coalesce(func.sum(Income.amount), 0))
+        .where(Income.user_id == current_user.id, Income.date >= first_day_year, Income.date <= last_day_month)
+    )
+    this_month_actual = Decimal(actual_month_q.scalar_one())
+    ytd_actual = Decimal(actual_ytd_q.scalar_one())
+
+    # Periyodik (yıl içi 12 ay tarama)
+    rec_q = await db.execute(
+        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
+    )
+    recurring = rec_q.scalars().all()
+
+    this_month_recurring = Decimal(0)
+    ytd_recurring = Decimal(0)
+    remaining_year_recurring = Decimal(0)
+    for m in range(1, 13):
+        for ri in recurring:
+            if not _applies_in_month(ri, year, m):
+                continue
+            amt = Decimal(ri.amount)
+            if m == month:
+                this_month_recurring += amt
+            if m <= month:
+                ytd_recurring += amt
+            else:
+                remaining_year_recurring += amt
+
+    year_total_estimate = ytd_actual + remaining_year_recurring
+
+    return IncomeDashboard(
+        year=year, month=month,
+        this_month_actual=this_month_actual,
+        ytd_actual=ytd_actual,
+        this_month_recurring=this_month_recurring,
+        ytd_recurring=ytd_recurring,
+        remaining_year_recurring=remaining_year_recurring,
+        year_total_estimate=year_total_estimate,
+    )

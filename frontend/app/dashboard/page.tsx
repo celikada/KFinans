@@ -64,6 +64,7 @@ export default function DashboardPage() {
 
   // Gelir (bu ay)
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
+  const [incomeYearEstimate, setIncomeYearEstimate] = useState<number | null>(null);
   const [incomeCount, setIncomeCount] = useState(0);
   const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
 
@@ -169,6 +170,11 @@ export default function DashboardPage() {
         (b) => parseFloat(b.total),
         (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
       ));
+    }).catch(() => {});
+
+    api.getIncomeDashboard(now.getFullYear(), now.getMonth() + 1).then((d) => {
+      const est = parseFloat(d.year_total_estimate);
+      if (est > 0) setIncomeYearEstimate(est);
     }).catch(() => {});
 
     api.getCommodities().then((s) => {
@@ -488,6 +494,9 @@ export default function DashboardPage() {
                 countLabel="kayıt"
                 top={incomeTop}
                 placeholder="Maaş, kira, temettü..."
+                footer={incomeYearEstimate !== null && (
+                  <span>Yıl sonu beklentisi: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
+                )}
               />
             )}
 
@@ -737,6 +746,7 @@ interface CardProps {
   loading?: boolean;
   top: TopItem[];
   placeholder: string;
+  footer?: React.ReactNode;
 }
 
 function GoalCard({ href, pct, passive }: { href: string; pct: number | null; passive: number | null }) {
@@ -814,7 +824,7 @@ function BudgetCard({ href, overCount }: { href: string; overCount: number | nul
   );
 }
 
-function Card({ href, icon, color, title, total, count, countLabel, loading, top, placeholder }: CardProps) {
+function Card({ href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer }: CardProps) {
   const router = useRouter();
   const c = COLOR_MAP[color];
   const hasTotal = total !== null && total > 0;
@@ -848,6 +858,11 @@ function Card({ href, icon, color, title, total, count, countLabel, loading, top
             </li>
           ))}
         </ul>
+      )}
+      {footer && (
+        <div className="mt-3 pt-3 border-t border-gray-50 text-xs text-gray-500">
+          {footer}
+        </div>
       )}
     </button>
   );

@@ -350,6 +350,17 @@ export const api = {
   getIncomeSummary: (year: number, month: number) =>
     request<IncomeSummaryDTO>(`/income/summary?year=${year}&month=${month}`),
 
+  // Periyodik gelir (recurring_incomes)
+  getIncomeDashboard: (year: number, month: number) =>
+    request<IncomeDashboardDTO>(`/income/dashboard?year=${year}&month=${month}`),
+  listRecurringIncomes: () => request<RecurringIncomeDTO[]>("/income/recurring"),
+  createRecurringIncome: (payload: RecurringIncomeInput) =>
+    request<RecurringIncomeDTO>("/income/recurring", { method: "POST", body: JSON.stringify(payload) }),
+  updateRecurringIncome: (id: number, payload: Partial<RecurringIncomeInput>) =>
+    request<RecurringIncomeDTO>(`/income/recurring/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteRecurringIncome: (id: number) =>
+    request<void>(`/income/recurring/${id}`, { method: "DELETE" }),
+
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
   setGoal: (amount: number, currency: GoalCurrency) =>
@@ -842,6 +853,64 @@ export interface IncomeSummaryDTO {
   total: string;
   count: number;
   by_category: IncomeCategoryBreakdownDTO[];
+}
+
+// Periyodik gelir (recurring_incomes)
+export type RecurringIncomeCategory = "salary" | "rental" | "dividend" | "bonus" | "freelance" | "other";
+export type RecurringRecurrence = "one_time" | "monthly" | "quarterly" | "biannual" | "yearly" | "custom";
+
+export const RECURRING_INCOME_CATEGORY_LABELS: Record<RecurringIncomeCategory, string> = {
+  salary:    "Maaş",
+  rental:    "Kira Geliri",
+  dividend:  "Temettü / Faiz",
+  bonus:     "İkramiye / Prim",
+  freelance: "Serbest Meslek",
+  other:     "Diğer",
+};
+
+export const RECURRING_RECURRENCE_LABELS: Record<RecurringRecurrence, string> = {
+  one_time:  "Tek seferlik",
+  monthly:   "Aylık",
+  quarterly: "3 aylık",
+  biannual:  "6 aylık",
+  yearly:    "Yıllık",
+  custom:    "Özel aylar",
+};
+
+export interface RecurringIncomeInput {
+  title: string;
+  amount: number;
+  category: RecurringIncomeCategory;
+  recurrence: RecurringRecurrence;
+  months?: number[] | null;
+  day_of_month: number;
+  start_date: string;     // YYYY-MM-DD
+  end_date?: string | null;
+  notes?: string | null;
+}
+
+export interface RecurringIncomeDTO {
+  id: number;
+  title: string;
+  amount: string;
+  category: RecurringIncomeCategory;
+  recurrence: RecurringRecurrence;
+  months: number[] | null;
+  day_of_month: number;
+  start_date: string;
+  end_date: string | null;
+  notes: string | null;
+}
+
+export interface IncomeDashboardDTO {
+  year: number;
+  month: number;
+  this_month_actual: string;
+  ytd_actual: string;
+  this_month_recurring: string;
+  ytd_recurring: string;
+  remaining_year_recurring: string;
+  year_total_estimate: string;
 }
 
 export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";

@@ -111,6 +111,8 @@ cd frontend && npm install && npm run dev
 
 **BES:** Manuel giriş + Excel import/export. 4 metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Snapshot servisi `_gather_bes_assets()` ile `asset_type="pension"` olarak entegre eder.
 
+**Periyodik gelir (`recurring_incomes`):** Maaş, kira, temettü gibi düzenli gelirler için ayrı tablo (`PlannedExpense` ile aynı yapı). Tek seferlik kayıtlar `incomes` tablosunda kalır; recurring sadece **tahmin/beklenti** için kullanılır (otomatik income kaydı oluşturmaz). Recurrence: `one_time/monthly/quarterly/biannual/yearly/custom`. `GET /income/dashboard?year=&month=` 6 metrik döner: this_month_actual, ytd_actual, this_month_recurring, ytd_recurring, remaining_year_recurring, year_total_estimate (= ytd_actual + remaining). Frontend `/dashboard/income` 3 metrik kartı + 2 sekme (Gerçekleşen / Periyodik). Dashboard "Gelirler" kartı footer'da yıl sonu beklentisi gösterir.
+
 **Fault-tolerance pattern:** Dış servisler **kritik** ve **best-effort** olarak ayrılır. TCMB USD/TRY kritik (fail → 503); GBP/USD opsiyonel (fail → 0 + log warning). Yahoo Finance metal sembolleri için fallback chain (XAU=X→GC=F, XAG=X→SI=F); ikisi de fail ise 0 dön + UI uyarı banner. Cache TTL Yahoo fail durumunda 5 dk → 30 sn'ye düşer (geçici 404 hızla telafi edilir).
 
 **Multi-RPC fallback (EVM zincirler):** Ethereum ve Avalanche C-Chain `settings.{ethereum,avalanche_c}_rpc_url` → publicnode → merkle → 1rpc → ankr → drpc sırasıyla denenir; upstream patladığında self-heal sağlar. Servisler ilk başarılı RPC'yi seçer.
