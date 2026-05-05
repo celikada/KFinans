@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
+import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
 import { getShowUsd, setShowUsd } from "@/app/_components/TLValue";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
@@ -276,31 +276,40 @@ export default function SettingsPage() {
         <section className={CARD_CLS}>
           <h2 className="text-base font-semibold text-gray-900 mb-1">Dashboard Görünümü</h2>
           <p className="text-xs text-gray-500 mb-4">Görmek istemediğiniz kartları gizleyin.</p>
-          <div className="space-y-1">
-            {DASHBOARD_CARDS.map(({ id, label }) => {
-              const isHidden = hiddenCards.includes(id);
-              return (
-                <div key={id} className="flex items-center justify-between py-2">
-                  <span className="text-sm text-gray-700 select-none">{label}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = isHidden
-                        ? hiddenCards.filter((c) => c !== id)
-                        : [...hiddenCards, id];
-                      setHiddenCards(next);
-                      saveHiddenCards(next);
-                    }}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${isHidden ? "bg-gray-200" : "bg-blue-600"}`}
-                    aria-label={isHidden ? `${label} göster` : `${label} gizle`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isHidden ? "" : "translate-x-5"}`}
-                    />
-                  </button>
+          <div className="space-y-5">
+            {DASHBOARD_GROUPS.map((group) => (
+              <div key={group.id}>
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
+                  {group.label}
+                </h3>
+                <div className="space-y-1 border border-gray-100 rounded-xl divide-y divide-gray-50">
+                  {DASHBOARD_CARDS.filter((c) => c.group === group.id).map(({ id, label }) => {
+                    const isHidden = hiddenCards.includes(id);
+                    return (
+                      <div key={id} className="flex items-center justify-between px-3 py-2.5">
+                        <span className="text-sm text-gray-700 select-none">{label}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = isHidden
+                              ? hiddenCards.filter((c) => c !== id)
+                              : [...hiddenCards, id];
+                            setHiddenCards(next);
+                            saveHiddenCards(next);
+                          }}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${isHidden ? "bg-gray-200" : "bg-blue-600"}`}
+                          aria-label={isHidden ? `${label} göster` : `${label} gizle`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isHidden ? "" : "translate-x-5"}`}
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </section>
 

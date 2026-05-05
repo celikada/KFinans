@@ -33,22 +33,30 @@ export const TOOLBAR_BTN_CLS =
   "text-sm text-gray-600 hover:text-gray-900 font-medium border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50";
 
 export const DASHBOARD_CARDS = [
-  { id: "tefas",       label: "TEFAS Fonları" },
-  { id: "crypto",      label: "Kripto" },
-  { id: "stocks",      label: "Hisse Senedi" },
-  { id: "wallets",     label: "Blockchain Cüzdanlar" },
-  { id: "bes",         label: "BES" },
-  { id: "expenses",    label: "Harcamalar" },
-  { id: "planned",     label: "Planlı Ödemeler" },
-  { id: "income",      label: "Gelirler" },
-  { id: "goal",        label: "Finansal Hedef" },
-  { id: "commodities", label: "Altın & Gümüş" },
-  { id: "budget",      label: "Bütçe Takibi" },
-  { id: "cash",        label: "Nakit / Banka" },
-  { id: "manualCrypto", label: "Manuel Kripto (API'siz)" },
+  // Portföy grubu
+  { id: "bes",          label: "BES",                       group: "portfolio" },
+  { id: "tefas",        label: "TEFAS Fonları",             group: "portfolio" },
+  { id: "stocks",       label: "Hisse Senedi",              group: "portfolio" },
+  { id: "wallets",      label: "Blockchain Cüzdanlar",      group: "portfolio" },
+  { id: "crypto",       label: "Kripto",                    group: "portfolio" },
+  { id: "manualCrypto", label: "Manuel Kripto (API'siz)",   group: "portfolio" },
+  { id: "commodities",  label: "Altın & Gümüş",             group: "portfolio" },
+  { id: "cash",         label: "Nakit / Banka",             group: "portfolio" },
+  // Finans grubu
+  { id: "income",       label: "Gelirler",                  group: "finance" },
+  { id: "expenses",     label: "Harcamalar",                group: "finance" },
+  { id: "planned",      label: "Planlı Harcamalar",         group: "finance" },
+  { id: "budget",       label: "Bütçe Takibi",              group: "finance" },
+  { id: "goal",         label: "Finansal Hedef",            group: "finance" },
 ] as const;
 
 export type DashboardCardId = typeof DASHBOARD_CARDS[number]["id"];
+export type DashboardGroup = "portfolio" | "finance";
+
+export const DASHBOARD_GROUPS: { id: DashboardGroup; label: string }[] = [
+  { id: "portfolio", label: "Portföy" },
+  { id: "finance",   label: "Finans" },
+];
 
 export function getHiddenCards(): DashboardCardId[] {
   if (typeof window === "undefined") return [];

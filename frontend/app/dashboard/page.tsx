@@ -357,165 +357,175 @@ export default function DashboardPage() {
           <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg mb-4">{snapshotMsg}</p>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {!hiddenCards.includes("tefas") && (
-            <Card
-              href="/dashboard/tefas"
-              icon="tefas"
-              color="blue"
-              title="TEFAS Fonları"
-              total={tefasTotal}
-              count={tefasFundCount}
-              countLabel="fon"
-              top={tefasTop}
-              placeholder="Yatırım fonu fiyatlarını canlı görüntüle"
-            />
-          )}
+        {/* PORTFÖY GRUBU */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Portföy</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {!hiddenCards.includes("bes") && (
+              <Card
+                href="/dashboard/bes"
+                icon="bes"
+                color="green"
+                title="BES"
+                total={besTotal}
+                count={besPlanCount}
+                countLabel="plan"
+                top={besTop}
+                placeholder="Bireysel emeklilik — manuel giriş"
+              />
+            )}
 
-          {!hiddenCards.includes("crypto") && (
-            <Card
-              href="/dashboard/crypto"
-              icon="crypto"
-              color="orange"
-              title="Kripto"
-              total={cryptoTotal}
-              loading={cryptoLoading}
-              top={cryptoTop}
-              placeholder="Binance & iCrypex"
-            />
-          )}
+            {!hiddenCards.includes("tefas") && (
+              <Card
+                href="/dashboard/tefas"
+                icon="tefas"
+                color="blue"
+                title="TEFAS Fonları"
+                total={tefasTotal}
+                count={tefasFundCount}
+                countLabel="fon"
+                top={tefasTop}
+                placeholder="Yatırım fonu fiyatlarını canlı görüntüle"
+              />
+            )}
 
-          {!hiddenCards.includes("stocks") && (
-            <Card
-              href="/dashboard/stocks"
-              icon="stocks"
-              color="indigo"
-              title="Hisse Senedi"
-              total={stockTotal}
-              count={stockHoldingCount}
-              countLabel="hisse"
-              top={stockTop}
-              placeholder="BIST + ABD + UK — Yahoo Finance"
-            />
-          )}
+            {!hiddenCards.includes("stocks") && (
+              <Card
+                href="/dashboard/stocks"
+                icon="stocks"
+                color="indigo"
+                title="Hisse Senedi"
+                total={stockTotal}
+                count={stockHoldingCount}
+                countLabel="hisse"
+                top={stockTop}
+                placeholder="BIST + ABD + UK — Yahoo Finance"
+              />
+            )}
 
-          {!hiddenCards.includes("wallets") && (
-            <Card
-              href="/dashboard/wallets"
-              icon="wallets"
-              color="purple"
-              title="Blockchain Cüzdanlar"
-              total={walletTotal}
-              loading={walletLoading}
-              top={walletTop}
-              placeholder="Sonic, Avalanche, Ethereum"
-            />
-          )}
+            {!hiddenCards.includes("wallets") && (
+              <Card
+                href="/dashboard/wallets"
+                icon="wallets"
+                color="purple"
+                title="Blockchain Cüzdanlar"
+                total={walletTotal}
+                loading={walletLoading}
+                top={walletTop}
+                placeholder="Sonic, Avalanche, Ethereum"
+              />
+            )}
 
-          {!hiddenCards.includes("bes") && (
-            <Card
-              href="/dashboard/bes"
-              icon="bes"
-              color="green"
-              title="BES"
-              total={besTotal}
-              count={besPlanCount}
-              countLabel="plan"
-              top={besTop}
-              placeholder="Bireysel emeklilik — manuel giriş"
-            />
-          )}
+            {!hiddenCards.includes("crypto") && (
+              <Card
+                href="/dashboard/crypto"
+                icon="crypto"
+                color="orange"
+                title="Kripto"
+                total={cryptoTotal}
+                loading={cryptoLoading}
+                top={cryptoTop}
+                placeholder="Binance & iCrypex"
+              />
+            )}
 
-          {!hiddenCards.includes("expenses") && (
-            <Card
-              href="/dashboard/expenses"
-              icon="expenses"
-              color="red"
-              title="Harcamalar (bu ay)"
-              total={expenseTotal}
-              count={expenseCount}
-              countLabel="kayıt"
-              top={expenseTop}
-              placeholder="Aylık gider takibi"
-            />
-          )}
+            {!hiddenCards.includes("manualCrypto") && (
+              <Card
+                href="/dashboard/manual-crypto"
+                icon="crypto"
+                color="orange"
+                title="Manuel Kripto"
+                total={manualCryptoTotal}
+                count={manualCryptoCount}
+                countLabel="pozisyon"
+                top={manualCryptoTop}
+                placeholder="API'siz borsalar (BinanceTR, iCrypex...)"
+              />
+            )}
 
-          {!hiddenCards.includes("planned") && (
-            <Card
-              href="/dashboard/planned"
-              icon="planned"
-              color="violet"
-              title="Planlı Ödemeler (bu yıl)"
-              total={plannedTotal}
-              top={[]}
-              placeholder="Kredi, vergi, fatura planı"
-            />
-          )}
+            {!hiddenCards.includes("commodities") && (
+              <Card
+                href="/dashboard/commodities"
+                icon="commodities"
+                color="amber"
+                title="Altın & Gümüş"
+                total={commodityTotal}
+                count={commodityCount}
+                countLabel="pozisyon"
+                top={[]}
+                placeholder="Gram, BiGA, sikke (çeyrek, tam...)"
+              />
+            )}
 
-          {!hiddenCards.includes("income") && (
-            <Card
-              href="/dashboard/income"
-              icon="income"
-              color="emerald"
-              title="Gelirler (bu ay)"
-              total={incomeTotal}
-              count={incomeCount}
-              countLabel="kayıt"
-              top={incomeTop}
-              placeholder="Maaş, kira, temettü..."
-            />
-          )}
+            {!hiddenCards.includes("cash") && (
+              <Card
+                href="/dashboard/cash"
+                icon="cash"
+                color="green"
+                title="Nakit / Banka"
+                total={cashTotal}
+                count={cashCount}
+                countLabel="hesap"
+                top={[]}
+                placeholder="Banka hesabı + nakit (manuel)"
+              />
+            )}
+          </div>
+        </section>
 
-          {!hiddenCards.includes("goal") && (
-            <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
-          )}
+        {/* FİNANS GRUBU */}
+        <section className="space-y-3 mt-8">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Finans</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {!hiddenCards.includes("income") && (
+              <Card
+                href="/dashboard/income"
+                icon="income"
+                color="emerald"
+                title="Gelirler (bu ay)"
+                total={incomeTotal}
+                count={incomeCount}
+                countLabel="kayıt"
+                top={incomeTop}
+                placeholder="Maaş, kira, temettü..."
+              />
+            )}
 
-          {!hiddenCards.includes("commodities") && (
-            <Card
-              href="/dashboard/commodities"
-              icon="commodities"
-              color="amber"
-              title="Altın & Gümüş"
-              total={commodityTotal}
-              count={commodityCount}
-              countLabel="pozisyon"
-              top={[]}
-              placeholder="Gram, BiGA, sikke (çeyrek, tam...)"
-            />
-          )}
+            {!hiddenCards.includes("expenses") && (
+              <Card
+                href="/dashboard/expenses"
+                icon="expenses"
+                color="red"
+                title="Harcamalar (bu ay)"
+                total={expenseTotal}
+                count={expenseCount}
+                countLabel="kayıt"
+                top={expenseTop}
+                placeholder="Aylık gider takibi"
+              />
+            )}
 
-          {!hiddenCards.includes("budget") && (
-            <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
-          )}
+            {!hiddenCards.includes("planned") && (
+              <Card
+                href="/dashboard/planned"
+                icon="planned"
+                color="violet"
+                title="Planlı Harcamalar (bu yıl)"
+                total={plannedTotal}
+                top={[]}
+                placeholder="Kredi, vergi, fatura planı"
+              />
+            )}
 
-          {!hiddenCards.includes("cash") && (
-            <Card
-              href="/dashboard/cash"
-              icon="cash"
-              color="green"
-              title="Nakit / Banka"
-              total={cashTotal}
-              count={cashCount}
-              countLabel="hesap"
-              top={[]}
-              placeholder="Banka hesabı + nakit (manuel)"
-            />
-          )}
+            {!hiddenCards.includes("budget") && (
+              <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
+            )}
 
-          {!hiddenCards.includes("manualCrypto") && (
-            <Card
-              href="/dashboard/manual-crypto"
-              icon="crypto"
-              color="orange"
-              title="Manuel Kripto"
-              total={manualCryptoTotal}
-              count={manualCryptoCount}
-              countLabel="pozisyon"
-              top={manualCryptoTop}
-              placeholder="API'siz borsalar (BinanceTR, iCrypex...)"
-            />
-          )}
-        </div>
+            {!hiddenCards.includes("goal") && (
+              <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
+            )}
+          </div>
+        </section>
       </main>
 
       {/* Snapshot uyarı popup'ı */}
