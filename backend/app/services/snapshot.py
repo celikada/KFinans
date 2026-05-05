@@ -9,8 +9,13 @@ bu modulu kullanir.
 import asyncio
 import logging
 import uuid
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+# Snapshot tarihi kullanıcı saatine göre belirlenmeli — UTC backend'de gece 03:00'a
+# kadar "dün" gösterirdi. Türkiye yerel saatiyle çalış.
+_ISTANBUL = ZoneInfo("Europe/Istanbul")
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -323,7 +328,7 @@ async def compute_and_save_snapshot(
     force=True:   issues olsa bile DB'ye yaz (kullanıcı onayladı).
                   dry_run=False ise zaten yazılır; force, semantik flag.
     """
-    today = date.today()
+    today = datetime.now(_ISTANBUL).date()
 
     # Mevcut bugune ait snapshot'i temizle (cascade ile asset_positions da silinir)
     existing_q = await db.execute(

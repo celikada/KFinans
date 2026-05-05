@@ -287,6 +287,26 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
 
 > Hata izolasyonu: bir kaynak başarısız olursa diğerleri devam eder, başarısız kaynak loglanır.
 > Döviz kuru: USD/TL kritik — TCMB primary, exchangerate-api fallback; ikisi de fail ise snapshot iptal (503). GBP/USD opsiyonel — fail ise UK hisseleri 0 değerle devam eder (201).
+> **Tarih (timezone):** `snapshot_date` `Europe/Istanbul` saatine göre belirlenir. Backend Docker container UTC'de çalışsa bile `datetime.now(ZoneInfo("Europe/Istanbul")).date()` kullanıldığı için Türkiye gece yarısı sonrası (00:00–03:00) alınan snapshot'lar doğru güne yazılır.
+
+### `DELETE /portfolio/snapshot/{snapshot_date}`
+Belirtilen tarihteki snapshot'ı siler. Yanlış kaydedilmiş snapshot'ları (timezone bug, hatalı manuel tetikleme vb.) temizlemek için kullanılır. Cascade ile `asset_positions` kayıtları da otomatik silinir.
+
+| Path param      | Tür  | Açıklama                                  |
+| --------------- | ---- | ----------------------------------------- |
+| `snapshot_date` | date | ISO format (`YYYY-MM-DD`, örn. `2026-05-04`) |
+
+```
+DELETE /api/v1/portfolio/snapshot/2026-05-04
+Authorization: Bearer eyJ...
+
+204 No Content
+
+404: { "detail": "Snapshot bulunamadı" }
+```
+
+> **IDOR koruması:** Sorgu `current_user.id` ile filtrelenir; başka kullanıcının snapshot'ı silinemez (yoksa 404 döner — bilgi sızdırma yok).
+> Frontend `/dashboard/history` sayfası altındaki "Snapshotlar" listesinde her satırın yanında "Sil" butonu vardır; tıklamada onay popup'ı çıkar (geri alınamaz uyarılı).
 
 ### `GET /portfolio/wallets`
 **Anlık** blockchain pozisyonları (10 zincir: Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin).
@@ -312,6 +332,7 @@ Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Son
 > Aynı response'ta zincire göre çeşitli `symbol` değerleri görülebilir: native token (`BTC`, `ETH`, `S`, `AVAX`, `SOL`, `ADA`, `DOT`, `ALGO`, `LTC`) + ERC-20 token'lar (Ethplorer dinamik discovery: `LINK`, `USDT`, `USDC` vb.) + curated AVAX list (`sAVAX`, `USDT.e`, `USDC.e`). Spot fiyatlar `aggregator.fetch_spot_prices()` 12 sembol için çekilir (`S`, `AVAX`, `ETH`, `BTC`, `SOL`, `ADA`, `DOT`, `ALGO`, `LTC`, `LINK`, `USDT`, `USDC`).
 > Solana için `staked_quantity` Stake program (`getProgramAccounts`) sonucuyla doldurulur.
 > Bitcoin için 10 dk in-memory cache + single-flight pattern (paralel cache miss'lerde tek tarama paylaşılır).
+> **`total_value_tl` formülü:** `(liquid_quantity + staked_quantity + pending_rewards) * unit_price_tl`. `pending_rewards` (Sonic SFC validator rewards, Avalanche P-Chain pending rewards) her zaman dahil edilir; snapshot servisi ile tutarlıdır.
 
 ---
 

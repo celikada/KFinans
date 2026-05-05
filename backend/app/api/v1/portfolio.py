@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, desc
@@ -105,6 +106,27 @@ async def create_snapshot(
         .options(selectinload(PortfolioSnapshot.asset_positions))
     )
     return result.scalar_one()
+
+
+@router.delete("/snapshot/{snapshot_date}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_snapshot(
+    snapshot_date: date,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Belirli bir tarihteki snapshot'i siler. Yanlış kaydedilmiş (ör. timezone)
+    snapshot'ları temizlemek için. Cascade ile asset_positions da silinir."""
+    result = await db.execute(
+        select(PortfolioSnapshot).where(
+            PortfolioSnapshot.user_id == current_user.id,
+            PortfolioSnapshot.snapshot_date == snapshot_date,
+        )
+    )
+    snap = result.scalar_one_or_none()
+    if not snap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot bulunamadı")
+    await db.delete(snap)
+    await db.commit()
 
 
 @router.get("", response_model=SnapshotOut)
@@ -289,7 +311,8 @@ async def get_wallet_positions(
             out = []
             for a in assets:
                 usd = lookup_usd_price(a.symbol, prices)
-                total_qty = a.liquid_quantity + a.staked_quantity
+                # Snapshot ile tutarlı: pending_rewards da toplama dahil
+                total_qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
                 out.append(WalletPositionOut(
                     wallet_id=wid,
                     chain=wallet.chain,

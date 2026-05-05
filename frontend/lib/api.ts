@@ -140,6 +140,9 @@ export const api = {
   getPortfolioHistory: (limit = 12) =>
     request<SnapshotHistoryDTO[]>(`/portfolio/history?limit=${limit}`),
 
+  deleteSnapshot: (snapshotDate: string) =>
+    request<void>(`/portfolio/snapshot/${snapshotDate}`, { method: "DELETE" }),
+
   // Harcama (Faz 3 MVP — manuel giris)
   listExpenses: (params: { year?: number; month?: number; category?: string } = {}) => {
     const q = new URLSearchParams();

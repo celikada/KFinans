@@ -201,6 +201,8 @@ Her asset için: total_value_tl = (liquid + staked) * unit_price_usd * usd_tl
 JSON response
 ```
 
+> **Wallet pricing tutarlılığı:** `GET /portfolio/wallets` endpoint'i `total_value_tl` hesaplarken `liquid + staked + pending_rewards` toplar (snapshot servisi ile aynı formül). Bu sayede dashboard kartlarındaki "Toplam Portföy" ile haftalık snapshot tutarı arasında pending_rewards farkı (Sonic SFC validator rewards, Avalanche P-Chain pending rewards) oluşmaz.
+
 ### 4.2 Haftalık Snapshot (APScheduler — implement edildi)
 
 ```
@@ -234,6 +236,10 @@ calculate_changes() WoW/MoM hesaplaması bu tablo üzerinden
 ```
 
 **Manuel tetikleme:** `POST /api/v1/portfolio/snapshot` — aynı `compute_and_save_snapshot()` fonksiyonunu çağırır (test/UI için). Frontend dashboard'da "Snapshot al" butonu mevcut.
+
+**Snapshot silme:** `DELETE /api/v1/portfolio/snapshot/{snapshot_date}` — yanlış kaydedilmiş snapshot'ları (timezone bug, hatalı manuel tetik vb.) temizlemek için. Cascade ile `asset_positions` de silinir; `current_user.id` filtresi IDOR koruması sağlar (başka kullanıcının kaydı 404 döner). Frontend `/dashboard/history` sayfasında snapshot listesi + "Sil" butonu (geri alınamaz onay popup'ı) sunulur.
+
+**Snapshot tarihi (timezone):** `snapshot_date` her zaman `Europe/Istanbul` saatine göre belirlenir. Backend Docker container UTC'de çalıştığı için `services/snapshot.py` `date.today()` (UTC tabanlı) yerine `datetime.now(ZoneInfo("Europe/Istanbul")).date()` kullanır. Bu düzeltmeden önce Türkiye saatine göre 00:00–03:00 arası alınan ad-hoc snapshot'lar **bir önceki güne** yazılıyordu (UTC sapması). APScheduler zaten `Europe/Istanbul` ile çalışıyordu; `compute_and_save_snapshot()` fonksiyonundaki tutarsızlık giderildi — scheduler ve manuel tetikleme aynı tarih mantığını paylaşır.
 
 **Hata izolasyonu:** Bir kaynak fail olursa (örn. Binance timeout), diğer kaynaklar devam eder; başarısız kaynak loglanır. Tüm kaynaklar fail olursa snapshot yazılmaz, 502 döner.
 

@@ -101,6 +101,12 @@ cd frontend && npm install && npm run dev
 
 **Scheduler:** APScheduler her Pazar 23:00'de çalışır, haftanın son değerlerini `portfolio_snapshots` tablosuna yazar. Haftalık değişim bu tablo üzerinden hesaplanır. **MKK Excel import sonrası** snapshot best-effort olarak ayrıca tetiklenir (try/except — fail olsa bile import korunur).
 
+**Snapshot timezone:** `services/snapshot.py` `snapshot_date` belirlerken `datetime.now(ZoneInfo("Europe/Istanbul")).date()` kullanır (UTC tabanlı `date.today()` değil). Backend Docker container UTC'de çalıştığı için Türkiye saatine göre 00:00–03:00 arası alınan ad-hoc snapshot'lar bir önceki güne yazılıyordu — düzeltildi. Scheduler zaten `Europe/Istanbul` ile çalışıyordu; manuel tetikleme ile tutarlı.
+
+**Snapshot silme:** `DELETE /portfolio/snapshot/{snapshot_date}` (ISO date path param) yanlış kaydedilmiş snapshot'ları temizler; cascade ile `asset_positions` de silinir, `current_user.id` filtresi IDOR koruması sağlar.
+
+**Wallet pricing tutarlılığı:** `GET /portfolio/wallets` `total_value_tl` hesaplarken `liquid + staked + pending_rewards` toplar (snapshot servisiyle aynı formül). Sonic SFC validator rewards ve Avalanche P-Chain pending rewards her zaman dahildir; dashboard "Toplam Portföy" ile snapshot tutarı arasında fark oluşmaz.
+
 **API key güvenliği:** Binance/iCrypex anahtarları DB'de `cryptography` kütüphanesi ile Fernet şifrelemeli saklanır, `.env`'deki master key ile açılır.
 
 **BES:** Manuel giriş + Excel import/export. 4 metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Snapshot servisi `_gather_bes_assets()` ile `asset_type="pension"` olarak entegre eder.

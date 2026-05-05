@@ -74,6 +74,8 @@ export default function HistoryPage() {
   const [error, setError] = useState("");
   const [currency, setCurrency] = useState<Currency>("TRY");
   const [openIssues, setOpenIssues] = useState<{ date: string; issues: SnapshotHealthIssue[] } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
@@ -100,6 +102,19 @@ export default function HistoryPage() {
   }, [router, handle401]);
 
   const latest = points.length > 0 ? points[points.length - 1] : null;
+
+  async function handleDelete(snapshotDate: string) {
+    setDeleting(true);
+    try {
+      await api.deleteSnapshot(snapshotDate);
+      setPoints((prev) => prev.filter((p) => p.date !== snapshotDate));
+      setConfirmDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Snapshot silinemedi");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Currency dönüşümlü grafik veri seti
   const chartData = points.map((p) => ({
@@ -258,6 +273,43 @@ export default function HistoryPage() {
               </div>
             </div>
 
+            {/* Snapshot listesi (tarih + tutar + sil) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="text-sm font-semibold text-gray-700">Snapshotlar</h2>
+              </div>
+              <ul className="divide-y divide-gray-50">
+                {[...points].reverse().map((p) => (
+                  <li key={p.date} className="px-6 py-3 flex items-center gap-3 text-sm">
+                    <span className="font-medium text-gray-700 tabular-nums w-24">{fmtDate(p.date)}</span>
+                    <span className="text-gray-500 tabular-nums flex-1">
+                      {fmtTL(p.total)} ₺
+                      {p.rate && p.rate > 0 && (
+                        <span className="text-gray-400 ml-2">≈ ${fmtUSD(p.total / p.rate)}</span>
+                      )}
+                    </span>
+                    {p.issues.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenIssues({ date: p.date, issues: p.issues })}
+                        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold"
+                        title={`${p.issues.length} uyarı`}
+                      >
+                        !
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(p.date)}
+                      className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+                    >
+                      Sil
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <p className="text-xs text-gray-400 text-center">
               Son {points.length} snapshot. {currency === "USD" && (
                 <>
@@ -269,6 +321,47 @@ export default function HistoryPage() {
           </>
         )}
       </main>
+
+      {/* Silme onayı */}
+      {confirmDelete && (
+        <button
+          type="button"
+          aria-label="Kapat"
+          onClick={() => setConfirmDelete(null)}
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        >
+          <div
+            role="dialog"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-sm w-full text-left cursor-default"
+          >
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Snapshot silinsin mi?</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              <strong>{fmtDate(confirmDelete)}</strong> tarihli snapshot ve içindeki tüm pozisyonlar
+              kalıcı olarak silinecek. Bu işlem geri alınamaz.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(confirmDelete)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? "Siliniyor…" : "Evet, sil"}
+              </button>
+            </div>
+          </div>
+        </button>
+      )}
 
       {/* Health issues popup */}
       {openIssues && (
