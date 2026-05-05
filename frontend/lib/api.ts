@@ -621,10 +621,13 @@ export interface SnapshotHealthIssue {
   source: string;
   code: string;
   msg: string;
+  level?: "warn" | "info";  // varsayılan 'warn' — eski kayıtlarda olmayabilir
   chain?: string | null;
   address?: string | null;
   provider?: string | null;
   label?: string | null;
+  exchange?: string | null;
+  symbol?: string | null;
 }
 
 export interface SnapshotHistoryDTO {

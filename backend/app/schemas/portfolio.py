@@ -39,10 +39,14 @@ class SnapshotHealthIssue(BaseModel):
     source: str
     code: str
     msg: str
+    # 'warn' (varsayılan, eksik/hatalı) veya 'info' (manuel/linked başarılı bilgisi)
+    level: str = "warn"
     chain: str | None = None
     address: str | None = None
     provider: str | None = None
     label: str | None = None
+    exchange: str | None = None
+    symbol: str | None = None
 
 
 class SnapshotPreflightOut(BaseModel):

@@ -320,8 +320,17 @@ async def _gather_manual_crypto_assets(
         if h.price_source == "manual":
             if h.manual_unit_price_tl and h.manual_unit_price_tl > 0:
                 unit_tl = Decimal(str(h.manual_unit_price_tl))
+                # Bilgi: kullanıcının manuel girdiği fiyat, otomatik fiyat değil
+                issues.append({
+                    "level": "info",
+                    "source": "manual_crypto",
+                    "exchange": h.exchange, "symbol": h.symbol,
+                    "code": "info_manual_price",
+                    "msg": f"{h.exchange} {h.symbol}: manuel girilmiş fiyat ({unit_tl} ₺) — anlık piyasa değeri değil",
+                })
             else:
                 issues.append({
+                    "level": "warn",
                     "source": "manual_crypto",
                     "exchange": h.exchange, "symbol": h.symbol,
                     "code": "manual_price_missing",
@@ -334,43 +343,37 @@ async def _gather_manual_crypto_assets(
             if ls == "commodity":
                 key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
                 unit_tl = metal_prices.get(key, Decimal(0)) if key else Decimal(0)
-                if unit_tl <= 0:
-                    issues.append({
-                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
-                        "code": f"linked_{ls}_unavailable",
-                        "msg": f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi",
-                    })
             elif ls == "binance":
-                usd = lookup_usd_price(lid, binance_prices)
-                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if (usd > 0 and usd_tl > 0) else Decimal(0)
-                if unit_tl <= 0:
-                    issues.append({
-                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
-                        "code": "linked_binance_no_price",
-                        "msg": f"{h.exchange} {h.symbol}: linked=binance:{lid} fiyatı bulunamadı",
-                    })
+                u = lookup_usd_price(lid, binance_prices)
+                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
             elif ls == "coingecko":
-                usd = cg_prices.get(lid, Decimal(0))
-                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if (usd > 0 and usd_tl > 0) else Decimal(0)
-                if unit_tl <= 0:
-                    issues.append({
-                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
-                        "code": "linked_coingecko_no_price",
-                        "msg": f"{h.exchange} {h.symbol}: linked=coingecko:{lid} fiyatı bulunamadı",
-                    })
+                u = cg_prices.get(lid, Decimal(0))
+                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
             elif ls == "tefas":
                 unit_tl = tefas_prices.get(lid, Decimal(0))
-                if unit_tl <= 0:
-                    issues.append({
-                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
-                        "code": "linked_tefas_no_price",
-                        "msg": f"{h.exchange} {h.symbol}: linked=tefas:{lid} fonu bulunamadı",
-                    })
             else:
                 issues.append({
+                    "level": "warn",
                     "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
                     "code": "linked_invalid",
                     "msg": f"{h.exchange} {h.symbol}: 'linked' seçili ama linked_source/linked_id geçersiz",
+                })
+
+            if unit_tl > 0:
+                # Bilgi: bu pozisyon başka bir varlığın fiyatına peg edilmiş
+                issues.append({
+                    "level": "info",
+                    "source": "manual_crypto",
+                    "exchange": h.exchange, "symbol": h.symbol,
+                    "code": "info_linked",
+                    "msg": f"{h.exchange} {h.symbol}: {ls}:{lid} fiyatına bağlı (anlık {unit_tl} ₺/birim)",
+                })
+            elif ls in ("commodity", "binance", "coingecko", "tefas"):
+                issues.append({
+                    "level": "warn",
+                    "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                    "code": f"linked_{ls}_no_price",
+                    "msg": f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi/bulunamadı",
                 })
         # auto için unit_tl=0 — ortak enrichment loop yakalar
 
