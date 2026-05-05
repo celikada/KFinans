@@ -32,6 +32,10 @@ export default function IncomePage() {
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
+  // Edit state'leri
+  const [editingIncome, setEditingIncome] = useState<IncomeDTO | null>(null);
+  const [editingRecurring, setEditingRecurring] = useState<RecurringIncomeDTO | null>(null);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -59,12 +63,8 @@ export default function IncomePage() {
     refresh();
   }, [refresh, router]);
 
-  function handleAdded(inc: IncomeDTO) {
-    const addedMonth = parseInt(inc.date.slice(5, 7));
-    const addedYear = parseInt(inc.date.slice(0, 4));
-    if (addedYear === year && addedMonth === month) {
-      setIncomes((prev) => [inc, ...prev]);
-    }
+  function handleIncomeSaved() {
+    setEditingIncome(null);
     refresh();
   }
 
@@ -73,8 +73,8 @@ export default function IncomePage() {
     refresh();
   }
 
-  function handleRecurringAdded(ri: RecurringIncomeDTO) {
-    setRecurring((prev) => [ri, ...prev]);
+  function handleRecurringSaved() {
+    setEditingRecurring(null);
     refresh();
   }
 
@@ -210,20 +210,35 @@ export default function IncomePage() {
               </div>
             )}
 
-            <IncomeForm onAdded={handleAdded} />
+            <IncomeForm
+              onSaved={handleIncomeSaved}
+              existing={editingIncome}
+              onCancel={() => setEditingIncome(null)}
+            />
 
             {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
             {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
-            {!loading && <IncomeTable incomes={incomes} onDeleted={handleDeleted} />}
+            {!loading && <IncomeTable incomes={incomes} onDeleted={handleDeleted} onEdit={setEditingIncome} />}
           </>
         )}
 
         {tab === "recurring" && (
           <>
-            <RecurringIncomeForm onAdded={handleRecurringAdded} />
+            <RecurringIncomeForm
+              onSaved={handleRecurringSaved}
+              existing={editingRecurring}
+              onCancel={() => setEditingRecurring(null)}
+            />
             {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
             {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
-            {!loading && <RecurringIncomeTable items={recurring} onDeleted={handleRecurringDeleted} />}
+            {!loading && (
+              <RecurringIncomeTable
+                items={recurring}
+                onDeleted={handleRecurringDeleted}
+                onEdit={setEditingRecurring}
+                onRefresh={refresh}
+              />
+            )}
           </>
         )}
       </main>

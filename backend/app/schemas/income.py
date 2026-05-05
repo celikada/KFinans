@@ -40,9 +40,21 @@ class IncomeOut(BaseModel):
     amount: Decimal
     category: str
     date: date_type
-    description: Optional[str]
+    description: Optional[str] = None
+    recurring_income_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
+
+
+class RealizeMonthRequest(BaseModel):
+    year: int = Field(..., ge=2020, le=2100)
+    month: int = Field(..., ge=1, le=12)
+
+
+class RealizeResult(BaseModel):
+    realized: int          # yeni oluşturulan income kaydı sayısı
+    skipped: int           # zaten realize edilmiş olduğu için atlanan
+    income_ids: list[int]  # yeni kayıtların ID'leri
 
 
 class IncomeCategoryBreakdown(BaseModel):

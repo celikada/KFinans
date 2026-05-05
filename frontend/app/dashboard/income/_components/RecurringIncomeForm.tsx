@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
   RecurringIncomeDTO,
@@ -12,7 +12,10 @@ import {
 import { INPUT_CLS } from "@/lib/format";
 
 interface Props {
-  onAdded: (ri: RecurringIncomeDTO) => void;
+  onSaved: (ri: RecurringIncomeDTO) => void;
+  /** Doluysa edit modunda; boşsa create */
+  existing?: RecurringIncomeDTO | null;
+  onCancel?: () => void;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -20,18 +23,34 @@ const CATEGORIES: RecurringIncomeCategory[] = ["salary", "rental", "dividend", "
 const RECURRENCES: RecurringRecurrence[] = ["one_time", "monthly", "quarterly", "biannual", "yearly", "custom"];
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
-export function RecurringIncomeForm({ onAdded }: Props) {
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<RecurringIncomeCategory>("salary");
-  const [recurrence, setRecurrence] = useState<RecurringRecurrence>("monthly");
-  const [months, setMonths] = useState<number[]>([]);
-  const [dayOfMonth, setDayOfMonth] = useState("1");
-  const [startDate, setStartDate] = useState(TODAY);
-  const [endDate, setEndDate] = useState("");
-  const [notes, setNotes] = useState("");
+export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
+  const isEdit = !!existing;
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [amount, setAmount] = useState(existing?.amount ?? "");
+  const [category, setCategory] = useState<RecurringIncomeCategory>(existing?.category ?? "salary");
+  const [recurrence, setRecurrence] = useState<RecurringRecurrence>(existing?.recurrence ?? "monthly");
+  const [months, setMonths] = useState<number[]>(existing?.months ?? []);
+  const [dayOfMonth, setDayOfMonth] = useState(existing?.day_of_month?.toString() ?? "1");
+  const [startDate, setStartDate] = useState(existing?.start_date ?? TODAY);
+  const [endDate, setEndDate] = useState(existing?.end_date ?? "");
+  const [notes, setNotes] = useState(existing?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // existing değişirse formu yenile
+  useEffect(() => {
+    if (existing) {
+      setTitle(existing.title);
+      setAmount(existing.amount);
+      setCategory(existing.category);
+      setRecurrence(existing.recurrence);
+      setMonths(existing.months ?? []);
+      setDayOfMonth(existing.day_of_month.toString());
+      setStartDate(existing.start_date);
+      setEndDate(existing.end_date ?? "");
+      setNotes(existing.notes ?? "");
+    }
+  }, [existing]);
 
   function toggleMonth(m: number) {
     setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].sort((a, b) => a - b)));
@@ -61,14 +80,18 @@ export function RecurringIncomeForm({ onAdded }: Props) {
         end_date: endDate || null,
         notes: notes.trim() || null,
       };
-      const result = await api.createRecurringIncome(payload);
-      onAdded(result);
-      setTitle("");
-      setAmount("");
-      setMonths([]);
-      setDayOfMonth("1");
-      setEndDate("");
-      setNotes("");
+      const result = isEdit && existing
+        ? await api.updateRecurringIncome(existing.id, payload)
+        : await api.createRecurringIncome(payload);
+      onSaved(result);
+      if (!isEdit) {
+        setTitle("");
+        setAmount("");
+        setMonths([]);
+        setDayOfMonth("1");
+        setEndDate("");
+        setNotes("");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kaydedilemedi");
     } finally {
@@ -79,7 +102,7 @@ export function RecurringIncomeForm({ onAdded }: Props) {
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-gray-700">Periyodik gelir ekle</h3>
+        <h3 className="text-sm font-semibold text-gray-700">{isEdit ? "Periyodik gelir düzenle" : "Periyodik gelir ekle"}</h3>
         <p className="text-xs text-gray-500 mt-0.5">Maaş, kira, temettü gibi düzenli gelirler. Yıl sonu beklentisi bunlardan hesaplanır.</p>
       </div>
 
@@ -206,13 +229,32 @@ export function RecurringIncomeForm({ onAdded }: Props) {
       </div>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
-      <button
-        type="submit"
-        disabled={saving}
-        className="text-sm bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-      >
-        {saving ? "Kaydediliyor..." : "Ekle"}
-      </button>
+      {(() => {
+        let submitLabel: string;
+        if (saving) submitLabel = "Kaydediliyor...";
+        else if (isEdit) submitLabel = "Güncelle";
+        else submitLabel = "Ekle";
+        return (
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="text-sm bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+        >
+          {submitLabel}
+        </button>
+        {isEdit && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
+          >
+            İptal
+          </button>
+        )}
+      </div>
+        );
+      })()}
     </form>
   );
 }

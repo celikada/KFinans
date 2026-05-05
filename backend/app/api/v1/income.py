@@ -21,6 +21,8 @@ from app.schemas.income import (
     IncomeOut,
     IncomeSummary,
     IncomeUpdate,
+    RealizeMonthRequest,
+    RealizeResult,
     RecurringIncomeCreate,
     RecurringIncomeOut,
     RecurringIncomeUpdate,
@@ -483,3 +485,150 @@ async def get_income_dashboard(
         remaining_year_recurring=remaining_year_recurring,
         year_total_estimate=year_total_estimate,
     )
+
+
+# ---------------------------------------------------------------------------
+# Realize endpoint'leri — periyodik kayıtları gerçekleşmiş incomes'a aktar
+# ---------------------------------------------------------------------------
+# Recurring kategori → income kategorisi (recurring'de "sale" yok, gerisi 1:1)
+_RECURRING_TO_INCOME_CAT: dict[str, str] = {
+    "salary": "salary", "rental": "rental", "dividend": "dividend",
+    "bonus": "bonus", "freelance": "freelance", "other": "other",
+}
+
+
+def _date_for_period(ri: RecurringIncome, year: int, month: int) -> date_type:
+    """Recurring'in o ay-yıl için 'gerçekleştiği gün' tarihini döner.
+    day_of_month o ayın son gününden büyükse son güne çekilir."""
+    last_day = calendar.monthrange(year, month)[1]
+    day = min(ri.day_of_month, last_day)
+    return date_type(year, month, day)
+
+
+async def _realize_one(
+    db: AsyncSession, ri: RecurringIncome, year: int, month: int, user_id,
+) -> int | None:
+    """Tek bir periyodik kayıt için verilen ay-yıl income oluşturur.
+    Zaten varsa None döner (skip), yoksa yeni income.id."""
+    if not _applies_in_month(ri, year, month):
+        return None
+    target_date = _date_for_period(ri, year, month)
+    # Mevcut realize var mı? (unique constraint zaten engelliyor; integrity hatasını
+    # önceden yakalamak için kontrol)
+    existing_q = await db.execute(
+        select(Income.id).where(
+            Income.user_id == user_id,
+            Income.recurring_income_id == ri.id,
+            Income.date == target_date,
+        )
+    )
+    if existing_q.scalar_one_or_none() is not None:
+        return None
+    inc = Income(
+        user_id=user_id,
+        amount=ri.amount,
+        category=_RECURRING_TO_INCOME_CAT.get(ri.category, "other"),
+        date=target_date,
+        description=ri.title,
+        recurring_income_id=ri.id,
+    )
+    db.add(inc)
+    await db.flush()  # ID üret
+    return inc.id
+
+
+@router.post("/recurring/{rid}/realize", response_model=RealizeResult)
+async def realize_recurring_period(
+    rid: int,
+    payload: RealizeMonthRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Periyodik kaydın belirli bir ay-yılı için income oluştur.
+    Idempotent: aynı dönem ikinci kez çağrılırsa skip."""
+    result = await db.execute(
+        select(RecurringIncome).where(
+            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id,
+        )
+    )
+    ri = result.scalar_one_or_none()
+    if not ri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
+    if not _applies_in_month(ri, payload.year, payload.month):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Bu kayıt belirtilen ay-yılında geçerli değil (periyot dışı)",
+        )
+    new_id = await _realize_one(db, ri, payload.year, payload.month, current_user.id)
+    await db.commit()
+    if new_id is None:
+        return RealizeResult(realized=0, skipped=1, income_ids=[])
+    return RealizeResult(realized=1, skipped=0, income_ids=[new_id])
+
+
+@router.post("/recurring/{rid}/realize-past", response_model=RealizeResult)
+async def realize_recurring_past(
+    rid: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Periyodik kaydın start_date'ten bugüne kadar olan tüm geçmiş dönemleri
+    income'a aktar. Mevcut realize'ler skip."""
+    result = await db.execute(
+        select(RecurringIncome).where(
+            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id,
+        )
+    )
+    ri = result.scalar_one_or_none()
+    if not ri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
+
+    today = date_type.today()
+    realized_ids: list[int] = []
+    skipped = 0
+    # Start'tan bugüne kadar her ayı tara
+    y, m = ri.start_date.year, ri.start_date.month
+    while date_type(y, m, 1) <= today:
+        new_id = await _realize_one(db, ri, y, m, current_user.id)
+        if new_id is None:
+            if _applies_in_month(ri, y, m):
+                skipped += 1
+        else:
+            realized_ids.append(new_id)
+        # Sonraki ay
+        m += 1
+        if m > 12:
+            m = 1; y += 1
+    await db.commit()
+    return RealizeResult(realized=len(realized_ids), skipped=skipped, income_ids=realized_ids)
+
+
+@router.post("/recurring/realize-all-past", response_model=RealizeResult)
+async def realize_all_recurring_past(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kullanıcının TÜM periyodik kayıtları için bugüne kadar olan tüm
+    geçmiş dönemleri income'a aktar."""
+    result = await db.execute(
+        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
+    )
+    all_ri = result.scalars().all()
+
+    today = date_type.today()
+    realized_ids: list[int] = []
+    skipped = 0
+    for ri in all_ri:
+        y, m = ri.start_date.year, ri.start_date.month
+        while date_type(y, m, 1) <= today:
+            new_id = await _realize_one(db, ri, y, m, current_user.id)
+            if new_id is None:
+                if _applies_in_month(ri, y, m):
+                    skipped += 1
+            else:
+                realized_ids.append(new_id)
+            m += 1
+            if m > 12:
+                m = 1; y += 1
+    await db.commit()
+    return RealizeResult(realized=len(realized_ids), skipped=skipped, income_ids=realized_ids)

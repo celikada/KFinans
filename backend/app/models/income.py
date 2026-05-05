@@ -24,6 +24,10 @@ class Income(Base):
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     date: Mapped[date_type] = mapped_column(Date, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Recurring kayıttan otomatik üretildiyse kaynak ID burada (manuel kayıtlarda NULL)
+    recurring_income_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("recurring_incomes.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

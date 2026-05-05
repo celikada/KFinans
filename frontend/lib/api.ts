@@ -360,6 +360,15 @@ export const api = {
     request<RecurringIncomeDTO>(`/income/recurring/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRecurringIncome: (id: number) =>
     request<void>(`/income/recurring/${id}`, { method: "DELETE" }),
+  realizeRecurringPeriod: (id: number, year: number, month: number) =>
+    request<RealizeResultDTO>(`/income/recurring/${id}/realize`, {
+      method: "POST",
+      body: JSON.stringify({ year, month }),
+    }),
+  realizeRecurringPast: (id: number) =>
+    request<RealizeResultDTO>(`/income/recurring/${id}/realize-past`, { method: "POST" }),
+  realizeAllRecurringPast: () =>
+    request<RealizeResultDTO>(`/income/recurring/realize-all-past`, { method: "POST" }),
 
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
@@ -839,6 +848,7 @@ export interface IncomeDTO {
   category: IncomeCategory;
   date: string;
   description: string | null;
+  recurring_income_id?: number | null;
 }
 
 export interface IncomeCategoryBreakdownDTO {
@@ -911,6 +921,12 @@ export interface IncomeDashboardDTO {
   ytd_recurring: string;
   remaining_year_recurring: string;
   year_total_estimate: string;
+}
+
+export interface RealizeResultDTO {
+  realized: number;
+  skipped: number;
+  income_ids: number[];
 }
 
 export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";
