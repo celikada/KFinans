@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-PriceSource = Literal["auto", "manual", "gold_gram", "silver_gram"]
+PriceSource = Literal["auto", "manual", "linked"]
+LinkedSource = Literal["binance", "coingecko", "tefas", "commodity"]
 
 
 class ManualCryptoCreate(BaseModel):
@@ -16,6 +17,8 @@ class ManualCryptoCreate(BaseModel):
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource = "auto"
     manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    linked_source: LinkedSource | None = None
+    linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("symbol")
@@ -40,6 +43,8 @@ class ManualCryptoUpdate(BaseModel):
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource | None = None
     manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    linked_source: LinkedSource | None = None
+    linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)
 
     @field_validator("symbol")
@@ -64,6 +69,8 @@ class ManualCryptoOut(BaseModel):
     avg_cost_tl: Decimal | None
     price_source: str
     manual_unit_price_tl: Decimal | None
+    linked_source: str | None
+    linked_id: str | None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -81,6 +88,8 @@ class ManualCryptoPositionOut(BaseModel):
     avg_cost_tl: Decimal | None
     price_source: str
     manual_unit_price_tl: Decimal | None
+    linked_source: str | None
+    linked_id: str | None
     unit_price_usd: Decimal
     unit_price_tl: Decimal
     total_value_tl: Decimal
@@ -88,6 +97,14 @@ class ManualCryptoPositionOut(BaseModel):
     gain_loss_tl: Decimal | None
     gain_loss_pct: float | None
     notes: str | None
+
+
+class AssetCatalogItem(BaseModel):
+    """Asset catalog endpoint sonucu — fiyat kaynaklarına bağlanabilir bir varlık."""
+    source: LinkedSource
+    id: str         # binance: 'BTC' (USDT pair base), coingecko: 'bitcoin', tefas: 'AFA', commodity: 'XAU'
+    symbol: str | None = None
+    name: str
 
 
 class ManualCryptoSummaryOut(BaseModel):

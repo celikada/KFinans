@@ -165,6 +165,32 @@ async def _get_coingecko_id_map() -> dict[str, str]:
     return mapping
 
 
+async def fetch_coingecko_prices_by_ids(ids: list[str]) -> dict[str, Decimal]:
+    """CoinGecko coin ID'lerinin USD fiyatlarını çeker (asset-catalog linkleri için).
+    Dönüş: {id: usd}. Bulunmayan ID dict'te yer almaz."""
+    if not ids:
+        return {}
+    unique = ",".join(sorted(set(ids)))
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                _COINGECKO_PRICE_URL,
+                params={"ids": unique, "vs_currencies": "usd"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("CoinGecko ID-bazlı fiyat çekilemedi: %s", e)
+        return {}
+
+    result: dict[str, Decimal] = {}
+    for cg_id in ids:
+        usd = data.get(cg_id, {}).get("usd")
+        if usd:
+            result[cg_id] = Decimal(str(usd))
+    return result
+
+
 async def fetch_coingecko_prices(symbols: list[str]) -> dict[str, Decimal]:
     """Verilen sembollerin USD fiyatlarını CoinGecko'dan çeker.
     Bulunmayanlar dict'te yer almaz (0 anlamına gelir).

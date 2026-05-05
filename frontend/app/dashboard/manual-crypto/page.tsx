@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { api, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
+import { api, AssetCatalogItem, LinkedSource, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
@@ -18,17 +18,22 @@ const EXCHANGE_OPTIONS = [
 ];
 
 const PRICE_SOURCE_OPTIONS: { value: ManualCryptoPriceSource; label: string; hint: string }[] = [
-  { value: "auto",        label: "Otomatik",       hint: "Binance USDT + CoinGecko fallback (varsayılan)" },
-  { value: "manual",      label: "Manuel fiyat",   hint: "Birim fiyatı TL olarak kendin gir" },
-  { value: "gold_gram",   label: "Altın gr",       hint: "1 birim = 1 gr altın (anlık TL/g)" },
-  { value: "silver_gram", label: "Gümüş gr",       hint: "1 birim = 1 gr gümüş (anlık TL/g) — örn. XAGX" },
+  { value: "auto",   label: "Otomatik",     hint: "Binance USDT + CoinGecko fallback (varsayılan)" },
+  { value: "manual", label: "Manuel fiyat", hint: "Birim fiyatı TL olarak kendin gir" },
+  { value: "linked", label: "Bağla",        hint: "Mevcut bir varlığın fiyatına bağla (altın, ETH, fon vs.)" },
 ];
 
 const PRICE_SOURCE_LABEL: Record<ManualCryptoPriceSource, string> = {
   auto: "Otomatik",
   manual: "Manuel",
-  gold_gram: "Altın gr",
-  silver_gram: "Gümüş gr",
+  linked: "Bağlı",
+};
+
+const LINKED_SOURCE_LABEL: Record<LinkedSource, string> = {
+  binance: "Binance",
+  coingecko: "CoinGecko",
+  tefas: "TEFAS",
+  commodity: "Emtia",
 };
 
 export default function ManualCryptoPage() {
@@ -49,6 +54,12 @@ export default function ManualCryptoPage() {
   const [priceSource, setPriceSource] = useState<ManualCryptoPriceSource>("auto");
   const [manualPrice, setManualPrice] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Linked: arama kutusu state
+  const [linkedQuery, setLinkedQuery] = useState("");
+  const [linkedResults, setLinkedResults] = useState<AssetCatalogItem[]>([]);
+  const [linkedSelected, setLinkedSelected] = useState<AssetCatalogItem | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,6 +85,26 @@ export default function ManualCryptoPage() {
     refresh();
   }, [refresh, router]);
 
+  // Linked arama — debounced (250ms)
+  useEffect(() => {
+    if (priceSource !== "linked") {
+      setLinkedResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await api.searchAssetCatalog({ q: linkedQuery, limit: 15 });
+        setLinkedResults(res);
+      } catch {
+        setLinkedResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [linkedQuery, priceSource]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!exchange || !symbol.trim() || !quantity.trim()) {
@@ -82,6 +113,10 @@ export default function ManualCryptoPage() {
     }
     if (priceSource === "manual" && (!manualPrice.trim() || parseFloat(manualPrice) <= 0)) {
       setError("Manuel fiyat seçildiğinde TL fiyat alanı zorunludur (>0)");
+      return;
+    }
+    if (priceSource === "linked" && !linkedSelected) {
+      setError("Bağla seçildiğinde arama yapıp bir varlık seçmelisin");
       return;
     }
     setSaving(true);
@@ -95,6 +130,8 @@ export default function ManualCryptoPage() {
         avg_cost_tl: avgCost.trim() ? parseFloat(avgCost) : null,
         price_source: priceSource,
         manual_unit_price_tl: priceSource === "manual" ? parseFloat(manualPrice) : null,
+        linked_source: priceSource === "linked" ? linkedSelected!.source : null,
+        linked_id: priceSource === "linked" ? linkedSelected!.id : null,
         notes: notes.trim() || null,
       });
       setLabel("");
@@ -103,6 +140,8 @@ export default function ManualCryptoPage() {
       setAvgCost("");
       setPriceSource("auto");
       setManualPrice("");
+      setLinkedQuery("");
+      setLinkedSelected(null);
       setNotes("");
       await refresh();
     } catch (err) {
@@ -277,7 +316,7 @@ export default function ManualCryptoPage() {
           {/* Fiyat kaynağı seçimi */}
           <div className="space-y-2 pt-2 border-t border-gray-50">
             <label className="text-xs font-medium text-gray-600">Fiyat Kaynağı</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {PRICE_SOURCE_OPTIONS.map((opt) => (
                 <label
                   key={opt.value}
@@ -311,6 +350,64 @@ export default function ManualCryptoPage() {
                 step="0.000001"
                 className={`w-full ${INPUT_CLS}`}
               />
+            )}
+            {priceSource === "linked" && (
+              <div className="space-y-2">
+                {linkedSelected ? (
+                  <div className="flex items-center gap-2 text-xs bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    <span className="font-medium text-green-800">
+                      ✓ {LINKED_SOURCE_LABEL[linkedSelected.source]}: {linkedSelected.id}
+                    </span>
+                    <span className="text-green-700">— {linkedSelected.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setLinkedSelected(null); setLinkedQuery(""); }}
+                      className="ml-auto text-green-600 hover:text-green-800"
+                    >
+                      Değiştir
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Ara: silver, ETH, AFA, tether-gold..."
+                      value={linkedQuery}
+                      onChange={(e) => setLinkedQuery(e.target.value)}
+                      className={`w-full ${INPUT_CLS}`}
+                    />
+                    {(searching || linkedResults.length > 0) && (
+                      <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50 bg-white">
+                        {searching && (
+                          <p className="text-xs text-gray-400 px-3 py-2">Aranıyor…</p>
+                        )}
+                        {!searching && linkedResults.length === 0 && (
+                          <p className="text-xs text-gray-400 px-3 py-2">Sonuç yok</p>
+                        )}
+                        {linkedResults.map((r) => (
+                          <button
+                            key={`${r.source}:${r.id}`}
+                            type="button"
+                            onClick={() => setLinkedSelected(r)}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              r.source === "commodity" ? "bg-amber-100 text-amber-800" :
+                              r.source === "binance"   ? "bg-yellow-100 text-yellow-800" :
+                              r.source === "coingecko" ? "bg-green-100 text-green-800" :
+                                                         "bg-blue-100 text-blue-800"
+                            }`}>
+                              {LINKED_SOURCE_LABEL[r.source]}
+                            </span>
+                            <span className="font-medium text-gray-900">{r.symbol || r.id}</span>
+                            <span className="text-gray-500 truncate">{r.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
           {error && (
@@ -359,7 +456,9 @@ export default function ManualCryptoPage() {
                         <p className="font-medium text-gray-900 tabular-nums">{p.symbol}</p>
                         {p.price_source !== "auto" && (
                           <span className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                            {PRICE_SOURCE_LABEL[p.price_source]}
+                            {p.price_source === "linked" && p.linked_source && p.linked_id
+                              ? `→ ${LINKED_SOURCE_LABEL[p.linked_source]}:${p.linked_id}`
+                              : PRICE_SOURCE_LABEL[p.price_source]}
                           </span>
                         )}
                         {p.notes && <p className="text-xs text-gray-400 mt-0.5">{p.notes}</p>}

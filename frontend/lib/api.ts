@@ -541,6 +541,14 @@ export const api = {
     a.click();
     URL.revokeObjectURL(url);
   },
+  searchAssetCatalog: (params: { q?: string; source?: LinkedSource; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q !== undefined) qs.set("q", params.q);
+    if (params.source) qs.set("source", params.source);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<AssetCatalogItem[]>(`/asset-catalog${qs.toString() ? `?${qs}` : ""}`);
+  },
+
   importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
     const token = getToken();
     const form = new FormData();
@@ -1009,7 +1017,15 @@ export interface CashSummaryDTO {
 }
 
 // Manuel kripto (API'siz borsalar — BinanceTR, iCrypex vs.)
-export type ManualCryptoPriceSource = "auto" | "manual" | "gold_gram" | "silver_gram";
+export type ManualCryptoPriceSource = "auto" | "manual" | "linked";
+export type LinkedSource = "binance" | "coingecko" | "tefas" | "commodity";
+
+export interface AssetCatalogItem {
+  source: LinkedSource;
+  id: string;
+  symbol: string | null;
+  name: string;
+}
 
 export interface ManualCryptoCreateInput {
   exchange: string;
@@ -1019,6 +1035,8 @@ export interface ManualCryptoCreateInput {
   avg_cost_tl?: number | string | null;
   price_source?: ManualCryptoPriceSource;
   manual_unit_price_tl?: number | string | null;
+  linked_source?: LinkedSource | null;
+  linked_id?: string | null;
   notes?: string | null;
 }
 
@@ -1031,6 +1049,8 @@ export interface ManualCryptoDTO {
   avg_cost_tl: string | null;
   price_source: ManualCryptoPriceSource;
   manual_unit_price_tl: string | null;
+  linked_source: LinkedSource | null;
+  linked_id: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -1045,6 +1065,8 @@ export interface ManualCryptoPositionDTO {
   avg_cost_tl: string | null;
   price_source: ManualCryptoPriceSource;
   manual_unit_price_tl: string | null;
+  linked_source: LinkedSource | null;
+  linked_id: string | null;
   unit_price_usd: string;
   unit_price_tl: string;
   total_value_tl: string;

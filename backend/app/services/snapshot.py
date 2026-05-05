@@ -253,21 +253,25 @@ async def _gather_manual_crypto_assets(
 ) -> list[AssetData]:
     """Manuel girilmiş kripto bakiyeleri AssetData'ya çevirir.
 
-    price_source bazlı fiyat injection:
-    - 'auto'         → unit_price_tl=0; ortak enrichment loop'u Binance+CoinGecko ile doldurur
-    - 'manual'       → unit_price_tl = h.manual_unit_price_tl (kullanıcı girdisi)
-    - 'gold_gram'    → commodity service anlık altın gr fiyatı (TRY/g)
-    - 'silver_gram'  → commodity service anlık gümüş gr fiyatı
-
-    Bu sırada her durumda doğrulama yapılır, eksiklerse `issues`'a uyarı eklenir.
-    Provider 'manual:{exchange}' formatında saklanır.
+    price_source bazlı:
+    - 'auto'   → unit_price_tl=0; ortak enrichment loop'u Binance+CoinGecko'dan doldurur
+    - 'manual' → kullanıcının manual_unit_price_tl
+    - 'linked' → linked_source dispatch:
+                 commodity (XAU/XAG), binance:SYMBOL, coingecko:ID, tefas:CODE
+    Eksik fiyat durumunda snapshot health 'issues' listesine uyarı eklenir.
     """
     if not holdings:
         return []
 
-    needs_metal = any(h.price_source in ("gold_gram", "silver_gram") for h in holdings)
+    # Linked kayıtlar için kaynak başına ID toplama
+    linked = [h for h in holdings if h.price_source == "linked"]
+    needs_commodity = any(h.linked_source == "commodity" for h in linked)
+    binance_ids = [h.linked_id for h in linked if h.linked_source == "binance" and h.linked_id]
+    cg_ids = list({h.linked_id for h in linked if h.linked_source == "coingecko" and h.linked_id})
+    tefas_codes = list({h.linked_id for h in linked if h.linked_source == "tefas" and h.linked_id})
+
     metal_prices: dict[str, Decimal] = {}
-    if needs_metal:
+    if needs_commodity:
         try:
             from app.services.commodity import fetch_metal_prices
             metal_prices = await fetch_metal_prices()
@@ -279,41 +283,96 @@ async def _gather_manual_crypto_assets(
                 "msg": f"Altın/Gümüş fiyatı çekilemedi: {str(exc)[:150]}",
             })
 
+    binance_prices: dict[str, Decimal] = {}
+    if binance_ids:
+        try:
+            binance_prices = await fetch_combined_prices(list(set(binance_ids)))
+        except Exception as exc:
+            logger.warning("Snapshot manuel kripto: Binance linked fiyatları çekilemedi: %s", exc)
+
+    cg_prices: dict[str, Decimal] = {}
+    if cg_ids:
+        try:
+            from app.services.aggregator import fetch_coingecko_prices_by_ids
+            cg_prices = await fetch_coingecko_prices_by_ids(cg_ids)
+        except Exception as exc:
+            logger.warning("Snapshot manuel kripto: CoinGecko linked fiyatları çekilemedi: %s", exc)
+
+    tefas_prices: dict[str, Decimal] = {}
+    if tefas_codes:
+        try:
+            from app.api.v1.manual_crypto import _fetch_tefas_prices_for_codes
+            tefas_prices = await _fetch_tefas_prices_for_codes(tefas_codes)
+        except Exception as exc:
+            logger.warning("Snapshot manuel kripto: TEFAS linked fiyatları çekilemedi: %s", exc)
+
+    # USD/TL — linked binance/coingecko için unit_tl hesabında lazım; üst loop zaten alıyor
+    # ama bu fonksiyon bağımsız çağrıldığında da çalışsın
+    try:
+        usd_tl = await fetch_usd_to_tl()
+    except Exception:
+        usd_tl = Decimal(0)
+
     out: list[AssetData] = []
     for h in holdings:
         unit_tl = Decimal(0)
+
         if h.price_source == "manual":
             if h.manual_unit_price_tl and h.manual_unit_price_tl > 0:
                 unit_tl = Decimal(str(h.manual_unit_price_tl))
             else:
                 issues.append({
                     "source": "manual_crypto",
-                    "exchange": h.exchange,
-                    "symbol": h.symbol,
+                    "exchange": h.exchange, "symbol": h.symbol,
                     "code": "manual_price_missing",
-                    "msg": f"{h.exchange} {h.symbol}: 'manual' fiyat seçili ama manual_unit_price_tl boş — 0 değerle kaydedildi",
+                    "msg": f"{h.exchange} {h.symbol}: 'manual' fiyat seçili ama manual_unit_price_tl boş",
                 })
-        elif h.price_source == "gold_gram":
-            unit_tl = metal_prices.get("gold", Decimal(0))
-            if unit_tl <= 0:
+
+        elif h.price_source == "linked":
+            ls = h.linked_source
+            lid = h.linked_id or ""
+            if ls == "commodity":
+                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
+                unit_tl = metal_prices.get(key, Decimal(0)) if key else Decimal(0)
+                if unit_tl <= 0:
+                    issues.append({
+                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                        "code": f"linked_{ls}_unavailable",
+                        "msg": f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi",
+                    })
+            elif ls == "binance":
+                usd = lookup_usd_price(lid, binance_prices)
+                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if (usd > 0 and usd_tl > 0) else Decimal(0)
+                if unit_tl <= 0:
+                    issues.append({
+                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                        "code": "linked_binance_no_price",
+                        "msg": f"{h.exchange} {h.symbol}: linked=binance:{lid} fiyatı bulunamadı",
+                    })
+            elif ls == "coingecko":
+                usd = cg_prices.get(lid, Decimal(0))
+                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if (usd > 0 and usd_tl > 0) else Decimal(0)
+                if unit_tl <= 0:
+                    issues.append({
+                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                        "code": "linked_coingecko_no_price",
+                        "msg": f"{h.exchange} {h.symbol}: linked=coingecko:{lid} fiyatı bulunamadı",
+                    })
+            elif ls == "tefas":
+                unit_tl = tefas_prices.get(lid, Decimal(0))
+                if unit_tl <= 0:
+                    issues.append({
+                        "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                        "code": "linked_tefas_no_price",
+                        "msg": f"{h.exchange} {h.symbol}: linked=tefas:{lid} fonu bulunamadı",
+                    })
+            else:
                 issues.append({
-                    "source": "manual_crypto",
-                    "exchange": h.exchange,
-                    "symbol": h.symbol,
-                    "code": "gold_price_unavailable",
-                    "msg": f"{h.exchange} {h.symbol}: gold_gram seçili ama altın fiyatı çekilemedi — 0 değerle kaydedildi",
+                    "source": "manual_crypto", "exchange": h.exchange, "symbol": h.symbol,
+                    "code": "linked_invalid",
+                    "msg": f"{h.exchange} {h.symbol}: 'linked' seçili ama linked_source/linked_id geçersiz",
                 })
-        elif h.price_source == "silver_gram":
-            unit_tl = metal_prices.get("silver", Decimal(0))
-            if unit_tl <= 0:
-                issues.append({
-                    "source": "manual_crypto",
-                    "exchange": h.exchange,
-                    "symbol": h.symbol,
-                    "code": "silver_price_unavailable",
-                    "msg": f"{h.exchange} {h.symbol}: silver_gram seçili ama gümüş fiyatı çekilemedi — 0 değerle kaydedildi",
-                })
-        # auto için unit_tl=0 → ortak enrichment loop yakalar; eksikse oradan uyarı yazılır
+        # auto için unit_tl=0 — ortak enrichment loop yakalar
 
         out.append(AssetData(
             symbol=h.symbol,

@@ -284,34 +284,56 @@ async def test_manual_price_used(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_silver_gram_uses_commodity_price(client: AsyncClient):
-    """price_source='silver_gram' → commodity service'ten anlık fiyat (TRY/g).
-    35 USD/oz / 31.10 × 40 ≈ 45 TRY/g. 10 birim → ~450 TL."""
-    headers = await _make_user(client, "mc_silver_gram@example.com")
+async def test_linked_commodity_silver(client: AsyncClient):
+    """price_source='linked', linked_source='commodity', linked_id='XAG'
+    → commodity service'ten anlık gümüş gr fiyatı.
+    35 USD/oz / 31.10 × 40 ≈ 45 TRY/g."""
+    headers = await _make_user(client, "mc_linked_xag@example.com")
     payload = {
         "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
-        "price_source": "silver_gram",
+        "price_source": "linked", "linked_source": "commodity", "linked_id": "XAG",
     }
-    await client.post(BASE, json=payload, headers=headers)
+    create = await client.post(BASE, json=payload, headers=headers)
+    assert create.status_code == 201
+    assert create.json()["price_source"] == "linked"
+    assert create.json()["linked_source"] == "commodity"
+    assert create.json()["linked_id"] == "XAG"
+
     resp = await client.get(BASE, headers=headers)
     pos = resp.json()["positions"][0]
-    # Silver: 35/31.1034768*40 ≈ 45.01 TRY/g
     assert 44 < float(pos["unit_price_tl"]) < 46
     assert 440 < float(pos["total_value_tl"]) < 460
 
 
 @pytest.mark.asyncio
-async def test_gold_gram_uses_commodity_price(client: AsyncClient):
-    """price_source='gold_gram' → 3000/31.10×40 ≈ 3861 TRY/g."""
-    headers = await _make_user(client, "mc_gold_gram@example.com")
+async def test_linked_commodity_gold(client: AsyncClient):
+    """linked=commodity:XAU → 3000/31.10×40 ≈ 3861 TRY/g."""
+    headers = await _make_user(client, "mc_linked_xau@example.com")
     payload = {
         "exchange": "icrypex", "symbol": "XAUT", "quantity": 1,
-        "price_source": "gold_gram",
+        "price_source": "linked", "linked_source": "commodity", "linked_id": "XAU",
     }
     await client.post(BASE, json=payload, headers=headers)
     resp = await client.get(BASE, headers=headers)
     pos = resp.json()["positions"][0]
     assert 3850 < float(pos["unit_price_tl"]) < 3870
+
+
+@pytest.mark.asyncio
+async def test_linked_binance_eth(client: AsyncClient):
+    """linked=binance:ETH → ETHUSDT fiyatından TL hesabı.
+    ETH=3000 USDT × 40 TRY/USD = 120000 TRY/birim."""
+    headers = await _make_user(client, "mc_linked_eth@example.com")
+    # 'CUSTOM' adlı bir token, fiyatı ETH'a peg
+    payload = {
+        "exchange": "other", "symbol": "MYETHTOKEN", "quantity": 2,
+        "price_source": "linked", "linked_source": "binance", "linked_id": "ETH",
+    }
+    await client.post(BASE, json=payload, headers=headers)
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    assert abs(float(pos["unit_price_tl"]) - 120000.0) < 0.01
+    assert abs(float(pos["total_value_tl"]) - 240000.0) < 0.01
 
 
 @pytest.mark.asyncio
@@ -347,6 +369,44 @@ async def test_update_price_source_clears_manual(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_update_price_source_clears_linked(client: AsyncClient):
+    """linked'tan auto'ya geçince linked_source/linked_id temizlenir."""
+    headers = await _make_user(client, "mc_clear_linked@example.com")
+    create = await client.post(BASE, json={
+        "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
+        "price_source": "linked", "linked_source": "commodity", "linked_id": "XAG",
+    }, headers=headers)
+    holding_id = create.json()["id"]
+    update = await client.put(f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers)
+    assert update.status_code == 200
+    assert update.json()["price_source"] == "auto"
+    assert update.json()["linked_source"] is None
+    assert update.json()["linked_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_asset_catalog_search_commodity(client: AsyncClient):
+    """asset-catalog 'silver' arar, commodity:XAG bulur."""
+    headers = await _make_user(client, "mc_catalog@example.com")
+    resp = await client.get("/api/v1/asset-catalog?q=silver", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    silver = [r for r in data if r["source"] == "commodity" and r["id"] == "XAG"]
+    assert len(silver) == 1
+
+
+@pytest.mark.asyncio
+async def test_asset_catalog_filter_source(client: AsyncClient):
+    """source=commodity filtresi sadece commodity döner."""
+    headers = await _make_user(client, "mc_catalog_filter@example.com")
+    resp = await client.get("/api/v1/asset-catalog?source=commodity", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 2  # XAU + XAG
+    assert all(r["source"] == "commodity" for r in data)
+
+
+@pytest.mark.asyncio
 async def test_import_replaces_existing(client: AsyncClient):
     """Import replace-all: mevcut silinir, yeniler eklenir."""
     headers = await _make_user(client, "mc_import@example.com")
@@ -356,8 +416,8 @@ async def test_import_replaces_existing(client: AsyncClient):
     # Excel hazırla — sadece BTC içerir, ETH silinmeli
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)", "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Notlar"])
-    ws.append(["binancetr", "Spot", "BTC", 0.25, "", "auto", "", "test"])
+    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)", "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Linked Source", "Linked ID", "Notlar"])
+    ws.append(["binancetr", "Spot", "BTC", 0.25, "", "auto", "", "", "", "test"])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

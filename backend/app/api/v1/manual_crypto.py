@@ -19,7 +19,12 @@ from app.schemas.manual_crypto import (
     ManualCryptoSummaryOut,
     ManualCryptoUpdate,
 )
-from app.services.aggregator import fetch_combined_prices, fetch_usd_to_tl, lookup_usd_price
+from app.services.aggregator import (
+    fetch_coingecko_prices_by_ids,
+    fetch_combined_prices,
+    fetch_usd_to_tl,
+    lookup_usd_price,
+)
 
 router = APIRouter(prefix="/manual-crypto", tags=["manual-crypto"])
 
@@ -36,51 +41,98 @@ def _calc_gain_loss(
     return cost_basis, gain_loss, pct
 
 
+async def _fetch_tefas_prices_for_codes(codes: list[str]) -> dict[str, Decimal]:
+    """Verilen TEFAS fon kodları için TL/birim fiyat döner. Bulunmayanlar yer almaz."""
+    if not codes:
+        return {}
+    from app.services.tefas import TefasService
+    payload = [{"code": c, "quantity": 1, "name": c} for c in codes]
+    try:
+        assets = await TefasService(payload).fetch()
+        return {a.symbol: a.unit_price_tl for a in assets if a.unit_price_tl > 0}
+    except Exception as e:
+        logger.warning("TEFAS linked fiyat çekilemedi: %s", e)
+        return {}
+
+
 async def _enrich_positions(
     holdings: list[ManualCryptoHolding],
 ) -> ManualCryptoSummaryOut:
-    """Holdings listesini anlık fiyatlarla zenginleştirir.
-
-    price_source bazlı 4 yol:
-    - 'auto'         → Binance USDT + CoinGecko fallback (ortak)
-    - 'manual'       → kullanıcının `manual_unit_price_tl` alanı (TL/adet)
-    - 'gold_gram'    → commodity servisten anlık altın gr fiyatı
-    - 'silver_gram'  → commodity servisten anlık gümüş gr fiyatı
+    """price_source bazlı 3 yol:
+    - 'auto'   → Binance USDT + CoinGecko fallback (sembol bazlı)
+    - 'manual' → kullanıcının manual_unit_price_tl
+    - 'linked' → linked_source bazında dispatch:
+                 commodity (XAU/XAG), binance:SYMBOL, coingecko:ID, tefas:CODE
     """
     if not holdings:
         return ManualCryptoSummaryOut(positions=[], total_value_tl=Decimal(0), unknown_symbols=[])
 
     auto_holdings = [h for h in holdings if h.price_source == "auto"]
-    needs_metal = any(h.price_source in ("gold_gram", "silver_gram") for h in holdings)
+    linked_holdings = [h for h in holdings if h.price_source == "linked"]
 
-    # Sadece auto kayıtlar için Binance/CoinGecko çağrısı; USD/TL her durumda gerekli.
+    # Hangi kaynaklara hangi ID'ler için sorgu lazım — bir kerede topla
     auto_symbols = list({h.symbol for h in auto_holdings})
-    prices, usd_tl = await _fetch_prices_safe(auto_symbols) if auto_symbols else ({}, await fetch_usd_to_tl())
+    binance_linked_symbols = [h.linked_id for h in linked_holdings if h.linked_source == "binance" and h.linked_id]
+    cg_linked_ids = list({h.linked_id for h in linked_holdings if h.linked_source == "coingecko" and h.linked_id})
+    tefas_linked_codes = list({h.linked_id for h in linked_holdings if h.linked_source == "tefas" and h.linked_id})
+    needs_commodity = any(h.linked_source == "commodity" for h in linked_holdings)
+
+    # USD/TL her durumda lazım
+    binance_symbols_to_fetch = list(set(auto_symbols + binance_linked_symbols))
+    if binance_symbols_to_fetch:
+        prices, usd_tl = await _fetch_prices_safe(binance_symbols_to_fetch)
+    else:
+        prices = {}
+        usd_tl = await fetch_usd_to_tl()
 
     metal_prices: dict[str, Decimal] = {}
-    if needs_metal:
+    if needs_commodity:
         try:
             from app.services.commodity import fetch_metal_prices
-            metal_prices = await fetch_metal_prices()
+            metal_prices = await fetch_metal_prices()  # {gold, silver} TRY/g
         except Exception:
-            metal_prices = {"gold": Decimal(0), "silver": Decimal(0)}
+            metal_prices = {}
+
+    cg_prices_by_id: dict[str, Decimal] = (
+        await fetch_coingecko_prices_by_ids(cg_linked_ids) if cg_linked_ids else {}
+    )
+    tefas_prices: dict[str, Decimal] = (
+        await _fetch_tefas_prices_for_codes(tefas_linked_codes) if tefas_linked_codes else {}
+    )
 
     positions: list[ManualCryptoPositionOut] = []
     total_tl = Decimal(0)
     unknown: list[str] = []
+
     for h in holdings:
         usd = Decimal(0)
         unit_tl = Decimal(0)
 
         if h.price_source == "manual":
             unit_tl = h.manual_unit_price_tl or Decimal(0)
-            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
-        elif h.price_source == "gold_gram":
-            unit_tl = metal_prices.get("gold", Decimal(0))
-            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
-        elif h.price_source == "silver_gram":
-            unit_tl = metal_prices.get("silver", Decimal(0))
-            usd = (unit_tl / usd_tl).quantize(Decimal("0.000001")) if (usd_tl > 0 and unit_tl > 0) else Decimal(0)
+            if usd_tl > 0 and unit_tl > 0:
+                usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
+
+        elif h.price_source == "linked":
+            ls = h.linked_source
+            lid = h.linked_id or ""
+            if ls == "commodity":
+                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
+                if key:
+                    unit_tl = metal_prices.get(key, Decimal(0))
+                    if usd_tl > 0 and unit_tl > 0:
+                        usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
+            elif ls == "binance":
+                usd = lookup_usd_price(lid, prices)
+                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
+            elif ls == "coingecko":
+                usd = cg_prices_by_id.get(lid, Decimal(0))
+                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
+            elif ls == "tefas":
+                unit_tl = tefas_prices.get(lid, Decimal(0))
+                if usd_tl > 0 and unit_tl > 0:
+                    usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
+
         else:  # auto
             usd = lookup_usd_price(h.symbol, prices)
             unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
@@ -101,6 +153,8 @@ async def _enrich_positions(
             avg_cost_tl=h.avg_cost_tl,
             price_source=h.price_source,
             manual_unit_price_tl=h.manual_unit_price_tl,
+            linked_source=h.linked_source,
+            linked_id=h.linked_id,
             unit_price_usd=usd,
             unit_price_tl=unit_tl,
             total_value_tl=value_tl,
@@ -164,6 +218,8 @@ async def create_manual_crypto(
         avg_cost_tl=payload.avg_cost_tl,
         price_source=payload.price_source,
         manual_unit_price_tl=payload.manual_unit_price_tl if payload.price_source == "manual" else None,
+        linked_source=payload.linked_source if payload.price_source == "linked" else None,
+        linked_id=payload.linked_id if payload.price_source == "linked" else None,
         notes=payload.notes,
     )
     db.add(holding)
@@ -199,11 +255,19 @@ async def update_manual_crypto(
         holding.avg_cost_tl = payload.avg_cost_tl
     if payload.price_source is not None:
         holding.price_source = payload.price_source
-        # auto/gold/silver'a geçildiyse manual fiyatı temizle
+        # mod değişince ilgisiz alanları temizle
         if payload.price_source != "manual":
             holding.manual_unit_price_tl = None
+        if payload.price_source != "linked":
+            holding.linked_source = None
+            holding.linked_id = None
     if payload.manual_unit_price_tl is not None and holding.price_source == "manual":
         holding.manual_unit_price_tl = payload.manual_unit_price_tl
+    if holding.price_source == "linked":
+        if payload.linked_source is not None:
+            holding.linked_source = payload.linked_source
+        if payload.linked_id is not None:
+            holding.linked_id = payload.linked_id
     if payload.notes is not None:
         holding.notes = payload.notes
     await db.commit()
@@ -245,7 +309,7 @@ async def export_manual_crypto(
     ws.title = "Manuel Kripto"
     headers = [
         "Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)",
-        "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Notlar",
+        "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Linked Source", "Linked ID", "Notlar",
     ]
     ws.append(headers)
     # Header stilini biraz belirginleştir
@@ -262,6 +326,8 @@ async def export_manual_crypto(
             float(r.avg_cost_tl) if r.avg_cost_tl else "",
             r.price_source,
             float(r.manual_unit_price_tl) if r.manual_unit_price_tl else "",
+            r.linked_source or "",
+            r.linked_id or "",
             r.notes or "",
         ])
 
@@ -317,7 +383,9 @@ async def import_manual_crypto(
             avg_cost_raw = row[4] if len(row) > 4 else None
             price_src_raw = str(row[5]).strip().lower() if len(row) > 5 and row[5] else "auto"
             manual_price_raw = row[6] if len(row) > 6 else None
-            notes = str(row[7]).strip() if len(row) > 7 and row[7] else None
+            linked_source_raw = str(row[7]).strip().lower() if len(row) > 7 and row[7] else None
+            linked_id_raw = str(row[8]).strip() if len(row) > 8 and row[8] else None
+            notes = str(row[9]).strip() if len(row) > 9 and row[9] else None
 
             if not exchange or not symbol or qty_raw in (None, ""):
                 errors.append(f"Satır {idx}: Borsa, Sembol ve Miktar zorunlu")
@@ -331,7 +399,7 @@ async def import_manual_crypto(
                 avg_cost = Decimal(str(avg_cost_raw))
                 if avg_cost <= 0:
                     avg_cost = None
-            price_source = price_src_raw if price_src_raw in ("auto", "manual", "gold_gram", "silver_gram") else "auto"
+            price_source = price_src_raw if price_src_raw in ("auto", "manual", "linked") else "auto"
             manual_price = None
             if price_source == "manual" and manual_price_raw not in (None, ""):
                 try:
@@ -340,6 +408,11 @@ async def import_manual_crypto(
                         manual_price = None
                 except Exception:
                     manual_price = None
+            linked_source = None
+            linked_id = None
+            if price_source == "linked" and linked_source_raw in ("binance", "coingecko", "tefas", "commodity") and linked_id_raw:
+                linked_source = linked_source_raw
+                linked_id = linked_id_raw[:100]
             new_rows.append(ManualCryptoHolding(
                 user_id=current_user.id,
                 exchange=exchange[:40],
@@ -349,6 +422,8 @@ async def import_manual_crypto(
                 avg_cost_tl=avg_cost,
                 price_source=price_source,
                 manual_unit_price_tl=manual_price,
+                linked_source=linked_source,
+                linked_id=linked_id,
                 notes=notes[:500] if notes else None,
             ))
         except Exception as e:
