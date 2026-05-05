@@ -103,6 +103,7 @@ backend/app/
 │   ├── income.py          # /income (gelir CRUD + summary + Excel) — Faz 3
 │   ├── budget.py          # /budgets (UPSERT + comparison) — Faz 3
 │   ├── goal.py            # /goals/me (finansal hedef + para birimi) — Faz 3
+│   ├── manual_crypto.py   # /manual-crypto (API'siz borsalar için manuel CRUD + Excel + anlık fiyat)
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
 │
 ├── core/                  # Çekirdek altyapı
@@ -148,7 +149,8 @@ backend/app/
 │   ├── planned_expense.py # planned_expenses (Faz 3)
 │   ├── income.py          # incomes (manuel gelir — Faz 3)
 │   ├── budget.py          # budgets (UPSERT: user_id+category UNIQUE — Faz 3)
-│   └── commodity.py       # commodity_holdings (gram/biga/coin — Faz 3)
+│   ├── commodity.py       # commodity_holdings (gram/biga/coin — Faz 3)
+│   └── manual_crypto.py   # manual_crypto_holdings (API'siz borsalar için manuel kayıt)
 │
 └── schemas/               # Pydantic — request/response sözleşmeleri
     ├── auth.py            # RegisterRequest, LoginRequest, RefreshRequest, LogoutRequest
@@ -162,6 +164,7 @@ backend/app/
     ├── income.py          # IncomeCategory (7), IncomeCreate/Update/Out, IncomeSummary
     ├── budget.py          # BudgetUpsert, BudgetOut, BudgetComparison
     ├── commodity.py       # CommodityCreate/Update/Out, CommodityPositionOut, CommoditySummaryOut
+    ├── manual_crypto.py   # ManualCryptoCreate/Update/Out, ManualCryptoPositionOut, ManualCryptoSummaryOut
     └── integration.py
 ```
 
@@ -202,6 +205,30 @@ JSON response
 ```
 
 > **Wallet pricing tutarlılığı:** `GET /portfolio/wallets` endpoint'i `total_value_tl` hesaplarken `liquid + staked + pending_rewards` toplar (snapshot servisi ile aynı formül). Bu sayede dashboard kartlarındaki "Toplam Portföy" ile haftalık snapshot tutarı arasında pending_rewards farkı (Sonic SFC validator rewards, Avalanche P-Chain pending rewards) oluşmaz.
+
+> **Avalanche P-Chain likit + stake (düzeltme):** `AvalanchePChainService.fetch()` daha önce sadece `platform.getStake` çağırıyordu; bu yüzden delegasyon dışındaki **likit (unlocked) bakiye 0 görünüyordu**. Şimdi `platform.getBalance` + `platform.getStake` paralel çağrılır, adres `P-` prefix'i ile gönderilir (`avax1...` → `P-avax1...`). `unlockeds` (yeni API: assetID→amount mapping) veya `unlocked` (eski API tekil) → `liquid_quantity`; `lockedStakeables` + `staked` → `staked_quantity`. `asset_type` staked > liquid ise `staked_crypto`, değilse `crypto`.
+
+### 4.1.1 Manuel Kripto (API'siz Borsalar) Akışı
+
+API erişimi olmayan borsalar (BinanceTR, iCrypex, BTCTurk, Paribu, Bybit, KuCoin, Bitget vb.) için kullanıcı bakiyelerini elle kaydeder.
+
+```
+Kullanıcı → POST /manual-crypto {exchange, symbol, quantity, avg_cost_tl?, notes?}
+  ↓ INSERT manual_crypto_holdings
+  ↓
+GET /manual-crypto
+  ↓ SELECT ... WHERE user_id=X
+  ↓ aggregator.fetch_spot_prices(symbols)  → Binance USDT spot
+  ↓ aggregator.fetch_usd_to_tl()           → TCMB
+  ↓ Her kayıt: total_value_tl = quantity * unit_price_usd * usd_tl
+  ↓ Bilinmeyen sembol → unknown_symbols listesi (TL=0)
+  ↓
+Snapshot:
+  services/snapshot.py::_gather_manual_crypto_assets()
+  → AssetData(asset_type="crypto", provider="manual:{exchange}", liquid_quantity=quantity)
+  → fiyat enjekte edilmez; compute_and_save_snapshot()'taki ortak fiyat enrichment loop'u
+    (SYMBOL_PRICE_ALIASES dahil) zincir/exchange kayıtlarıyla aynı pipeline'da yakalar
+```
 
 ### 4.2 Haftalık Snapshot (APScheduler — implement edildi)
 
@@ -483,6 +510,24 @@ INDEX ix_commodity_holdings_user_id (user_id)
 
 > Migration `a0b1c2d3e4f5`. Pydantic `model_validator` `unit_type`, `metal`, `biga_code`, `coin_type` uyumunu zorlar. Anlık fiyat: `services/commodity.py::fetch_metal_prices()` TCMB USD/TRY (kritik) + Yahoo Finance XAU=X→GC=F + XAG=X→SI=F fallback. 5 dakikalık in-memory cache; Yahoo fail durumunda TTL 30 saniyeye düşer. Metal fiyatı 0 ise dashboard banner uyarı gösterir, etkilenen pozisyonlar `total_value_tl` toplama dahil edilmez. `User.commodity_holdings` ilişkisi cascade all, delete-orphan.
 
+#### `manual_crypto_holdings` (API'siz borsalar — manuel kripto kayıt)
+```sql
+id           BIGSERIAL PK
+user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+exchange     VARCHAR(40) NOT NULL                    -- 'binancetr'|'icrypex'|'btcturk'|'paribu'|'bybit'|'kucoin'|'bitget'|'other'
+label        VARCHAR(100)                            -- Opsiyonel kullanıcı etiketi
+symbol       VARCHAR(20) NOT NULL                    -- 'BTC', 'AVAX' vb. (otomatik upper-case)
+quantity     NUMERIC(28, 12) NOT NULL                -- adet
+avg_cost_tl  NUMERIC(18, 6)                          -- TRY/adet ortalama maliyet (nullable; ≤0 → None)
+notes        TEXT                                    -- Opsiyonel serbest not
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()      -- onupdate=now()
+
+INDEX ix_manual_crypto_holdings_user_exchange (user_id, exchange)
+```
+
+> Migration `f5a6b7c8d9e0`. API erişimi olmayan borsalardaki bakiyeleri portföye dahil etmek için. Anlık fiyat: `aggregator.fetch_spot_prices()` (Binance USDT) + `fetch_usd_to_tl()` (TCMB); bulunmayan semboller `unknown_symbols` listesinde döner (TL=0). Snapshot entegrasyonu `_gather_manual_crypto_assets()` → `asset_type="crypto"`, `provider="manual:{exchange}"`. `User.manual_crypto_holdings` ilişkisi cascade all, delete-orphan.
+
 #### `revoked_tokens` (JWT blacklist)
 ```sql
 jti          TEXT PRIMARY KEY                       -- JWT'nin jti claim'i (uuid4.hex)
@@ -584,6 +629,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `a0b1c2d3e4f5` | ✅ `commodity_holdings` tablosu (id, user_id, unit_type, metal, biga_code?, coin_type?, quantity, notes?, created_at) + `ix_commodity_holdings_user_id` — Faz 3 altın/gümüş |
 | `b1c2d3e4f5a6` | ✅ `tefas_holdings.avg_cost_tl` + `stock_holdings.avg_cost_tl` (NUMERIC 18,6 nullable) — Faz 3 maliyet bazı / kâr-zarar |
 | `c2d3e4f5a6b7` | ✅ `tefas_holdings.distributor` + `stock_holdings.distributor` (VARCHAR 50 nullable) — Faz 3 aracı kurum (aynı varlığı farklı kurumlardan ayrı satır) |
+| `f5a6b7c8d9e0` | ✅ `manual_crypto_holdings` tablosu (id, user_id, exchange, label?, symbol, quantity 28,12, avg_cost_tl?, notes?, created_at, updated_at) + `ix_manual_crypto_holdings_user_exchange` — API'siz borsalar için manuel kripto kayıt |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -597,6 +643,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_planned_expenses_user_id` (user_id)
 - `ix_incomes_user_date` (user_id + date)
 - `ix_commodity_holdings_user_id` (user_id)
+- `ix_manual_crypto_holdings_user_exchange` (user_id + exchange)
 - `ix_revoked_tokens_expires_at`
 - `ix_investment_advice_user_id`
 - `ix_portfolio_snapshots_user_date` (user_id + snapshot_date DESC)
@@ -649,7 +696,7 @@ class Asset:
 | Binance TR        | `BinanceTRService`                          | Özel istemci, session token (cid cookie); GeeTest CAPTCHA nedeniyle programatik login YOK                                                                                    |
 | iCrypex           | `ICrypexService`                            | CCXT wrapper                                                                                                                                                                 |
 | Sonic             | `SonicService`                              | web3.py + SFC staking contract; `Semaphore(20)` ile paralel validator sorgu                                                                                                  |
-| Avalanche P-Chain | `AvalanchePChainService`                    | `platform.getStake` REST API, httpx                                                                                                                                          |
+| Avalanche P-Chain | `AvalanchePChainService`                    | `platform.getBalance` + `platform.getStake` paralel (httpx, `P-` prefix gerekli); likit (`unlockeds`/`unlocked`) + stake (`lockedStakeables`+`staked`) ayrı çekilir |
 | Avalanche C-Chain | `AvalancheCChainService`                    | EVM RPC, web3.py — multi-RPC fallback (settings → public-rpc → drpc → 1rpc); curated 3 ERC-20 (sAVAX, USDT.e, USDC.e)                                                       |
 | Ethereum          | `EthereumService`                           | EVM RPC (multi-RPC fallback: settings → publicnode → merkle → 1rpc → ankr) + Etherscan + Ethplorer ERC-20 discovery                                                          |
 | Solana            | `SolanaService`                             | `api.mainnet-beta.solana.com` JSON-RPC; liquid (native SOL `getBalance`) + staked (`getProgramAccounts` Stake program, offset 12=staker, 44=withdrawer)                       |
@@ -658,6 +705,7 @@ class Asset:
 | TEFAS             | `TefasService`                              | httpx + JSON API                                                                                                                                                             |
 | Yahoo Finance     | `fetch_stock_quotes()`                      | httpx (`v8/finance/chart/{ticker}`)                                                                                                                                          |
 | BES               | `_gather_bes_assets()` (snapshot.py içinde) | DB'den okur — `bes_holdings` → `AssetData(asset_type="pension", provider="bes")`                                                                                             |
+| Manuel kripto     | `_gather_manual_crypto_assets()` (snapshot.py içinde) | DB'den okur — `manual_crypto_holdings` → `AssetData(asset_type="crypto", provider="manual:{exchange}")`; fiyat `compute_and_save_snapshot()` ortak enrichment loop'unda enjekte edilir |
 | Kıymetli madenler | `commodity.py::fetch_metal_prices()`        | TCMB USD/TRY (kritik) + Yahoo Finance Chart API XAU=X→GC=F + XAG=X→SI=F fallback chain. 5 dk in-memory cache; Yahoo fail durumunda TTL 30 sn'ye düşer; metaller best-effort (0 dönerse UI banner) |
 | Aggregator        | `aggregator.py`                             | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
 | Snapshot          | `snapshot.py::compute_and_save_snapshot()`  | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent). MKK import endpoint'lerinden best-effort tetiklenir                                          |

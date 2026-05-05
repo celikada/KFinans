@@ -39,31 +39,31 @@ KFinans/
 │   │   ├── api/v1/                # FastAPI router'ları (auth, user, portfolio, tefas,
 │   │   │                          # stocks, bes, commodity, wallets, integrations,
 │   │   │                          # expenses, planned_expenses, income, budget, goal,
-│   │   │                          # advice)
+│   │   │                          # manual_crypto, advice)
 │   │   ├── services/
 │   │   │   ├── exchange/          # CCXT tabanlı (Binance, iCrypex, BinanceTR)
-│   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C, Ethereum (web3.py multi-RPC),
-│   │   │   │                      # Bitcoin (mempool.space + cache), Solana (JSON-RPC),
-│   │   │   │                      # evm_tokens.py (ERC-20 discovery — Ethplorer + curated list + spam filter)
+│   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C (getBalance + getStake),
+│   │   │   │                      # Ethereum (web3.py multi-RPC), Bitcoin (mempool.space + cache),
+│   │   │   │                      # Solana (JSON-RPC), evm_tokens.py (ERC-20 discovery — Ethplorer + curated list + spam filter)
 │   │   │   ├── tefas.py
 │   │   │   ├── stocks.py
 │   │   │   ├── commodity.py       # TCMB + Yahoo XAU/XAG fallback chain + 5 dk cache
 │   │   │   ├── aggregator.py      # TL normalize, USD/TRY, breakdown
-│   │   │   ├── snapshot.py        # compute_and_save_snapshot() — paralel toplama
+│   │   │   ├── snapshot.py        # compute_and_save_snapshot() — paralel toplama (manuel kripto dahil)
 │   │   │   ├── email.py           # Resend SDK — verify_email
 │   │   │   └── advisor.py         # Claude API (Faz 3'te aktive olacak)
-│   │   ├── models/                # SQLAlchemy ORM
-│   │   ├── schemas/               # Pydantic
+│   │   ├── models/                # SQLAlchemy ORM (manual_crypto.py dahil)
+│   │   ├── schemas/               # Pydantic (manual_crypto.py dahil)
 │   │   ├── core/                  # security, deps, limiter
 │   │   ├── scheduler.py           # APScheduler — Pazar 23:00 haftalık snapshot
 │   │   └── main.py
-│   ├── alembic/versions/          # 21 migration
-│   ├── tests/{unit,integration}/
+│   ├── alembic/versions/          # 22 migration (f5a6b7c8d9e0 = manual_crypto_holdings)
+│   ├── tests/{unit,integration}/  # tests/integration/test_manual_crypto_api.py (12 test)
 │   ├── pyproject.toml
 │   └── .env.example
 ├── frontend/                      # Next.js 16 (App Router, proxy.ts auth yönlendirme)
 │   ├── app/_components/{Logos,MkkHint,PageHeader}.tsx
-│   ├── app/dashboard/{tefas,stocks,wallets,crypto,bes,expenses,planned,
+│   ├── app/dashboard/{tefas,stocks,wallets,crypto,manual-crypto,bes,expenses,planned,
 │   │                  income,budget,commodities,goal,settings,history}/
 │   └── lib/{api,format}.ts
 ├── docs/                          # 9 sıralı belge (01-tasarim ... 09-altyapi-test)
@@ -126,6 +126,10 @@ cd frontend && npm install && npm run dev
 **Distributor (aracı kurum) alanı:** TEFAS + Stocks holding'lerinde aynı varlığı (örn. ZJI fonu) farklı kurumlardan (Ziraat + Foneria) ayrı satır olarak izlemek için `distributor` (VARCHAR 50). MKK Üye sütunu otomatik bu alana yazılır.
 
 **Maliyet bazı (avg_cost_tl):** TEFAS + Stocks `avg_cost_tl` (Numeric 18,6 nullable) — TRY/adet ortalama maliyet. Schema validator: 0 veya negatif → None (kullanıcı bilmiyorsa boş bırakabilir). Preview/list'te `cost_basis_tl`, `gain_loss_tl`, `gain_loss_pct` hesaplanır.
+
+**Manuel kripto (API'siz borsalar):** API erişimi olmayan borsalar (BinanceTR, iCrypex, BTCTurk, Paribu, Bybit, KuCoin, Bitget vb.) için kullanıcının manuel kayıt yapabildiği `manual_crypto_holdings` tablosu. Endpoint prefix `/manual-crypto`; CRUD + Excel import/export + anlık fiyatla zenginleştirilmiş listeleme. Fiyatlama `aggregator.fetch_spot_prices()` (Binance USDT) + `fetch_usd_to_tl()` (TCMB) ile yapılır; Binance'te bulunmayan semboller `unknown_symbols` listesinde döner ve TL değer 0 olur. Snapshot entegrasyonu `services/snapshot.py::_gather_manual_crypto_assets()` — `asset_type="crypto"`, `provider="manual:{exchange}"` (örn. `manual:icrypex`). Fiyat enjekte edilmez; `compute_and_save_snapshot()` içindeki ortak fiyat enrichment loop'u (`SYMBOL_PRICE_ALIASES` dahil) bu kayıtları da yakalar — zincir/exchange kayıtlarıyla aynı pipeline.
+
+**Avalanche P-Chain likit bakiye:** `AvalanchePChainService.fetch()` daha önce sadece `platform.getStake` çağırıyordu, bu yüzden likit (unlocked) bakiye gözükmüyordu. Şimdi `platform.getBalance` + `platform.getStake` paralel çağrılıyor; adres `P-` prefix'i ile gönderiliyor (`avax1...` → `P-avax1...`). `unlockeds` (yeni API: assetID→amount mapping) veya `unlocked` (eski API tekil) → `liquid_quantity`; `lockedStakeables` + `staked` → `staked_quantity`. `asset_type` staked > liquid ise `staked_crypto`, değilse `crypto` olarak set edilir.
 
 **Soft-delete:** `DELETE /user/me` `users.deleted_at = now()` set eder; hard-delete cron job (30 gün sonra fiziksel silme) Faz 3 TODO.
 

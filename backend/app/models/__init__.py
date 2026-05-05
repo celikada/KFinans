@@ -6,6 +6,7 @@ from app.models.advice import InvestmentAdvice
 from app.models.tefas import TefasHolding
 from app.models.commodity import CommodityHolding
 from app.models.cash import CashHolding
+from app.models.manual_crypto import ManualCryptoHolding
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "TefasHolding",
     "CommodityHolding",
     "CashHolding",
+    "ManualCryptoHolding",
 ]

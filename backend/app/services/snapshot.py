@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decrypt_secret
 from app.models.bes import BesHolding
 from app.models.integration import Integration, WalletAddress
+from app.models.manual_crypto import ManualCryptoHolding
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.models.stock import StockHolding
 from app.models.tefas import TefasHolding
@@ -246,6 +247,28 @@ async def _gather_commodity_assets(
     return out
 
 
+def _gather_manual_crypto_assets(
+    holdings: list[ManualCryptoHolding],
+) -> list[AssetData]:
+    """Manuel girilmiş kripto bakiyeleri AssetData'ya çevirir.
+
+    Fiyat enjekte edilmez — `compute_and_save_snapshot` içindeki ortak fiyat
+    enrichment loop'u (fetch_spot_prices + lookup_usd_price) bunu da yakalar.
+    Provider 'manual:{exchange}' formatında saklanır (ör. 'manual:binancetr').
+    """
+    out: list[AssetData] = []
+    for h in holdings:
+        out.append(AssetData(
+            symbol=h.symbol,
+            name=h.label or f"{h.exchange} {h.symbol}",
+            provider=f"manual:{h.exchange}",
+            asset_type="crypto",
+            source_type="manual",
+            liquid_quantity=Decimal(str(h.quantity)),
+        ))
+    return out
+
+
 def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
     """BES holdinglerini AssetData'ya cevirir.
 
@@ -345,7 +368,7 @@ async def compute_and_save_snapshot(
     from app.models.cash import CashHolding
     from app.models.commodity import CommodityHolding
 
-    intg_q, wallet_q, tefas_q, stock_q, bes_q, commodity_q, cash_q = await asyncio.gather(
+    intg_q, wallet_q, tefas_q, stock_q, bes_q, commodity_q, cash_q, manual_q = await asyncio.gather(
         db.execute(
             select(Integration).where(
                 Integration.user_id == user_id, Integration.is_active.is_(True)
@@ -361,6 +384,7 @@ async def compute_and_save_snapshot(
         db.execute(select(BesHolding).where(BesHolding.user_id == user_id)),
         db.execute(select(CommodityHolding).where(CommodityHolding.user_id == user_id)),
         db.execute(select(CashHolding).where(CashHolding.user_id == user_id)),
+        db.execute(select(ManualCryptoHolding).where(ManualCryptoHolding.user_id == user_id)),
     )
     integrations = intg_q.scalars().all()
     wallets = wallet_q.scalars().all()
@@ -369,6 +393,7 @@ async def compute_and_save_snapshot(
     bes_holdings = bes_q.scalars().all()
     commodity_holdings = commodity_q.scalars().all()
     cash_holdings = cash_q.scalars().all()
+    manual_crypto_holdings = manual_q.scalars().all()
 
     # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
@@ -397,6 +422,7 @@ async def compute_and_save_snapshot(
         _gather_cash_assets(cash_holdings, usd_tl, issues),
     )
     bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
+    manual_crypto_assets = _gather_manual_crypto_assets(manual_crypto_holdings)  # Sync
     all_assets: list[AssetData] = (
         list(crypto_assets)
         + list(wallet_assets)
@@ -405,6 +431,7 @@ async def compute_and_save_snapshot(
         + list(bes_assets)
         + list(commodity_assets)
         + list(cash_assets)
+        + list(manual_crypto_assets)
     )
 
     # Blockchain ve kripto asset'lerine spot fiyat enjekte et

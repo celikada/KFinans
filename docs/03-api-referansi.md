@@ -568,6 +568,107 @@ xlsx indir/yükle (TEFAS pattern'i ile aynı).
 
 ---
 
+## 8.1 Manuel Kripto (`/api/v1/manual-crypto`)
+
+API erişimi olmayan borsalardaki (BinanceTR, iCrypex, BTCTurk, Paribu, Bybit, KuCoin, Bitget, Other) bakiyelerin manuel kayıt yoluyla portföye dahil edilmesini sağlar. Tüm endpoint'ler auth gerektirir; başka kullanıcının kaydına erişim 404 döner (IDOR koruması). Snapshot entegrasyonu `_gather_manual_crypto_assets()` ile sağlanır — `asset_type="crypto"`, `provider="manual:{exchange}"` (örn. `manual:icrypex`).
+
+### `GET /manual-crypto`
+Kullanıcının manuel kripto kayıtlarını listeler; her kayıt anlık fiyatla zenginleştirilir. Sembol Binance USDT spot listesinde yoksa `unknown_symbols` döner ve TL değer 0 olur.
+
+```json
+200 OK — ManualCryptoSummaryOut
+{
+  "positions": [{
+    "id":             1,
+    "exchange":       "icrypex",
+    "label":          "iCrypex Ana",
+    "symbol":         "BTC",
+    "quantity":       "0.01250000",
+    "avg_cost_tl":    "1850000.000000",
+    "notes":          "2026 Mart alımı",
+    "unit_price_usd": "95000.00",
+    "unit_price_tl":  "4271574.00",
+    "total_value_tl": "53394.68",
+    "cost_basis_tl":  "23125.00",
+    "gain_loss_tl":   "30269.68",
+    "gain_loss_pct":   130.89,
+    "created_at":     "2026-05-04T19:02:00Z",
+    "updated_at":     "2026-05-05T08:40:00Z"
+  }],
+  "total_value_tl":  "53394.68",
+  "unknown_symbols": []
+}
+```
+
+> Bilinmeyen sembol akışı: `["FOOCOIN"]` → frontend banner uyarı; ilgili pozisyon `total_value_tl=0` olarak listelenir, toplama dahil edilmez.
+
+### `POST /manual-crypto`
+Yeni kayıt ekler.
+
+```json
+// Request — ManualCryptoCreate
+{
+  "exchange":    "icrypex",       // 'binancetr'|'icrypex'|'btcturk'|'paribu'|'bybit'|'kucoin'|'bitget'|'other'
+  "label":       "iCrypex Ana",   // Opsiyonel, max 100
+  "symbol":      "btc",           // Otomatik upper-case ('BTC')
+  "quantity":    "0.0125",        // Decimal, gt=0 (28,12)
+  "avg_cost_tl": "1850000.00",    // Opsiyonel TRY/adet (≤0 → None)
+  "notes":       "2026 Mart alımı" // Opsiyonel serbest not
+}
+
+// 201 Created — ManualCryptoOut
+{ "id": 1, "exchange": "icrypex", "symbol": "BTC", ... }
+
+422: { "detail": "ensure this value is greater than 0" }   // quantity ≤ 0
+422: { "detail": "Geçersiz borsa: ..." }                    // exchange enum dışı
+```
+
+### `PUT /manual-crypto/{id}`
+Partial update — `ManualCryptoUpdate` tüm alanları opsiyonel; gönderilen alanlar değişir, diğerleri korunur. `updated_at` otomatik yenilenir.
+
+```json
+// Request — sadece quantity
+{ "quantity": "0.0150" }
+
+// 200 OK — güncellenmiş ManualCryptoOut
+
+404: { "detail": "Manuel kripto kaydı bulunamadı" }   // başka kullanıcı veya yok (IDOR koruması)
+422: { "detail": "..." }                              // schema doğrulama
+```
+
+### `DELETE /manual-crypto/{id}`
+```
+DELETE /api/v1/manual-crypto/1
+Authorization: Bearer eyJ...
+
+204 No Content
+404: { "detail": "Manuel kripto kaydı bulunamadı" }   // IDOR korumalı
+```
+
+### `GET /manual-crypto/export`
+Tüm manuel kripto kayıtlarını `manuel-kripto.xlsx` olarak indir (sütunlar: borsa, etiket, sembol, miktar, ortalama maliyet TL, notlar, oluşturulma).
+
+```
+200 OK
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+Content-Disposition: attachment; filename="manuel-kripto.xlsx"
+```
+
+### `POST /manual-crypto/import`
+Excel dosyasından **replace-all** import (mevcut kayıtlar silinir, yeniler eklenir).
+
+```
+multipart/form-data: file=manuel-kripto.xlsx
+
+200 OK — kaydedilen liste (ManualCryptoOut[])
+422: { "detail": "Sadece .xlsx dosyası kabul edilir" }
+422: { "detail": "Geçerli manuel kripto kaydı bulunamadı" }
+```
+
+> Schema validator `avg_cost_tl ≤ 0 → None`, `symbol` otomatik upper-case. Replace-all davranışı kullanıcıyı uyarmak için frontend'de onay popup'ı gösterilir.
+
+---
+
 ## 9. AI Tavsiye (`/api/v1/advice`) — Faz 3'te Kredi Tüketir
 
 ### `POST /advice/generate`
@@ -931,6 +1032,7 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 - [x] Kullanıcı yönetimi (`/user/me`, `PUT /user/profile`, `PUT /user/password`, `DELETE /user/me` soft-delete) — Faz 3
 - [x] Finansal hedef (`/goals/me`) — Faz 3 (USD/EUR/GBP/TRY)
 - [x] MKK e-Yatırımcı Excel import (`/portfolio/tefas/import-mkk` + `/portfolio/stocks/import-mkk`) — Faz 3
+- [x] Manuel kripto endpoint'leri (`/manual-crypto/*`) — Faz 3 (API'siz borsalar için CRUD + Excel + anlık fiyat)
 - [ ] Harcama analizi AI (`/expenses/analysis/generate`) — Faz 3 (3 kredi)
 - [ ] `/user/data-export` (KVKK) — Faz 3
 - [ ] Pagination (cursor-based) `/portfolio/history` ve `/advice` için

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from decimal import Decimal
 import httpx
@@ -13,37 +14,84 @@ WEI = Decimal("1e18")
 
 
 class AvalanchePChainService(BaseBlockchainIntegration):
-    """P-Chain staking: platform.getStake API."""
+    """P-Chain bakiye + staking.
+
+    `platform.getBalance` ile likit (unlocked) bakiye + `platform.getStake` ile
+    aktif validator stake'i çekilir. Adres `P-` prefix'i ile gönderilmeli.
+    """
+
+    @staticmethod
+    def _to_decimal_navax(raw) -> Decimal:
+        """nAVAX (1e9) ham değerini Decimal'e çevirir. int veya '0x...' string olabilir."""
+        if raw is None:
+            return Decimal(0)
+        if isinstance(raw, str):
+            value = int(raw, 16) if raw.startswith("0x") else int(raw)
+        else:
+            value = int(raw)
+        return Decimal(value) / NAVAX
+
+    @classmethod
+    def _sum_assets(cls, mapping) -> Decimal:
+        """Yeni API: {assetID: amount} mapping → toplam (tek asset olduğu varsayılır,
+        AVAX P-Chain üzerinde tek primary asset)."""
+        if not isinstance(mapping, dict):
+            return Decimal(0)
+        total = Decimal(0)
+        for v in mapping.values():
+            total += cls._to_decimal_navax(v)
+        return total
 
     async def fetch(self) -> list[AssetData]:
+        p_addr = f"P-{self.address}" if not self.address.startswith("P-") else self.address
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                settings.avalanche_p_api_url,
-                json={
-                    "jsonrpc": "2.0",
+            balance_resp, stake_resp = await asyncio.gather(
+                client.post(settings.avalanche_p_api_url, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "platform.getBalance",
+                    "params": {"addresses": [p_addr]},
+                }),
+                client.post(settings.avalanche_p_api_url, json={
+                    "jsonrpc": "2.0", "id": 2,
                     "method": "platform.getStake",
-                    "params": {"addresses": [self.address], "encoding": "hex"},
-                    "id": 1,
-                },
+                    "params": {"addresses": [p_addr], "encoding": "hex"},
+                }),
+                return_exceptions=False,
             )
-            resp.raise_for_status()
-            data = resp.json()
+            balance_resp.raise_for_status()
+            stake_resp.raise_for_status()
+            balance_data = balance_resp.json().get("result", {})
+            stake_data = stake_resp.json().get("result", {})
 
-        result = data.get("result", {})
-        staked_raw = result.get("staked", "0x0")
-        staked_navax = int(staked_raw, 16) if isinstance(staked_raw, str) else int(staked_raw)
-        staked_avax = Decimal(staked_navax) / NAVAX
+        # getBalance — yeni API: unlockeds/lockedStakeables (assetID→amount mapping)
+        # eski API: unlocked/lockedStakeable (tekil değer). İkisini de destekle.
+        unlocked = self._sum_assets(balance_data.get("unlockeds")) \
+            or self._to_decimal_navax(balance_data.get("unlocked"))
+        locked_stakeable = self._sum_assets(balance_data.get("lockedStakeables")) \
+            or self._to_decimal_navax(balance_data.get("lockedStakeable"))
+        # Aktif validator stake (delegasyon dahil)
+        staked = self._to_decimal_navax(stake_data.get("staked", 0))
+        # Yeni API'de stakedOutputs varsa onun toplamı tercih edilir
+        if "stakedOutputs" in stake_data and isinstance(stake_data["stakedOutputs"], list):
+            # Bazı sürümler mapping yerine UTXO listesi döner — staked alanı bizde yeterli
+            pass
+
+        # Liquid = unlocked; Staked = aktif stake; lockedStakeable kategorize edilemediği
+        # için staked'a dahil ediyoruz (kullanıcı için "kilitli ve stake'lenebilir" =
+        # zaten tutuluyor demek).
+        liquid = unlocked
+        total_staked = staked + locked_stakeable
 
         assets = []
-        if staked_avax > 0:
+        if liquid > 0 or total_staked > 0:
             assets.append(AssetData(
                 symbol="AVAX",
                 name="Avalanche",
                 provider="avalanche_p",
-                asset_type="staked_crypto",
+                asset_type="staked_crypto" if total_staked > liquid else "crypto",
                 source_type="blockchain",
-                liquid_quantity=Decimal(0),
-                staked_quantity=staked_avax,
+                liquid_quantity=liquid,
+                staked_quantity=total_staked,
                 wallet_address_id=self.wallet_address_id,
             ))
         return assets

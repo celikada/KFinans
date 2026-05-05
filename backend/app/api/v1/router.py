@@ -11,6 +11,7 @@ from app.api.v1 import (
     goal,
     income,
     integrations,
+    manual_crypto,
     planned_expenses,
     portfolio,
     stocks,
@@ -35,4 +36,5 @@ api_router.include_router(income.router)
 api_router.include_router(budget.router)
 api_router.include_router(commodity.router)
 api_router.include_router(cash.router)
+api_router.include_router(manual_crypto.router)
 api_router.include_router(advice.router)

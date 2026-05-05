@@ -518,6 +518,44 @@ export const api = {
     request<CashDTO>(`/cash/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCash: (id: number) =>
     request<void>(`/cash/${id}`, { method: "DELETE" }),
+
+  // Manuel kripto (API'siz borsalar — BinanceTR / iCrypex vs.)
+  listManualCrypto: () => request<ManualCryptoSummaryDTO>("/manual-crypto"),
+  createManualCrypto: (payload: ManualCryptoCreateInput) =>
+    request<ManualCryptoDTO>("/manual-crypto", { method: "POST", body: JSON.stringify(payload) }),
+  updateManualCrypto: (id: number, payload: Partial<ManualCryptoCreateInput>) =>
+    request<ManualCryptoDTO>(`/manual-crypto/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteManualCrypto: (id: number) =>
+    request<void>(`/manual-crypto/${id}`, { method: "DELETE" }),
+  exportManualCrypto: async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/manual-crypto/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export başarısız");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "manuel-kripto.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/manual-crypto/import`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === "string" ? err.detail : res.statusText);
+    }
+    return res.json();
+  },
   updateProfile: (risk_profile: string) =>
     request<UserMeDTO>("/user/profile", {
       method: "PUT",
@@ -968,6 +1006,50 @@ export interface CashDTO {
 export interface CashSummaryDTO {
   holdings: CashDTO[];
   total_tl: string;
+}
+
+// Manuel kripto (API'siz borsalar — BinanceTR, iCrypex vs.)
+export interface ManualCryptoCreateInput {
+  exchange: string;
+  label?: string | null;
+  symbol: string;
+  quantity: number | string;
+  avg_cost_tl?: number | string | null;
+  notes?: string | null;
+}
+
+export interface ManualCryptoDTO {
+  id: number;
+  exchange: string;
+  label: string | null;
+  symbol: string;
+  quantity: string;
+  avg_cost_tl: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManualCryptoPositionDTO {
+  id: number;
+  exchange: string;
+  label: string | null;
+  symbol: string;
+  quantity: string;
+  avg_cost_tl: string | null;
+  unit_price_usd: string;
+  unit_price_tl: string;
+  total_value_tl: string;
+  cost_basis_tl: string | null;
+  gain_loss_tl: string | null;
+  gain_loss_pct: number | null;
+  notes: string | null;
+}
+
+export interface ManualCryptoSummaryDTO {
+  positions: ManualCryptoPositionDTO[];
+  total_value_tl: string;
+  unknown_symbols: string[];
 }
 
 export interface CommoditySummaryDTO {

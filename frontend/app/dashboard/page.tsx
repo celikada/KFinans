@@ -73,6 +73,11 @@ export default function DashboardPage() {
   const [cashCount, setCashCount] = useState(0);
   const [commodityCount, setCommodityCount] = useState(0);
 
+  // Manuel kripto (API'siz borsalar)
+  const [manualCryptoTotal, setManualCryptoTotal] = useState<number | null>(null);
+  const [manualCryptoCount, setManualCryptoCount] = useState(0);
+  const [manualCryptoTop, setManualCryptoTop] = useState<TopItem[]>([]);
+
   // Bütçe
   const [budgetOverCount, setBudgetOverCount] = useState<number | null>(null);
 
@@ -179,6 +184,19 @@ export default function DashboardPage() {
       if (s.holdings.length > 0) {
         setCashTotal(total);
         setCashCount(s.holdings.length);
+      }
+    }).catch(() => {});
+
+    api.listManualCrypto().then((s) => {
+      const total = parseFloat(s.total_value_tl);
+      if (s.positions.length > 0) {
+        setManualCryptoTotal(total);
+        setManualCryptoCount(s.positions.length);
+        setManualCryptoTop(top3(
+          s.positions,
+          (p) => parseFloat(p.total_value_tl),
+          (p) => p.symbol,
+        ));
       }
     }).catch(() => {});
 
@@ -289,7 +307,8 @@ export default function DashboardPage() {
     (walletTotal ?? 0) +
     (besTotal ?? 0) +
     (commodityTotal ?? 0) +
-    (cashTotal ?? 0);
+    (cashTotal ?? 0) +
+    (manualCryptoTotal ?? 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -480,6 +499,20 @@ export default function DashboardPage() {
               countLabel="hesap"
               top={[]}
               placeholder="Banka hesabı + nakit (manuel)"
+            />
+          )}
+
+          {!hiddenCards.includes("manualCrypto") && (
+            <Card
+              href="/dashboard/manual-crypto"
+              icon="crypto"
+              color="orange"
+              title="Manuel Kripto"
+              total={manualCryptoTotal}
+              count={manualCryptoCount}
+              countLabel="pozisyon"
+              top={manualCryptoTop}
+              placeholder="API'siz borsalar (BinanceTR, iCrypex...)"
             />
           )}
         </div>

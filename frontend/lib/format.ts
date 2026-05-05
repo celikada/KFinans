@@ -45,6 +45,7 @@ export const DASHBOARD_CARDS = [
   { id: "commodities", label: "Altın & Gümüş" },
   { id: "budget",      label: "Bütçe Takibi" },
   { id: "cash",        label: "Nakit / Banka" },
+  { id: "manualCrypto", label: "Manuel Kripto (API'siz)" },
 ] as const;
 
 export type DashboardCardId = typeof DASHBOARD_CARDS[number]["id"];
