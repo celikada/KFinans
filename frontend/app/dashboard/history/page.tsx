@@ -324,14 +324,15 @@ export default function HistoryPage() {
 
       {/* Silme onayı */}
       {confirmDelete && (
-        <button
-          type="button"
-          aria-label="Kapat"
+        <div
+          role="presentation"
           onClick={() => setConfirmDelete(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setConfirmDelete(null); }}
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
         >
           <div
             role="dialog"
+            aria-modal="true"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-sm w-full text-left cursor-default"
@@ -360,19 +361,20 @@ export default function HistoryPage() {
               </button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* Health issues popup */}
       {openIssues && (
-        <button
-          type="button"
-          aria-label="Kapat"
+        <div
+          role="presentation"
           onClick={() => setOpenIssues(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setOpenIssues(null); }}
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
         >
           <div
             role="dialog"
+            aria-modal="true"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
@@ -427,7 +429,7 @@ export default function HistoryPage() {
               Kapat
             </button>
           </div>
-        </button>
+        </div>
       )}
     </div>
   );

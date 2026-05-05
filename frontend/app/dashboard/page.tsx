@@ -530,14 +530,15 @@ export default function DashboardPage() {
 
       {/* Snapshot uyarı popup'ı */}
       {pendingIssues && (
-        <button
-          type="button"
-          aria-label="Kapat"
+        <div
+          role="presentation"
           onClick={() => setPendingIssues(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setPendingIssues(null); }}
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
         >
           <div
             role="dialog"
+            aria-modal="true"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
@@ -604,7 +605,7 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">
