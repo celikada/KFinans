@@ -300,6 +300,22 @@ export default function HistoryPage() {
                     )}
                     <button
                       type="button"
+                      onClick={() => api.downloadReport(`/portfolio/snapshot/${p.date}/report.xlsx`, `portfoy-${p.date}.xlsx`)}
+                      className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100"
+                      title="Excel olarak indir"
+                    >
+                      📊 xlsx
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => api.downloadReport(`/portfolio/snapshot/${p.date}/report.pdf`, `portfoy-${p.date}.pdf`)}
+                      className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100"
+                      title="PDF olarak indir"
+                    >
+                      📄 pdf
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setConfirmDelete(p.date)}
                       className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
                     >

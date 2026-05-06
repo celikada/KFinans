@@ -63,7 +63,7 @@ export default function CashFlowPage() {
       <PageHeader title="Nakit Akışı" />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        {/* Yıl seçici */}
+        {/* Yıl seçici + indir butonları */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
             {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
@@ -83,10 +83,26 @@ export default function CashFlowPage() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-400">
-            Geçmiş aylar gerçekleşen, gelecek aylar tahmin (recurring + planlı + taksit + ekstre).
-          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => api.downloadReport(`/cash-flow/report.xlsx?year=${year}`, `nakit-akis-${year}.xlsx`)}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              Excel İndir
+            </button>
+            <button
+              type="button"
+              onClick={() => api.downloadReport(`/cash-flow/report.pdf?year=${year}`, `nakit-akis-${year}.pdf`)}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+            >
+              PDF İndir
+            </button>
+          </div>
         </div>
+        <p className="text-xs text-gray-400">
+          Geçmiş aylar gerçekleşen, gelecek aylar tahmin (recurring + planlı + taksit + ekstre).
+        </p>
 
         {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
 

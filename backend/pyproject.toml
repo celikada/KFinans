@@ -25,6 +25,7 @@ dependencies = [
     "anthropic>=0.40",
     "python-multipart",
     "openpyxl>=3.1",
+    "reportlab>=4.0",
     "xlrd==1.2.0",
     "bip-utils>=2.9",
     "base58>=2.1",

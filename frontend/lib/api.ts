@@ -373,6 +373,22 @@ export const api = {
   // Yıllık nakit akış (geçmiş + gelecek)
   getCashFlow: (year: number) => request<CashFlowYearDTO>(`/cash-flow?year=${year}`),
 
+  // Rapor indirme yardımcısı (hem Excel hem PDF için)
+  downloadReport: async (path: string, filename: string) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Rapor indirilemedi");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
   setGoal: (amount: number, currency: GoalCurrency) =>

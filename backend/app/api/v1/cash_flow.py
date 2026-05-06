@@ -15,6 +15,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -261,4 +262,64 @@ async def get_cash_flow(
         total_income=total_income,
         total_expense=total_expense,
         total_net=total_income - total_expense,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rapor indirme endpoint'leri (Excel + PDF)
+# ---------------------------------------------------------------------------
+async def _build_cash_flow_data(year: int, current_user: User, db: AsyncSession):
+    """get_cash_flow ile aynı hesabı yapar, model'leri dict'e çevirir."""
+    result = await get_cash_flow(current_user, db, year)
+    months_dict = [
+        {
+            "month": m.month,
+            "income_actual": m.income_actual,
+            "income_forecast": m.income_forecast,
+            "expense_actual": m.expense_actual,
+            "expense_forecast": m.expense_forecast,
+            "net": m.net,
+            "is_past": m.is_past,
+        }
+        for m in result.months
+    ]
+    totals = {
+        "total_income": result.total_income,
+        "total_expense": result.total_expense,
+        "total_net": result.total_net,
+    }
+    return months_dict, totals
+
+
+@router.get("/report.xlsx")
+async def download_cash_flow_xlsx(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: int = Query(..., ge=2020, le=2100),
+):
+    """Yıllık nakit akış Excel raporu."""
+    from app.services.reports import cash_flow_to_xlsx
+    months, totals = await _build_cash_flow_data(year, current_user, db)
+    content = cash_flow_to_xlsx(year, months, totals)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=nakit-akis-{year}.xlsx"},
+    )
+
+
+@router.get("/report.pdf")
+async def download_cash_flow_pdf(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: int = Query(..., ge=2020, le=2100),
+):
+    """Yıllık nakit akış PDF raporu."""
+    from app.services.reports import cash_flow_to_pdf
+    months, totals = await _build_cash_flow_data(year, current_user, db)
+    content = cash_flow_to_pdf(year, months, totals)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=nakit-akis-{year}.pdf"},
     )

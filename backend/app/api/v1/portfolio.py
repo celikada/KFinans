@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,6 +128,59 @@ async def delete_snapshot(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot bulunamadı")
     await db.delete(snap)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Snapshot rapor indirme (Excel + PDF)
+# ---------------------------------------------------------------------------
+async def _load_snapshot_with_positions(snapshot_date: date, current_user: User, db: AsyncSession):
+    """Verilen tarihteki snapshot'i pozisyonlarıyla birlikte yükler."""
+    result = await db.execute(
+        select(PortfolioSnapshot)
+        .where(
+            PortfolioSnapshot.user_id == current_user.id,
+            PortfolioSnapshot.snapshot_date == snapshot_date,
+        )
+        .options(selectinload(PortfolioSnapshot.asset_positions))
+    )
+    snap = result.scalar_one_or_none()
+    if not snap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot bulunamadı")
+    return snap
+
+
+@router.get("/snapshot/{snapshot_date}/report.xlsx")
+async def download_snapshot_xlsx(
+    snapshot_date: date,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Belirli bir tarihteki snapshot için Excel raporu (tüm pozisyonlar)."""
+    from app.services.reports import snapshot_to_xlsx
+    snap = await _load_snapshot_with_positions(snapshot_date, current_user, db)
+    content = snapshot_to_xlsx(snap, list(snap.asset_positions))
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.xlsx"},
+    )
+
+
+@router.get("/snapshot/{snapshot_date}/report.pdf")
+async def download_snapshot_pdf(
+    snapshot_date: date,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Belirli bir tarihteki snapshot için PDF raporu."""
+    from app.services.reports import snapshot_to_pdf
+    snap = await _load_snapshot_with_positions(snapshot_date, current_user, db)
+    content = snapshot_to_pdf(snap, list(snap.asset_positions))
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.pdf"},
+    )
 
 
 @router.get("", response_model=SnapshotOut)
