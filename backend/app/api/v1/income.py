@@ -1,8 +1,13 @@
 import calendar
 import io
 import logging
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
+
+# Realize işlemlerinde "bugün" Türkiye saatine göre belirlenmeli — snapshot'la
+# tutarlı (backend Docker UTC'de çalışır).
+_ISTANBUL = ZoneInfo("Europe/Istanbul")
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -507,12 +512,24 @@ def _date_for_period(ri: RecurringIncome, year: int, month: int) -> date_type:
 
 async def _realize_one(
     db: AsyncSession, ri: RecurringIncome, year: int, month: int, user_id,
+    today: date_type | None = None,
 ) -> int | None:
     """Tek bir periyodik kayıt için verilen ay-yıl income oluşturur.
-    Zaten varsa None döner (skip), yoksa yeni income.id."""
+
+    Skip durumları (None döner):
+    - Periyot bu ay-yılı kapsamıyor (_applies_in_month False)
+    - Hedef tarih (year, month, day_of_month) BUGÜNDEN İLERİDE — ödeme günü
+      gelmediği için future-dated kayıt yaratılmaz
+    - Aynı (recurring, date) kombinasyonu için kayıt zaten var
+    """
     if not _applies_in_month(ri, year, month):
         return None
     target_date = _date_for_period(ri, year, month)
+    if today is None:
+        today = datetime.now(_ISTANBUL).date()
+    # Ödeme günü henüz gelmediyse atla — future-dated income yaratma
+    if target_date > today:
+        return None
     # Mevcut realize var mı? (unique constraint zaten engelliyor; integrity hatasını
     # önceden yakalamak için kontrol)
     existing_q = await db.execute(
@@ -559,7 +576,14 @@ async def realize_recurring_period(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Bu kayıt belirtilen ay-yılında geçerli değil (periyot dışı)",
         )
-    new_id = await _realize_one(db, ri, payload.year, payload.month, current_user.id)
+    today = datetime.now(_ISTANBUL).date()
+    target_date = _date_for_period(ri, payload.year, payload.month)
+    if target_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Ödeme günü ({target_date.isoformat()}) henüz gelmedi — gerçekleşti olarak işaretlenemez",
+        )
+    new_id = await _realize_one(db, ri, payload.year, payload.month, current_user.id, today=today)
     await db.commit()
     if new_id is None:
         return RealizeResult(realized=0, skipped=1, income_ids=[])
@@ -583,15 +607,16 @@ async def realize_recurring_past(
     if not ri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
 
-    today = date_type.today()
+    today = datetime.now(_ISTANBUL).date()
     realized_ids: list[int] = []
     skipped = 0
-    # Start'tan bugüne kadar her ayı tara
+    # Start'tan bugüne kadar her ayı tara (ödeme günü henüz gelmemiş aylar atlanır)
     y, m = ri.start_date.year, ri.start_date.month
     while date_type(y, m, 1) <= today:
-        new_id = await _realize_one(db, ri, y, m, current_user.id)
+        new_id = await _realize_one(db, ri, y, m, current_user.id, today=today)
         if new_id is None:
-            if _applies_in_month(ri, y, m):
+            # Sadece "applies + ödeme günü geçmiş + zaten var" durumu skipped
+            if _applies_in_month(ri, y, m) and _date_for_period(ri, y, m) <= today:
                 skipped += 1
         else:
             realized_ids.append(new_id)
@@ -615,15 +640,15 @@ async def realize_all_recurring_past(
     )
     all_ri = result.scalars().all()
 
-    today = date_type.today()
+    today = datetime.now(_ISTANBUL).date()
     realized_ids: list[int] = []
     skipped = 0
     for ri in all_ri:
         y, m = ri.start_date.year, ri.start_date.month
         while date_type(y, m, 1) <= today:
-            new_id = await _realize_one(db, ri, y, m, current_user.id)
+            new_id = await _realize_one(db, ri, y, m, current_user.id, today=today)
             if new_id is None:
-                if _applies_in_month(ri, y, m):
+                if _applies_in_month(ri, y, m) and _date_for_period(ri, y, m) <= today:
                     skipped += 1
             else:
                 realized_ids.append(new_id)
