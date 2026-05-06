@@ -204,17 +204,44 @@ async def get_current_portfolio(
 @router.get("/history", response_model=list[SnapshotOut])
 async def get_portfolio_history(
     limit: int = 12,
+    year: int | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    """Snapshot geçmişi.
+
+    `year` verilirse o yılın tüm snapshot'ları döner (limit yine de uygulanır).
+    `year` boşsa en son N snapshot.
+    """
+    stmt = (
         select(PortfolioSnapshot)
         .where(PortfolioSnapshot.user_id == current_user.id)
         .options(selectinload(PortfolioSnapshot.asset_positions))
         .order_by(desc(PortfolioSnapshot.snapshot_date))
-        .limit(limit)
     )
+    if year is not None:
+        stmt = stmt.where(
+            PortfolioSnapshot.snapshot_date >= date(year, 1, 1),
+            PortfolioSnapshot.snapshot_date <= date(year, 12, 31),
+        )
+    result = await db.execute(stmt.limit(limit))
     return result.scalars().all()
+
+
+@router.get("/history/years", response_model=list[int])
+async def get_portfolio_history_years(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kullanıcının snapshot'larının olduğu yılların listesi (yeni → eski)."""
+    from sqlalchemy import extract
+    result = await db.execute(
+        select(extract("year", PortfolioSnapshot.snapshot_date).label("y"))
+        .where(PortfolioSnapshot.user_id == current_user.id)
+        .group_by("y")
+        .order_by(desc("y"))
+    )
+    return [int(row[0]) for row in result.all()]
 
 
 @router.get("/changes", response_model=PortfolioChanges)

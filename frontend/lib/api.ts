@@ -137,8 +137,13 @@ export const api = {
       { method: "POST" }
     ),
 
-  getPortfolioHistory: (limit = 12) =>
-    request<SnapshotHistoryDTO[]>(`/portfolio/history?limit=${limit}`),
+  getPortfolioHistory: (params: { limit?: number; year?: number } = {}) => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(params.limit ?? 100));
+    if (params.year !== undefined) qs.set("year", String(params.year));
+    return request<SnapshotHistoryDTO[]>(`/portfolio/history?${qs}`);
+  },
+  getPortfolioHistoryYears: () => request<number[]>("/portfolio/history/years"),
 
   deleteSnapshot: (snapshotDate: string) =>
     request<void>(`/portfolio/snapshot/${snapshotDate}`, { method: "DELETE" }),

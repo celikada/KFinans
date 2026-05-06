@@ -76,6 +76,8 @@ export default function HistoryPage() {
   const [openIssues, setOpenIssues] = useState<{ date: string; issues: SnapshotHealthIssue[] } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number | "all">("all");
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
@@ -84,7 +86,15 @@ export default function HistoryPage() {
       router.replace("/login");
       return;
     }
-    api.getPortfolioHistory(12)
+    api.getPortfolioHistoryYears().then(setAvailableYears).catch(() => {});
+  }, [router]);
+
+  useEffect(() => {
+    if (!localStorage.getItem("access_token")) return;
+    setLoading(true);
+    const params: { limit?: number; year?: number } = { limit: 365 };
+    if (selectedYear !== "all") params.year = selectedYear;
+    api.getPortfolioHistory(params)
       .then((snapshots) => {
         const sorted = [...snapshots].sort((a, b) =>
           a.snapshot_date.localeCompare(b.snapshot_date)
@@ -99,7 +109,7 @@ export default function HistoryPage() {
         setError(err instanceof Error ? err.message : "Geçmiş yüklenemedi");
       })
       .finally(() => setLoading(false));
-  }, [router, handle401]);
+  }, [selectedYear, handle401]);
 
   const latest = points.length > 0 ? points[points.length - 1] : null;
 
@@ -142,8 +152,27 @@ export default function HistoryPage() {
           ← Geri
         </button>
         <h1 className="text-lg font-semibold text-gray-900">Portföy Geçmişi</h1>
+
+        {/* Yıl seçici */}
+        {availableYears.length > 0 && (
+          <select
+            value={selectedYear}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedYear(v === "all" ? "all" : parseInt(v));
+            }}
+            className="ml-auto text-xs px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-700 hover:border-gray-300"
+            aria-label="Yıl filtresi"
+          >
+            <option value="all">Tüm yıllar</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
+
         {/* TL/USD toggle */}
-        <div className="ml-auto inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+        <div className={`${availableYears.length > 0 ? "" : "ml-auto"} inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs`}>
           {(["TRY", "USD"] as Currency[]).map((c) => (
             <button
               key={c}
