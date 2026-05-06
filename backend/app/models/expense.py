@@ -3,7 +3,7 @@ from datetime import date as date_type, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +31,14 @@ class Expense(Base):
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     date: Mapped[date_type] = mapped_column(Date, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Opsiyonel: harcama bir kredi kartından yapıldıysa kart ID'si.
+    # Boş = nakit/banka. Çift sayım kuralı için kullanılır.
+    credit_card_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("credit_cards.id", ondelete="SET NULL"), nullable=True, index=True,
+    )
+    # Harcama gerçekleşti mi? (default=true; planlı kayıttan dönüştürülen
+    # nadir senaryolarda false olabilir.)
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

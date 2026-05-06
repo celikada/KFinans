@@ -60,7 +60,17 @@ export function ExpenseTable({ expenses, onDeleted }: Props) {
                 {EXPENSE_CATEGORY_LABELS[exp.category] ?? exp.category}
               </td>
               <td className="px-6 py-3 text-gray-500 truncate max-w-xs">
-                {exp.description ?? <span className="text-gray-300">—</span>}
+                <span className="flex items-center gap-2 flex-wrap">
+                  {exp.credit_card_id && (
+                    <span
+                      className="text-[10px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded"
+                      title="Bu harcama kredi kartından yapıldı — gider toplamına dahil edilmez (kart borcuyla zaten sayılır)"
+                    >
+                      💳 kart
+                    </span>
+                  )}
+                  {exp.description ?? <span className="text-gray-300">—</span>}
+                </span>
               </td>
               <td className="px-6 py-3 text-right font-semibold text-gray-900">
                 {fmtTL(exp.amount)} ₺

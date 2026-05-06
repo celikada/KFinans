@@ -727,6 +727,8 @@ export interface ExpenseInput {
   category: ExpenseCategory;
   date: string;        // YYYY-MM-DD
   description?: string | null;
+  credit_card_id?: number | null;
+  is_paid?: boolean;
 }
 
 export interface ExpenseDTO {
@@ -735,6 +737,8 @@ export interface ExpenseDTO {
   category: ExpenseCategory;
   date: string;
   description: string | null;
+  credit_card_id?: number | null;
+  is_paid?: boolean;
 }
 
 export interface CategoryBreakdownDTO {
@@ -1121,6 +1125,8 @@ export interface PlannedExpenseInput {
   end_date?: string | null;
   remaining_count?: number | null;
   notes?: string | null;
+  credit_card_id?: number | null;
+  is_paid?: boolean;
 }
 
 export interface PlannedExpenseDTO {
@@ -1136,6 +1142,8 @@ export interface PlannedExpenseDTO {
   end_date: string | null;
   remaining_count: number | null;
   notes: string | null;
+  credit_card_id?: number | null;
+  is_paid?: boolean;
 }
 
 export interface ForecastItemDTO {

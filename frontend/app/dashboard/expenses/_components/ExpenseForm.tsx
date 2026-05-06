@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
+  CreditCardDTO,
   ExpenseCategory,
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
@@ -17,13 +18,20 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ExpenseForm({ onAdded }: Props) {
+export function ExpenseForm({ onAdded }: Readonly<Props>) {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("groceries");
   const [date, setDate] = useState(todayIso());
   const [description, setDescription] = useState("");
+  const [creditCardId, setCreditCardId] = useState<string>("");  // "" = nakit
+  const [cards, setCards] = useState<CreditCardDTO[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Mevcut kartları çek (tek seferlik)
+  useEffect(() => {
+    api.listCreditCards().then((s) => setCards(s.cards)).catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,10 +45,13 @@ export function ExpenseForm({ onAdded }: Props) {
         category,
         date,
         description: description.trim() || null,
+        credit_card_id: creditCardId ? parseInt(creditCardId) : null,
+        is_paid: true,  // gerçekleşmiş harcama varsayılır
       });
       onAdded(added);
       setAmount("");
       setDescription("");
+      setCreditCardId("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eklenemedi");
     } finally {
@@ -97,6 +108,28 @@ export function ExpenseForm({ onAdded }: Props) {
           />
         </div>
       </div>
+
+      {/* Kredi kartı seçimi (opsiyonel) */}
+      {cards.length > 0 && (
+        <div className="mt-3">
+          <label className="block text-xs text-gray-500 mb-1">
+            Ödeme yöntemi
+            <span className="ml-1 text-[10px] text-gray-400">(kart seçilirse bu harcama gider toplamına dahil edilmez — kart borcuyla zaten sayılır)</span>
+          </label>
+          <select
+            value={creditCardId}
+            onChange={(e) => setCreditCardId(e.target.value)}
+            className={`w-full sm:w-1/2 ${INPUT_CLS}`}
+          >
+            <option value="">Nakit / Banka transferi</option>
+            {cards.map((c) => (
+              <option key={c.id} value={c.id}>
+                💳 {c.name}{c.last_4 ? ` (**** ${c.last_4})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && (
         <p className="mt-3 text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>

@@ -42,6 +42,8 @@ class PlannedExpenseCreate(BaseModel):
     end_date: Optional[date_type] = None
     remaining_count: Optional[int] = Field(default=None, ge=1)
     notes: Optional[str] = Field(default=None, max_length=500)
+    credit_card_id: Optional[int] = None
+    is_paid: bool = False
 
 
 class PlannedExpenseUpdate(BaseModel):
@@ -56,6 +58,8 @@ class PlannedExpenseUpdate(BaseModel):
     end_date: Optional[date_type] = None
     remaining_count: Optional[int] = Field(default=None, ge=1)
     notes: Optional[str] = Field(default=None, max_length=500)
+    credit_card_id: Optional[int] = None
+    is_paid: Optional[bool] = None
 
 
 class PlannedExpenseOut(BaseModel):
@@ -65,12 +69,14 @@ class PlannedExpenseOut(BaseModel):
     is_estimated: bool
     category: str
     recurrence: str
-    months: Optional[list[int]]
+    months: Optional[list[int]] = None
     day_of_month: int
     start_date: date_type
-    end_date: Optional[date_type]
-    remaining_count: Optional[int]
-    notes: Optional[str]
+    end_date: Optional[date_type] = None
+    remaining_count: Optional[int] = None
+    notes: Optional[str] = None
+    credit_card_id: Optional[int] = None
+    is_paid: bool = False
 
     model_config = {"from_attributes": True}
 

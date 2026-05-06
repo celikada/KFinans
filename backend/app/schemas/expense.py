@@ -31,6 +31,8 @@ class ExpenseCreate(BaseModel):
     category: ExpenseCategory
     date: date_type
     description: Optional[str] = Field(default=None, max_length=500)
+    credit_card_id: Optional[int] = None
+    is_paid: bool = True
 
 
 class ExpenseUpdate(BaseModel):
@@ -39,6 +41,8 @@ class ExpenseUpdate(BaseModel):
     category: Optional[ExpenseCategory] = None
     date: Optional[date_type] = None
     description: Optional[str] = Field(default=None, max_length=500)
+    credit_card_id: Optional[int] = None
+    is_paid: Optional[bool] = None
 
 
 class ExpenseOut(BaseModel):
@@ -46,7 +50,9 @@ class ExpenseOut(BaseModel):
     amount: Decimal
     category: str
     date: date_type
-    description: Optional[str]
+    description: Optional[str] = None
+    credit_card_id: Optional[int] = None
+    is_paid: bool = True
 
     model_config = {"from_attributes": True}
 

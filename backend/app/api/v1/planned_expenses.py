@@ -93,6 +93,8 @@ async def create_planned_expense(
         end_date=end_date,
         remaining_count=payload.remaining_count,
         notes=payload.notes.strip() if payload.notes else None,
+        credit_card_id=payload.credit_card_id,
+        is_paid=payload.is_paid,
     )
     db.add(pe)
     await db.commit()
@@ -120,10 +122,14 @@ async def update_planned_expense(
     for field in (
         "title", "amount", "is_estimated", "category", "recurrence",
         "months", "day_of_month", "start_date", "end_date", "remaining_count", "notes",
+        "is_paid",
     ):
         val = getattr(payload, field)
         if val is not None:
             setattr(pe, field, val)
+    # credit_card_id: None set edebilmek için explicit kontrol
+    if "credit_card_id" in payload.model_fields_set:
+        pe.credit_card_id = payload.credit_card_id
 
     await db.commit()
     await db.refresh(pe)

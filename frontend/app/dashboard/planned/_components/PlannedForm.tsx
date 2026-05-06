@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
+  CreditCardDTO,
   PlannedExpenseInput,
   PlannedExpenseDTO,
   PLANNED_CATEGORIES,
@@ -18,7 +19,7 @@ interface Props {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-export function PlannedForm({ onAdded }: Props) {
+export function PlannedForm({ onAdded }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -34,6 +35,13 @@ export function PlannedForm({ onAdded }: Props) {
   const [dayOfMonth, setDayOfMonth] = useState("1");
   const [customMonths, setCustomMonths] = useState<number[]>([]);
   const [notes, setNotes] = useState("");
+  const [creditCardId, setCreditCardId] = useState<string>("");
+  const [isPaid, setIsPaid] = useState(false);
+  const [cards, setCards] = useState<CreditCardDTO[]>([]);
+
+  useEffect(() => {
+    api.listCreditCards().then((s) => setCards(s.cards)).catch(() => {});
+  }, []);
 
   function toggleMonth(m: number) {
     setCustomMonths((prev) =>
@@ -58,12 +66,15 @@ export function PlannedForm({ onAdded }: Props) {
         remaining_count: remainingCount ? parseInt(remainingCount) : null,
         months: recurrence === "custom" ? customMonths : null,
         notes: notes.trim() || null,
+        credit_card_id: creditCardId ? parseInt(creditCardId) : null,
+        is_paid: isPaid,
       };
       const result = await api.createPlannedExpense(payload);
       onAdded(result);
       // reset
       setTitle(""); setAmount(""); setNotes(""); setEndDate(""); setRemainingCount("");
       setIsEstimated(false); setCustomMonths([]); setOpen(false);
+      setCreditCardId(""); setIsPaid(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kaydedilemedi");
     } finally {
@@ -234,6 +245,45 @@ export function PlannedForm({ onAdded }: Props) {
                 Tutar tahmini (kesin değil)
               </label>
             </div>
+
+            {/* Kredi kartı + ödendi durumu */}
+            {cards.length > 0 && (
+              <div className="sm:col-span-2 space-y-2">
+                <div>
+                  <label htmlFor="credit_card" className="block text-xs text-gray-500 mb-1">
+                    Ödeme yöntemi
+                    <span className="ml-1 text-[10px] text-gray-400">
+                      (kart seçilirse + ödenmediyse → gider olarak sayılır; ödendiyse kart borcu sayar)
+                    </span>
+                  </label>
+                  <select
+                    id="credit_card"
+                    value={creditCardId}
+                    onChange={(e) => setCreditCardId(e.target.value)}
+                    className={INPUT_CLS}
+                  >
+                    <option value="">Nakit / Banka transferi</option>
+                    {cards.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        💳 {c.name}{c.last_4 ? ` (**** ${c.last_4})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_paid"
+                    checked={isPaid}
+                    onChange={(e) => setIsPaid(e.target.checked)}
+                    className="rounded"
+                  />
+                  <label htmlFor="is_paid" className="text-xs text-gray-500">
+                    Yapıldı / ödendi (varsayılan: planlı, henüz yapılmadı)
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-red-500">{error}</p>}

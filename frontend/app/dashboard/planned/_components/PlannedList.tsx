@@ -43,6 +43,19 @@ export function PlannedList({ items, onDeleted }: Props) {
                     tahmini
                   </span>
                 )}
+                {pe.credit_card_id && (
+                  <span
+                    className="text-[10px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded"
+                    title="Kredi kartından yapılacak"
+                  >
+                    💳 kart
+                  </span>
+                )}
+                {pe.is_paid && (
+                  <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded">
+                    ✓ ödendi
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-400">
                 <span>{PLANNED_CATEGORY_LABELS[pe.category] ?? pe.category}</span>

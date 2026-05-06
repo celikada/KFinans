@@ -78,6 +78,8 @@ async def create_expense(
         category=payload.category,
         date=payload.date,
         description=payload.description.strip() if payload.description else None,
+        credit_card_id=payload.credit_card_id,
+        is_paid=payload.is_paid,
     )
     db.add(expense)
     await db.commit()
@@ -110,6 +112,13 @@ async def update_expense(
         expense.date = payload.date
     if payload.description is not None:
         expense.description = payload.description.strip() or None
+    # credit_card_id: None değeri "kart bağlantısını kaldır" anlamına gelmesi için
+    # özel handling — payload'da explicit "credit_card_id" yoksa atla, varsa None bile
+    # set edilebilir. Pydantic model_fields_set ile kontrol.
+    if "credit_card_id" in payload.model_fields_set:
+        expense.credit_card_id = payload.credit_card_id
+    if payload.is_paid is not None:
+        expense.is_paid = payload.is_paid
 
     await db.commit()
     await db.refresh(expense)
