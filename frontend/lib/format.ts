@@ -43,6 +43,7 @@ export const DASHBOARD_CARDS = [
   { id: "commodities",  label: "Altın & Gümüş",             group: "portfolio" },
   { id: "cash",         label: "Nakit / Banka",             group: "portfolio" },
   // Finans grubu
+  { id: "creditCards",  label: "Kredi Kartları",             group: "finance" },
   { id: "income",       label: "Gelirler",                  group: "finance" },
   { id: "expenses",     label: "Harcamalar",                group: "finance" },
   { id: "planned",      label: "Planlı Harcamalar",         group: "finance" },

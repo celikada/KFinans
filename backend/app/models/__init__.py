@@ -8,6 +8,7 @@ from app.models.commodity import CommodityHolding
 from app.models.cash import CashHolding
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.recurring_income import RecurringIncome
+from app.models.credit_card import CreditCard
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "CashHolding",
     "ManualCryptoHolding",
     "RecurringIncome",
+    "CreditCard",
 ]

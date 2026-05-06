@@ -65,6 +65,10 @@ export default function DashboardPage() {
   // Gelir (bu ay)
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
   const [incomeYearEstimate, setIncomeYearEstimate] = useState<number | null>(null);
+
+  // Kredi kartları (toplam dönem içi borç)
+  const [creditCardDebt, setCreditCardDebt] = useState<number | null>(null);
+  const [creditCardCount, setCreditCardCount] = useState(0);
   const [incomeCount, setIncomeCount] = useState(0);
   const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
 
@@ -175,6 +179,12 @@ export default function DashboardPage() {
     api.getIncomeDashboard(now.getFullYear(), now.getMonth() + 1).then((d) => {
       const est = parseFloat(d.year_total_estimate);
       if (est > 0) setIncomeYearEstimate(est);
+    }).catch(() => {});
+
+    api.listCreditCards().then((s) => {
+      const debt = parseFloat(s.total_current_period_debt);
+      setCreditCardDebt(debt);
+      setCreditCardCount(s.cards.length);
     }).catch(() => {});
 
     api.getCommodities().then((s) => {
@@ -483,6 +493,20 @@ export default function DashboardPage() {
         <section className="space-y-3 mt-8">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Finans</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {!hiddenCards.includes("creditCards") && (
+              <Card
+                href="/dashboard/credit-cards"
+                icon="creditCard"
+                color="red"
+                title="Kredi Kartları"
+                total={creditCardDebt}
+                count={creditCardCount}
+                countLabel="kart"
+                top={[]}
+                placeholder="Kart tanımı + dönem içi borç"
+              />
+            )}
+
             {!hiddenCards.includes("income") && (
               <Card
                 href="/dashboard/income"
@@ -646,7 +670,7 @@ const COLOR_MAP: Record<string, { bg: string; border: string; text: string; acce
   amber:   { bg: "bg-amber-50",   border: "hover:border-amber-200",   text: "text-amber-600",   accent: "bg-amber-500" },
 };
 
-type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget" | "cash";
+type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget" | "cash" | "creditCard";
 
 const ICONS: Record<IconName, React.ReactNode> = {
   tefas: (
@@ -731,6 +755,14 @@ const ICONS: Record<IconName, React.ReactNode> = {
       <rect x="2" y="6" width="20" height="12" rx="2" />
       <circle cx="12" cy="12" r="2" />
       <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  ),
+  creditCard: (
+    // Kredi kartı — chip ile birlikte
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+      <rect x="5" y="13" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
     </svg>
   ),
 };

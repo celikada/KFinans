@@ -569,6 +569,15 @@ export const api = {
     return request<AssetCatalogItem[]>(`/asset-catalog${qs.toString() ? `?${qs}` : ""}`);
   },
 
+  // Kredi kartları (Faz 3 — manuel giriş)
+  listCreditCards: () => request<CreditCardSummaryDTO>("/credit-cards"),
+  createCreditCard: (payload: CreditCardInput) =>
+    request<CreditCardDTO>("/credit-cards", { method: "POST", body: JSON.stringify(payload) }),
+  updateCreditCard: (id: number, payload: Partial<CreditCardInput>) =>
+    request<CreditCardDTO>(`/credit-cards/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteCreditCard: (id: number) =>
+    request<void>(`/credit-cards/${id}`, { method: "DELETE" }),
+
   importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
     const token = getToken();
     const form = new FormData();
@@ -927,6 +936,37 @@ export interface RealizeResultDTO {
   realized: number;
   skipped: number;
   income_ids: number[];
+}
+
+// Kredi kartları (Faz 3 — manuel giriş)
+export interface CreditCardInput {
+  name: string;
+  bank_name?: string | null;
+  last_4?: string | null;
+  credit_limit?: number | string | null;
+  statement_day: number;
+  payment_due_day: number;
+  current_period_debt?: number | string;
+  notes?: string | null;
+}
+
+export interface CreditCardDTO {
+  id: number;
+  name: string;
+  bank_name: string | null;
+  last_4: string | null;
+  credit_limit: string | null;
+  statement_day: number;
+  payment_due_day: number;
+  current_period_debt: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreditCardSummaryDTO {
+  cards: CreditCardDTO[];
+  total_current_period_debt: string;
 }
 
 export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";
