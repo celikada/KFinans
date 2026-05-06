@@ -1,4 +1,5 @@
 """Kredi kartı CRUD endpoint'leri: tanım + dönem içi borç + ekstre + taksit."""
+from datetime import date as date_type
 from decimal import Decimal
 from typing import Annotated
 
@@ -253,6 +254,23 @@ async def delete_statement(
 # ---------------------------------------------------------------------------
 # Taksit endpoint'leri
 # ---------------------------------------------------------------------------
+def _calc_monthly(total: Decimal, count: int) -> Decimal:
+    """total / count → 2 ondalık. count=0 yasak (validator zaten engeller)."""
+    return (total / Decimal(count)).quantize(Decimal("0.01"))
+
+
+def _calc_remaining(first_due: date_type, total_count: int) -> int:
+    """first_due'dan bugüne kaç taksit geçti, kalan = total - geçen.
+    Bugün < first_due ise hepsi kalan; geçmiş > total ise 0."""
+    from app.api.v1.income import _ISTANBUL  # Istanbul tz reuse
+    from datetime import datetime as _dt
+    today = _dt.now(_ISTANBUL).date()
+    if today < first_due:
+        return total_count
+    months_passed = (today.year - first_due.year) * 12 + (today.month - first_due.month) + 1
+    return max(0, total_count - months_passed)
+
+
 @router.post("/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
 async def create_installment(
     card_id: int,
@@ -261,18 +279,15 @@ async def create_installment(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     await _get_owned_card(card_id, current_user, db)
-    if payload.installments_remaining > payload.installments_total:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="installments_remaining, installments_total'dan büyük olamaz",
-        )
+    monthly = _calc_monthly(payload.total_amount, payload.installments_total)
+    remaining = _calc_remaining(payload.first_due_date, payload.installments_total)
     inst = CreditCardInstallment(
         card_id=card_id,
         description=payload.description,
         total_amount=payload.total_amount,
-        monthly_amount=payload.monthly_amount,
+        monthly_amount=monthly,
         installments_total=payload.installments_total,
-        installments_remaining=payload.installments_remaining,
+        installments_remaining=remaining,
         first_due_date=payload.first_due_date,
         notes=payload.notes,
     )
@@ -300,16 +315,13 @@ async def update_installment(
     inst = result.scalar_one_or_none()
     if not inst:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Taksit bulunamadı")
-    for attr in ("description", "total_amount", "monthly_amount",
-                 "installments_total", "installments_remaining", "first_due_date", "notes"):
+    for attr in ("description", "total_amount", "installments_total", "first_due_date", "notes"):
         v = getattr(payload, attr)
         if v is not None:
             setattr(inst, attr, v)
-    if inst.installments_remaining > inst.installments_total:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="installments_remaining, installments_total'dan büyük olamaz",
-        )
+    # Otomatik hesaplama: monthly + remaining
+    inst.monthly_amount = _calc_monthly(Decimal(inst.total_amount), inst.installments_total)
+    inst.installments_remaining = _calc_remaining(inst.first_due_date, inst.installments_total)
     await db.commit()
     await db.refresh(inst)
     return inst

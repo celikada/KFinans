@@ -41,7 +41,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PageHeader title="Kart Detayı" />
+        <PageHeader title="Kart Detayı" back="/dashboard/credit-cards" />
         <p className="text-sm text-gray-400 text-center py-12">Yükleniyor...</p>
       </div>
     );
@@ -49,7 +49,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PageHeader title="Kart Detayı" />
+        <PageHeader title="Kart Detayı" back="/dashboard/credit-cards" />
         <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl mx-6 my-6">{error}</p>
       </div>
     );
@@ -63,7 +63,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title={c.name} />
+      <PageHeader title={c.name} back="/dashboard/credit-cards" />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Üst panel */}
@@ -260,9 +260,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
   const [editing, setEditing] = useState<InstallmentDTO | null>(null);
   const [description, setDescription] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
-  const [monthlyAmount, setMonthlyAmount] = useState("");
   const [total, setTotal] = useState("12");
-  const [remaining, setRemaining] = useState("12");
   const [firstDue, setFirstDue] = useState(TODAY);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -270,7 +268,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
 
   function reset() {
     setEditing(null);
-    setDescription(""); setTotalAmount(""); setMonthlyAmount(""); setTotal("12"); setRemaining("12");
+    setDescription(""); setTotalAmount(""); setTotal("12");
     setFirstDue(TODAY); setNotes(""); setErr("");
   }
 
@@ -278,9 +276,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     setEditing(i);
     setDescription(i.description);
     setTotalAmount(i.total_amount);
-    setMonthlyAmount(i.monthly_amount);
     setTotal(i.installments_total.toString());
-    setRemaining(i.installments_remaining.toString());
     setFirstDue(i.first_due_date);
     setNotes(i.notes ?? "");
   }
@@ -293,9 +289,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
       const payload: InstallmentInput = {
         description: description.trim(),
         total_amount: parseFloat(totalAmount),
-        monthly_amount: parseFloat(monthlyAmount),
         installments_total: parseInt(total),
-        installments_remaining: parseInt(remaining),
         first_due_date: firstDue,
         notes: notes.trim() || null,
       };
@@ -312,6 +306,13 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
       setSaving(false);
     }
   }
+
+  // Aylık tutar canlı hesaplama (form preview)
+  const totalNum = parseFloat(totalAmount);
+  const totalCount = parseInt(total) || 0;
+  const monthlyPreview = totalNum > 0 && totalCount > 0
+    ? (totalNum / totalCount).toFixed(2)
+    : null;
 
   async function handleDelete(i: InstallmentDTO) {
     if (!confirm(`"${i.description}" taksiti silinsin mi?`)) return;
@@ -341,13 +342,16 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
           onChange={(e) => setDescription(e.target.value)} maxLength={200}
           className={INPUT_CLS}
         />
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          <input type="number" placeholder="Toplam (TL)" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
-          <input type="number" placeholder="Aylık (TL)" value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
-          <input type="number" placeholder="Toplam taksit" value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
-          <input type="number" placeholder="Kalan taksit" value={remaining} onChange={(e) => setRemaining(e.target.value)} min="0" max="120" className={INPUT_CLS} />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <input type="number" placeholder="Toplam tutar (TL)" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
+          <input type="number" placeholder="Taksit sayısı" value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
           <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={INPUT_CLS} title="İlk taksit tarihi" />
         </div>
+        {monthlyPreview && (
+          <p className="text-xs text-gray-500">
+            Aylık: <span className="font-semibold text-gray-700">{monthlyPreview} ₺</span> · Kalan taksit ilk vadeye göre otomatik hesaplanır.
+          </p>
+        )}
         <input
           placeholder="Notlar (ops.)" value={notes} onChange={(e) => setNotes(e.target.value)}
           className={INPUT_CLS} maxLength={500}

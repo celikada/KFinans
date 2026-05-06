@@ -101,9 +101,7 @@ class StatementOut(BaseModel):
 class InstallmentCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=200)
     total_amount: Decimal = Field(..., gt=0, le=Decimal("999999999999.99"))
-    monthly_amount: Decimal = Field(..., gt=0, le=Decimal("999999999999.99"))
     installments_total: int = Field(..., ge=1, le=120)
-    installments_remaining: int = Field(..., ge=0, le=120)
     first_due_date: date_type
     notes: Optional[str] = Field(default=None, max_length=500)
 
@@ -111,9 +109,7 @@ class InstallmentCreate(BaseModel):
 class InstallmentUpdate(BaseModel):
     description: Optional[str] = Field(default=None, min_length=1, max_length=200)
     total_amount: Optional[Decimal] = Field(default=None, gt=0, le=Decimal("999999999999.99"))
-    monthly_amount: Optional[Decimal] = Field(default=None, gt=0, le=Decimal("999999999999.99"))
     installments_total: Optional[int] = Field(default=None, ge=1, le=120)
-    installments_remaining: Optional[int] = Field(default=None, ge=0, le=120)
     first_due_date: Optional[date_type] = None
     notes: Optional[str] = Field(default=None, max_length=500)
 

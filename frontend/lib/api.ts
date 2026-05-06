@@ -1018,12 +1018,12 @@ export interface StatementDTO {
 }
 
 // Taksit
+// monthly_amount + installments_remaining backend'de otomatik hesaplanır
+// (total / count = monthly; first_due_date'ten bugüne kalan = remaining).
 export interface InstallmentInput {
   description: string;
   total_amount: number | string;
-  monthly_amount: number | string;
   installments_total: number;
-  installments_remaining: number;
   first_due_date: string;
   notes?: string | null;
 }
