@@ -1,5 +1,5 @@
-"""Kredi kartı şemaları (tanım + dönem içi borç)."""
-from datetime import datetime
+"""Kredi kartı şemaları (tanım + dönem içi borç + ekstre + taksit)."""
+from datetime import date as date_type, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -57,3 +57,84 @@ class CreditCardSummaryOut(BaseModel):
     """Tüm kartların özet bilgisi (dashboard kartı için)."""
     cards: list[CreditCardOut]
     total_current_period_debt: Decimal  # tüm kartların dönem içi borç toplamı
+
+
+# ---------------------------------------------------------------------------
+# Aylık ekstreler
+# ---------------------------------------------------------------------------
+class StatementCreate(BaseModel):
+    period_year: int = Field(..., ge=2020, le=2100)
+    period_month: int = Field(..., ge=1, le=12)
+    statement_amount: Decimal = Field(..., ge=0, le=Decimal("999999999999.99"))
+    statement_date: date_type
+    due_date: date_type
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class StatementUpdate(BaseModel):
+    statement_amount: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
+    statement_date: Optional[date_type] = None
+    due_date: Optional[date_type] = None
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class StatementOut(BaseModel):
+    id: int
+    card_id: int
+    period_year: int
+    period_month: int
+    statement_amount: Decimal
+    statement_date: date_type
+    due_date: date_type
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Gelecek taksitler
+# ---------------------------------------------------------------------------
+class InstallmentCreate(BaseModel):
+    description: str = Field(..., min_length=1, max_length=200)
+    total_amount: Decimal = Field(..., gt=0, le=Decimal("999999999999.99"))
+    monthly_amount: Decimal = Field(..., gt=0, le=Decimal("999999999999.99"))
+    installments_total: int = Field(..., ge=1, le=120)
+    installments_remaining: int = Field(..., ge=0, le=120)
+    first_due_date: date_type
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class InstallmentUpdate(BaseModel):
+    description: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    total_amount: Optional[Decimal] = Field(default=None, gt=0, le=Decimal("999999999999.99"))
+    monthly_amount: Optional[Decimal] = Field(default=None, gt=0, le=Decimal("999999999999.99"))
+    installments_total: Optional[int] = Field(default=None, ge=1, le=120)
+    installments_remaining: Optional[int] = Field(default=None, ge=0, le=120)
+    first_due_date: Optional[date_type] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class InstallmentOut(BaseModel):
+    id: int
+    card_id: int
+    description: str
+    total_amount: Decimal
+    monthly_amount: Decimal
+    installments_total: int
+    installments_remaining: int
+    first_due_date: date_type
+    notes: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CardDetailOut(BaseModel):
+    """Bir kartın tüm detayı: kart bilgisi + ekstreler + taksitler."""
+    card: CreditCardOut
+    statements: list[StatementOut]
+    installments: list[InstallmentOut]

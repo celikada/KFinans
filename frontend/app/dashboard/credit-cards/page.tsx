@@ -291,6 +291,13 @@ export default function CreditCardsPage() {
                         <div className="flex items-center gap-2 justify-end">
                           <button
                             type="button"
+                            onClick={() => router.push(`/dashboard/credit-cards/${c.id}`)}
+                            className="text-xs px-2 py-1 rounded text-rose-700 border border-rose-200 hover:bg-rose-50"
+                          >
+                            Ekstre / Taksit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => startEdit(c)}
                             className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
                           >

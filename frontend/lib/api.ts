@@ -577,6 +577,30 @@ export const api = {
     request<CreditCardDTO>(`/credit-cards/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteCreditCard: (id: number) =>
     request<void>(`/credit-cards/${id}`, { method: "DELETE" }),
+  getCreditCardDetail: (id: number) =>
+    request<CreditCardDetailDTO>(`/credit-cards/${id}`),
+  // Ekstreler
+  createStatement: (cardId: number, payload: StatementInput) =>
+    request<StatementDTO>(`/credit-cards/${cardId}/statements`, {
+      method: "POST", body: JSON.stringify(payload),
+    }),
+  updateStatement: (cardId: number, statementId: number, payload: Partial<StatementInput>) =>
+    request<StatementDTO>(`/credit-cards/${cardId}/statements/${statementId}`, {
+      method: "PUT", body: JSON.stringify(payload),
+    }),
+  deleteStatement: (cardId: number, statementId: number) =>
+    request<void>(`/credit-cards/${cardId}/statements/${statementId}`, { method: "DELETE" }),
+  // Taksitler
+  createInstallment: (cardId: number, payload: InstallmentInput) =>
+    request<InstallmentDTO>(`/credit-cards/${cardId}/installments`, {
+      method: "POST", body: JSON.stringify(payload),
+    }),
+  updateInstallment: (cardId: number, installmentId: number, payload: Partial<InstallmentInput>) =>
+    request<InstallmentDTO>(`/credit-cards/${cardId}/installments/${installmentId}`, {
+      method: "PUT", body: JSON.stringify(payload),
+    }),
+  deleteInstallment: (cardId: number, installmentId: number) =>
+    request<void>(`/credit-cards/${cardId}/installments/${installmentId}`, { method: "DELETE" }),
 
   importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
     const token = getToken();
@@ -967,6 +991,60 @@ export interface CreditCardDTO {
 export interface CreditCardSummaryDTO {
   cards: CreditCardDTO[];
   total_current_period_debt: string;
+}
+
+// Ekstre
+export interface StatementInput {
+  period_year: number;
+  period_month: number;
+  statement_amount: number | string;
+  statement_date: string;     // YYYY-MM-DD
+  due_date: string;
+  paid_at?: string | null;    // ISO datetime
+  notes?: string | null;
+}
+
+export interface StatementDTO {
+  id: number;
+  card_id: number;
+  period_year: number;
+  period_month: number;
+  statement_amount: string;
+  statement_date: string;
+  due_date: string;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// Taksit
+export interface InstallmentInput {
+  description: string;
+  total_amount: number | string;
+  monthly_amount: number | string;
+  installments_total: number;
+  installments_remaining: number;
+  first_due_date: string;
+  notes?: string | null;
+}
+
+export interface InstallmentDTO {
+  id: number;
+  card_id: number;
+  description: string;
+  total_amount: string;
+  monthly_amount: string;
+  installments_total: number;
+  installments_remaining: number;
+  first_due_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreditCardDetailDTO {
+  card: CreditCardDTO;
+  statements: StatementDTO[];
+  installments: InstallmentDTO[];
 }
 
 export type GoalCurrency = "TRY" | "USD" | "EUR" | "GBP";

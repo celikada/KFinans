@@ -1,14 +1,10 @@
-"""Kredi kartı modeli (tanım + dönem içi borç).
-
-Aylık ekstreler ve taksitler ayrı tablolar olarak ileride eklenecek
-(credit_card_statements, credit_card_installments).
-"""
+"""Kredi kartı modelleri: tanım + dönem içi borç + aylık ekstreler + taksitler."""
 import uuid
-from datetime import datetime
+from datetime import date as date_type, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,3 +39,62 @@ class CreditCard(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="credit_cards")
+    statements: Mapped[list["CreditCardStatement"]] = relationship(
+        back_populates="card", cascade="all, delete-orphan",
+    )
+    installments: Mapped[list["CreditCardInstallment"]] = relationship(
+        back_populates="card", cascade="all, delete-orphan",
+    )
+
+
+class CreditCardStatement(Base):
+    """Aylık ekstre kaydı (kesim tarihi + tutar + son ödeme tarihi)."""
+    __tablename__ = "credit_card_statements"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    card_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    period_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    statement_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    statement_date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+    card: Mapped["CreditCard"] = relationship(back_populates="statements")
+
+    __table_args__ = (
+        UniqueConstraint("card_id", "period_year", "period_month", name="uq_statement_card_period"),
+    )
+
+
+class CreditCardInstallment(Base):
+    """Gelecek aylar için bilinen taksit yükümlülüğü.
+
+    Cash flow projeksiyonunda her ay `monthly_amount` kadar gider olarak
+    sayılır (ilk taksit `first_due_date`'ten başlar, `installments_remaining`
+    kadar ay devam eder).
+    """
+    __tablename__ = "credit_card_installments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    card_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    monthly_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    installments_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    installments_remaining: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+    card: Mapped["CreditCard"] = relationship(back_populates="installments")
