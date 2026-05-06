@@ -30,6 +30,25 @@ class Settings(BaseSettings):
     # CORS — production'da frontend domain'i ekle
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # ─── Güvenlik header'ları (FAZ C2) ────────────────────────────────
+    # Production'da True; testlerde header beklemek için açık tutulur.
+    # Dev ortamda Swagger UI deneyimini bozmamak için False yapılabilir.
+    enable_security_headers: bool = True
+    hsts_max_age: int = 31536000  # 1 yıl
+    # Backend JSON-only; Swagger UI kullanımı için override:
+    #   "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ..."
+    csp_policy: str = (
+        "default-src 'none'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+
+    # ─── TrustedHost (FAZ C3) ─────────────────────────────────────────
+    # Host header injection koruması. Prod'da override edilir; dev'de "*"
+    # (tüm Host header'larına izin) çünkü localhost + 127.0.0.1 + IP karışık.
+    allowed_hosts: list[str] = ["*"]
+
     # E-posta (Resend) — kullanıcı kayıt doğrulama
     resend_api_key: str = ""
     email_from: str = "KFinans <noreply@kfinans.app>"

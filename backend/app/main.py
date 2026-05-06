@@ -4,12 +4,14 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
+from app.core.middleware import SecurityHeadersMiddleware
 from app.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -48,6 +50,24 @@ async def log_validation_errors(request: Request, exc: RequestValidationError):
         request.method, request.url.path, errors,
     )
     return JSONResponse(status_code=422, content={"detail": errors})
+
+# Middleware sırası önemli: add_middleware LIFO çalışır
+# (en SON add edilen request'te İLK çalışır).
+#
+# add sırası                 →  request flow              →  response flow
+# 1. SecurityHeaders         →  4. çalışır                →  1. çalışır (her response'a header)
+# 2. TrustedHost             →  3. çalışır (Host check)   →  2. çalışır
+# 3. CORS (en son add)       →  1. çalışır (preflight)    →  3. çalışır
+#
+# CORS en son add ediliyor çünkü preflight OPTIONS isteklerini diğer
+# middleware'lerden önce yakalaması ve CORS error response'larına da
+# güvenlik header'larının uygulanması gerekiyor.
+app.add_middleware(SecurityHeadersMiddleware)
+
+# TrustedHost (FAZ C3): Host header injection koruması.
+# Dev'de allowed_hosts=["*"] (config default) — testler ve localhost serbest.
+# Prod'da env: ALLOWED_HOSTS=["kfinans.app","www.kfinans.app","api.kfinans.app"]
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 
 app.add_middleware(
     CORSMiddleware,
