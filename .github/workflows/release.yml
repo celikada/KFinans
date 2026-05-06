@@ -30,11 +30,13 @@ concurrency:
 jobs:
   # ─── Job 0: SonarCloud Quality Gate ──────────────────────────────────────────
   # Release'i baslatmadan once kod kalitesinin gecerli oldugunu dogrula.
-  # Sonar fail ederse build/deploy atlanir.
+  # NOT: ENABLE_SONAR=false iken atlanir; build-and-push job'i `needs` ile
+  # bagli olsa da bu job skip ederse pipeline devam eder (success: skipped).
   sonar-quality-gate:
     name: SonarCloud Quality Gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: ${{ vars.ENABLE_SONAR == 'true' }}
 
     services:
       postgres:
@@ -109,10 +111,13 @@ jobs:
             -Dsonar.qualitygate.wait=true
 
   # ─── Job 1: Docker Image Build & Push ────────────────────────────────────────
+  # Sonar job skip ederse (ENABLE_SONAR=false) bu job devam eder.
+  # Sonar fail ederse durur — kalite gate'i blocker olur (ENABLE_SONAR=true iken).
   build-and-push:
     name: Build & Push — ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: sonar-quality-gate
+    if: ${{ always() && needs.sonar-quality-gate.result != 'failure' }}
     timeout-minutes: 30
 
     permissions:
