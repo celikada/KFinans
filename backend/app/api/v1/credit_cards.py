@@ -28,22 +28,66 @@ from app.schemas.credit_card import (
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
 
+def _enrich_card(card: CreditCard) -> CreditCardOut:
+    """Bir kart için 5 hesaplanmış alanı doldur ve CreditCardOut döner."""
+    unpaid = [s for s in (card.statements or []) if s.paid_at is None]
+    unpaid_total = sum((Decimal(s.statement_amount) for s in unpaid), Decimal(0))
+    unpaid_count = len(unpaid)
+
+    future_total = Decimal(0)
+    for inst in (card.installments or []):
+        if inst.installments_remaining > 0:
+            future_total += Decimal(inst.monthly_amount) * Decimal(inst.installments_remaining)
+
+    current_period = Decimal(card.current_period_debt)
+    period_debt = unpaid_total + current_period
+    total_debt = period_debt + future_total
+
+    return CreditCardOut(
+        id=card.id,
+        name=card.name,
+        bank_name=card.bank_name,
+        last_4=card.last_4,
+        credit_limit=card.credit_limit,
+        statement_day=card.statement_day,
+        payment_due_day=card.payment_due_day,
+        current_period_debt=current_period,
+        notes=card.notes,
+        created_at=card.created_at,
+        updated_at=card.updated_at,
+        unpaid_statement_total=unpaid_total,
+        unpaid_statement_count=unpaid_count,
+        future_installment_total=future_total,
+        period_debt=period_debt,
+        total_debt=total_debt,
+    )
+
+
 @router.get("", response_model=CreditCardSummaryOut)
 async def list_credit_cards(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """Tüm kartları + toplam dönem içi borç özeti."""
+    """Tüm kartları + toplam dönem içi borç + toplam borç özeti."""
     result = await db.execute(
         select(CreditCard)
         .where(CreditCard.user_id == current_user.id)
+        .options(
+            selectinload(CreditCard.statements),
+            selectinload(CreditCard.installments),
+        )
         .order_by(CreditCard.name)
     )
     cards = result.scalars().all()
-    total_debt = sum((Decimal(c.current_period_debt) for c in cards), Decimal(0))
+    enriched = [_enrich_card(c) for c in cards]
+    total_period = sum((c.period_debt for c in enriched), Decimal(0))
+    total = sum((c.total_debt for c in enriched), Decimal(0))
+    total_current = sum((c.current_period_debt for c in enriched), Decimal(0))
     return CreditCardSummaryOut(
-        cards=cards,
-        total_current_period_debt=total_debt,
+        cards=enriched,
+        total_period_debt=total_period,
+        total_debt=total,
+        total_current_period_debt=total_current,  # legacy field
     )
 
 
@@ -159,7 +203,7 @@ async def get_credit_card_detail(
     sorted_installments = sorted(card.installments, key=lambda i: i.first_due_date)
 
     return CardDetailOut(
-        card=card,
+        card=_enrich_card(card),
         statements=sorted_statements,
         installments=sorted_installments,
     )

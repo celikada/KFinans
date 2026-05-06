@@ -986,11 +986,19 @@ export interface CreditCardDTO {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // Hesaplanmış (server-side)
+  unpaid_statement_total: string;
+  unpaid_statement_count: number;
+  future_installment_total: string;
+  period_debt: string;
+  total_debt: string;
 }
 
 export interface CreditCardSummaryDTO {
   cards: CreditCardDTO[];
-  total_current_period_debt: string;
+  total_period_debt: string;
+  total_debt: string;
+  total_current_period_debt: string;  // legacy
 }
 
 // Ekstre

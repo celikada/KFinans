@@ -58,36 +58,65 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
 
   const c = detail.card;
   const limit = c.credit_limit ? parseFloat(c.credit_limit) : null;
-  const debt = parseFloat(c.current_period_debt);
-  const utilization = limit ? (debt / limit) * 100 : null;
+  const currentPeriod = parseFloat(c.current_period_debt);
+  const unpaid = parseFloat(c.unpaid_statement_total);
+  const future = parseFloat(c.future_installment_total);
+  const periodDebt = parseFloat(c.period_debt);
+  const totalDebt = parseFloat(c.total_debt);
+  const utilization = limit ? (totalDebt / limit) * 100 : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader title={c.name} back="/dashboard/credit-cards" />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        {/* Üst panel */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Banka / Kart</p>
-            <p className="text-base font-semibold text-gray-900">{c.bank_name ?? "—"}</p>
-            {c.last_4 && <p className="text-xs text-gray-500 font-mono">**** {c.last_4}</p>}
+        {/* Üst panel: kart bilgisi + 4 borç metriği */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Banka / Kart</p>
+              <p className="text-base font-semibold text-gray-900">{c.bank_name ?? "—"}</p>
+              {c.last_4 && <p className="text-xs text-gray-500 font-mono">**** {c.last_4}</p>}
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Kesim / Son ödeme</p>
+              <p className="text-sm text-gray-700">{c.statement_day}. gün → {c.payment_due_day}.</p>
+              {limit !== null && (
+                <p className="text-xs text-gray-400 mt-1">Limit: {fmtTL(limit)} ₺</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Toplam borç</p>
+              <p className={`text-2xl font-bold tabular-nums ${totalDebt > 0 ? "text-rose-600" : "text-gray-400"}`}>
+                {fmtTL(totalDebt)} ₺
+              </p>
+              {utilization !== null && limit !== null && limit > 0 && (
+                <p className="text-xs text-gray-400 mt-1">%{utilization.toFixed(0)} kullanım</p>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Kesim / Son ödeme</p>
-            <p className="text-sm text-gray-700">{c.statement_day}. gün → {c.payment_due_day}.</p>
-            {limit !== null && (
-              <p className="text-xs text-gray-400 mt-1">Limit: {fmtTL(limit)} ₺</p>
-            )}
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Dönem içi borç</p>
-            <p className={`text-2xl font-bold tabular-nums ${debt > 0 ? "text-rose-600" : "text-gray-400"}`}>
-              {fmtTL(debt)} ₺
-            </p>
-            {utilization !== null && limit !== null && limit > 0 && (
-              <p className="text-xs text-gray-400 mt-1">%{utilization.toFixed(0)} kullanım</p>
-            )}
+          <div className="border-t border-gray-50 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-xs text-gray-400">Henüz ekstreye düşmemiş</p>
+              <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(currentPeriod)} ₺</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Ödenmemiş ekstre</p>
+              <p className={`font-semibold tabular-nums ${unpaid > 0 ? "text-rose-600" : "text-gray-700"}`}>
+                {fmtTL(unpaid)} ₺
+              </p>
+              {c.unpaid_statement_count >= 2 && (
+                <p className="text-[10px] text-amber-600 mt-0.5">⚠ {c.unpaid_statement_count} kayıt</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Dönem içi borç</p>
+              <p className="font-semibold text-rose-500 tabular-nums">{fmtTL(periodDebt)} ₺</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Gelecek taksit</p>
+              <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(future)} ₺</p>
+            </div>
           </div>
         </div>
 

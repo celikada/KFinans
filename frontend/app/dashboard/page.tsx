@@ -66,8 +66,9 @@ export default function DashboardPage() {
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
   const [incomeYearEstimate, setIncomeYearEstimate] = useState<number | null>(null);
 
-  // Kredi kartları (toplam dönem içi borç)
-  const [creditCardDebt, setCreditCardDebt] = useState<number | null>(null);
+  // Kredi kartları (toplam borç + dönem içi borç)
+  const [creditCardTotal, setCreditCardTotal] = useState<number | null>(null);
+  const [creditCardPeriod, setCreditCardPeriod] = useState<number | null>(null);
   const [creditCardCount, setCreditCardCount] = useState(0);
   const [incomeCount, setIncomeCount] = useState(0);
   const [incomeTop, setIncomeTop] = useState<TopItem[]>([]);
@@ -182,8 +183,8 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     api.listCreditCards().then((s) => {
-      const debt = parseFloat(s.total_current_period_debt);
-      setCreditCardDebt(debt);
+      setCreditCardTotal(parseFloat(s.total_debt));
+      setCreditCardPeriod(parseFloat(s.total_period_debt));
       setCreditCardCount(s.cards.length);
     }).catch(() => {});
 
@@ -498,12 +499,15 @@ export default function DashboardPage() {
                 href="/dashboard/credit-cards"
                 icon="creditCard"
                 color="red"
-                title="Kredi Kartları"
-                total={creditCardDebt}
+                title="Kredi Kartları (toplam borç)"
+                total={creditCardTotal}
                 count={creditCardCount}
                 countLabel="kart"
                 top={[]}
-                placeholder="Kart tanımı + dönem içi borç"
+                placeholder="Kart tanımı + ekstre + taksit"
+                footer={creditCardPeriod !== null && (
+                  <span>Dönem içi borç: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
+                )}
               />
             )}
 

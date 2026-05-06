@@ -104,8 +104,11 @@ export default function CreditCardsPage() {
     }
   }
 
-  const totalDebt = summary ? parseFloat(summary.total_current_period_debt) : 0;
+  const totalDebtAll = summary ? parseFloat(summary.total_debt) : 0;
+  const totalPeriodAll = summary ? parseFloat(summary.total_period_debt) : 0;
   const cards = summary?.cards ?? [];
+  // Birden fazla ödenmemiş ekstresi olan kartlar (data hijyeni uyarısı)
+  const cardsWithMultipleUnpaid = cards.filter((c) => c.unpaid_statement_count >= 2);
 
   let submitLabel: string;
   if (saving) submitLabel = "Kaydediliyor...";
@@ -116,26 +119,39 @@ export default function CreditCardsPage() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Kredi Kartları" />
 
-      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Bilgi banner */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-900">
-          <p className="font-medium mb-1">Dönem içi borç + ekstre + taksit takibi</p>
-          <p className="text-xs text-blue-700">
-            Bu sayfa <strong>kart tanımı</strong> ve <strong>dönem içi (henüz ekstreye düşmemiş) borç</strong> içindir.
-            Aylık ekstreler ve taksitler bir sonraki güncellemede eklenecek. Şimdilik dönem içi borç toplamı,
-            harcamaların hesabına gider olarak girer.
-          </p>
-        </div>
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        {/* Birden fazla ödenmemiş ekstre uyarısı */}
+        {cardsWithMultipleUnpaid.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">
+            <p className="font-medium mb-1">⚠ {cardsWithMultipleUnpaid.length} kartta birden fazla ödenmemiş ekstre var</p>
+            <p className="text-xs text-amber-800">
+              Normalde ödenmemiş ekstre bir sonraki ekstreye devreder. Aşağıdaki kart(lar)da fazla ödenmemiş ekstre kayıtı bulunduğu için <strong>çift sayım yapılıyor olabilir</strong>:
+              <strong> {cardsWithMultipleUnpaid.map((c) => `${c.name} (${c.unpaid_statement_count})`).join(", ")}</strong>.
+              Detayına gidip eski olanları "Ödendi" olarak işaretle ya da sil.
+            </p>
+          </div>
+        )}
 
-        {/* Özet panel */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <p className="text-xs text-gray-400 mb-1">Toplam dönem içi borç</p>
-          <TLValue
-            tl={totalDebt}
-            className="text-3xl font-bold text-rose-600"
-            usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
-          />
-          <p className="text-xs text-gray-400 mt-1">{cards.length} kart tanımlı</p>
+        {/* Özet panel: 2 metrik */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Toplam borç</p>
+            <TLValue
+              tl={totalDebtAll}
+              className="text-3xl font-bold text-rose-600"
+              usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
+            />
+            <p className="text-xs text-gray-400 mt-1">Dönem içi + gelecek taksitler · {cards.length} kart</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Dönem içi borç</p>
+            <TLValue
+              tl={totalPeriodAll}
+              className="text-3xl font-bold text-rose-500"
+              usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
+            />
+            <p className="text-xs text-gray-400 mt-1">Ödenmemiş ekstre + henüz ekstreye düşmemiş</p>
+          </div>
         </div>
 
         {/* Form */}
@@ -248,44 +264,54 @@ export default function CreditCardsPage() {
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
                   <th className="px-4 py-3 text-left">Kart</th>
-                  <th className="px-4 py-3 text-left">Banka</th>
                   <th className="px-4 py-3 text-center">Kesim / Son ödeme</th>
-                  <th className="px-4 py-3 text-right">Limit</th>
-                  <th className="px-4 py-3 text-right">Dönem içi borç</th>
+                  <th className="px-4 py-3 text-right">Dönem içi (henüz ekstre)</th>
+                  <th className="px-4 py-3 text-right">Ödenmemiş ekstre</th>
+                  <th className="px-4 py-3 text-right">Gelecek taksit</th>
+                  <th className="px-4 py-3 text-right">Toplam borç</th>
                   <th className="px-4 py-3 text-right">İşlemler</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {cards.map((c) => {
-                  const limit = c.credit_limit ? parseFloat(c.credit_limit) : null;
-                  const debt = parseFloat(c.current_period_debt);
-                  const utilization = limit ? (debt / limit) * 100 : null;
+                  const currentPeriod = parseFloat(c.current_period_debt);
+                  const unpaid = parseFloat(c.unpaid_statement_total);
+                  const future = parseFloat(c.future_installment_total);
+                  const total = parseFloat(c.total_debt);
                   return (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900">{c.name}</p>
+                        {c.bank_name && <p className="text-xs text-gray-500">{c.bank_name}</p>}
                         {c.last_4 && (
                           <p className="text-xs text-gray-400 font-mono">**** {c.last_4}</p>
                         )}
                         {c.notes && <p className="text-xs text-gray-400 mt-0.5">{c.notes}</p>}
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{c.bank_name ?? "—"}</td>
                       <td className="px-4 py-3 text-center text-gray-600 text-xs">
                         Kesim: {c.statement_day}.<br />
                         Son ödeme: {c.payment_due_day}.
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-600 tabular-nums">
-                        {limit !== null ? `${fmtTL(limit)} ₺` : "—"}
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                        {fmtTL(currentPeriod)} ₺
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`font-semibold tabular-nums ${debt > 0 ? "text-rose-600" : "text-gray-400"}`}>
-                          {fmtTL(debt)} ₺
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        <span className={unpaid > 0 ? "text-rose-600" : "text-gray-400"}>
+                          {fmtTL(unpaid)} ₺
                         </span>
-                        {utilization !== null && limit !== null && limit > 0 && (
-                          <p className="text-[10px] text-gray-400 mt-0.5">
-                            %{utilization.toFixed(0)} kullanım
+                        {c.unpaid_statement_count >= 2 && (
+                          <p className="text-[10px] text-amber-600 mt-0.5">
+                            ⚠ {c.unpaid_statement_count} kayıt
                           </p>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                        {fmtTL(future)} ₺
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`font-semibold tabular-nums ${total > 0 ? "text-rose-600" : "text-gray-400"}`}>
+                          {fmtTL(total)} ₺
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
