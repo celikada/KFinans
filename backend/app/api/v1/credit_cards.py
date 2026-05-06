@@ -254,9 +254,9 @@ async def delete_statement(
 # ---------------------------------------------------------------------------
 # Taksit endpoint'leri
 # ---------------------------------------------------------------------------
-def _calc_monthly(total: Decimal, count: int) -> Decimal:
-    """total / count → 2 ondalık. count=0 yasak (validator zaten engeller)."""
-    return (total / Decimal(count)).quantize(Decimal("0.01"))
+def _calc_total(monthly: Decimal, count: int) -> Decimal:
+    """monthly × count → 2 ondalık."""
+    return (monthly * Decimal(count)).quantize(Decimal("0.01"))
 
 
 def _calc_remaining(first_due: date_type, total_count: int) -> int:
@@ -279,13 +279,13 @@ async def create_installment(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     await _get_owned_card(card_id, current_user, db)
-    monthly = _calc_monthly(payload.total_amount, payload.installments_total)
+    total = _calc_total(payload.monthly_amount, payload.installments_total)
     remaining = _calc_remaining(payload.first_due_date, payload.installments_total)
     inst = CreditCardInstallment(
         card_id=card_id,
         description=payload.description,
-        total_amount=payload.total_amount,
-        monthly_amount=monthly,
+        total_amount=total,
+        monthly_amount=payload.monthly_amount,
         installments_total=payload.installments_total,
         installments_remaining=remaining,
         first_due_date=payload.first_due_date,
@@ -315,12 +315,12 @@ async def update_installment(
     inst = result.scalar_one_or_none()
     if not inst:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Taksit bulunamadı")
-    for attr in ("description", "total_amount", "installments_total", "first_due_date", "notes"):
+    for attr in ("description", "monthly_amount", "installments_total", "first_due_date", "notes"):
         v = getattr(payload, attr)
         if v is not None:
             setattr(inst, attr, v)
-    # Otomatik hesaplama: monthly + remaining
-    inst.monthly_amount = _calc_monthly(Decimal(inst.total_amount), inst.installments_total)
+    # Otomatik hesaplama: total = monthly × count, remaining = first_due'den geçen ay
+    inst.total_amount = _calc_total(Decimal(inst.monthly_amount), inst.installments_total)
     inst.installments_remaining = _calc_remaining(inst.first_due_date, inst.installments_total)
     await db.commit()
     await db.refresh(inst)

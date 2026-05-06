@@ -259,7 +259,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
 }>) {
   const [editing, setEditing] = useState<InstallmentDTO | null>(null);
   const [description, setDescription] = useState("");
-  const [totalAmount, setTotalAmount] = useState("");
+  const [monthlyAmount, setMonthlyAmount] = useState("");
   const [total, setTotal] = useState("12");
   const [firstDue, setFirstDue] = useState(TODAY);
   const [notes, setNotes] = useState("");
@@ -268,14 +268,14 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
 
   function reset() {
     setEditing(null);
-    setDescription(""); setTotalAmount(""); setTotal("12");
+    setDescription(""); setMonthlyAmount(""); setTotal("12");
     setFirstDue(TODAY); setNotes(""); setErr("");
   }
 
   function startEdit(i: InstallmentDTO) {
     setEditing(i);
     setDescription(i.description);
-    setTotalAmount(i.total_amount);
+    setMonthlyAmount(i.monthly_amount);
     setTotal(i.installments_total.toString());
     setFirstDue(i.first_due_date);
     setNotes(i.notes ?? "");
@@ -288,7 +288,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     try {
       const payload: InstallmentInput = {
         description: description.trim(),
-        total_amount: parseFloat(totalAmount),
+        monthly_amount: parseFloat(monthlyAmount),
         installments_total: parseInt(total),
         first_due_date: firstDue,
         notes: notes.trim() || null,
@@ -307,11 +307,11 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     }
   }
 
-  // Aylık tutar canlı hesaplama (form preview)
-  const totalNum = parseFloat(totalAmount);
+  // Toplam tutar canlı hesaplama (form preview)
+  const monthlyNum = parseFloat(monthlyAmount);
   const totalCount = parseInt(total) || 0;
-  const monthlyPreview = totalNum > 0 && totalCount > 0
-    ? (totalNum / totalCount).toFixed(2)
+  const totalPreview = monthlyNum > 0 && totalCount > 0
+    ? (monthlyNum * totalCount).toFixed(2)
     : null;
 
   async function handleDelete(i: InstallmentDTO) {
@@ -343,13 +343,13 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
           className={INPUT_CLS}
         />
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <input type="number" placeholder="Toplam tutar (TL)" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
+          <input type="number" placeholder="Aylık taksit (TL)" value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
           <input type="number" placeholder="Taksit sayısı" value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
           <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={INPUT_CLS} title="İlk taksit tarihi" />
         </div>
-        {monthlyPreview && (
+        {totalPreview && (
           <p className="text-xs text-gray-500">
-            Aylık: <span className="font-semibold text-gray-700">{monthlyPreview} ₺</span> · Kalan taksit ilk vadeye göre otomatik hesaplanır.
+            Toplam: <span className="font-semibold text-gray-700">{totalPreview} ₺</span> · Kalan taksit ilk vadeye göre otomatik hesaplanır.
           </p>
         )}
         <input
