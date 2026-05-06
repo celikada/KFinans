@@ -859,7 +859,9 @@ function BudgetCard({ href, overCount }: { href: string; overCount: number | nul
 function Card({ href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer }: CardProps) {
   const router = useRouter();
   const c = COLOR_MAP[color];
-  const hasTotal = total !== null && total > 0;
+  // total === 0 da geçerli yüklenmiş değer (örn. kredi kartı borç yoksa).
+  // Sadece null = henüz fetch gelmedi.
+  const hasTotal = total !== null;
 
   return (
     <button
