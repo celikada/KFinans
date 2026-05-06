@@ -372,19 +372,25 @@ INDEX ix_integrations_user_id (user_id)
 UNIQUE (user_id, provider)
 ```
 
-#### `wallet_addresses` (Blockchain cüzdanları)
+#### `wallet_addresses` (Blockchain cüzdanları) — FAZ C1: Fernet encrypted
 ```sql
-id         UUID PK
-user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-chain      TEXT NOT NULL                         -- 'bitcoin'|'ethereum'|'sonic'|'avalanche_c'|'avalanche_p'|'solana'|'cardano'|'algorand'|'polkadot'|'litecoin' (10 zincir)
-address    TEXT NOT NULL
-label      TEXT
-is_active  BOOLEAN NOT NULL DEFAULT TRUE
-created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+id                    UUID PK
+user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+chain                 VARCHAR(20) NOT NULL    -- 'bitcoin'|'ethereum'|'sonic'|'avalanche_c'|'avalanche_p'|'solana'|'cardano'|'algorand'|'polkadot'|'litecoin'
+address_encrypted     TEXT NOT NULL           -- Fernet ciphertext of plaintext address/xpub
+address_fingerprint   VARCHAR(64) NOT NULL    -- SHA-256 hex of lowercase address (lookup + uniqueness)
+label                 TEXT
+is_active             BOOLEAN NOT NULL DEFAULT TRUE
+created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 
-UNIQUE (user_id, chain, address)
+UNIQUE (user_id, chain, address_fingerprint)   -- case-insensitive (EVM checksum varyasyonları aynı)
 INDEX ix_wallet_addresses_user_id (user_id)
+INDEX ix_wallet_addresses_fingerprint (address_fingerprint)
 ```
+
+**Migration `b3c4d5e6f7a8`:** Plaintext `address` kolonu Fernet'e taşındı. `WalletAddress.address` artık Python `@hybrid_property` — getter `decrypt_secret()`, setter `encrypt_secret()` + `address_fingerprint()` hesaplar. Service ve API kodu hiç değişmedi.
+
+**Sebep:** Bitcoin xpub'tan **tüm child public key'ler türetilebilir** (BIP-32 deterministic derivation). DB sızıntısında saldırgan kullanıcının BTC bakiye geçmişini blockchain'den görebilirdi.
 
 #### `tefas_holdings`
 ```sql
@@ -539,7 +545,24 @@ created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 INDEX ix_revoked_tokens_expires_at (expires_at)
 ```
 
-> `POST /auth/logout` access (zorunlu) ve refresh (opsiyonel) tokenları bu tabloya yazar. `get_current_user` decode sonrası `jti`'yi sorgular; blacklist'teyse 401. PK çakışmasında rollback ile sessiz idempotency (aynı token tekrar logout edilirse hata değil — ikinci `get_current_user` zaten 401 döndürür). Eski (jti'siz) tokenlar geriye dönük uyumlu — `jti` yoksa kontrol atlanır. Cleanup için `expires_at` index'i kullanılır (Faz 3 cron job).
+> `POST /auth/logout` access (zorunlu) ve refresh (opsiyonel) tokenları bu tabloya yazar. `POST /auth/refresh` (FAZ C4) **rotation** ile her refresh çağrısında eski refresh `jti`'sini buraya ekler. `get_current_user` decode sonrası `jti`'yi sorgular; blacklist'teyse 401. PK çakışmasında rollback ile sessiz idempotency. Eski (jti'siz) tokenlar geriye dönük uyumlu. **Cleanup cron (FAZ C5):** APScheduler her gün 03:00 Europe/Istanbul `expires_at < now` kayıtları siler.
+
+#### `audit_logs` (FAZ C6) — KVKK m.12 + Veri İhlali Bildirim için forensic
+```sql
+id           UUID PK DEFAULT gen_random_uuid()
+user_id      UUID NULL REFERENCES users(id) ON DELETE SET NULL  -- user silinince log korunur (forensic)
+action       VARCHAR(64) NOT NULL                                -- 'auth.login', 'wallet.add', 'integration.delete', vb.
+resource     VARCHAR(128) NULL                                   -- 'wallet:<uuid>', 'integration:binance'
+ip_address   VARCHAR(45) NULL                                    -- IPv6 max 45 char (X-Forwarded-For desteği)
+user_agent   VARCHAR(512) NULL                                   -- truncated
+extra        JSONB NULL                                          -- ek context (chain, email, vs.)
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_audit_logs_user_created   (user_id, created_at DESC)    -- user kendi log'larını hızlı görür
+INDEX ix_audit_logs_action_created (action, created_at DESC)     -- admin/security tipe göre arama
+```
+
+> **8 kritik eyleme hook'lanmış:** auth (login, login_failed, logout, register, password_change), wallet (add, delete), integration (add, delete), snapshot (delete), account (soft_delete). `app/services/audit.py::log_audit()` best-effort (try/except yutar — ana endpoint bozulmaz). `GET /api/v1/audit-logs?action_prefix=&limit=` IDOR korumalı endpoint. Migration `c4d5e6f7a8b9`. Detay: [03-api-referansi.md §17](./03-api-referansi.md), [07-guvenlik.md §10.2](./07-guvenlik.md).
 
 #### `portfolio_snapshots` + `asset_positions`
 ```sql

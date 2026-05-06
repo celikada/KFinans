@@ -96,13 +96,20 @@ Giriş. Rate limit: 10/dk. **E-posta doğrulanmamışsa hard block (403).**
 ```
 
 ### `POST /auth/refresh`
-Yeni access + refresh token üretir. Rate limit: 30/dk. Refresh token'ın `jti`'si `revoked_tokens` tablosundaysa **401 "Token iptal edilmiş"** döner.
+Yeni access + refresh token üretir. **Refresh token rotation aktif (FAZ C4):** Her başarılı refresh çağrısında **eski refresh token'ın `jti`'si `revoked_tokens` blacklist'ine atılır** ve yeni refresh token üretilir. Sızan refresh token ikinci kez kullanılırsa 401 döner. Rate limit: 30/dk.
+
 ```json
+// Request
 { "refresh_token": "eyJ..." }
 
-// 401 Unauthorized — token logout ile iptal edilmiş
+// 200 OK — yeni access + yeni refresh
+{ "access_token": "eyJNEW...", "refresh_token": "eyJNEW..." }
+
+// 401 Unauthorized — eski refresh ikinci kez kullanildı veya logout ile iptal
 { "detail": "Token iptal edilmiş" }
 ```
+
+**Güvenlik notu:** Saldırgan ele geçirdiği refresh token'ı kullansa bile, gerçek kullanıcı bir sonraki refresh'inde saldırganın token'ını invalidate eder (rotation). Tüm refresh token'lar `revoked_tokens` cleanup cron (FAZ C5) ile expires_at sonrası DB'den silinir.
 
 ### `POST /auth/logout`
 Mevcut access token'ı (header'dan) ve opsiyonel olarak body'deki refresh token'ı `revoked_tokens` tablosuna ekler. Auth gerektirir (token'sız 401). **İdempotent** — aynı token tekrar logout edilirse `get_current_user` zaten 401 döner. Bilgi sızdırmamak için bozuk/geçersiz refresh token sessizce yutulur (access token yine blacklist'e alınır).
@@ -1016,7 +1023,69 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 
 ---
 
-## 17. Eksik / Eklenecek (TODO)
+## 17. Audit Log (`/api/v1/audit-logs`) — FAZ C6
+
+### `GET /api/v1/audit-logs`
+Kullanıcının kendi audit log kayıtlarını döner (en yeniden eskiye). IDOR korumalı: sadece `user_id == current_user.id` filtreli kayıtlar.
+
+**Query params:**
+- `action_prefix` (opsiyonel) — `auth.`, `wallet.`, `integration.`, `snapshot.`, `account.` ile başlayanları filtreler
+- `limit` (opsiyonel, default 100, max 500)
+
+**Loglanan eylemler (FAZ C6 — `app/services/audit.py::AuditAction`):**
+
+| Action | Trigger | Extra alanları |
+|--------|---------|----------------|
+| `auth.login` | Başarılı giriş | – |
+| `auth.login_failed` | Yanlış şifre / mevcut olmayan e-posta | `extra.email` |
+| `auth.logout` | `POST /auth/logout` | – |
+| `auth.register` | Yeni kullanıcı kaydı | `extra.email`, `extra.risk_profile` |
+| `auth.password_change` | `PUT /user/password` | – |
+| `wallet.add` | `POST /wallets` | `extra.chain`, `extra.label`, `resource: wallet:{uuid}` |
+| `wallet.delete` | `DELETE /wallets/{id}` | `extra.chain`, `resource: wallet:{uuid}` |
+| `integration.add` | `POST /integrations` | `extra.updated`, `resource: integration:{provider}` |
+| `integration.delete` | `DELETE /integrations/{provider}` | `resource: integration:{provider}` |
+| `snapshot.delete` | `DELETE /portfolio/snapshot/{date}` | `resource: snapshot:{date}` |
+| `account.soft_delete` | `DELETE /user/me` | `resource: user:{uuid}` |
+
+```json
+// 200 OK
+[
+  {
+    "id": "01H8X...",
+    "action": "wallet.add",
+    "resource": "wallet:550e8400-e29b-41d4-a716-446655440000",
+    "ip_address": "192.168.1.50",
+    "user_agent": "Mozilla/5.0 ...",
+    "extra": { "chain": "bitcoin", "label": "Ana cüzdan" },
+    "created_at": "2026-05-06T20:35:12.123Z"
+  },
+  {
+    "id": "01H8Y...",
+    "action": "auth.login",
+    "resource": null,
+    "ip_address": "192.168.1.50",
+    "user_agent": "Mozilla/5.0 ...",
+    "extra": null,
+    "created_at": "2026-05-06T20:34:55.001Z"
+  }
+]
+```
+
+### Örnek Kullanım
+```bash
+# Tüm log'lar (son 100)
+curl https://kfinans.app/api/v1/audit-logs \
+  -H "Authorization: Bearer eyJ..."
+
+# Sadece wallet eylemleri
+curl "https://kfinans.app/api/v1/audit-logs?action_prefix=wallet.&limit=50" \
+  -H "Authorization: Bearer eyJ..."
+```
+
+---
+
+## 18. Eksik / Eklenecek (TODO)
 
 - [x] `POST /auth/register` testleri (14 yeni test test_auth.py'da)
 - [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri

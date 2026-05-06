@@ -13,21 +13,32 @@
 | JWT imza | HS256 | ✅ Aktif |
 | Token tipi ayrımı | `access` / `refresh` | ✅ Aktif |
 | Exchange API key encryption | Fernet (AES-128-CBC) | ✅ Aktif |
+| **Wallet adresi (xpub) encryption** (FAZ C1) | Fernet ciphertext + SHA-256 fingerprint lookup; `WalletAddress.address` hybrid_property transparent encrypt/decrypt | ✅ Aktif |
 | CORS allowlist | `settings.cors_origins` (env'den) | ✅ Aktif |
+| **TrustedHostMiddleware** (FAZ C3) | `settings.allowed_hosts` env'den; prod'da `["kfinans.app","www.kfinans.app","api.kfinans.app"]`; Host header injection koruması | ✅ Aktif |
+| **SecurityHeadersMiddleware** (FAZ C2) | HSTS (1 yıl + preload) + X-Frame-Options DENY + X-Content-Type-Options + Referrer-Policy + CSP (default-src 'none') + Permissions-Policy + COOP + CORP + Server maskeleme | ✅ Aktif |
+| **Frontend güvenlik header'ları** (FAZ C2) | `next.config.ts` async `headers()`; HSTS + CSP + X-Frame + Permissions-Policy + COOP HTML response'larında | ✅ Aktif |
 | Rate limiting (auth endpoint'leri) | slowapi (in-memory) | ✅ Aktif |
 | **E-posta doğrulama zorunluluğu** | `email_verified=False` ise login 403 hard block | ✅ Aktif |
 | **Doğrulama token'ı (TTL'li)** | `secrets.token_urlsafe(32)`, `verify_token_expires_at` (24 saat) | ✅ Aktif |
 | **Account enumeration koruması** | `POST /auth/resend-verification` her zaman 202 döner | ✅ Aktif |
 | **JWT blacklist + logout** | `revoked_tokens` tablosu (jti PK); `POST /auth/logout`; `get_current_user` ve `/auth/refresh` jti kontrolü | ✅ Aktif |
 | **`jti` claim** | `create_access_token` ve `create_refresh_token` her token'a `uuid4.hex` jti ekler | ✅ Aktif |
+| **Refresh token rotation** (FAZ C4) | `/auth/refresh` her çağrıda eski refresh `jti`'sini blacklist'e atar + yeni refresh üretir; sızan token ikinci kez kullanılamaz | ✅ Aktif |
+| **`revoked_tokens` cleanup cron** (FAZ C5) | APScheduler her gün 03:00 Europe/Istanbul; `expires_at < now` kayıtları siler; DB sonsuz şişme koruması | ✅ Aktif |
+| **Audit log** (FAZ C6) | `audit_logs` tablosu (user_id, action, resource, ip_address, user_agent, extra JSONB); 8 kritik eylem hook'lu (auth.login, .login_failed, .logout, .register, .password_change, wallet.add/delete, integration.add/delete, snapshot.delete, account.soft_delete); `GET /api/v1/audit-logs` endpoint | ✅ Aktif |
+| **JWT TTL prod env override** (FAZ C4) | `ACCESS_TOKEN_EXPIRE_MINUTES=30` prod'da; dev=480 (8 saat) | ✅ Aktif |
 | Health endpoint (auth gerektirmez) | `/health` | ✅ Aktif |
 | Auth gerektiren endpoint'ler | `Depends(get_current_user)` | ✅ Aktif |
 | User izolasyonu | `WHERE user_id == current_user.id` | ✅ Aktif |
 | Pydantic input validation | Tüm request body'ler | ✅ Aktif |
 | Servis katmanı logging | 9 servis dosyasında module-level logger | ✅ Aktif |
-| Test kapsama (regresyon koruma) | IDOR (5 endpoint), security primitives (22 test), integrations leak (5 test), auth flow (21 test) | ✅ Aktif |
+| **422 JSON serialize fix** (FAZ C1 bonus) | `RequestValidationError` handler'da `jsonable_encoder` ile ValueError → str (Pydantic 2 ctx serialize bug fix) | ✅ Aktif |
+| Test kapsama (regresyon koruma) | IDOR (5 endpoint), security primitives (22 test), integrations leak (5 test), auth flow (21 test), **xpub encryption (7), security headers (7), refresh rotation (3), cleanup cron (2), audit log (9)** = 33 yeni FAZ C testi | ✅ Aktif |
 | Soft delete altyapısı | `users.deleted_at` kolonu hazır (cron Faz 3) | ✅ Şema hazır |
 | `users.credit_balance` (CHECK >= 0) | DB seviyesinde negatif bakiye koruması | ✅ Aktif |
+| **CI/CD secret tarama** (FAZ B4) | gitleaks (her PR/push) + Trivy fs (deps + IaC HIGH/CRITICAL) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + TS SAST) | ✅ Aktif |
+| **Container image vulnerability scan** (FAZ B3) | Trivy image scan release pipeline'ında (build sonrası, deploy öncesi); HIGH/CRITICAL → fail | ✅ Aktif |
 
 **Bu korumalar regresyon kabul etmez** — production'a çıkmadan önce düşürülemez. CI'da `test_idor.py`, `test_security.py`, `test_integrations_api.py` testleri bunları otomatik doğrular.
 
@@ -54,10 +65,13 @@
 | Exchange API key | 🔴 Kritik | Fernet (reversible) | Sadece pozisyon çekiminde decrypt |
 | Binance TR session token | 🔴 Kritik | Fernet | Sadece TR earn fetch'te |
 | JWT secret + Fernet master key | 🔴 Kritik | k8s Secret + sealed-secrets | Sadece backend pod |
-| Cüzdan adresleri | 🟡 Orta | – (public key) | User izolasyonu yeterli |
+| **Cüzdan adresleri (xpub dahil)** | 🔴 Kritik (FAZ C1'de yeniden sınıflandırıldı) | **Fernet (reversible)** + SHA-256 fingerprint lookup | Sadece blockchain pozisyon çekiminde decrypt |
+| **Audit log IP/User-Agent** | 🟡 Orta | – | User kendi log'ları + (gelecek) admin |
 | Portföy snapshot | 🟡 Orta | – | User izolasyonu |
 | AI tavsiye içeriği | 🟢 Düşük | – | User izolasyonu |
 | Email | 🟡 Orta | – | KVKK kapsamında |
+
+> **Not (FAZ C1):** Wallet adresleri 🟡 Orta'dan 🔴 Kritik'e yükseltildi çünkü Bitcoin xpub formatından **tüm child public key'ler türetilebilir** (BIP-32 deterministic derivation). DB sızıntısında saldırgan kullanıcının BTC bakiye geçmişini blockchain'den görebilirdi. Migration `b3c4d5e6f7a8` ile Fernet şifreleme eklendi.
 
 ---
 
@@ -170,10 +184,10 @@ POST /auth/logout {refresh_token?}   (Authorization: Bearer <access>)
 ### 3.5 Bilinen Açıklar (Güncel)
 1. ~~**JWT blacklist YOK**~~ ✅ Çözüldü (Faz 2 — `revoked_tokens` + `/auth/logout`)
 2. ~~**`jti` (JWT ID) claim YOK**~~ ✅ Çözüldü (Faz 2 — tüm yeni tokenlar `jti` taşır)
-3. **Refresh token rotation YOK** — aynı refresh token süresi dolana kadar defalarca kullanılabilir (Faz 3)
+3. ~~**Refresh token rotation YOK**~~ ✅ Çözüldü (FAZ C4 — `/auth/refresh` her çağrıda eski refresh `jti`'sini blacklist'e atar; sızan token ikinci kez kullanılamaz)
 4. **Tek device "tüm cihazlardan çık" yok** — kullanıcının tüm aktif tokenlarını toplu iptal etme akışı yok (Faz 3 — `revoked_tokens`'a `user_id+token_type` toplu insert ile çözülebilir)
 5. **Frontend refresh saklamıyor** — `localStorage` sadece access tutuyor; logout'ta refresh blacklist'e alınmıyor. Refresh akışı eklendiğinde düzeltilmeli (frontend teknik borç)
-6. **`revoked_tokens` cleanup yok** — süresi dolmuş kayıtlar bekliyor; Faz 3'te cron job (`DELETE WHERE expires_at < now()`)
+6. ~~**`revoked_tokens` cleanup yok**~~ ✅ Çözüldü (FAZ C5 — APScheduler her gün 03:00 Europe/Istanbul `expires_at < now` kayıtları siler)
 
 ---
 
@@ -304,35 +318,46 @@ CORS_ORIGINS=["https://app.kfinans.com","https://kfinans.com"]
 ### 8.1 CSRF Token (Yapılacak)
 State-changing endpoint'lerde (POST/PUT/DELETE) cookie-based auth kullanılırsa CSRF zorunlu. Bearer token kullandığımız için **şu an düşük risk**, ama frontend httpOnly cookie'ye geçerse zorunlu olur.
 
-### 8.2 Security Response Headers (Yapılacak)
-nginx-ingress veya middleware seviyesinde:
+### 8.2 Security Response Headers ✅ TAMAMLANDI (FAZ C2)
+`backend/app/core/middleware.py::SecurityHeadersMiddleware` her response'a şu header'ları ekler:
 ```
-Strict-Transport-Security: max-age=31536000; includeSubDomains
-X-Frame-Options: SAMEORIGIN
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Frame-Options: DENY
 X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
-Content-Security-Policy: default-src 'self'; script-src 'self'; ...
-Permissions-Policy: geolocation=(), microphone=(), camera=()
+Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'
+Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-site
+Server: kfinans
 ```
 
-### 8.3 HTTPS Zorunluluğu (Yapılacak)
-- nginx-ingress + cert-manager (Let's Encrypt)
-- HTTP → HTTPS redirect (301)
-- HSTS preload (Chrome HSTS list'e ekleme)
+Frontend (`frontend/next.config.ts` async `headers()`) HTML response'larında ek olarak CSP'ye `script-src 'unsafe-inline' 'unsafe-eval'` (Next.js inline runtime için, nonce stratejisi gelecek sürümde) ve `connect-src https://kfinans.app` ekler.
+
+**.app TLD HSTS preload listesinde** — tarayıcı `kfinans.app`'e DNS sorgusu yapmadan zorla HTTPS kullanır. Defence-in-depth için manuel HSTS header da ayarlandı.
+
+### 8.3 HTTPS Zorunluluğu (FAZ D1'de yapılacak)
+- nginx-ingress + cert-manager (Let's Encrypt) — Oracle Cloud K3s'e provision edilecek
+- HTTP → HTTPS redirect (`force-ssl-redirect: true` ingress annotation, mevcut)
+- HSTS preload: `.app` TLD zaten preload listesinde (otomatik)
 
 ### 8.4 Request Size Limit (Yapılacak)
-- nginx: `client_max_body_size 10m;`
+- nginx-ingress: `proxy-body-size: "10m"` annotation eklendi (`k8s/ingress.yaml`)
 - FastAPI: file upload endpoint'lerde Pydantic + content-length kontrol
 
 ### 8.5 SQL Injection
 - ✅ Tüm sorgular SQLAlchemy ORM/parametrize — güvende
-- ✅ Raw SQL yok
+- ✅ Raw SQL yok (audit_logs migration `bind.execute(text(...))` parametrize)
 - ⚠️ String concatenation ile sorgu yazılırsa risk — code review'de yakalanmalı
 
 ### 8.6 XSS Koruması
 - React/Next.js otomatik HTML escape ✅
 - `dangerouslySetInnerHTML` kullanımı YOK (review edilmeli)
 - AI tavsiye Markdown render: `react-markdown` + `rehype-sanitize` zorunlu (Faz 3)
+- **CSP `default-src 'none'`** (FAZ C2) backend için XSS surface'ini sıfıra indirir
+
+### 8.7 Host Header Injection ✅ TAMAMLANDI (FAZ C3)
+`TrustedHostMiddleware` ile `settings.allowed_hosts` env'den (prod'da `["kfinans.app","www.kfinans.app","api.kfinans.app"]`); yanlış Host header → 400.
 
 ---
 
@@ -343,42 +368,68 @@ Permissions-Policy: geolocation=(), microphone=(), camera=()
 - `npm ci` — `package-lock.json` mevcut
 
 ### 9.2 Yapılacak
-- [ ] `pip-audit` veya `safety` CI'da çalışsın
-- [ ] `npm audit` CI'da çalışsın
-- [ ] Trivy ile container image vulnerability scan
-- [ ] Dependabot aktif et (mevcutta? — kontrol edilmeli)
-- [ ] `pip-tools` ile `requirements.lock` üretimi
+- [x] `pip-audit` CI'da çalışıyor (FAZ B4 — `.github/workflows/security.yml`, strict mode + osv vulnerability service)
+- [x] `npm audit` CI'da çalışıyor (FAZ B4 — `--audit-level=high`, fail on threshold)
+- [x] Trivy ile container image vulnerability scan (FAZ B3 — `.github/workflows/release.yml::trivy-scan` job; HIGH/CRITICAL → fail)
+- [x] Trivy filesystem scan (FAZ B4 — `.github/workflows/security.yml::trivy-fs`; deps + IaC)
+- [x] Dependabot aktif (FAZ A4 — `.github/dependabot.yml`; pip + npm + actions + docker, haftalık)
+- [x] CodeQL Python + TypeScript SAST (FAZ B4 — security-and-quality query suite)
+- [x] Gitleaks secret tarama (FAZ B4 — `.gitleaks.toml` allowlist'li; her PR/push)
+- [ ] `pip-tools` ile `requirements.lock` üretimi (Faz 3)
 
 ---
 
 ## 10. Loglama ve Audit Trail
 
-### 10.1 Mevcut
+### 10.1 Mevcut Application Log
 - Login success/fail loglanıyor
 - API entegrasyon hataları loglanıyor
 - Scheduler events loglanıyor
 
-### 10.2 Yapılacak (Faz 3)
-Audit trail tablosu:
+### 10.2 Audit Trail ✅ TAMAMLANDI (FAZ C6)
+
+`audit_logs` tablosu (migration `c4d5e6f7a8b9`):
 ```sql
 audit_logs
-  id          UUID PK
-  user_id     UUID FK NULL          -- anonim eylemler için NULL
-  action      TEXT                  -- 'login', 'add_integration', 'delete_wallet'
-  resource    TEXT                  -- 'wallet:{uuid}'
-  ip_address  TEXT
-  user_agent  TEXT
-  metadata    JSONB                 -- ek context
-  created_at  TIMESTAMPTZ
+  id                 UUID PK
+  user_id            UUID FK ON DELETE SET NULL    -- user silinince log korunur (forensic)
+  action             VARCHAR(64) NOT NULL          -- "auth.login", "wallet.add", "integration.delete"
+  resource           VARCHAR(128)                  -- "wallet:<uuid>", "integration:binance"
+  ip_address         VARCHAR(45)                   -- X-Forwarded-For > client.host (IPv6 max 45)
+  user_agent         VARCHAR(512)                  -- truncated
+  extra              JSONB                         -- ek context (chain, email, vs.)
+  created_at         TIMESTAMPTZ DEFAULT now()
+  -- Index'ler:
+  --   ix_audit_logs_user_created   (user_id, created_at DESC)
+  --   ix_audit_logs_action_created (action, created_at DESC)
 ```
 
-Loglanacak eylemler:
-- Tüm auth eylemleri (login, logout, password change)
-- API key ekleme/silme
-- Cüzdan ekleme/silme
-- Kredi satın alma
-- AI tavsiye üretimi
-- Veri export (KVKK için)
+**Hook'lanmış 8+ eylem:**
+
+| Action | Hook konumu | Kayıt detayı |
+|--------|-------------|--------------|
+| `auth.login` | `auth.py::login` | success → user_id |
+| `auth.login_failed` | `auth.py::login` | user_id (varsa) + extra.email |
+| `auth.logout` | `auth.py::logout` | user_id |
+| `auth.register` | `auth.py::register` | user_id + extra.email + extra.risk_profile |
+| `auth.password_change` | `user.py::change_password` | user_id |
+| `wallet.add` | `wallets.py::add_wallet` | resource=wallet:{id} + extra.chain + extra.label |
+| `wallet.delete` | `wallets.py::remove_wallet` | resource=wallet:{id} + extra.chain |
+| `integration.add` | `integrations.py::add_integration` | resource=integration:{provider} + extra.updated |
+| `integration.delete` | `integrations.py::remove_integration` | resource=integration:{provider} |
+| `snapshot.delete` | `portfolio.py::delete_snapshot` | resource=snapshot:{date} |
+| `account.soft_delete` | `user.py::delete_me` | resource=user:{id} |
+
+**Endpoint:** `GET /api/v1/audit-logs?action_prefix=&limit=` — kullanıcı sadece kendi log'larını görür (IDOR korumalı).
+
+**Servis:** `app/services/audit.py::log_audit()` — best-effort (try/except yutar, ana endpoint bozulmaz). X-Forwarded-For desteği proxy/ingress arkası için.
+
+**Test:** `tests/integration/test_audit_logs.py` — 9 test: 5 hook regression + 4 endpoint (IDOR + filter + auth).
+
+**Kalan loglanacak eylemler (gelecek):**
+- `kvkk.data_export` — KVKK Madde 11 veri taşıma talebi (FAZ E1 ile birlikte endpoint açılınca)
+- `auth.email_verified` — explicit hook (zaten log seviyesinde info kaydı var)
+- AI tavsiye üretimi (Faz 3 — kredi tüketimli)
 
 ---
 
@@ -386,16 +437,16 @@ Loglanacak eylemler:
 
 | OWASP 2021 | Durum | Not |
 |------------|-------|-----|
-| A01: Broken Access Control | ✅ | User izolasyonu var; IDOR riski code review ile |
-| A02: Cryptographic Failures | ⚠️ | bcrypt + Fernet ✅; HTTPS ❌ (prod'da olacak) |
-| A03: Injection | ✅ | ORM only; raw SQL yok |
-| A04: Insecure Design | ✅ | Logout + JWT blacklist (Faz 2'de eklendi) |
-| A05: Security Misconfiguration | ⚠️ | Security headers eksik (prod'da eklenecek) |
-| A06: Vulnerable Components | ❌ | Audit/scan yok (yapılacak) |
-| A07: Identification & Auth Failures | ⚠️ | Logout + blacklist ✅; refresh rotation yok (Faz 3) |
-| A08: Software & Data Integrity | ⚠️ | Image signing yok |
-| A09: Security Logging & Monitoring | ❌ | Audit log yok (Faz 3) |
-| A10: Server-Side Request Forgery | ✅ | Dış URL kullanıcı girişiyle oluşmuyor |
+| A01: Broken Access Control | ✅ | User izolasyonu (5 IDOR test); audit log endpoint de IDOR korumalı |
+| A02: Cryptographic Failures | ✅ | bcrypt (şifre) + Fernet (API key + xpub FAZ C1) + HTTPS (Oracle ingress + cert-manager) + .app TLD HSTS preload |
+| A03: Injection | ✅ | ORM only; raw SQL yok; migration'da `text()` parametrize |
+| A04: Insecure Design | ✅ | Logout + JWT blacklist + refresh rotation (FAZ C4) |
+| A05: Security Misconfiguration | ✅ | SecurityHeaders + TrustedHost (FAZ C2/C3); env'den allowed_hosts override |
+| A06: Vulnerable Components | ✅ | pip-audit + npm-audit + Trivy fs + Trivy image + Dependabot + CodeQL (FAZ A4 + B3 + B4) |
+| A07: Identification & Auth Failures | ✅ | Logout + blacklist + refresh rotation (FAZ C4) + email verify hard block |
+| A08: Software & Data Integrity | ⚠️ | Image signing (cosign) yok — Faz 3 |
+| A09: Security Logging & Monitoring | ✅ | audit_logs tablosu + 8 hook + endpoint (FAZ C6) |
+| A10: Server-Side Request Forgery | ✅ | Dış URL kullanıcı girişiyle oluşmuyor; Ethplorer/CoinGecko sabit URL'ler |
 
 ---
 

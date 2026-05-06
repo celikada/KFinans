@@ -14,27 +14,36 @@
 - ✅ Auto-migration: container start'ta `alembic upgrade head`
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
-### 1.2 CI Pipeline (Çalışıyor — 4 ayrı workflow)
+### 1.2 CI Pipeline (Çalışıyor — 6 workflow)
 - ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%50)
 - ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build
 - ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
-- ✅ `.github/workflows/security.yml`: pip-audit + npm audit (haftalık cron + her PR)
+- ✅ `.github/workflows/security.yml` (FAZ B4): gitleaks (.gitleaks.toml allowlist) + Trivy fs (HIGH/CRITICAL fail) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + JS/TS) — haftalık cron + her PR
+- ✅ `.github/workflows/sonar.yml` (FAZ B2): backend pytest cov XML + frontend vitest LCOV → SonarCloud quality gate (`vars.ENABLE_SONAR='true'` iken aktif; bekleme döneminde skip)
+- ✅ `.github/workflows/release.yml` (FAZ B3): semver tag (`v*.*.*`) → 5 job (Sonar QG → matrix Docker buildx & GHCR push → Trivy image scan HIGH/CRITICAL → Oracle SSH `kubectl set image` + rollout → Playwright @smoke → GitHub Release notes)
 
-### 1.3 Yayın Pipeline (Çalışıyor)
-- ✅ GitHub Actions `cd.yml`: develop → GHCR'a backend + frontend image push (commit SHA tag)
+### 1.3 Yayın Pipeline ✅ TAMAMLANDI (FAZ B3)
+- ✅ Semver tag push (`v*.*.*`) → otomatik Oracle Cloud K3s deploy
+- ✅ GHCR `ghcr.io/celikada/kfinans-backend:tag` + `kfinans-frontend:tag`
+- ✅ Trivy image vulnerability scan deploy öncesi
+- ✅ kubectl set image + rollout status (360s timeout)
+- ✅ Production smoke test (Playwright @smoke etiketi)
+- ✅ GitHub Release notes otomatik
 
 ### 1.4 GitHub Actions Limit Durumu
-- Repo: **PRIVATE** → Free tier 2,000 dk/ay
+- Repo: **PUBLIC** (FAZ B5) → **Sınırsız** GitHub Actions dakikası
 - Workflow path filtresi aktif (sadece ilgili dizin değişince tetiklenir)
-- Tahmini aylık tüketim: ~600-1,500 dk (push sıklığına göre)
 
 ### 1.5 Eksik (Production'a Kadar)
 - ✅ Kubernetes manifestleri (`k8s/` klasörü — kustomize, tek komutla deploy) — bkz. §3
-- ❌ Production deployment (kubectl rollout otomasyonu — manuel `kubectl apply -k k8s/`, CD'den otomatik tetik yok)
+- ✅ Production deployment otomatik (FAZ B3 — release.yml semver tag tetiklemesi)
+- ✅ Branch protection rule'ları (`main` + `develop`) — FAZ B6
+- ✅ Container image vulnerability scan (Trivy) — FAZ B3 + B4
+- ✅ Dependency scan (pip-audit + npm-audit + Dependabot) — FAZ A4 + B4
 - ❌ Tilt/Skaffold dev loop (Docker Compose'tan geçiş — bilinçli teknik borç)
-- ❌ Monitoring (Prometheus + Grafana)
-- ❌ Centralized logging (Loki veya ELK)
-- ❌ Branch protection rule'ları (`main`, `develop`)
+- ❌ Monitoring (Prometheus + Grafana) — Faz 3
+- ❌ Centralized logging (Loki veya ELK) — Faz 3
+- ⏳ SonarCloud entegrasyonu — GitHub flag (Ticket #4360519) çözülmesi bekleniyor; workflow opsiyonel
 
 ---
 
@@ -158,44 +167,96 @@ ghcr.io/celikada/kfinans-backend:latest       # KULLANILMAYACAK — kafa karış
 
 ---
 
-## 4. CI/CD Pipeline
+## 4. CI/CD Pipeline (FAZ B sonrası — 6 workflow)
 
-### 4.1 CI Akışı (`.github/workflows/ci.yml`) — Çalışıyor
-```yaml
-on: [pull_request, push]
-jobs:
-  backend:
-    services: postgres:16
-    steps:
-      - pip install -e ".[dev]"
-      - ruff check . && ruff format --check .
-      - pytest --cov=app --cov-report=xml
-  frontend:
-    steps:
-      - npm ci
-      - npm run lint
-      - npm run build
+```
+                          ┌──────────────────────────┐
+                          │  develop branch (push)   │
+                          └─────────────┬────────────┘
+                                        │
+        ┌───────────────────────────────┼───────────────────────────────┐
+        │                               │                               │
+        ▼                               ▼                               ▼
+┌──────────────┐               ┌──────────────┐                ┌──────────────┐
+│ ci-backend   │               │ ci-frontend  │                │ e2e          │
+│ ruff+pytest  │               │ eslint+vitest│                │ Playwright   │
+│ +cov gate %50│               │ +next build  │                │              │
+└──────────────┘               └──────────────┘                └──────────────┘
+        │                               │                               │
+        ▼                               ▼                               ▼
+        ┌───────────────────────────────────────────────────────────────┐
+        │  security.yml                                                 │
+        │  gitleaks (allowlist) | Trivy fs (HIGH/CRITICAL) | pip-audit  │
+        │  npm-audit (high)     | CodeQL (Python + JS/TS)               │
+        └───────────────────────────────────────────────────────────────┘
+        │
+        ▼
+        ┌───────────────────────────────────────────────────────────────┐
+        │  sonar.yml (vars.ENABLE_SONAR='true' iken)                    │
+        │  backend pytest cov XML + frontend vitest LCOV → SonarCloud   │
+        │  quality gate (wait=true)                                     │
+        └───────────────────────────────────────────────────────────────┘
+
+
+                          ┌──────────────────────────┐
+                          │  main: tag push v*.*.*   │
+                          └─────────────┬────────────┘
+                                        │
+                                        ▼  release.yml
+        ┌───────────────────────────────────────────────────────────────┐
+        │  Job 0: SonarCloud Quality Gate (opsiyonel)                   │
+        ├───────────────────────────────────────────────────────────────┤
+        │  Job 1: Build & Push (matrix backend + frontend)              │
+        │         docker buildx → ghcr.io/celikada/kfinans-{svc}:tag    │
+        ├───────────────────────────────────────────────────────────────┤
+        │  Job 2: Trivy Image Scan (HIGH/CRITICAL → fail)               │
+        ├───────────────────────────────────────────────────────────────┤
+        │  Job 3: Oracle K3s Deploy                                     │
+        │         SSH → kubectl apply -k k8s/ → set image → rollout     │
+        ├───────────────────────────────────────────────────────────────┤
+        │  Job 4: Production Smoke Test (Playwright @smoke)             │
+        ├───────────────────────────────────────────────────────────────┤
+        │  Job 5: GitHub Release (changelog otomatik)                   │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+                          ┌──────────────────────────┐
+                          │ https://kfinans.app      │
+                          │ (Oracle Cloud K3s)       │
+                          └──────────────────────────┘
 ```
 
-### 4.2 CD Akışı (`.github/workflows/cd.yml`) — Çalışıyor
-```yaml
-on:
-  push:
-    branches: [develop, main]
-jobs:
-  build-and-push:
-    steps:
-      - docker build → ghcr.io/.../{git-sha}
-      - docker push
-  # ✅ K8s manifest'leri hazır (k8s/, kustomize) — manuel `kubectl apply -k k8s/`
-  # ❌ Otomatik kubectl rollout: Faz 3 (CD pipeline'a eklenecek)
-```
+### 4.1 Workflow listesi
+| Workflow | Tetikleyici | Süre | Status check name'leri (branch protection için) |
+|----------|-------------|------|------------------------------------------------|
+| `ci-backend.yml` | develop+main push, PR | ~5 dk | `Lint (ruff)`, `Unit testler`, `Integration testler (real PostgreSQL)`, `Coverage gate` |
+| `ci-frontend.yml` | develop+main push, PR | ~3 dk | `Lint`, `Unit (vitest)`, `Build` |
+| `e2e.yml` | develop+main push, PR | ~8 dk | `E2E (Playwright)` |
+| `security.yml` | develop+main push, PR, weekly cron | ~10 dk | `Gitleaks — secret tarama`, `Trivy — filesystem (deps + IaC)`, `pip-audit — Python deps`, `npm-audit — Node deps`, `CodeQL — python`, `CodeQL — javascript-typescript` |
+| `sonar.yml` | develop+main push, PR | ~6 dk | `Backend coverage (pytest + cobertura XML)`, `Frontend coverage (vitest + LCOV)`, `SonarCloud analiz + quality gate` |
+| `release.yml` | Tag `v*.*.*` push | ~15 dk | (release-only, branch protection check değil) |
 
-### 4.3 Eklenecek
-- [ ] Test coverage `Codecov` veya `Coveralls`'a yüklensin
-- [ ] `kubectl rollout` otomasyonu (main → production) — **manifest'ler hazır, sadece pipeline adımı eksik**
-- [ ] Slack/Discord deploy bildirimi
-- [ ] Vulnerability scan (Trivy) — image push öncesi
+### 4.2 Branch Protection (FAZ B6)
+**`main`:**
+- PR şart, lineer history, force-push kapalı, branch silme kapalı
+- Conversation resolution zorunlu
+- Review opsiyonel (count=0 — tek dev için; ekip büyüyünce 1)
+- Status check'ler **manuel UI'dan eklenir** (workflow'lar ilk başarılı run sonrası görünür olur)
+
+**`develop`:**
+- Doğrudan push'a izin (lokal akış için)
+- Force-push kapalı, branch silme kapalı
+
+### 4.3 GitHub Repo Ayarları
+- Default branch: `develop`
+- Sadece **squash merge** (lineer history)
+- Merge sonrası branch otomatik silme
+- Public repo (Apache-2.0 LICENSE otomatik tanındı)
+
+### 4.4 Eklenecek (Faz 3)
+- [ ] Slack/Discord deploy bildirimi (release sonrası)
+- [ ] Image signing (cosign) + sigstore attestations
+- [ ] Coverage trend (Codecov SaaS — Sonar zaten gösteriyor, opsiyonel)
 
 ---
 
