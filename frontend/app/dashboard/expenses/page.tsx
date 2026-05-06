@@ -21,6 +21,7 @@ export default function ExpensesPage() {
   const [error, setError] = useState("");
   const [overBudget, setOverBudget] = useState<BudgetComparisonDTO[]>([]);
   const [importing, setImporting] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ExpenseDTO | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
@@ -50,12 +51,8 @@ export default function ExpensesPage() {
     refresh();
   }, [refresh, router]);
 
-  function handleAdded(added: ExpenseDTO) {
-    const addedMonth = parseInt(added.date.slice(5, 7));
-    const addedYear = parseInt(added.date.slice(0, 4));
-    if (addedYear === year && addedMonth === month) {
-      setExpenses((prev) => [added, ...prev]);
-    }
+  function handleSaved() {
+    setEditingExpense(null);
     refresh();
   }
 
@@ -149,7 +146,11 @@ export default function ExpensesPage() {
           </div>
         )}
 
-        <ExpenseForm onAdded={handleAdded} />
+        <ExpenseForm
+          onSaved={handleSaved}
+          existing={editingExpense}
+          onCancel={() => setEditingExpense(null)}
+        />
 
         {error && (
           <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
@@ -164,7 +165,7 @@ export default function ExpensesPage() {
         )}
 
         {!loading && (
-          <ExpenseTable expenses={expenses} onDeleted={handleDeleted} />
+          <ExpenseTable expenses={expenses} onDeleted={handleDeleted} onEdit={setEditingExpense} />
         )}
       </main>
     </div>

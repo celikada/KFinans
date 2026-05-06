@@ -7,9 +7,10 @@ import { TLValue } from "@/app/_components/TLValue";
 interface Props {
   expenses: ExpenseDTO[];
   onDeleted: (id: number) => void;
+  onEdit?: (expense: ExpenseDTO) => void;
 }
 
-export function ExpenseTable({ expenses, onDeleted }: Props) {
+export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
   const [removing, setRemoving] = useState<number | null>(null);
 
   async function handleDelete(id: number) {
@@ -76,13 +77,23 @@ export function ExpenseTable({ expenses, onDeleted }: Props) {
                 {fmtTL(exp.amount)} ₺
               </td>
               <td className="px-6 py-3 text-right">
-                <button
-                  onClick={() => handleDelete(exp.id)}
-                  disabled={removing === exp.id}
-                  className="text-xs text-gray-300 hover:text-red-400 transition-colors disabled:opacity-40"
-                >
-                  {removing === exp.id ? "..." : "Sil"}
-                </button>
+                <div className="flex items-center justify-end gap-3">
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(exp)}
+                      className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
+                    >
+                      Düzenle
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDelete(exp.id)}
+                    disabled={removing === exp.id}
+                    className="text-xs text-gray-300 hover:text-red-400 transition-colors disabled:opacity-40"
+                  >
+                    {removing === exp.id ? "..." : "Sil"}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

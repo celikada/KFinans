@@ -11,19 +11,23 @@ import {
 import { INPUT_CLS } from "@/lib/format";
 
 interface Props {
-  onAdded: (expense: ExpenseDTO) => void;
+  onSaved: (expense: ExpenseDTO) => void;
+  /** Doluysa edit modu */
+  existing?: ExpenseDTO | null;
+  onCancel?: () => void;
 }
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ExpenseForm({ onAdded }: Readonly<Props>) {
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<ExpenseCategory>("groceries");
-  const [date, setDate] = useState(todayIso());
-  const [description, setDescription] = useState("");
-  const [creditCardId, setCreditCardId] = useState<string>("");  // "" = nakit
+export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
+  const isEdit = !!existing;
+  const [amount, setAmount] = useState(existing?.amount ?? "");
+  const [category, setCategory] = useState<ExpenseCategory>(existing?.category ?? "groceries");
+  const [date, setDate] = useState(existing?.date ?? todayIso());
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [creditCardId, setCreditCardId] = useState<string>(existing?.credit_card_id ? existing.credit_card_id.toString() : "");
   const [cards, setCards] = useState<CreditCardDTO[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -33,6 +37,17 @@ export function ExpenseForm({ onAdded }: Readonly<Props>) {
     api.listCreditCards().then((s) => setCards(s.cards)).catch(() => {});
   }, []);
 
+  // existing değişirse formu yenile
+  useEffect(() => {
+    if (existing) {
+      setAmount(existing.amount);
+      setCategory(existing.category);
+      setDate(existing.date);
+      setDescription(existing.description ?? "");
+      setCreditCardId(existing.credit_card_id ? existing.credit_card_id.toString() : "");
+    }
+  }, [existing]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -40,20 +55,25 @@ export function ExpenseForm({ onAdded }: Readonly<Props>) {
     if (!value || value <= 0) { setError("Geçerli bir tutar girin"); return; }
     setSaving(true);
     try {
-      const added = await api.createExpense({
+      const payload = {
         amount: value,
         category,
         date,
         description: description.trim() || null,
         credit_card_id: creditCardId ? parseInt(creditCardId) : null,
-        is_paid: true,  // gerçekleşmiş harcama varsayılır
-      });
-      onAdded(added);
-      setAmount("");
-      setDescription("");
-      setCreditCardId("");
+        is_paid: true,
+      };
+      const result = isEdit && existing
+        ? await api.updateExpense(existing.id, payload)
+        : await api.createExpense(payload);
+      onSaved(result);
+      if (!isEdit) {
+        setAmount("");
+        setDescription("");
+        setCreditCardId("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Eklenemedi");
+      setError(err instanceof Error ? err.message : "Kaydedilemedi");
     } finally {
       setSaving(false);
     }
@@ -61,7 +81,7 @@ export function ExpenseForm({ onAdded }: Readonly<Props>) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-sm font-semibold text-gray-700 mb-4">Yeni Harcama</h2>
+      <h2 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? "Harcamayı düzenle" : "Yeni Harcama"}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Tutar (₺)</label>
@@ -135,13 +155,32 @@ export function ExpenseForm({ onAdded }: Readonly<Props>) {
         <p className="mt-3 text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
       )}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
-        {saving ? "Ekleniyor..." : "Ekle"}
-      </button>
+      {(() => {
+        let submitLabel: string;
+        if (saving) submitLabel = "Kaydediliyor...";
+        else if (isEdit) submitLabel = "Güncelle";
+        else submitLabel = "Ekle";
+        return (
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {submitLabel}
+            </button>
+            {isEdit && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
+              >
+                İptal
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </form>
   );
 }
