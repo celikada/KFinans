@@ -20,7 +20,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
-from app.models.credit_card import CreditCardInstallment, CreditCardStatement
+from app.models.credit_card import CreditCard, CreditCardInstallment, CreditCardStatement
 from app.models.expense import Expense
 from app.models.income import Income
 from app.models.planned_expense import PlannedExpense
@@ -161,28 +161,29 @@ async def get_cash_flow(
         actual_expense_by_month[d.month] += Decimal(amt)
 
     # 3) Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri)
+    # user_id filtresi SQL'de — lazy load gerekmez
     stmt_q = await db.execute(
-        select(CreditCardStatement)
-        .join(CreditCardStatement.card)
+        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount)
+        .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
         .where(
+            CreditCard.user_id == current_user.id,
             CreditCardStatement.due_date >= date_type(year, 1, 1),
             CreditCardStatement.due_date <= date_type(year, 12, 31),
         )
     )
-    statements = stmt_q.scalars().all()
     statement_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for s in statements:
-        if s.card.user_id != current_user.id:
-            continue
-        statement_by_month[s.due_date.month] += Decimal(s.statement_amount)
+    for due_date, amount in stmt_q.all():
+        statement_by_month[due_date.month] += Decimal(amount)
 
     # 4) Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için
-    inst_q = await db.execute(select(CreditCardInstallment).join(CreditCardInstallment.card))
+    inst_q = await db.execute(
+        select(CreditCardInstallment)
+        .join(CreditCard, CreditCardInstallment.card_id == CreditCard.id)
+        .where(CreditCard.user_id == current_user.id)
+    )
     installments = inst_q.scalars().all()
     installment_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
     for inst in installments:
-        if inst.card.user_id != current_user.id:
-            continue
         for m in range(1, 13):
             if _installment_applies_in_month(inst, year, m):
                 installment_by_month[m] += Decimal(inst.monthly_amount)
