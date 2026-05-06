@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -90,6 +91,24 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Kullanıcı bulunamadı")
+
+    # ─── Refresh token rotation (FAZ C4) ────────────────────────────────
+    # Eski refresh'in jti'sini blacklist'e at — sizan refresh token'in
+    # ikinci kez kullanilmasi engellenir. expires_at TTL kontrol icin
+    # cleanup cron'da (FAZ C5) silinir.
+    if jti and "exp" in data:
+        db.add(RevokedToken(
+            jti=jti,
+            user_id=user.id,
+            token_type="refresh",
+            expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Idempotency: ayni token paralel iki istekte rotate edilirse
+            # PK cakismasi olabilir. Rollback yapip yeni token uretmeye devam.
+            await db.rollback()
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),

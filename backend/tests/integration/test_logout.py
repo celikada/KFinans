@@ -127,3 +127,62 @@ async def test_logout_does_not_affect_other_users(client: AsyncClient):
     # B'nin tokenlari hala calisiyor olmali
     resp = await client.get("/api/v1/integrations", headers=session_b["headers"])
     assert resp.status_code == 200
+
+
+# ─── FAZ C4: Refresh token rotation ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotates_old_token_into_blacklist(client: AsyncClient):
+    """/auth/refresh sonrasi eski refresh token tekrar kullanilamamali."""
+    session = await _register_and_login(client, "rotate_basic@example.com")
+    old_refresh = session["refresh_token"]
+
+    # 1. ilk refresh — yeni tokenlar gelir
+    r1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+    assert r1.status_code == 200
+    new_refresh = r1.json()["refresh_token"]
+    assert new_refresh != old_refresh, "Yeni refresh token uretilmeli"
+
+    # 2. eski refresh ikinci kez kullanilirsa 401 (rotation: blacklist'te)
+    r2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+    assert r2.status_code == 401
+    assert "iptal" in r2.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_refresh_new_token_works_after_rotation(client: AsyncClient):
+    """Rotation sonrasi yeni refresh token bir sonraki refresh icin gecerli olmali."""
+    session = await _register_and_login(client, "rotate_chain@example.com")
+
+    r1 = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": session["refresh_token"]}
+    )
+    assert r1.status_code == 200
+    new_refresh = r1.json()["refresh_token"]
+
+    # Yeni refresh hemen ikinci kez calisip basarili olmali
+    r2 = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": new_refresh}
+    )
+    assert r2.status_code == 200
+    assert r2.json()["refresh_token"] != new_refresh  # rotate edildi
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotation_preserves_user_isolation(client: AsyncClient):
+    """User A'nin rotation'i User B'nin tokenlarini etkilememeli."""
+    session_a = await _register_and_login(client, "rotate_iso_a@example.com")
+    session_b = await _register_and_login(client, "rotate_iso_b@example.com")
+
+    # A refresh yapar
+    r = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": session_a["refresh_token"]}
+    )
+    assert r.status_code == 200
+
+    # B'nin refresh'i hala calismali
+    rb = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": session_b["refresh_token"]}
+    )
+    assert rb.status_code == 200
