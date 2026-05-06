@@ -370,6 +370,9 @@ export const api = {
   realizeAllRecurringPast: () =>
     request<RealizeResultDTO>(`/income/recurring/realize-all-past`, { method: "POST" }),
 
+  // Yıllık nakit akış (geçmiş + gelecek)
+  getCashFlow: (year: number) => request<CashFlowYearDTO>(`/cash-flow?year=${year}`),
+
   // Finansal hedef
   getGoal: () => request<GoalDTO>("/user/goal"),
   setGoal: (amount: number, currency: GoalCurrency) =>
@@ -964,6 +967,27 @@ export interface RealizeResultDTO {
   realized: number;
   skipped: number;
   income_ids: number[];
+}
+
+// Yıllık nakit akış (geçmiş + gelecek aylar)
+export interface CashFlowMonthDTO {
+  month: number;
+  income_actual: string;
+  income_forecast: string;
+  expense_actual: string;
+  expense_forecast: string;
+  income_total: string;
+  expense_total: string;
+  net: string;
+  is_past: boolean;
+}
+
+export interface CashFlowYearDTO {
+  year: number;
+  months: CashFlowMonthDTO[];
+  total_income: string;
+  total_expense: string;
+  total_net: string;
 }
 
 // Kredi kartları (Faz 3 — manuel giriş)

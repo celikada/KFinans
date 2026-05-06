@@ -362,6 +362,12 @@ export default function DashboardPage() {
               Geçmiş
             </button>
             <button
+              onClick={() => router.push("/dashboard/cash-flow")}
+              className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Nakit Akışı
+            </button>
+            <button
               onClick={takeSnapshot}
               disabled={snapshotting}
               className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"

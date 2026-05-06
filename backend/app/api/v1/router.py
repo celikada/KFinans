@@ -7,6 +7,7 @@ from app.api.v1 import (
     bes,
     budget,
     cash,
+    cash_flow,
     commodity,
     credit_cards,
     expenses,
@@ -38,6 +39,7 @@ api_router.include_router(income.router)
 api_router.include_router(budget.router)
 api_router.include_router(commodity.router)
 api_router.include_router(cash.router)
+api_router.include_router(cash_flow.router)
 api_router.include_router(credit_cards.router)
 api_router.include_router(manual_crypto.router)
 api_router.include_router(asset_catalog.router)
