@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
@@ -6,6 +6,7 @@ from app.core.security import encrypt_secret
 from app.models.integration import Integration
 from app.models.user import User
 from app.schemas.integration import IntegrationCreate, IntegrationOut
+from app.services.audit import AuditAction, log_audit
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -21,6 +22,7 @@ async def list_integrations(
 
 @router.post("", response_model=IntegrationOut, status_code=status.HTTP_201_CREATED)
 async def add_integration(
+    request: Request,
     payload: IntegrationCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -36,6 +38,13 @@ async def add_integration(
         existing.encrypted_key = encrypt_secret(payload.api_key)
         existing.encrypted_secret = encrypt_secret(payload.api_secret) if payload.api_secret else None
         existing.is_active = True
+        await log_audit(
+            db, request,
+            action=AuditAction.INTEGRATION_ADD,
+            user_id=current_user.id,
+            resource=f"integration:{payload.provider}",
+            extra={"updated": True},
+        )
         await db.commit()
         await db.refresh(existing)
         return existing
@@ -47,6 +56,13 @@ async def add_integration(
         encrypted_secret=encrypt_secret(payload.api_secret) if payload.api_secret else None,
     )
     db.add(integration)
+    await log_audit(
+        db, request,
+        action=AuditAction.INTEGRATION_ADD,
+        user_id=current_user.id,
+        resource=f"integration:{payload.provider}",
+        extra={"updated": False},
+    )
     await db.commit()
     await db.refresh(integration)
     return integration
@@ -55,6 +71,7 @@ async def add_integration(
 @router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_integration(
     provider: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -68,6 +85,12 @@ async def remove_integration(
     if not integration:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entegrasyon bulunamadı")
     await db.delete(integration)
+    await log_audit(
+        db, request,
+        action=AuditAction.INTEGRATION_DELETE,
+        user_id=current_user.id,
+        resource=f"integration:{provider}",
+    )
     await db.commit()
 
 

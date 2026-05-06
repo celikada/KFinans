@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import date
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
@@ -23,6 +23,7 @@ from app.schemas.portfolio import (
     WalletResponse,
 )
 from app.services.aggregator import fetch_usd_to_tl, fetch_combined_prices, lookup_usd_price
+from app.services.audit import AuditAction, log_audit
 from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
@@ -112,6 +113,7 @@ async def create_snapshot(
 @router.delete("/snapshot/{snapshot_date}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_snapshot(
     snapshot_date: date,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -127,6 +129,12 @@ async def delete_snapshot(
     if not snap:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot bulunamadı")
     await db.delete(snap)
+    await log_audit(
+        db, request,
+        action=AuditAction.SNAPSHOT_DELETE,
+        user_id=current_user.id,
+        resource=f"snapshot:{snapshot_date.isoformat()}",
+    )
     await db.commit()
 
 

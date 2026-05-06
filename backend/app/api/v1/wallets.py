@@ -1,6 +1,6 @@
 import io
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +9,7 @@ from app.core.deps import get_db, get_current_user
 from app.models.integration import WalletAddress
 from app.models.user import User
 from app.schemas.integration import WalletCreate, WalletOut
+from app.services.audit import AuditAction, log_audit
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
@@ -31,6 +32,7 @@ async def list_wallets(
 
 @router.post("", response_model=WalletOut, status_code=status.HTTP_201_CREATED)
 async def add_wallet(
+    request: Request,
     payload: WalletCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -48,13 +50,21 @@ async def add_wallet(
     )
     db.add(wallet)
     try:
-        await db.commit()
+        await db.flush()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu cüzdan zaten kayıtlı",
         )
+    await log_audit(
+        db, request,
+        action=AuditAction.WALLET_ADD,
+        user_id=current_user.id,
+        resource=f"wallet:{wallet.id}",
+        extra={"chain": payload.chain, "label": payload.label},
+    )
+    await db.commit()
     await db.refresh(wallet)
     return wallet
 
@@ -62,6 +72,7 @@ async def add_wallet(
 @router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_wallet(
     wallet_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -74,7 +85,15 @@ async def remove_wallet(
     wallet = result.scalar_one_or_none()
     if not wallet:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cüzdan bulunamadı")
+    deleted_chain = wallet.chain
     await db.delete(wallet)
+    await log_audit(
+        db, request,
+        action=AuditAction.WALLET_DELETE,
+        user_id=current_user.id,
+        resource=f"wallet:{wallet_id}",
+        extra={"chain": deleted_chain},
+    )
     await db.commit()
 
 

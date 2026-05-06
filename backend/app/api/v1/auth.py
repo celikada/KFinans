@@ -31,6 +31,7 @@ from app.schemas.auth import (
     ResendVerificationRequest,
     TokenResponse,
 )
+from app.services.audit import AuditAction, log_audit
 from app.services.email import send_verification_email
 
 _oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -52,6 +53,14 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
         logger.warning("Başarısız giriş denemesi: %s", payload.email)
+        # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
+        await log_audit(
+            db, request,
+            action=AuditAction.LOGIN_FAILED,
+            user_id=user.id if user else None,
+            extra={"email": payload.email},
+        )
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
     if not user.email_verified:
         logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", payload.email)
@@ -60,6 +69,12 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             detail="E-posta adresiniz henüz doğrulanmadı. Lütfen gelen kutunuzu kontrol edin.",
         )
     logger.info("Kullanıcı giriş yaptı: %s", payload.email)
+    await log_audit(
+        db, request,
+        action=AuditAction.LOGIN,
+        user_id=user.id,
+    )
+    await db.commit()
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),
@@ -118,6 +133,7 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 async def logout(
+    request: Request,
     payload: LogoutRequest,
     access_token: str = Depends(_oauth2),
     current_user: User = Depends(get_current_user),
@@ -160,6 +176,13 @@ async def logout(
         except JWTError:
             pass  # Gecersiz refresh token; sessizce yutulur
 
+    # Audit log (commit oncesi flush'lanir, ana commit ile birlikte gider)
+    await log_audit(
+        db, request,
+        action=AuditAction.LOGOUT,
+        user_id=current_user.id,
+    )
+
     try:
         await db.commit()
     except Exception:
@@ -186,6 +209,13 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         verify_token_expires_at=expires_at,
     )
     db.add(user)
+    await db.flush()  # user.id'yi al
+    await log_audit(
+        db, request,
+        action=AuditAction.REGISTER,
+        user_id=user.id,
+        extra={"email": payload.email, "risk_profile": payload.risk_profile},
+    )
     await db.commit()
     await db.refresh(user)
     logger.info("Yeni kullanıcı kaydı: %s", payload.email)
