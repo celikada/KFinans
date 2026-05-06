@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 from jose import jwt
@@ -44,3 +45,14 @@ def encrypt_secret(value: str) -> str:
 
 def decrypt_secret(value: str) -> str:
     return _fernet.decrypt(value.encode()).decode()
+
+
+def address_fingerprint(address: str) -> str:
+    """SHA-256 hex digest of lowercase address.
+
+    Used for unique-constraint lookups on encrypted wallet addresses where
+    plaintext WHERE filtering is not possible. Lowercase normalization makes
+    EVM checksum variants collide (intended) and is no-op for Bech32/base58/
+    xpub formats which are conventionally lowercase.
+    """
+    return hashlib.sha256(address.lower().encode("utf-8")).hexdigest()
