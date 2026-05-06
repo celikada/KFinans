@@ -1,0 +1,27 @@
+# gitleaks konfigurasyonu — KFinans
+# CI'da `gitleaks detect --config=.gitleaks.toml` ile çalışır.
+# False positive (test fixture password'leri) burada allowlist'e alınır.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "KFinans test fixture'ları — gerçek secret değil"
+
+# Test password'leri: backend pytest + frontend playwright fixture'ları.
+# Bu değerler sadece test DB'lerinde geçici user oluşturmak için kullanılır,
+# üretim sistemine erişim sağlamaz. Detay: .credentials.local.md
+regexTarget = "match"
+regexes = [
+    '''guclu-sifre-123''',
+]
+
+# Test dosyalarındaki sahte örnek değerler için path bazlı genişletilebilir hariç tutma:
+paths = [
+    '''(?i)backend/tests/.*''',
+    '''(?i)frontend/playwright/.*\.spec\.ts''',
+    '''(?i)backend/\.env\.example''',
+    '''(?i)\.env\.prod\.example''',
+    '''(?i)k8s/secrets\.example\.yaml''',
+    '''(?i)\.credentials\.local\.md''',  # gitignore'da ama yine de allowlist
+]

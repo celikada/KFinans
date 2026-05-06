@@ -1,11 +1,21 @@
 # KFinans
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs)](https://nextjs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](./CODE_OF_CONDUCT.md)
+
 > **Türkiye'ye özel kişisel yatırım ve finans takip uygulaması**
+> 🌐 Production: [https://kfinans.app](https://kfinans.app) *(yakında)*
 
 KFinans, dağınık yatırım hesaplarınızı ve günlük finansal yaşamınızı tek ekranda toplar:
-**TEFAS yatırım fonları**, **kripto borsaları** (Binance, iCrypex), **blockchain cüzdanlar** (Sonic, Avalanche, Ethereum), **BES birikimleri**, **hisse senetleri** (BIST + ABD + UK, Yahoo Finance), **kıymetli madenler** (gram/BiGA/sikke), **harcama-gelir-bütçe takibi** ve **AI destekli yatırım tavsiyeleri** (Claude API).
+**TEFAS yatırım fonları**, **kripto borsaları** (Binance, iCrypex), **blockchain cüzdanlar** (Sonic, Avalanche, Ethereum, Bitcoin, Solana, +5 zincir), **BES birikimleri**, **hisse senetleri** (BIST + ABD + UK, Yahoo Finance), **kıymetli madenler** (gram/BiGA/sikke), **harcama-gelir-bütçe takibi** ve **AI destekli yatırım tavsiyeleri** (Claude API).
 
 Bir [Mayotek](https://mayotek.com) ürünüdür.
+
+> ⚠️ **Kişisel finansal veri uyarısı:** Bu uygulama exchange API anahtarlarınızı, blockchain cüzdan adreslerinizi ve portföy bakiyelerinizi işler. Self-host eden kullanıcılar **kendi verilerinin yöneticisidir**. Production deploy yapacaksanız mutlaka [docs/07-guvenlik.md](./docs/07-guvenlik.md) ve [docs/08-uyumluluk-kvkk.md](./docs/08-uyumluluk-kvkk.md) dokümanlarını okuyun. SaaS sürümümüzü (`https://kfinans.app`) kullanırken işlenen veriler için Aydınlatma Metni ve KVKK haklarınızı [hesap ayarları](https://kfinans.app/legal) sayfasında bulabilirsiniz.
 
 ---
 
@@ -129,10 +139,22 @@ Detaylı teknik dokümanlar için → [`docs/`](./docs/README.md):
 
 ---
 
+## Katkı
+
+Katkı sağlamak istiyorsanız: [CONTRIBUTING.md](./CONTRIBUTING.md). Tüm katkıcılar [Davranış Kuralları](./CODE_OF_CONDUCT.md)'na uymakla yükümlüdür.
+
+## Güvenlik Açığı Bildirimi
+
+Lütfen güvenlik açıklarını **public issue olarak açmayın**. [SECURITY.md](./SECURITY.md) bildirim akışını izleyin.
+
 ## Lisans
 
-Tüm hakları saklıdır © Mayotek.
+[Apache License 2.0](./LICENSE) — Copyright © 2026 Mayotek.
+
+Bu lisans size kodu kullanma, değiştirme, dağıtma, alt-lisanslama ve patent kullanım hakkı verir. Yalnızca lisans metnini ve copyright bildirimini saklayın.
 
 ## İletişim
 
-celikada@gmail.com
+- 📧 Genel: `celikada@gmail.com`
+- 🔐 Güvenlik: [SECURITY.md](./SECURITY.md)
+- 🐛 Bug / Özellik: [GitHub Issues](https://github.com/celikada/KFinans/issues)

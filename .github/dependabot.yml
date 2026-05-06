@@ -1,0 +1,154 @@
+# Dependabot — bağımlılık güvenlik güncellemeleri
+#
+# Haftalık tarama (Pazartesi 06:00 Europe/Istanbul). Major sürüm yükseltmeleri
+# ignore edilir; yalnızca patch + minor otomatik PR olarak gelir. Major'lar
+# manuel review gerektirir (breaking change riski).
+#
+# Detay: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # ─── Backend (Python / pip) ────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "celikada"
+    assignees:
+      - "celikada"
+    labels:
+      - "dependencies"
+      - "backend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # FastAPI ekosistemi tek PR'da gelsin (ilişkili)
+      fastapi-stack:
+        patterns:
+          - "fastapi"
+          - "starlette"
+          - "uvicorn*"
+          - "pydantic*"
+      # Test araçları tek PR'da
+      test-tools:
+        patterns:
+          - "pytest*"
+          - "respx"
+          - "ruff"
+      # SQLAlchemy + Alembic
+      db-stack:
+        patterns:
+          - "sqlalchemy"
+          - "alembic"
+          - "asyncpg"
+    ignore:
+      # Major yükseltmeleri manuel
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ─── Frontend (npm) ────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "celikada"
+    assignees:
+      - "celikada"
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      next-react:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@types/react*"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+          - "postcss*"
+          - "autoprefixer"
+      test-stack:
+        patterns:
+          - "@playwright/*"
+          - "vitest"
+          - "jest*"
+          - "@testing-library/*"
+      eslint:
+        patterns:
+          - "eslint*"
+          - "@typescript-eslint/*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ─── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "celikada"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci(deps)"
+      include: "scope"
+    groups:
+      actions-stack:
+        patterns:
+          - "actions/*"
+          - "docker/*"
+          - "github/*"
+
+  # ─── Docker base image'lar ─────────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"

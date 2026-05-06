@@ -4,6 +4,7 @@ backend/__pycache__/
 backend/*.pyc
 backend/.pytest_cache/
 backend/.ruff_cache/
+backend/.coverage
 backend/*.egg-info/
 backend/dist/
 backend/build/
@@ -18,6 +19,19 @@ frontend/.env*.local
 # Genel
 .DS_Store
 *.log
+gitleaks-report.txt
+
+# IDE / editor workspace files (kullanıcıya özel, repo'ya ait degil)
+.obsidian/
+.vscode/
+.idea/
+
+# Claude Code lokal state
+.claude/scheduled_tasks.lock
 
 # Kubernetes secrets — secrets.example.yaml commit edilir, secrets.yaml asla
 k8s/secrets.yaml
+
+# Lokal credentials referansı (dev .env yedekleri + test fixture'lar) — ASLA commit edilmez
+.credentials.local.md
+.credentials.local.*
