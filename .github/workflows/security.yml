@@ -1,5 +1,8 @@
-name: Security — Dependency & Image Scan
+name: Security — Secret, Dependency & Image Scan
 
+# ─── Tetikleyici ─────────────────────────────────────────────────────────────
+# Her push + PR + haftalik (zamanlanmis tarama) + manuel tetikleme.
+# Gitleaks/Trivy fail olursa branch protection bunu blocker olarak gorur.
 on:
   push:
     branches: [main, develop]
@@ -9,9 +12,63 @@ on:
     - cron: "0 6 * * 1"   # her Pazartesi 06:00 UTC
   workflow_dispatch:
 
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ─── Secret tarama (gitleaks) ──────────────────────────────────────────────
+  # CI'da .gitleaks.toml allowlist'i ile calisir. Test fixture password'leri
+  # allowlist'te oldugu icin false positive yaratmaz. Yeni secret commit'lenirse
+  # (gerçek API key, sifre, token) bu job FAIL eder ve PR merge edilemez.
+  gitleaks:
+    name: Gitleaks — secret tarama
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Tum git history'yi tara
+
+      - name: Gitleaks tarama
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ─── Trivy — repo (filesystem) tarama ──────────────────────────────────────
+  # Dependency manifest'leri (pyproject.toml, package.json, Dockerfile) ve
+  # IaC dosyalari (k8s/, docker-compose.yml) icindeki HIGH/CRITICAL bulgular.
+  # Image scan release.yml'da yapilir; bu job pre-build aci icin.
+  trivy-fs:
+    name: Trivy — filesystem (deps + IaC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
+          skip-dirs: 'frontend/node_modules,frontend/.next,backend/.venv,backend/__pycache__'
+
+      - name: Trivy SARIF rapor upload
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-fs.sarif'
+          category: trivy-fs
+
+  # ─── pip-audit — Python deps zafiyet ───────────────────────────────────────
   pip-audit:
-    name: Python bağımlılık zafiyet taraması
+    name: pip-audit — Python deps
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,15 +76,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: pip-audit yükle
         run: pip install pip-audit
-      - name: Audit
-        working-directory: backend
-        run: pip-audit -r <(pip compile pyproject.toml 2>/dev/null || cat pyproject.toml) --strict || pip-audit --strict
-        continue-on-error: true
 
+      - name: Bağımlılıkları kur (uretim — dev hariç)
+        working-directory: backend
+        run: pip install -e "."
+
+      - name: pip-audit (strict mode — fail on HIGH/CRITICAL)
+        working-directory: backend
+        # --strict: zafiyet bulunca exit 1
+        # --vulnerability-service: PyPI advisory DB
+        run: pip-audit --strict --vulnerability-service osv
+
+  # ─── npm-audit — Node deps zafiyet ─────────────────────────────────────────
   npm-audit:
-    name: NPM bağımlılık zafiyet taraması
+    name: npm-audit — Node deps
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,7 +100,43 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: npm audit
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit (high severity, fail on threshold)
         working-directory: frontend
         run: npm audit --audit-level=high
-        continue-on-error: true
+
+  # ─── CodeQL — Python + JavaScript statik analiz ────────────────────────────
+  # GitHub'in built-in SAST aracı. SQL injection, XSS, hard-coded credentials
+  # gibi pattern'leri yakalar. Sonar ile çakışmaz, complementary.
+  codeql:
+    name: CodeQL — ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['python', 'javascript-typescript']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
