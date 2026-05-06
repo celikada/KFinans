@@ -262,36 +262,43 @@ async def test_tefas_preview_gain_negative(client: AsyncClient):
 
 
 # ---------------------------------------------------------------------------
-# Test 10: avg_cost_tl=0 için 422 (gt=0 Pydantic validasyonu)
+# Test 10: avg_cost_tl=0 schema tarafindan None'a normalize edilir
+# (CLAUDE.md "Maliyet bazi" bolumu — kullanici bilmiyorsa bos birakabilir)
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_stock_avg_cost_zero_returns_422(client: AsyncClient):
+async def test_stock_avg_cost_zero_normalizes_to_none(client: AsyncClient):
     headers = await _make_user(client, "cb_stock_zero@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "avg_cost_tl": 0.0}]
     resp = await client.put(f"{_STOCKS_BASE}/holdings", json=payload, headers=headers)
-    assert resp.status_code == 422
+    assert resp.status_code in (200, 201)
+    body = resp.json()
+    assert body[0]["avg_cost_tl"] is None
 
 
 # ---------------------------------------------------------------------------
-# Test 11: Negatif avg_cost_tl için 422
+# Test 11: Negatif avg_cost_tl schema tarafindan None'a normalize edilir
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_stock_avg_cost_negative_returns_422(client: AsyncClient):
+async def test_stock_avg_cost_negative_normalizes_to_none(client: AsyncClient):
     headers = await _make_user(client, "cb_stock_neg@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "avg_cost_tl": -100.0}]
     resp = await client.put(f"{_STOCKS_BASE}/holdings", json=payload, headers=headers)
-    assert resp.status_code == 422
+    assert resp.status_code in (200, 201)
+    body = resp.json()
+    assert body[0]["avg_cost_tl"] is None
 
 
 # ---------------------------------------------------------------------------
-# Test 12: TEFAS negatif avg_cost_tl için 422
+# Test 12: TEFAS negatif avg_cost_tl schema tarafindan None'a normalize edilir
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_tefas_avg_cost_negative_returns_422(client: AsyncClient):
+async def test_tefas_avg_cost_negative_normalizes_to_none(client: AsyncClient):
     headers = await _make_user(client, "cb_tefas_neg@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "avg_cost_tl": -5.0}]
     resp = await client.put(f"{_TEFAS_BASE}/holdings", json=payload, headers=headers)
-    assert resp.status_code == 422
+    assert resp.status_code in (200, 201)
+    body = resp.json()
+    assert body[0]["avg_cost_tl"] is None
 
 
 # ---------------------------------------------------------------------------
