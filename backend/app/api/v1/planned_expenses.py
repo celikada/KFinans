@@ -161,18 +161,28 @@ async def get_forecast(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Yillik nakit akisi tahmini — planli odemeler baz alinir."""
+    """Yillik nakit akisi tahmini — planli odemeler baz alinir.
+
+    Cift sayim kurali: credit_card_id NOT NULL + is_paid=true olan kayitlar
+    forecast'a dahil edilmez (kart borcu zaten sayilmis). Henuz odenmemis
+    kart planlari (is_paid=false) dahil — gelecek bir nakit cikisi.
+    """
     result = await db.execute(
         select(PlannedExpense).where(PlannedExpense.user_id == current_user.id)
     )
     all_planned = result.scalars().all()
+    # Filtre: kart + odendi olanlari at
+    eligible = [
+        pe for pe in all_planned
+        if pe.credit_card_id is None or not pe.is_paid
+    ]
 
     months_out: list[ForecastMonth] = []
     year_total = Decimal("0")
 
     for m in range(1, 13):
         items: list[ForecastItem] = []
-        for pe in all_planned:
+        for pe in eligible:
             if _applies_in_month(pe, year, m):
                 items.append(
                     ForecastItem(

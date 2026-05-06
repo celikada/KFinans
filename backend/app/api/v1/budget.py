@@ -4,7 +4,7 @@ from datetime import date as date_type
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,12 +97,18 @@ async def get_comparison(
         b.category: b.amount for b in budgets_q.scalars().all()
     }
 
+    # Cift sayim filtresi: kart + odendi olanlari haric tut (kart borcu sayar)
+    not_double_counted = or_(
+        Expense.credit_card_id.is_(None),
+        Expense.is_paid.is_(False),
+    )
     actuals_q = await db.execute(
         select(Expense.category, func.coalesce(func.sum(Expense.amount), 0))
         .where(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
             Expense.date <= last_day,
+            not_double_counted,
         )
         .group_by(Expense.category)
     )

@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
@@ -152,9 +152,20 @@ async def get_expense_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Belirli ay icin toplam + kategori bazinda kirilim."""
+    """Belirli ay icin toplam + kategori bazinda kirilim.
+
+    Cift sayim kurali: credit_card_id NOT NULL + is_paid=true olan kayitlar
+    haric tutulur — bu harcamalar kart borcuyla zaten sayildi (credit_cards
+    + statements + installments tarafinda).
+    """
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
+
+    # Cift sayim filtresi: kart + odendi olanlari haric tut
+    not_double_counted = or_(
+        Expense.credit_card_id.is_(None),
+        Expense.is_paid.is_(False),
+    )
 
     # Toplam ve adet
     total_q = await db.execute(
@@ -163,11 +174,12 @@ async def get_expense_summary(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
             Expense.date <= last_day,
+            not_double_counted,
         )
     )
     total, count = total_q.one()
 
-    # Kategori kirilimi
+    # Kategori kirilimi (ayni filtre)
     cat_q = await db.execute(
         select(
             Expense.category,
@@ -178,6 +190,7 @@ async def get_expense_summary(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
             Expense.date <= last_day,
+            not_double_counted,
         )
         .group_by(Expense.category)
         .order_by(desc(func.sum(Expense.amount)))
