@@ -1,0 +1,44 @@
+name: ❓ Soru / Yardım
+description: Kurulum, kullanım veya geliştirme ile ilgili bir sorunuz var
+title: "[Question]: "
+labels: ["question", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 💡 **Genel sorular için [GitHub Discussions / Q&A](https://github.com/celikada/KFinans/discussions/categories/q-a)** daha uygun olabilir — orada topluluk daha hızlı yanıt verir.
+        >
+        > Bu form, bug veya feature request kategorisine girmeyen ama issue olarak takip etmeniz gereken sorular içindir.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Kategori
+      options:
+        - Kurulum / Onboarding (lokal, Docker, K8s)
+        - Kullanım (UI, dashboard, raporlar)
+        - Yapılandırma (.env, secrets, RPC URL)
+        - API / Integration (3rd party kod yazıyorum)
+        - Mimari / Tasarım sorusu
+        - Geliştirme / Katkı (CONTRIBUTING.md)
+        - KVKK / Yasal
+        - Diğer
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Sorunuz
+      placeholder: Net ve detaylı sorun. Ne denediniz, hangi kaynaklara baktınız?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Bağlam
+      description: Hangi dokümanlara baktınız? Discord/Slack'te sordunuz mu? Stack Overflow'ta benzer var mı?
+      placeholder: |
+        - docs/02-mimari.md okudum, §4.2 kısmı net değil
+        - SECURITY.md'deki PGP key bağlantısı 404 dönüyor

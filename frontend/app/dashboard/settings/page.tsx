@@ -313,7 +313,60 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Bölüm 5: Tehlike Bölgesi */}
+        {/* Bölüm 5: Geri Bildirim — bug, feature, soru için GitHub'a yönlendir */}
+        <section className={CARD_CLS}>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">Geri Bildirim</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            KFinans'ı geliştirmek için yardımınıza ihtiyacımız var. Bug, öneri veya sorularınız için
+            aşağıdaki kanalları kullanın.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <a
+              href="https://github.com/celikada/KFinans/issues/new?template=bug_report.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group"
+            >
+              <span className="text-2xl mb-2">🐛</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-red-700">Hata Bildir</span>
+              <span className="text-xs text-gray-500 mt-1">Bir şey çalışmıyor mu? Detaylı raporlayın</span>
+            </a>
+            <a
+              href="https://github.com/celikada/KFinans/issues/new?template=feature_request.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+            >
+              <span className="text-2xl mb-2">💡</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-700">Özellik İste</span>
+              <span className="text-xs text-gray-500 mt-1">Yeni bir özellik öneriniz var mı?</span>
+            </a>
+            <a
+              href="https://github.com/celikada/KFinans/discussions"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
+            >
+              <span className="text-2xl mb-2">💬</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-purple-700">Tartışmaya Katıl</span>
+              <span className="text-xs text-gray-500 mt-1">Sorular, fikirler, deneyim paylaşımı</span>
+            </a>
+          </div>
+          <p className="text-xs text-gray-400 mt-4">
+            🔐 Güvenlik açıkları için public issue açmayın —{" "}
+            <a
+              href="https://github.com/celikada/KFinans/security/advisories/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              private vulnerability report
+            </a>{" "}
+            kullanın.
+          </p>
+        </section>
+
+        {/* Bölüm 6: Tehlike Bölgesi */}
         <section className={`${CARD_CLS} border-red-100`}>
           <h2 className="text-base font-semibold text-red-600 mb-2">Tehlike Bölgesi</h2>
           <p className="text-sm text-gray-500 mb-4">

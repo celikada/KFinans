@@ -1,0 +1,132 @@
+name: 🐛 Bug Raporu
+description: KFinans'ta karşılaştığınız bir hata için. Kullanıcı verisi sızıntısı / güvenlik açığı içermez (onlar için SECURITY.md'yi izleyin).
+title: "[Bug]: "
+labels: ["bug", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hata raporunuz için teşekkürler! Çözümü hızlandırmak için aşağıdaki bilgileri olabildiğince eksiksiz doldurun.
+
+        > ⚠️ **Güvenlik açığı mı bildiriyorsunuz?** Lütfen burada açmayın — [SECURITY.md](https://github.com/celikada/KFinans/blob/main/SECURITY.md) izleyin (private disclosure).
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Önceden açılmış issue kontrolü
+      description: Lütfen [açık issue'ları](https://github.com/celikada/KFinans/issues?q=is%3Aissue+is%3Aopen) tarayıp aynı bug'ın daha önce raporlanmadığını teyit edin.
+      options:
+        - label: Bu hata için açık bir issue olmadığını doğruladım
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Hata açıklaması
+      description: Ne oldu? Net ve kısa anlatın.
+      placeholder: "Wallet ekleme sayfasında BTC xpub girip 'Kaydet' tıklayınca 500 hatası geliyor..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Tekrar üretim adımları
+      description: Hatayı tekrar göstermek için adımlar
+      placeholder: |
+        1. `/dashboard/wallets` sayfasına git
+        2. "Yeni cüzdan ekle" butonuna tıkla
+        3. Chain: Bitcoin, Address: xpub6CUG... yapıştır
+        4. "Kaydet" butonuna tıkla
+        5. 500 hatası görünür
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Beklenen davranış
+      placeholder: Cüzdanın başarıyla kaydedilmesi ve listede görünmesi
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Gerçekleşen davranış
+      placeholder: HTTP 500 hatası + boş yanıt; cüzdan listede görünmüyor
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Ekran görüntüsü / video / log
+      description: Sürükle-bırak ile yükleyebilirsiniz. Backend log'u varsa ekleyin (gizli bilgi içermesin — JWT, API key vb. maskeleyin).
+      placeholder: "Buraya ekran görüntüsü yapıştırabilirsiniz"
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Önem derecesi
+      description: Hatanın etkisi
+      options:
+        - "🔴 Critical — Veri kaybı / güvenlik / çökme (uygulama kullanılamıyor)"
+        - "🟠 High — Önemli özellik çalışmıyor, workaround yok"
+        - "🟡 Medium — Önemli özellik çalışıyor ama bozuk; workaround var"
+        - "🟢 Low — Kozmetik / küçük UX sorunu"
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Etkilenen alan
+      description: Birden fazla seçebilirsiniz
+      multiple: true
+      options:
+        - Backend (FastAPI)
+        - Frontend (Next.js)
+        - Auth / Login / Şifre
+        - Cüzdan (blockchain)
+        - Exchange (Binance, iCrypex)
+        - TEFAS / Hisse / BES / Maden
+        - Harcama / Bütçe / Gelir
+        - Snapshot / Geçmiş / Rapor
+        - AI Tavsiye
+        - DevOps / CI/CD
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Tarayıcı + sürüm
+      placeholder: "Chrome 121, Firefox 124, Safari 17, Brave 1.65..."
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: İşletim sistemi
+      placeholder: "Windows 11, macOS 14, Ubuntu 24.04, iOS 17, Android 14..."
+    validations:
+      required: false
+
+  - type: input
+    id: kfinans-version
+    attributes:
+      label: KFinans sürümü / commit
+      description: SaaS kullanıyorsanız boş bırakın. Self-host iseniz `git rev-parse HEAD` veya tag.
+      placeholder: "v1.0.0 veya 41cd04e"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Ek bilgi
+      description: Çözümle ilgili tahminler, ilgili commit/PR, debug çıktısı vb.
+      placeholder: "Browser console'da şu hata: ..."

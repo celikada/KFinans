@@ -1,0 +1,30 @@
+# Issues sayfasında "New issue" üzerine tıklayınca template'lerin yanında
+# çıkacak harici linkler. blank_issues_enabled false yapılırsa kullanıcı
+# sadece template'ler üzerinden issue açabilir (önerilen — yapılandırılmış
+# raporlar daha hızlı triage edilir).
+blank_issues_enabled: false
+
+contact_links:
+  - name: 🔐 Güvenlik açığı bildirimi
+    url: https://github.com/celikada/KFinans/security/advisories/new
+    about: Güvenlik açıkları için kamuya açık issue açmayın. SECURITY.md ve GitHub Private Vulnerability Reporting üzerinden bildirin.
+
+  - name: 💬 Genel tartışma / Soru-Cevap
+    url: https://github.com/celikada/KFinans/discussions
+    about: Bug/feature olmayan, fikir/soru/showcase için Discussions kullanın. Topluluk daha hızlı yanıt verir.
+
+  - name: 💡 Fikir paylaşma (henüz olgunlaşmamış)
+    url: https://github.com/celikada/KFinans/discussions/categories/ideas
+    about: Feature request olarak issue açmadan önce fikir tartışılabilir.
+
+  - name: 📚 Dokümantasyon
+    url: https://github.com/celikada/KFinans/tree/main/docs
+    about: 9 sıralı teknik belge — sorunuzun cevabı burada olabilir.
+
+  - name: 🇹🇷 KVKK / Gizlilik / Kullanım Şartları
+    url: https://kfinans.app/legal
+    about: KVKK Aydınlatma Metni, gizlilik politikası, kullanım şartları.
+
+  - name: 📧 İletişim (kişisel)
+    url: mailto:celikada@gmail.com
+    about: Diğer her şey (iş birliği, ticari sorular, vb.) için.

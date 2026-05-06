@@ -139,6 +139,21 @@ Detaylı teknik dokümanlar için → [`docs/`](./docs/README.md):
 
 ---
 
+## Geri Bildirim — Bug, Feature, Soru
+
+KFinans'ta bir sorun yaşadıysanız veya öneriniz varsa aşağıdaki kanallar:
+
+| Kategori | Kanal | Yanıt süresi (hedef) |
+|----------|-------|---------------------|
+| 🐛 **Bug raporu** | [Yeni Issue → Bug Report](https://github.com/celikada/KFinans/issues/new?template=bug_report.yml) | Kritik: 48 saat / diğer: 1 hafta |
+| 💡 **Yeni özellik isteği** | [Yeni Issue → Feature Request](https://github.com/celikada/KFinans/issues/new?template=feature_request.yml) | Triage: 1 hafta / yapılır mı kararı: 2 hafta |
+| ❓ **Soru / yardım** | Önce [Discussions / Q&A](https://github.com/celikada/KFinans/discussions/categories/q-a); aciliyet varsa [Issue](https://github.com/celikada/KFinans/issues/new?template=question.yml) | Topluluk: hızlı / sürdürücü: 1 hafta |
+| 💬 **Tartışma / fikir** | [Discussions / Ideas](https://github.com/celikada/KFinans/discussions/categories/ideas) | Asenkron — topluluk yanıt verir |
+| 🎉 **Showcase** | [Discussions / Show & Tell](https://github.com/celikada/KFinans/discussions) | – |
+| 🔐 **Güvenlik açığı** | **Public issue açmayın** — [SECURITY.md](./SECURITY.md) ya da [Private Vulnerability Report](https://github.com/celikada/KFinans/security/advisories/new) | 48 saat ack, 30 gün fix planı |
+
+Issue açarken **template'leri doldurun** — yapılandırılmış raporlar 3-5 kat daha hızlı çözülür. Triage label'ları (`status:needs-triage` → `status:in-progress` → tamamlandı) ile durumu takip edebilirsiniz.
+
 ## Katkı
 
 Katkı sağlamak istiyorsanız: [CONTRIBUTING.md](./CONTRIBUTING.md). Tüm katkıcılar [Davranış Kuralları](./CODE_OF_CONDUCT.md)'na uymakla yükümlüdür.

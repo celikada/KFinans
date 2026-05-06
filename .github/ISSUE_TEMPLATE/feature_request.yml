@@ -1,0 +1,105 @@
+name: 💡 Özellik İsteği
+description: KFinans için yeni bir özellik veya iyileştirme öneriniz var mı?
+title: "[Feature]: "
+labels: ["feature", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Öneriniz için teşekkürler! İyi şekillendirilmiş feature request hızlı yanıt alır.
+
+        > 💬 Henüz fikriniz tam netleşmemişse veya tartışmak istiyorsanız [GitHub Discussions](https://github.com/celikada/KFinans/discussions/categories/ideas) daha uygun olabilir.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Önceden açılmış issue/discussion kontrolü
+      description: Lütfen [açık feature request'leri](https://github.com/celikada/KFinans/issues?q=is%3Aissue+is%3Aopen+label%3Afeature) ve [Discussions/Ideas](https://github.com/celikada/KFinans/discussions/categories/ideas)'ı tarayıp aynı önerinin daha önce yapılmadığını teyit edin.
+      options:
+        - label: Bu öneri için açık bir issue/discussion olmadığını doğruladım
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Hangi problemi çözüyor?
+      description: |
+        Bu özellik olmadan hangi sorunla karşılaşıyorsunuz? Kullanım senaryosu / kullanıcı hikayesi şeklinde anlatın.
+
+        **Format:** "X yapmak istiyorum çünkü Y, ama şu an Z..."
+      placeholder: |
+        Tahvil/Bono yatırımlarımı KFinans'ta takip etmek istiyorum çünkü tüm portföyü tek ekranda görmek
+        finansal kararlarımı kolaylaştırıyor. Şu an tahvil hesaplamak için ayrı bir Excel kullanıyorum.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Önerdiğiniz çözüm
+      description: Nasıl çalışmasını hayal ediyorsunuz? UI mockup, akış şeması, veya benzer bir uygulamadan örnek ekleyebilirsiniz.
+      placeholder: |
+        - Yeni dashboard kartı: "Tahvil/Bono"
+        - Manuel giriş + Excel import (TCMB faiz API'si ile değerleme)
+        - Snapshot servisine entegrasyon (haftalık değişim hesabı dahil)
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Düşündüğünüz alternatifler
+      description: Bu problemi çözmenin başka yolları var mı? Niçin bu öneriyi tercih ettiniz?
+      placeholder: |
+        - Manuel kripto modülünü kullanıp tahvilleri "manual" olarak ekleyebilirim ama TL faiz hesabı yok.
+        - Üçüncü taraf bir tahvil hesaplayıcısına link verilebilir ama tek ekran avantajı kaybolur.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Sizin için öncelik
+      options:
+        - "🔴 Olmazsa kullanımı bırakırım"
+        - "🟠 Önemli — sıkça karşılaşıyorum"
+        - "🟡 Güzel olur — ara sıra ihtiyaç"
+        - "🟢 Nice-to-have — meraktan istedim"
+      default: 2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Etkilenen alan
+      multiple: true
+      options:
+        - Backend / API
+        - Frontend / UI
+        - Yeni varlık türü (tahvil, fon türü vb.)
+        - Yeni exchange / blockchain entegrasyonu
+        - Snapshot / Rapor / Analiz
+        - AI Tavsiye / Otomasyon
+        - KVKK / Gizlilik / Güvenlik
+        - Mobile / API third-party kullanım
+        - DevOps / Performans
+        - Dokümantasyon / Onboarding
+    validations:
+      required: true
+
+  - type: textarea
+    id: kvkk-impact
+    attributes:
+      label: KVKK / Gizlilik etkisi (opsiyonel)
+      description: Bu özellik kişisel veri işliyor mu? Yeni veri türü topluyor mu? Sınır ötesi (yurt dışı) servis kullanıyor mu?
+      placeholder: |
+        - TCMB faiz API'si: kişisel veri yok, KVKK kapsamı dışı
+        - Yeni veri: tahvil ISIN kodu (kullanıcı portföyüne özel) — diğer holding'lerle aynı kategori
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Ek bilgi / referans
+      placeholder: |
+        - Benzer uygulama: https://...
+        - İlgili dokümantasyon: docs/05-ai-ve-finans.md
+        - Daha önce konuşulan discussion: #12
