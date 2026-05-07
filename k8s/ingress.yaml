@@ -1,10 +1,17 @@
 ---
-# Iki host: api.kfinans.app -> backend, app.kfinans.app -> frontend.
-# Production'a uyarlama: domain isimleri ve TLS issuer'i kendinize gore guncelleyin.
+# Tek host (kfinans.app) + path-based routing:
+#   /api/*  -> backend service (port 80 -> container 8000)
+#   /*      -> frontend service (port 80 -> container 3000)
 #
-# Gereksinimler (cluster'da kurulu olmali):
-#   - ingress-nginx-controller
-#   - cert-manager + ClusterIssuer (letsencrypt-prod)
+# Niçin tek host:
+#   1. .app TLD HSTS preload listesinde — tarayıcı zorla HTTPS kullanır
+#   2. Cookie scope tek domain (cross-origin auth karmaşası yok)
+#   3. Tek TLS sertifikası, tek DNS A kaydı
+#   4. CSP `connect-src 'self'` yeterli (cross-origin call yok)
+#
+# Gereksinimler (cluster'da kurulu olmalı):
+#   - Traefik (K3s default ingress controller)
+#   - cert-manager v1.14+ + ClusterIssuer "letsencrypt-prod" (gerçek email ile)
 #
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -13,28 +20,46 @@ metadata:
   namespace: kfinans
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Traefik HTTP -> HTTPS redirect ve body size middleware'ler manifest dışında
+    # (k8s/middleware-traefik.yaml ile uygulanır). Burada referans alınır:
+    traefik.ingress.kubernetes.io/router.middlewares: kfinans-redirect-https@kubernetescrd
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - hosts:
-        - api.kfinans.app
-        - app.kfinans.app
+        - kfinans.app
+        - www.kfinans.app
       secretName: kfinans-tls
   rules:
-    - host: api.kfinans.app
+    - host: kfinans.app
       http:
         paths:
-          - path: /
+          # Backend API: /api/* -> backend:80 -> container 8000 (uvicorn)
+          # FastAPI router /api/v1 prefix ile mount edildiği için path strip yok.
+          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: backend
                 port:
                   number: 80
-    - host: app.kfinans.app
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+          # Frontend Next.js: kalan tüm path'ler -> frontend:80 -> container 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    # www subdomain — frontend'e fallback (TLS dahil; tarayıcı 301 ile root'a yönlendirebilir)
+    - host: www.kfinans.app
       http:
         paths:
           - path: /
@@ -44,3 +69,24 @@ spec:
                 name: frontend
                 port:
                   number: 80
+---
+# Traefik Middleware: HTTP -> HTTPS redirect (308 permanent)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: kfinans
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# Traefik Middleware: 10MB request body limit (Excel import endpoint'leri)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: body-size-limit
+  namespace: kfinans
+spec:
+  buffering:
+    maxRequestBodyBytes: 10485760  # 10 MiB
