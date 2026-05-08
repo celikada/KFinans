@@ -9,7 +9,7 @@ bu modulu kullanir.
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -475,6 +475,42 @@ async def _gather_stock_assets(
     return out
 
 
+async def _last_known_usd_price(
+    db: AsyncSession, user_id: uuid.UUID, symbol: str,
+) -> tuple[Decimal | None, date | None]:
+    """FIN-005 (FAZ H): Bir sembol icin son bilinen USD fiyatini doner.
+
+    Onceki snapshot'larda saklanan unit_price_tl + usd_try_rate'ten USD
+    fiyat hesaplar (snapshot anindaki kura bagli, bu sayede TCMB degisiklikleri
+    eski fiyati bozmaz).
+
+    Doner: (last_usd_price, snapshot_date) — bulunamazsa (None, None).
+    """
+    q = (
+        select(
+            AssetPosition.unit_price_tl,
+            PortfolioSnapshot.usd_try_rate,
+            PortfolioSnapshot.snapshot_date,
+        )
+        .join(PortfolioSnapshot, AssetPosition.snapshot_id == PortfolioSnapshot.id)
+        .where(
+            PortfolioSnapshot.user_id == user_id,
+            AssetPosition.symbol == symbol,
+            AssetPosition.unit_price_tl > 0,
+            PortfolioSnapshot.usd_try_rate.is_not(None),
+        )
+        .order_by(PortfolioSnapshot.snapshot_date.desc())
+        .limit(1)
+    )
+    row = (await db.execute(q)).first()
+    if row is None:
+        return None, None
+    unit_price_tl, usd_rate, snap_date = row
+    if usd_rate is None or Decimal(usd_rate) <= 0:
+        return None, None
+    return (Decimal(unit_price_tl) / Decimal(usd_rate)).quantize(Decimal("0.000001")), snap_date
+
+
 async def compute_and_save_snapshot(
     user_id: uuid.UUID,
     db: AsyncSession,
@@ -597,15 +633,31 @@ async def compute_and_save_snapshot(
             if usd_price > 0:
                 a.unit_price_usd = usd_price
             else:
-                # Fiyatsız blockchain pozisyonu = sıfır değer = sağlık uyarısı
+                # FIN-005 (FAZ H): Spot fiyat alinamadi — onceki snapshot'tan
+                # son bilinen fiyati lookup et (gorunmez kayip onleme).
                 qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
                 if qty > 0:
-                    issues.append({
-                        "source": a.provider,
-                        "symbol": a.symbol,
-                        "code": "no_spot_price",
-                        "msg": f"{a.symbol} için Binance USDT pariteni bulunamadı, snapshot'a 0 değerle eklendi",
-                    })
+                    last_usd_price, last_snap_date = await _last_known_usd_price(
+                        db, user_id, a.symbol,
+                    )
+                    if last_usd_price is not None and last_usd_price > 0:
+                        a.unit_price_usd = last_usd_price
+                        issues.append({
+                            "source": a.provider,
+                            "symbol": a.symbol,
+                            "code": "stale_price",
+                            "msg": (
+                                f"{a.symbol} icin spot fiyat alinamadi, son bilinen "
+                                f"fiyat ({last_snap_date}) kullanildi"
+                            ),
+                        })
+                    else:
+                        issues.append({
+                            "source": a.provider,
+                            "symbol": a.symbol,
+                            "code": "no_spot_price",
+                            "msg": f"{a.symbol} için Binance USDT pariteni bulunamadı, snapshot'a 0 değerle eklendi",
+                        })
 
     # Toplam degeri hesapla (weight_pct icin gerekli)
     total_tl = Decimal(0)
