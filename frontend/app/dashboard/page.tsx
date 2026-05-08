@@ -354,35 +354,113 @@ export default function DashboardPage() {
               <p className="text-3xl font-bold text-gray-300">—</p>
             )}
           </div>
-          <div className="flex gap-2 pb-1">
-            <button
-              onClick={() => router.push("/dashboard/history")}
-              className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Geçmiş
-            </button>
+        </div>
+        {snapshotMsg && (
+          <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg mb-4">{snapshotMsg}</p>
+        )}
+
+        {/* FINANS GRUBU (yukarida) */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Finans</h2>
             <button
               onClick={() => router.push("/dashboard/cash-flow")}
               className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
               Nakit Akışı
             </button>
-            <button
-              onClick={takeSnapshot}
-              disabled={snapshotting}
-              className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {snapshotting ? "Alınıyor..." : "Snapshot al"}
-            </button>
           </div>
-        </div>
-        {snapshotMsg && (
-          <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 px-3 py-2 rounded-lg mb-4">{snapshotMsg}</p>
-        )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {!hiddenCards.includes("creditCards") && (
+              <Card
+                href="/dashboard/credit-cards"
+                icon="creditCard"
+                color="red"
+                title="Kredi Kartları (toplam borç)"
+                total={creditCardTotal}
+                count={creditCardCount}
+                countLabel="kart"
+                top={[]}
+                placeholder="Kart tanımı + ekstre + taksit"
+                footer={creditCardPeriod !== null && (
+                  <span>Dönem içi borç: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
+                )}
+              />
+            )}
 
-        {/* PORTFÖY GRUBU */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Portföy</h2>
+            {!hiddenCards.includes("income") && (
+              <Card
+                href="/dashboard/income"
+                icon="income"
+                color="emerald"
+                title="Gelirler (bu ay)"
+                total={incomeTotal}
+                count={incomeCount}
+                countLabel="kayıt"
+                top={incomeTop}
+                placeholder="Maaş, kira, temettü..."
+                footer={incomeYearEstimate !== null && (
+                  <span>Yıl sonu beklentisi: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
+                )}
+              />
+            )}
+
+            {!hiddenCards.includes("expenses") && (
+              <Card
+                href="/dashboard/expenses"
+                icon="expenses"
+                color="red"
+                title="Harcamalar (bu ay)"
+                total={expenseTotal}
+                count={expenseCount}
+                countLabel="kayıt"
+                top={expenseTop}
+                placeholder="Aylık gider takibi"
+              />
+            )}
+
+            {!hiddenCards.includes("planned") && (
+              <Card
+                href="/dashboard/planned"
+                icon="planned"
+                color="violet"
+                title="Planlı Harcamalar (bu yıl)"
+                total={plannedTotal}
+                top={[]}
+                placeholder="Kredi, vergi, fatura planı"
+              />
+            )}
+
+            {!hiddenCards.includes("budget") && (
+              <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
+            )}
+
+            {!hiddenCards.includes("goal") && (
+              <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
+            )}
+          </div>
+        </section>
+
+        {/* PORTFÖY GRUBU (asagida) */}
+        <section className="space-y-3 mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Portföy</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push("/dashboard/history")}
+                className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Geçmiş
+              </button>
+              <button
+                onClick={takeSnapshot}
+                disabled={snapshotting}
+                className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {snapshotting ? "Alınıyor..." : "Snapshot al"}
+              </button>
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {!hiddenCards.includes("bes") && (
               <Card
@@ -492,80 +570,6 @@ export default function DashboardPage() {
                 top={[]}
                 placeholder="Banka hesabı + nakit (manuel)"
               />
-            )}
-          </div>
-        </section>
-
-        {/* FİNANS GRUBU */}
-        <section className="space-y-3 mt-8">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Finans</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {!hiddenCards.includes("creditCards") && (
-              <Card
-                href="/dashboard/credit-cards"
-                icon="creditCard"
-                color="red"
-                title="Kredi Kartları (toplam borç)"
-                total={creditCardTotal}
-                count={creditCardCount}
-                countLabel="kart"
-                top={[]}
-                placeholder="Kart tanımı + ekstre + taksit"
-                footer={creditCardPeriod !== null && (
-                  <span>Dönem içi borç: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
-                )}
-              />
-            )}
-
-            {!hiddenCards.includes("income") && (
-              <Card
-                href="/dashboard/income"
-                icon="income"
-                color="emerald"
-                title="Gelirler (bu ay)"
-                total={incomeTotal}
-                count={incomeCount}
-                countLabel="kayıt"
-                top={incomeTop}
-                placeholder="Maaş, kira, temettü..."
-                footer={incomeYearEstimate !== null && (
-                  <span>Yıl sonu beklentisi: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
-                )}
-              />
-            )}
-
-            {!hiddenCards.includes("expenses") && (
-              <Card
-                href="/dashboard/expenses"
-                icon="expenses"
-                color="red"
-                title="Harcamalar (bu ay)"
-                total={expenseTotal}
-                count={expenseCount}
-                countLabel="kayıt"
-                top={expenseTop}
-                placeholder="Aylık gider takibi"
-              />
-            )}
-
-            {!hiddenCards.includes("planned") && (
-              <Card
-                href="/dashboard/planned"
-                icon="planned"
-                color="violet"
-                title="Planlı Harcamalar (bu yıl)"
-                total={plannedTotal}
-                top={[]}
-                placeholder="Kredi, vergi, fatura planı"
-              />
-            )}
-
-            {!hiddenCards.includes("budget") && (
-              <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
-            )}
-
-            {!hiddenCards.includes("goal") && (
-              <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
             )}
           </div>
         </section>
