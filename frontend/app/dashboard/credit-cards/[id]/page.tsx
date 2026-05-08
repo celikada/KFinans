@@ -34,9 +34,8 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   }, [cardId, router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   if (loading) {
     return (

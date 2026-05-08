@@ -30,9 +30,8 @@ export default function CommoditiesPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   async function handleExport() {
     try {

@@ -78,12 +78,8 @@ export default function ManualCryptoPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) {
-      router.replace("/login");
-      return;
-    }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   // Linked arama — debounced (250ms)
   useEffect(() => {

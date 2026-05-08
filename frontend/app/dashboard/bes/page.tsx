@@ -64,10 +64,6 @@ export default function BesPage() {
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) {
-      router.replace("/login");
-      return;
-    }
     api.getBesHoldings()
       .then((data) => {
         if (data.length > 0) {

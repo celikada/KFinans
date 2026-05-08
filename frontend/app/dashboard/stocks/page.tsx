@@ -35,7 +35,6 @@ export default function StocksPage() {
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     api.getStockHoldings()
       .then((data) => {
         if (data.length > 0) {

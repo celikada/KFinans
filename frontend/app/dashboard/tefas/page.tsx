@@ -51,7 +51,6 @@ export default function TefasPage() {
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
 
     api.getTefasHoldings()
       .then((data) => {

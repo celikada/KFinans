@@ -59,9 +59,8 @@ export default function IncomePage() {
   }, [year, month, router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   function handleIncomeSaved() {
     setEditingIncome(null);

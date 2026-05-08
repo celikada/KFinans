@@ -38,9 +38,8 @@ export default function CreditCardsPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   function startEdit(c: CreditCardDTO) {
     setEditing(c);

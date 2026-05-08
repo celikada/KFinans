@@ -47,9 +47,8 @@ export default function ExpensesPage() {
   }, [year, month, handle401]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   function handleSaved() {
     setEditingExpense(null);

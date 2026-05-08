@@ -36,9 +36,8 @@ export default function PlannedPage() {
   }, [year]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   function handleAdded(pe: PlannedExpenseDTO) {
     setItems((prev) => [...prev, pe].sort((a, b) => a.start_date.localeCompare(b.start_date)));

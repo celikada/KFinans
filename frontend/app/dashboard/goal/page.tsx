@@ -53,9 +53,8 @@ export default function GoalPage() {
   }, []);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     load();
-  }, [load, router]);
+  }, [load]);
 
   async function handleSave() {
     const val = parseFloat(inputVal);

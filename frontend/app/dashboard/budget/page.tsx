@@ -33,9 +33,8 @@ export default function BudgetPage() {
   }, [year, month, router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   async function handleDelete(category: string) {
     try {

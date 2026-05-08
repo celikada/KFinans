@@ -44,7 +44,6 @@ export default function SettingsPage() {
   const [pwdError, setPwdError]   = useState("");
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     api.getMe()
       .then((data) => {
         setUser(data);

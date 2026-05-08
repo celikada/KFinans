@@ -82,15 +82,10 @@ export default function HistoryPage() {
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) {
-      router.replace("/login");
-      return;
-    }
     api.getPortfolioHistoryYears().then(setAvailableYears).catch(() => {});
-  }, [router]);
+  }, []);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) return;
     setLoading(true);
     const params: { limit?: number; year?: number } = { limit: 365 };
     if (selectedYear !== "all") params.year = selectedYear;

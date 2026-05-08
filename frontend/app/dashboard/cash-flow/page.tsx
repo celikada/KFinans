@@ -41,9 +41,8 @@ export default function CashFlowPage() {
   }, [year, router]);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) { router.replace("/login"); return; }
     refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   // Grafik için data hazırla
   const chartData = (data?.months ?? []).map((m) => ({
