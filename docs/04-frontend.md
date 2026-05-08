@@ -234,29 +234,64 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 ```
 Production'da `NEXT_PUBLIC_API_URL` Kubernetes ConfigMap'ten gelir.
 
-### Token Yönetimi (Dual Storage)
-- `localStorage.access_token` — JS erişimi için
+### Token Yönetimi (Dual Storage + Refresh Rotation)
+- `localStorage.access_token` — JS erişimi için (kısa ömürlü; prod 30 dk)
+- `localStorage.refresh_token` — yenileme için (uzun ömürlü; 7 gün, FAZ C4 ile aktif)
 - `document.cookie` `access_token=...` — `proxy.ts` server-side okuma için
-- `localStorage.refresh_token` — yenileme için
 
-> **Güvenlik notu:** `localStorage` XSS'e açık. Production'da `httpOnly` cookie + CSRF token'a geçilmeli (Faz 3 güvenlik iyileştirmesi).
+`setAuth(access, refresh)` ikisini birden saklar; `clearAuth()` ikisini birden siler.
 
-### Standart Fetch Pattern
+> **Güvenlik notu:** `localStorage` XSS'e açık. Production'da `httpOnly` cookie + CSRF token'a geçilmeli (Faz 3 güvenlik iyileştirmesi). FAZ C4 rotation bu açığı kısmen telafi eder — sızan refresh token bir sonraki gerçek refresh çağrısında geçersiz olur.
+
+### Standart Fetch Pattern (FAZ C4 — refresh akışlı)
+`request<T>()` fonksiyonu (`lib/api.ts`):
 ```typescript
-async function authFetch(path: string, init?: RequestInit) {
-  const token = localStorage.getItem("access_token");
-  const res = await fetch(`${BASE_URL}/api/v1${path}`, {
-    ...init,
-    headers: { ...init?.headers, Authorization: `Bearer ${token}` },
+async function request<T>(path, options = {}, _isRetry = false): Promise<T> {
+  const token = getAccessToken();
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
   });
-  if (res.status === 401) {
-    localStorage.clear();
-    window.location.href = "/login";
-    throw new Error("Unauthorized");
+
+  // FAZ C4: 401 → bir kez refresh dene + retry. /auth/refresh kendi
+  // 401'inde retry yapma (sonsuz döngü engeli).
+  if (res.status === 401 && !_isRetry && path !== "/auth/refresh") {
+    const newToken = await tryRefresh();
+    if (newToken) return request<T>(path, options, true);
+    clearAuth();
+    window.location.replace("/login");
+    throw new Error("Oturum süresi doldu");
   }
-  return res;
+  // ...
 }
 ```
+
+**Single-flight pattern (kritik):** `tryRefresh()` `_refreshInflight` promise'i paylaşır. Aynı anda 5 farklı request 401 aldığında **tek bir refresh çağrısı** yapılır, hepsi aynı yeni token ile retry eder. Aksi halde backend rotation gereği 2. refresh çağrısı 401 alır ve kullanıcı logout olur.
+
+```typescript
+let _refreshInflight: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  const refresh = getRefreshToken();
+  if (!refresh) return null;
+  if (_refreshInflight) return _refreshInflight;  // single-flight
+  _refreshInflight = (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, { ... });
+      if (!res.ok) return null;
+      const data = await res.json();
+      setAuth(data.access_token, data.refresh_token);  // yeni rotated refresh
+      return data.access_token;
+    } finally {
+      _refreshInflight = null;
+    }
+  })();
+  return _refreshInflight;
+}
+```
+
+### Logout Akışı
+`api.logout()` parametresiz çağrıldığında storage'dan refresh token okur ve backend'e gönderir; backend `revoked_tokens`'a hem access hem refresh `jti`'sini ekler. Tarayıcıda `clearAuth()` ile her ikisi de silinir.
 
 ### TypeScript DTO Örnekleri
 ```typescript

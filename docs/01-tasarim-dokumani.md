@@ -172,7 +172,71 @@ Kubernetes Ingress (nginx)
 
 ---
 
-## 7. Güncel Durum (2026-04-30)
+## 7. Güncel Durum (2026-05-07)
+
+### ✅ FAZ A — OSS Hijyeni + Public Repo Hazırlığı (2026-05-06)
+- Repo public yapıldı (https://github.com/celikada/KFinans)
+- Apache-2.0 LICENSE + NOTICE
+- SECURITY.md (zafiyet bildirim akışı, TR + EN, 90 gün disclosure)
+- CONTRIBUTING.md (branch stratejisi, commit format, test, güvenlik)
+- CODE_OF_CONDUCT.md (Contributor Covenant 2.1, TR)
+- README.md (Apache rozet, KVKK uyarısı, Geri Bildirim bölümü)
+- Dependabot (.github/dependabot.yml) — pip + npm + actions + docker, haftalık
+- gitleaks (.gitleaks.toml) — test fixture allowlist; CI'da her PR/push tarama
+- .credentials.local.md — lokal dev secret'larının açıklamalı yedeği (gitignore'da)
+
+### ✅ FAZ B — CI/CD Workflow (2026-05-06)
+6 workflow:
+- **ci-backend.yml**: lint (ruff) + unit + integration + coverage gate (%50)
+- **ci-frontend.yml**: ESLint + Vitest + Next.js build
+- **e2e.yml**: Playwright (Chromium) — 5 senaryo
+- **security.yml**: gitleaks + Trivy fs (HIGH/CRITICAL fail) + pip-audit (osv strict) + npm-audit + CodeQL (Python + JS/TS)
+- **sonar.yml**: backend pytest cov XML + frontend vitest LCOV → SonarCloud quality gate (`vars.ENABLE_SONAR='true'` iken aktif; GitHub flag bekleme döneminde skip)
+- **release.yml**: semver tag (`v*.*.*`) → 5 job (Sonar QG → matrix Docker buildx & GHCR push → Trivy image scan → Oracle K3s deploy → Playwright @smoke → GitHub Release notes)
+
+Branch protection: `main` PR şart + lineer history + force-push kapalı; `develop` doğrudan push'a izin (force-push kapalı). Sadece squash merge.
+
+### ✅ FAZ C — Production Öncesi Güvenlik Patch'leri (2026-05-06/07)
+33 yeni güvenlik testi, 293/293 backend test geçti.
+
+| # | Patch | Detay |
+|---|-------|-------|
+| C1 | Wallet xpub Fernet şifrelemesi | `address_encrypted` + `address_fingerprint` (SHA-256), `@hybrid_property` transparent encrypt/decrypt; migration `b3c4d5e6f7a8`; 7 test |
+| C2 | SecurityHeadersMiddleware | HSTS + X-Frame-Options DENY + X-Content-Type-Options + Referrer-Policy + CSP `default-src 'none'` + Permissions-Policy + COOP + CORP + Server maskeleme; frontend Next.js `headers()` HTML için aynı set |
+| C3 | TrustedHostMiddleware | `settings.allowed_hosts` env'den; Host header injection koruması |
+| C4 | JWT TTL prod env + Refresh rotation | Prod 30 dk access; `/auth/refresh` her çağrıda eski refresh `jti` blacklist'e atar; **Frontend single-flight refresh akışı + 401 retry** (lib/api.ts) |
+| C5 | revoked_tokens cleanup cron | APScheduler her gün 03:00 Europe/Istanbul `expires_at < now` siler |
+| C6 | Audit log altyapısı | `audit_logs` tablosu + 8 hook (auth.login/login_failed/logout/register/password_change, wallet.add/delete, integration.add/delete, snapshot.delete, account.soft_delete) + `GET /audit-logs` IDOR korumalı endpoint; migration `c4d5e6f7a8b9`; 9 test |
+
+### ✅ FAZ F — Community Management (2026-05-06)
+- 4 issue template (.github/ISSUE_TEMPLATE/): bug_report, feature_request, question, config (blank issues kapalı)
+- 27 standart issue label (gh API + PowerShell): tip / öncelik / durum / alan kategorileri
+- README.md "Geri Bildirim" bölümü (6 kategori tablosu)
+- Frontend `/dashboard/settings` "Geri Bildirim" bölümü (3 kart link: Bug, Feature, Discussion + private vulnerability link)
+
+### 🔴 Bekleyen — GitHub Hesap Flag (Ticket #4360519)
+2026-05-06 yoğun aktivite (repo public + branch protection + 8 commit) GitHub anti-spam'i tetikledi. Sophia (GitHub Support) yanıtına manuel inceleme cevabı gönderildi (2026-05-06). Yanıt bekleniyor.
+
+**Etkilenen:**
+- SonarCloud OAuth login bloklu → workflow'lar `ENABLE_SONAR=false` ile skip ediliyor
+- Anonim git protokol erişimi 401/404 → Oracle VM'den `git clone` engelli → FAZ D1 (production deploy) bloke
+
+### ⏳ Sıradaki — Production Deploy (FAZ D1-D3)
+Flag çözülünce:
+1. **D1:** Oracle VM (141.144.243.54) selektif temizlik — portföy namespace sil, K3s + Traefik + cert-manager olduğu gibi koru, ClusterIssuer'ı düzelt (admin@example.com → celikada@gmail.com), kfinans namespace + secret'lar oluştur
+2. **D2:** İlk release tag (`v1.0.0`) → release.yml otomatik build + push + deploy + smoke test
+3. **D3:** Namecheap 2FA + Whois Privacy aktif et (production canlı olduktan sonra)
+
+### 📚 Sıradaki — Kullanıcı Dokümanları (FAZ E)
+Production deploy bittikten sonra:
+- `docs/user-guide/` — 10 markdown (kayıt, exchange API key ekleme, cüzdan, TEFAS, MKK Excel import, bütçe, AI tavsiye, KVKK hakları, SSS, troubleshooting)
+- Production'dan ekran görüntüleri
+- GitHub Wiki sync
+- (Opsiyonel) docs.kfinans.app subdomain + MkDocs Material
+
+---
+
+## 8. Eski Durum (2026-04-30) — Faz 1+2+3 referansı
 
 ### ✅ Faz 1 Tamamlandı
 - Backend iskeleti, JWT auth, slowapi rate limiting (login 10/dk, register 5/dk, refresh 30/dk), `/health` endpoint
