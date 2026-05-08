@@ -19,7 +19,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await api.login(email, password);
-      setAuth(data.access_token);
+      // FAZ C4: hem access hem refresh sakla — refresh token rotation +
+      // 401 sonrası otomatik retry için lib/api.ts::tryRefresh() kullanır.
+      setAuth(data.access_token, data.refresh_token);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Giriş başarısız");

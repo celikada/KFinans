@@ -1,17 +1,60 @@
 const BASE = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1`;
 
-function getToken() {
-  return typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+const ACCESS_TOKEN_KEY = "access_token";
+const REFRESH_TOKEN_KEY = "refresh_token";
+
+function getAccessToken() {
+  return typeof window !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
 }
 
-export function setAuth(token: string) {
-  localStorage.setItem("access_token", token);
-  document.cookie = `access_token=${token}; path=/; SameSite=Strict`;
+function getRefreshToken() {
+  return typeof window !== "undefined" ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+}
+
+export function setAuth(accessToken: string, refreshToken?: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  document.cookie = `access_token=${accessToken}; path=/; SameSite=Strict`;
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  }
 }
 
 export function clearAuth() {
-  localStorage.removeItem("access_token");
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+}
+
+// Single-flight: aynı anda birden çok 401 → tek refresh request paylaş.
+// FAZ C4 backend rotation aktif: ilk refresh eski token'ı blacklist'e atar,
+// paralel istekler aynı yeni token ile retry eder.
+let _refreshInflight: Promise<string | null> | null = null;
+
+async function tryRefresh(): Promise<string | null> {
+  const refresh = getRefreshToken();
+  if (!refresh) return null;
+
+  if (_refreshInflight) return _refreshInflight;
+
+  _refreshInflight = (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refresh }),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { access_token: string; refresh_token: string };
+      setAuth(data.access_token, data.refresh_token);
+      return data.access_token;
+    } catch {
+      return null;
+    } finally {
+      _refreshInflight = null;
+    }
+  })();
+
+  return _refreshInflight;
 }
 
 /**
@@ -38,8 +81,12 @@ function formatErrorDetail(detail: unknown): string {
   return String(detail);
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  _isRetry = false,
+): Promise<T> {
+  const token = getAccessToken();
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
@@ -48,11 +95,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers,
     },
   });
-  if (!res.ok) {
-    if (res.status === 401 && typeof window !== "undefined") {
-      clearAuth();
-      window.location.replace("/login");
+
+  // Access expired → bir kez refresh dene + retry (FAZ C4 rotation uyumlu).
+  // /auth/refresh endpoint'inin kendisinde retry yapma (sonsuz döngü riski).
+  if (
+    res.status === 401 &&
+    typeof window !== "undefined" &&
+    !_isRetry &&
+    path !== "/auth/refresh"
+  ) {
+    const newToken = await tryRefresh();
+    if (newToken) {
+      return request<T>(path, options, true);
     }
+    clearAuth();
+    window.location.replace("/login");
+    throw new Error("Oturum süresi doldu");
+  }
+
+  if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(formatErrorDetail(err.detail) || res.statusText);
   }
@@ -81,11 +142,15 @@ export const api = {
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
 
-  logout: (refreshToken?: string) =>
-    request<{ detail: string }>("/auth/logout", {
+  logout: (refreshToken?: string) => {
+    // Saklı refresh token'ı blacklist'e gönder (FAZ C4 rotation + logout
+    // birlikte → tüm token'lar iptal). Çağıran parametre verirse o öncelikli.
+    const refresh = refreshToken ?? getRefreshToken();
+    return request<{ detail: string }>("/auth/logout", {
       method: "POST",
-      body: JSON.stringify({ refresh_token: refreshToken ?? null }),
-    }),
+      body: JSON.stringify({ refresh_token: refresh }),
+    });
+  },
 
   register: (email: string, password: string, risk_profile: string) =>
     request<RegisterResponseDTO>("/auth/register", {
