@@ -39,10 +39,11 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 KFinans/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/                # FastAPI router'ları (auth, user, portfolio, tefas,
+│   │   ├── api/v1/                # FastAPI 21 router'ı: auth, user, portfolio, tefas,
 │   │   │                          # stocks, bes, commodity, wallets, integrations,
 │   │   │                          # expenses, planned_expenses, income, budget, goal,
-│   │   │                          # manual_crypto, advice)
+│   │   │                          # cash, cash_flow, credit_cards, manual_crypto,
+│   │   │                          # asset_catalog, audit_logs, advice
 │   │   ├── services/
 │   │   │   ├── exchange/          # CCXT tabanlı (Binance, iCrypex, BinanceTR)
 │   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C (getBalance + getStake),
@@ -61,14 +62,26 @@ KFinans/
 │   │   ├── core/                  # security (fernet+jwt+bcrypt+address_fingerprint), deps, limiter, middleware (SecurityHeadersMiddleware)
 │   │   ├── scheduler.py           # APScheduler — Pazar 23:00 snapshot + günlük 03:00 revoked_tokens cleanup
 │   │   └── main.py                # SecurityHeaders + TrustedHost + CORS middleware sırası
-│   ├── alembic/versions/          # 24 migration (b3c4d5e6f7a8 = wallet xpub Fernet, c4d5e6f7a8b9 = audit_logs)
+│   ├── alembic/versions/          # 31 migration. Faz 3 ana ekleme'ler:
+│   │                              # - e0f1a2b3c4d5: credit_cards
+│   │                              # - f1a2b3c4d5e6: credit_card_statements + installments
+│   │                              # - f5a6b7c8d9e0: manual_crypto_holdings
+│   │                              # - a6b7c8d9e0f1: manual_crypto.price_source enum
+│   │                              # - b7c8d9e0f1a2: manual_crypto.linked_source
+│   │                              # - c8d9e0f1a2b3: recurring_incomes
+│   │                              # - d3e4f5a6b7c8: cash_holdings
+│   │                              # - d9e0f1a2b3c4: incomes.recurring_income_id FK
+│   │                              # - e4f5a6b7c8d9: snapshot health_issues + usd_try_rate
+│   │                              # - b3c4d5e6f7a8: wallet xpub Fernet (FAZ C1)
+│   │                              # - c4d5e6f7a8b9: audit_logs (FAZ C6)
 │   ├── tests/{unit,integration}/  # 293 test (FAZ C: +33 test — xpub encrypt, security headers, refresh rotation, cleanup, audit log)
 │   ├── pyproject.toml
 │   └── .env.example
 ├── frontend/                      # Next.js 16 (App Router, proxy.ts auth yönlendirme)
 │   ├── app/_components/{Logos,MkkHint,PageHeader}.tsx
 │   ├── app/dashboard/{tefas,stocks,wallets,crypto,manual-crypto,bes,expenses,planned,
-│   │                  income,budget,commodities,goal,settings,history}/
+│   │                  income,budget,commodities,goal,settings,history,
+│   │                  cash,cash-flow,credit-cards}/  # 17 alt sayfa
 │   ├── next.config.ts             # FAZ C2: async headers() — HSTS, CSP, X-Frame, Permissions-Policy
 │   └── lib/{api,format}.ts
 ├── docs/                          # 9 sıralı belge (01-tasarim ... 09-altyapi-test)

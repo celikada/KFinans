@@ -104,6 +104,11 @@ backend/app/
 │   ├── budget.py          # /budgets (UPSERT + comparison) — Faz 3
 │   ├── goal.py            # /goals/me (finansal hedef + para birimi) — Faz 3
 │   ├── manual_crypto.py   # /manual-crypto (API'siz borsalar için manuel CRUD + Excel + anlık fiyat)
+│   ├── cash.py            # /cash (nakit/banka hesabı CRUD, USD/EUR/GBP→TRY)
+│   ├── cash_flow.py       # /cash-flow (12 aylık nakit akış projeksiyonu + Excel/PDF rapor)
+│   ├── credit_cards.py    # /credit-cards (kart + ekstre + taksit nested CRUD)
+│   ├── asset_catalog.py   # /asset-catalog (manuel kripto autocomplete: commodity/binance/coingecko/tefas)
+│   ├── audit_logs.py      # /audit-logs (kullanıcı kendi log'ları, IDOR korumalı — FAZ C6)
 │   └── advice.py          # /advice (AI tavsiye — Faz 3'te kredi tüketir)
 │
 ├── core/                  # Çekirdek altyapı

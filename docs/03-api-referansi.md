@@ -1000,6 +1000,164 @@ Hesabı **soft-delete** eder (`users.deleted_at = now()`). Hard-delete cron job 
 
 ---
 
+## 15.1 Nakit / Banka Hesabı (`/api/v1/cash`) — Faz 3
+
+```
+GET    /cash               → liste (CashSummaryOut: holdings + total_tl)
+POST   /cash               → ekle (CashCreate: label, amount, currency)
+PUT    /cash/{id}          → güncelle (partial: label/amount/currency/notes)
+DELETE /cash/{id}          → sil (204)
+```
+
+**Currency:** `TRY | USD | EUR | GBP`. USD/EUR/GBP otomatik TCMB kuru ile TL'ye çevrilir (`amount_tl` response'ta dönülür).
+
+**Validation:** `amount: Decimal(ge=0, le=999_999_999_999.99)`, `label: str(min_length=1, max_length=100)`.
+
+**IDOR:** Tüm endpoint'lerde `user_id == current_user.id` filtresi.
+
+```json
+// POST /cash request
+{ "label": "Garanti TL", "amount": "5000.00", "currency": "TRY" }
+
+// 201 Created
+{ "id": 1, "label": "Garanti TL", "amount": "5000.00", "currency": "TRY", "amount_tl": "5000.00", ... }
+```
+
+---
+
+## 15.2 Nakit Akış Projeksiyonu (`/api/v1/cash-flow`) — Faz 3
+
+```
+GET /cash-flow?year=2026                  → 12 aylık projeksiyon
+GET /cash-flow/report.xlsx?year=2026     → Excel rapor
+GET /cash-flow/report.pdf?year=2026      → PDF rapor (DejaVu Sans, TR karakter)
+```
+
+**Hesaplama:**
+- `income_actual`: `incomes` tablosundan gerçek aylık toplam
+- `income_forecast`: `recurring_incomes` projeksiyonu (recurrence: monthly/quarterly/biannual/yearly/custom)
+- `expense_actual`: `expenses` tablosundan (çift sayım filtresi: `or_(credit_card_id IS NULL, is_paid=false)`) + `credit_card_statements.due_date` o aydaysa
+- `expense_forecast`: `planned_expenses` projeksiyonu + `credit_card_installments` aylık taksit
+- `is_past`: bu ay'dan eski mi (UI farklı renk)
+
+```json
+// GET /cash-flow?year=2026
+{
+  "year": 2026,
+  "months": [
+    { "month": 1, "income_actual": "5000", "income_forecast": "8000", "expense_actual": "3500",
+      "expense_forecast": "2000", "income_total": "13000", "expense_total": "5500", "net": "7500", "is_past": false },
+    ...
+  ],
+  "total_income": "...", "total_expense": "...", "total_net": "..."
+}
+```
+
+---
+
+## 15.3 Kredi Kartları (`/api/v1/credit-cards`) — Faz 3 finans modülü
+
+**Kart CRUD:**
+```
+GET    /credit-cards                        → kullanıcının kartları (liste)
+POST   /credit-cards                        → yeni kart
+GET    /credit-cards/{id}                   → detay (statements + installments tek seferde)
+PUT    /credit-cards/{id}                   → güncelle
+DELETE /credit-cards/{id}                   → sil (CASCADE statements + installments)
+GET    /credit-cards/summary                → özet (toplam limit, kullanılan, kalan)
+```
+
+**Card alanları:** `name, bank_name, last_4, credit_limit, statement_day, payment_due_day, current_period_debt`.
+
+> ⚠️ **PCI-DSS scope DIŞI**: Sadece `last_4` (son 4 hane) saklanır; PAN, CVV, expiry asla DB'ye yazılmaz.
+
+**Aylık ekstre (statements):**
+```
+POST   /credit-cards/{id}/statements        → ekstre ekle (period_year, period_month, statement_amount, due_date, paid_at?)
+PUT    /credit-cards/{id}/statements/{sid}  → güncelle (paid_at set)
+DELETE /credit-cards/{id}/statements/{sid}  → sil
+```
+
+UNIQUE `(card_id, period_year, period_month)` — aynı dönem için tek ekstre.
+
+**Taksitler (installments):**
+```
+POST   /credit-cards/{id}/installments       → ekle (description, total_amount, monthly_amount, installments_total/remaining, first_due_date)
+PUT    /credit-cards/{id}/installments/{iid} → güncelle
+DELETE /credit-cards/{id}/installments/{iid} → sil
+```
+
+Cash Flow projection (`/cash-flow`) installments'i otomatik dahil eder.
+
+---
+
+## 15.4 Asset Catalog — Manuel Kripto Autocomplete (`/api/v1/asset-catalog`) — Faz 3
+
+```
+GET /asset-catalog?q=BTC&source=binance&limit=20  → autocomplete
+```
+
+**Query params:**
+- `q: str(max_length=100)` — arama terimi (boş = popüler ilkler)
+- `source: "commodity"|"binance"|"coingecko"|"tefas"|None` — filtre (boş = hepsi)
+- `limit: int(1-100, default 20)`
+
+**Kaynaklar:**
+- `commodity` (statik, 2 kalem): XAU = altın gr, XAG = gümüş gr
+- `binance` (5 dk cache): USDT pariteli base symbol'leri (BTC, ETH, SOL, vb.)
+- `coingecko` (24 saat cache): `/coins/list` (~17K coin); `COINGECKO_SYMBOL_OVERRIDES` map ile alias çakışmaları
+- `tefas` (1 saat cache): aktif fon listesi (kod + isim)
+
+```json
+// GET /asset-catalog?q=BTC&source=binance
+[
+  { "source": "binance", "id": "BTC", "symbol": "BTC", "name": "BTC" }
+]
+```
+
+---
+
+## 15.5 Periyodik Gelir Realize (`/api/v1/income/recurring`) — Faz 3
+
+```
+POST   /income/recurring/{id}/realize          → tek dönem ({year, month}) → incomes'a kayıt
+POST   /income/recurring/{id}/realize-past     → start_date'ten bugüne tüm dönemler
+POST   /income/recurring/realize-all-past      → tüm aktif recurring'ler için
+```
+
+**Kural:** `incomes.recurring_income_id` (FK→recurring_incomes, ON DELETE SET NULL) + UNIQUE `(recurring_income_id, date)` — çift realize'ı engeller.
+
+**Recurrence değerleri:** `monthly | quarterly | biannual | yearly | custom (months: int[])`.
+
+```json
+// POST /income/recurring/123/realize
+{ "year": 2026, "month": 5 }
+
+// 200 OK
+{ "id": 456, "amount": "5000", "date": "2026-05-15", "category": "salary", "recurring_income_id": 123 }
+```
+
+UI'da realize'lı kayıtlarda mavi "↻ periyodik" rozeti.
+
+---
+
+## 15.6 Snapshot Raporu İndirme (`/api/v1/portfolio/snapshot/{date}/report.*`) — Faz 3
+
+```
+GET /portfolio/snapshot/2026-05-08/report.xlsx → Excel (tüm pozisyonlar)
+GET /portfolio/snapshot/2026-05-08/report.pdf  → PDF (ilk 50 pozisyon, en büyük → küçük)
+```
+
+**Excel içeriği:** Tip, provider, sembol, isim, likit, stake, pending_rewards, fiyat, toplam_tl, ağırlık_yüzdesi.
+
+**PDF içeriği:** İlk 50 pozisyon (büyük → küçük) + USD karşılığı + USD/TRY kuru. DejaVu Sans font (Türkçe karakter desteği — `backend/Dockerfile`'a yüklü).
+
+**Yetki:** Sadece kullanıcının kendi snapshot'larına (`user_id == current_user.id` filtresi).
+
+History sayfasında her snapshot satırında 📊 xlsx + 📄 pdf butonları.
+
+---
+
 ## 16. Geliştirme İpuçları
 
 ### OpenAPI Dokümantasyonu
