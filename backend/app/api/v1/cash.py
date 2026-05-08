@@ -1,4 +1,5 @@
 """Nakit/banka hesabı CRUD endpoint'leri."""
+import logging
 from decimal import Decimal
 from typing import Annotated
 
@@ -10,21 +11,46 @@ from app.core.deps import get_current_user, get_db
 from app.models.cash import CashHolding
 from app.models.user import User
 from app.schemas.cash import CashCreate, CashOut, CashSummaryOut, CashUpdate
-from app.services.aggregator import fetch_usd_to_tl
+from app.services.aggregator import fetch_tcmb_rates, fetch_usd_to_tl
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cash", tags=["cash"])
 
 
 async def _amount_to_tl(amount: Decimal, currency: str) -> Decimal:
-    """Currency → TL dönüşüm. TRY ise 1:1, USD/EUR/GBP için TCMB+fallback."""
+    """Currency → TL dönüşüm.
+
+    FIN-007 (FAZ H): TCMB her doviz icin ayri kur (EUR, USD, GBP, CHF, JPY...);
+    eski kod EUR/GBP icin yanlislikla USD/TRY kullaniyordu. TCMB cekilemezse
+    USD icin exchangerate-api fallback; diger doviz icin yaklasik USD/TRY +
+    log warning (kullanici degeri kabaca gorur, kesin degil).
+    """
     if currency == "TRY":
         return amount
-    if currency in ("USD", "EUR", "GBP"):
-        # USD/TRY üzerinden — EUR ve GBP için yaklaşık 1:1 USD varsayım
-        # (precision için ileride ayrı kur servisi eklenecek)
+    currency = currency.upper()
+    try:
+        rates = await fetch_tcmb_rates()
+    except Exception as exc:
+        logger.warning("TCMB rates cekilemedi (cash %s): %s", currency, exc)
+        rates = {}
+
+    if currency in rates and rates[currency] > 0:
+        return (amount * rates[currency]).quantize(Decimal("0.01"))
+
+    # Fallback: USD/TRY (ilgili doviz USD'ye yakin varsayim)
+    try:
         usd_tl = await fetch_usd_to_tl()
-        return (amount * usd_tl).quantize(Decimal("0.01"))
-    return amount
+    except Exception as exc:
+        logger.error("USD/TRY kuru cekilemedi (cash %s): %s", currency, exc)
+        return Decimal(0)
+
+    if currency != "USD":
+        logger.warning(
+            "TCMB %s kuru bulunamadi, USD/TRY ile yaklasik cevriliyor (gercek deger farkli olabilir)",
+            currency,
+        )
+    return (amount * usd_tl).quantize(Decimal("0.01"))
 
 
 @router.get("", response_model=CashSummaryOut)

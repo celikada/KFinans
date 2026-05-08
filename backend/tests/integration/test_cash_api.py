@@ -26,12 +26,13 @@ async def _make_user(client: AsyncClient, email: str) -> dict:
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
-def _mock_tcmb(usd_to_tl: float = 40.0):
-    """TCMB XML mock (services/aggregator.fetch_usd_to_tl için).
+def _mock_tcmb(usd_to_tl: float = 40.0, eur_to_tl: float = 44.0, gbp_to_tl: float = 50.0):
+    """TCMB XML mock (services/aggregator için).
 
-    Test ortamında 1 USD = 40 TL kabul. Aggregator bir 5 dk in-memory cache'e
-    sahip — her test öncesi yeni respx context'i bunu temizler değil ama
-    çağrı sayısı aynı (idempotent).
+    FIN-007 (FAZ H): EUR/GBP ayri kurlar test edilebilsin diye parametreli.
+    Aggregator 5 dk in-memory cache'lidir; her test fonksiyonu icin yeni respx
+    context'i mock'i sifirlamaz ama _tcmb_cache test sirasinda ozdes kalir
+    (process icinde her TCMB cagrisi idempotent).
     """
     xml = f"""<?xml version="1.0" encoding="ISO-8859-9"?>
 <Tarih_Date Tarih="07.05.2026">
@@ -44,12 +45,19 @@ def _mock_tcmb(usd_to_tl: float = 40.0):
     <BanknoteBuying>{usd_to_tl - 0.01}</BanknoteBuying>
     <BanknoteSelling>{usd_to_tl + 0.02}</BanknoteSelling>
   </Currency>
+  <Currency CrossOrder="0" Kod="EUR" CurrencyCode="EUR">
+    <Unit>1</Unit>
+    <Isim>EURO</Isim>
+    <CurrencyName>EURO</CurrencyName>
+    <ForexBuying>{eur_to_tl}</ForexBuying>
+    <ForexSelling>{eur_to_tl + 0.01}</ForexSelling>
+  </Currency>
   <Currency CrossOrder="0" Kod="GBP" CurrencyCode="GBP">
     <Unit>1</Unit>
     <Isim>INGILIZ STERLINI</Isim>
     <CurrencyName>POUND STERLING</CurrencyName>
-    <ForexBuying>50.0</ForexBuying>
-    <ForexSelling>50.01</ForexSelling>
+    <ForexBuying>{gbp_to_tl}</ForexBuying>
+    <ForexSelling>{gbp_to_tl + 0.01}</ForexSelling>
   </Currency>
 </Tarih_Date>"""
     respx.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
@@ -118,6 +126,44 @@ async def test_create_cash_usd_converts_to_tl(client: AsyncClient):
     data = resp.json()
     assert data["currency"] == "USD"
     assert Decimal(data["amount_tl"]) == Decimal("4000.00")  # 100 × 40
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_cash_eur_uses_tcmb_eur_rate_not_usd(client: AsyncClient):
+    """FIN-007 (FAZ H): EUR holding TCMB EUR/TRY ile cevrilir, USD/TRY ile DEGIL.
+
+    Eski bug: 100 EUR × 40 USD/TL = 4000 TL (yanlis)
+    Dogru:    100 EUR × 44 EUR/TL = 4400 TL
+    """
+    _mock_tcmb(usd_to_tl=40.0, eur_to_tl=44.0)
+    headers = await _make_user(client, "cash_eur@example.com")
+    resp = await client.post(
+        "/api/v1/cash",
+        json={"label": "Wise EUR", "amount": "100", "currency": "EUR"},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["currency"] == "EUR"
+    assert Decimal(data["amount_tl"]) == Decimal("4400.00")
+    # USD/TRY ile cevrilseydi 4000.00 olurdu — degil
+    assert Decimal(data["amount_tl"]) != Decimal("4000.00")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_create_cash_gbp_uses_tcmb_gbp_rate(client: AsyncClient):
+    """FIN-007: GBP holding TCMB GBP/TRY ile cevrilir."""
+    _mock_tcmb(usd_to_tl=40.0, gbp_to_tl=50.0)
+    headers = await _make_user(client, "cash_gbp@example.com")
+    resp = await client.post(
+        "/api/v1/cash",
+        json={"label": "Revolut GBP", "amount": "200", "currency": "GBP"},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    assert Decimal(resp.json()["amount_tl"]) == Decimal("10000.00")  # 200 × 50
 
 
 @pytest.mark.asyncio

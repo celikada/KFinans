@@ -1,4 +1,5 @@
 import os
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import update
@@ -52,6 +53,17 @@ async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_tcmb_cache():
+    """FIN-007 (FAZ H): TCMB rates modul-level cache (300s TTL) testler arasi
+    paylasildigindan respx mock degisiklikleri etkisiz kaliyordu. Her test
+    oncesi cache sifirla — testler izole.
+    """
+    from app.services import aggregator
+    aggregator._tcmb_cache = None
+    yield
 
 
 async def verify_user_email(email: str) -> None:

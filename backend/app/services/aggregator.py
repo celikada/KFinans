@@ -21,6 +21,11 @@ _TCMB_CACHE_TTL_SEC = 300
 _tcmb_cache: tuple[float, dict[str, Decimal]] | None = None
 
 
+async def fetch_tcmb_rates() -> dict[str, Decimal]:
+    """TCMB kurlarinin public alias'i (snapshot, cash multi-currency)."""
+    return await _fetch_tcmb_rates()
+
+
 async def _fetch_tcmb_rates() -> dict[str, Decimal]:
     """TCMB resmi gunluk kurlari (XML). 'ForexBuying' (efektif alis) kullanilir.
 

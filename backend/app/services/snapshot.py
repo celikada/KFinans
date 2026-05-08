@@ -30,6 +30,7 @@ from app.models.tefas import TefasHolding
 from app.services.aggregator import (
     fetch_combined_prices,
     fetch_gbp_to_usd,
+    fetch_tcmb_rates,
     fetch_usd_to_tl,
     lookup_usd_price,
     to_asset_position,
@@ -158,31 +159,53 @@ async def _gather_tefas_assets(
 
 
 async def _gather_cash_assets(
-    holdings: list, usd_tl: Decimal, issues: list[dict],
+    holdings: list,
+    usd_tl: Decimal,
+    tcmb_rates: dict[str, Decimal],
+    issues: list[dict],
 ) -> list[AssetData]:
     """Nakit/banka hesabı bakiyelerini AssetData'ya çevirir.
-    USD/EUR/GBP → TRY dönüşümü USD/TRY üzerinden yapılır (basit yaklaşım)."""
+
+    FIN-007 (FAZ H): EUR/GBP/CHF gibi para birimleri TCMB kurlarindan dogru
+    cevrilir. Rates dict'inde currency yoksa USD/TRY ile fallback + warning.
+    TCMB cekilemezse (rates bos) sadece TRY ve USD kabul edilir.
+    """
     if not holdings:
         return []
     out: list[AssetData] = []
     for h in holdings:
         amount = Decimal(str(h.amount))
-        if h.currency == "TRY":
+        currency = h.currency.upper()
+
+        if currency == "TRY":
             tl = amount
-        elif usd_tl > 0:
+        elif currency in tcmb_rates and tcmb_rates[currency] > 0:
+            tl = (amount * tcmb_rates[currency]).quantize(Decimal("0.01"))
+        elif currency == "USD" and usd_tl > 0:
+            # TCMB cekilemediyse exchangerate-api fallback ile gelen USD kuru
             tl = (amount * usd_tl).quantize(Decimal("0.01"))
+        elif usd_tl > 0:
+            # TCMB rates yok + USD/TRY var → tahmini USD eşdeğeri olarak çevir
+            # (1:1 USD varsayim) ve issue'a uyari ekle
+            tl = (amount * usd_tl).quantize(Decimal("0.01"))
+            issues.append({
+                "source": "cash",
+                "label": h.label,
+                "code": "currency_rate_missing",
+                "msg": f"{currency} kuru bulunamadi, USD/TRY ile yaklasik cevrildi (gercek deger farkli olabilir)",
+            })
         else:
             issues.append({
                 "source": "cash",
                 "label": h.label,
                 "code": "rate_unavailable",
-                "msg": f"USD kuru alınamadığı için {h.currency} hesabı dahil edilmedi",
+                "msg": f"{currency} kuru hicbir kaynaktan alinamadi, hesap dahil edilmedi",
             })
             continue
         if tl <= 0:
             continue
         out.append(AssetData(
-            symbol=h.currency, name=h.label,
+            symbol=currency, name=h.label,
             provider="cash", asset_type="cash", source_type="manual",
             liquid_quantity=Decimal("1"),
             unit_price_tl=tl,
@@ -518,18 +541,23 @@ async def compute_and_save_snapshot(
     # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
     # GBP/USD sadece UK hisseleri icin; cekilemezse 0 ile devam (UK hisseler 0 deger).
+    # TCMB rates EUR/CHF/JPY... cash holding multi-currency icin (FIN-007).
     rate_results = await asyncio.gather(
         fetch_usd_to_tl(),
         fetch_gbp_to_usd(),
+        fetch_tcmb_rates(),
         return_exceptions=True,
     )
-    usd_tl, gbp_usd = rate_results
+    usd_tl, gbp_usd, tcmb_rates = rate_results
     if isinstance(usd_tl, BaseException):
         logger.error("Snapshot: USD/TL kuru hicbir kaynaktan cekilemedi, iptal: %s", usd_tl)
         raise usd_tl
     if isinstance(gbp_usd, BaseException):
         logger.warning("Snapshot: GBP/USD cekilemedi, UK hisseleri 0 deger: %s", gbp_usd)
         gbp_usd = Decimal("0")
+    if isinstance(tcmb_rates, BaseException):
+        logger.warning("Snapshot: TCMB rates cekilemedi, cash USD/TRY ile cevrilecek: %s", tcmb_rates)
+        tcmb_rates = {}
 
     # Tum kaynaklardan asset'leri topla (paralel)
     issues: list[dict] = []
@@ -539,7 +567,7 @@ async def compute_and_save_snapshot(
         _gather_tefas_assets(tefas_holdings, issues),
         _gather_stock_assets(stock_holdings, usd_tl, gbp_usd, issues),
         _gather_commodity_assets(commodity_holdings, issues),
-        _gather_cash_assets(cash_holdings, usd_tl, issues),
+        _gather_cash_assets(cash_holdings, usd_tl, tcmb_rates, issues),
     )
     bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
     manual_crypto_assets = await _gather_manual_crypto_assets(manual_crypto_holdings, issues)

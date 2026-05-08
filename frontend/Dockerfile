@@ -8,6 +8,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# DEVOPS-018 (FAZ H): NEXT_PUBLIC_* runtime'da etkili degil, build-time'da bake edilir.
+# Prod tek host modeli (kfinans.app + path-based ingress): bos string -> goreceli /api/v1
+# release.yml --build-arg NEXT_PUBLIC_API_URL="" ile gecirir (default zaten "").
+ARG NEXT_PUBLIC_API_URL=""
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
 # ── runner (production) ───────────────────────────────────────────────────────

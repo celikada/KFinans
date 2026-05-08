@@ -170,6 +170,11 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
             ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ steps.version.outputs.tag }}
+          # DEVOPS-018 (FAZ H): Frontend build-time NEXT_PUBLIC_API_URL bake.
+          # Bos string -> goreceli /api/v1 (same-origin, ingress /api -> backend).
+          # Backend icin etkisi yok (Dockerfile ARG kullanmiyor).
+          build-args: |
+            NEXT_PUBLIC_API_URL=
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

@@ -1,4 +1,8 @@
 # Non-secret konfigurasyon. Production'da degerleri kendi domain'lerinize gore guncelleyin.
+#
+# DEVOPS-018 (FAZ H): Tek host (kfinans.app) + path-based routing modeline uyarlandi.
+# Ingress (k8s/ingress.yaml) /api -> backend, /* -> frontend olarak yonlendirir.
+# Cross-origin yok; CSP `connect-src 'self'` yeterli; cookie scope tek domain.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,21 +11,30 @@ metadata:
 data:
   # Backend
   ALGORITHM: "HS256"
-  ACCESS_TOKEN_EXPIRE_MINUTES: "480"
+  # FAZ C4: Prod'da access token TTL 30 dk (refresh rotation aktif)
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"
   REFRESH_TOKEN_EXPIRE_DAYS: "7"
   SONIC_RPC_URL: "https://rpc.soniclabs.com"
   AVALANCHE_P_API_URL: "https://api.avax.network/ext/bc/P"
   AVALANCHE_C_RPC_URL: "https://api.avax.network/ext/bc/C/rpc"
-  CORS_ORIGINS: '["https://app.kfinans.app"]'
+  # Tek host modeli: same-origin /api cagrilarinda CORS preflight yok ama
+  # www -> root 301 oncesi cross-origin atilabilir; iki entry guvenli.
+  CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
+  # FAZ C3: TrustedHostMiddleware whitelist
+  ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"
-  FRONTEND_URL: "https://app.kfinans.app"
+  FRONTEND_URL: "https://kfinans.app"
   VERIFY_TOKEN_EXPIRE_HOURS: "24"
 
   # Claude
   CLAUDE_MODEL: "claude-sonnet-4-6"
   CLAUDE_MAX_TOKENS: "1024"
 
-  # Frontend (build-time'da gerek; runtime ENV de okunabilir)
-  NEXT_PUBLIC_API_URL: "https://api.kfinans.app"
+  # Frontend (build-time'da bake edilir; runtime'da etkili degil — release.yml
+  # frontend Dockerfile build-arg NEXT_PUBLIC_API_URL="" ile gecmeli).
+  # frontend/lib/api.ts: `${NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1`
+  # Bos string -> goreceli URL `/api/v1` -> ingress /api -> backend.
+  # Tek host modeli: same-origin request, CORS preflight yok.
+  NEXT_PUBLIC_API_URL: ""
