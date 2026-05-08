@@ -57,7 +57,17 @@ async def test_db_stores_only_ciphertext_no_plaintext(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
-    """ORM uzerinden okunan address her zaman plaintext olmali (transparent decrypt)."""
+    """ORM uzerinden okunan address her zaman plaintext olmali (transparent decrypt).
+
+    BACK-013 (FAZ H) sonrasi: API JSON response'ta address MASKELI doner
+    (xpub leak engeli). Bu test iki katmani ayri ayri dogrular:
+      1. Python ORM seviyesinde wallet.address full plaintext (ic kullanim icin)
+      2. HTTP JSON response'ta mask edilmis (ilk 6 + son 4) — ic ile dis
+         kontrolu farkli.
+    """
+    from sqlalchemy import select
+    from app.models.integration import WalletAddress
+
     headers = await make_user(client, "wallet_enc_orm@example.com")
     add_resp = await client.post(
         "/api/v1/wallets",
@@ -66,12 +76,31 @@ async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
     )
     assert add_resp.status_code in (200, 201)
 
+    # 1) ORM seviyesi: hybrid_property otomatik decrypt
+    # NOT: Diger testlerden birikmis ethereum wallet'lari olabilir (test izolasyonu
+    # yok — TEST-004 ayri issue). Sadece bu testin user'ina ait wallet'i ara.
+    from app.models.user import User
+    async with TestSession() as session:
+        user = (await session.execute(
+            select(User).where(User.email == "wallet_enc_orm@example.com")
+        )).scalar_one()
+        wallet = (await session.execute(
+            select(WalletAddress).where(
+                WalletAddress.user_id == user.id,
+                WalletAddress.chain == "ethereum",
+            )
+        )).scalar_one()
+        assert wallet.address == VALID_ETH_LOWER
+
+    # 2) API seviyesi (BACK-013): JSON response'ta address masked
     list_resp = await client.get("/api/v1/wallets", headers=headers)
     assert list_resp.status_code == 200
     wallets = list_resp.json()
     assert len(wallets) == 1
-    # Response body decrypt edilmis plaintext
-    assert wallets[0]["address"] == VALID_ETH_LOWER
+    assert wallets[0]["address"] != VALID_ETH_LOWER, "API plaintext xpub leak — BACK-013 ihlali"
+    assert "..." in wallets[0]["address"]  # mask formati: ilk 6 + ... + son 4
+    assert wallets[0]["address"].startswith(VALID_ETH_LOWER[:6])
+    assert wallets[0]["address"].endswith(VALID_ETH_LOWER[-4:])
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ from app.schemas.portfolio import (
     PortfolioBreakdown,
     PortfolioChanges,
     SnapshotOut,
+    SnapshotPreviewOut,
     StakingPosition,
     WalletPositionOut,
     WalletResponse,
@@ -52,7 +53,7 @@ async def get_usd_rate(
     return {"usd_try": str(rate)}
 
 
-@router.post("/snapshot/preview")
+@router.post("/snapshot/preview", response_model=SnapshotPreviewOut)
 async def preview_snapshot(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -98,9 +99,9 @@ async def create_snapshot(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Snapshot alinamadi: {e}",
         )
-    if isinstance(snapshot, dict):
-        # dry_run değil ama somehow dict döndü — beklenmeyen durum
-        raise HTTPException(status_code=500, detail="Snapshot kaydedilemedi")
+    # BACK-001 (FAZ H): dry_run=False oldugu icin compute_and_save_snapshot her zaman
+    # PortfolioSnapshot doner. dict fallback dual-type response_model'i bypass ediyordu;
+    # kaldirildi — `dry_run=True` ayri preview endpoint'inde kullaniliyor.
     # Asset position'lari donulen response icin tekrar yukle
     result = await db.execute(
         select(PortfolioSnapshot)

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
+from app.core.masking import mask_address as _mask_address  # BACK-013: central helper
 from app.models.integration import WalletAddress
 from app.models.user import User
 from app.schemas.integration import WalletCreate, WalletOut
@@ -17,21 +18,6 @@ VALID_CHAINS = {
     "sonic", "avalanche_c", "avalanche_p", "ethereum", "bitcoin",
     "solana", "cardano", "algorand", "polkadot", "litecoin",
 }
-
-
-def _mask_address(addr: str) -> str:
-    """COMP-024 (FAZ H): xpub/adres maskeleme — Excel sizmasinda riski azaltir.
-    Ilk 6 + son 4 karakter, ortasi *** ile gizlenir.
-
-    Ornek: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKEy5jp48n4XwRY3VntPj1iqksXc2D4D
-    -> xpub6C...XC2D4D
-    """
-    if not addr:
-        return ""
-    if len(addr) <= 12:
-        # Kisa adres (BTC P2PKH ~34) — standart 6+4 mask
-        return f"{addr[:4]}...{addr[-4:]}" if len(addr) > 8 else addr
-    return f"{addr[:6]}...{addr[-4:]}"
 
 
 @router.get("", response_model=list[WalletOut])

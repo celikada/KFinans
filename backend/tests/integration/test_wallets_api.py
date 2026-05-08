@@ -21,7 +21,11 @@ async def test_add_wallet_creates_record(client: AsyncClient):
     assert resp.status_code in (200, 201)
     data = resp.json()
     assert data["chain"] == "ethereum"
-    assert data["address"] == VALID_ETH
+    # BACK-013 (FAZ H): API response'ta address maskeli (ilk 6 + son 4)
+    assert data["address"] != VALID_ETH
+    assert data["address"].startswith(VALID_ETH[:6])
+    assert data["address"].endswith(VALID_ETH[-4:])
+    assert "..." in data["address"]
     assert data["label"] == "Ana"
     assert "id" in data
 

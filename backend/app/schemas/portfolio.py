@@ -2,7 +2,9 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
+
+from app.core.masking import mask_address
 
 
 class AssetPositionOut(BaseModel):
@@ -54,6 +56,20 @@ class SnapshotPreflightOut(BaseModel):
     kullanıcıya uyarı gösterilir."""
     issues: list[SnapshotHealthIssue]
     can_proceed: bool  # Her zaman True — kullanıcı yine de devam edebilir
+
+
+class SnapshotPreviewOut(BaseModel):
+    """BACK-001 (FAZ H): /portfolio/snapshot/preview response_model.
+
+    `compute_and_save_snapshot(dry_run=True)` cikti sozlesmesi. saved her
+    zaman False (dry run'da DB'ye yazilmaz). issues SnapshotHealthIssue
+    listesidir; her kaynak fail/info raporlar.
+    """
+    total_value_tl: str            # quantize sonrasi string ("123.45")
+    asset_count: int
+    issues: list[SnapshotHealthIssue]
+    usd_try_rate: str | None = None
+    saved: bool = False
 
 
 class PortfolioChanges(BaseModel):
@@ -111,6 +127,11 @@ class WalletPositionOut(BaseModel):
     unit_price_usd: Decimal
     unit_price_tl: Decimal
     total_value_tl: Decimal
+
+    # BACK-013 (FAZ H): xpub leak engeli — JSON response'ta address maskelenir.
+    @field_serializer("address")
+    def _serialize_address(self, addr: str) -> str:
+        return mask_address(addr)
 
 
 class WalletResponse(BaseModel):

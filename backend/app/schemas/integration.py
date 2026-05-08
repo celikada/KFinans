@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
+
+from app.core.masking import mask_address
 
 
 EXCHANGE_PROVIDERS = {"binance", "binancetr", "icrypex", "tefas", "bes"}
@@ -50,3 +52,10 @@ class WalletOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    # BACK-013 (FAZ H): xpub leak engeli — JSON response'ta address maskelenir.
+    # DB'de Fernet sifreli (FAZ C1); buradaki maskeleme network/proxy/log sizmasini
+    # da onler. Excel export full adresi opt-in audit'li dondurur (wallets.py).
+    @field_serializer("address")
+    def _serialize_address(self, addr: str) -> str:
+        return mask_address(addr)
