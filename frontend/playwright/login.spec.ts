@@ -1,6 +1,18 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Login akışı", () => {
+test.describe("Login akışı @smoke", () => {
+  test("@smoke Login sayfası açılır", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator('input[type="email"]')).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toBeVisible();
+  });
+
+  test("@smoke Token'sız /dashboard erişimi /login'e yönlendirmeli", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("Geçersiz kullanıcı için hata mesajı göstermeli", async ({ page }) => {
     await page.goto("/login");
     await expect(page).toHaveURL(/\/login/);
@@ -11,11 +23,6 @@ test.describe("Login akışı", () => {
 
     // Hata mesajı veya 401 sonrası login sayfasında kalmalı
     await expect(page).toHaveURL(/\/login/, { timeout: 5000 });
-  });
-
-  test("Token'sız /dashboard erişimi /login'e yönlendirmeli", async ({ page }) => {
-    await page.goto("/dashboard");
-    await expect(page).toHaveURL(/\/login/);
   });
 
   test("Token'sız /dashboard/crypto erişimi /login'e yönlendirmeli", async ({ page }) => {

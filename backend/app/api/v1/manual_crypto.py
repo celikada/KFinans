@@ -1,4 +1,5 @@
 """API'siz borsa hesapları için manuel kripto holding CRUD + Excel + preview."""
+import logging
 from decimal import Decimal
 from io import BytesIO
 from typing import Annotated
@@ -10,6 +11,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+
+logger = logging.getLogger(__name__)
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.user import User
 from app.schemas.manual_crypto import (

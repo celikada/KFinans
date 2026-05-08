@@ -264,7 +264,7 @@ export const api = {
       body: JSON.stringify(holdings),
     }),
   exportStockHoldings: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/portfolio/stocks/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -278,7 +278,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   importStockMkk: async (file: File): Promise<StockHoldingDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/stocks/import-mkk`, {
@@ -294,7 +294,7 @@ export const api = {
   },
 
   importStockHoldings: async (file: File): Promise<StockHoldingDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/stocks/import`, {
@@ -310,7 +310,7 @@ export const api = {
   },
 
   exportWallets: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/wallets/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -325,7 +325,7 @@ export const api = {
   },
 
   importWallets: async (file: File): Promise<WalletDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/wallets/import`, {
@@ -356,7 +356,7 @@ export const api = {
     }),
 
   exportTefasHoldings: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/portfolio/tefas/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -371,7 +371,7 @@ export const api = {
   },
 
   importTefasHoldings: async (file: File): Promise<TefasHoldingDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/tefas/import`, {
@@ -387,7 +387,7 @@ export const api = {
   },
 
   importTefasMkk: async (file: File): Promise<TefasHoldingDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/tefas/import-mkk`, {
@@ -445,7 +445,7 @@ export const api = {
 
   // Rapor indirme yardımcısı (hem Excel hem PDF için)
   downloadReport: async (path: string, filename: string) => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -503,7 +503,7 @@ export const api = {
   deleteCommodity: (id: number) =>
     request<void>(`/portfolio/commodities/${id}`, { method: "DELETE" }),
   exportCommodities: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/portfolio/commodities/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -517,7 +517,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   importCommodities: async (file: File): Promise<CommodityDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/commodities/import`, {
@@ -534,7 +534,7 @@ export const api = {
 
   // Harcama Excel export/import
   exportExpenses: async (year?: number, month?: number) => {
-    const token = getToken();
+    const token = getAccessToken();
     const q = new URLSearchParams();
     if (year !== undefined) q.set("year", String(year));
     if (month !== undefined) q.set("month", String(month));
@@ -552,7 +552,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   importExpenses: async (file: File): Promise<ExpenseDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/expenses/import`, {
@@ -569,7 +569,7 @@ export const api = {
 
   // Gelir Excel export/import
   exportIncomes: async (year?: number, month?: number) => {
-    const token = getToken();
+    const token = getAccessToken();
     const q = new URLSearchParams();
     if (year !== undefined) q.set("year", String(year));
     if (month !== undefined) q.set("month", String(month));
@@ -587,7 +587,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   importIncomes: async (file: File): Promise<IncomeDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/income/import`, {
@@ -637,7 +637,7 @@ export const api = {
   deleteManualCrypto: (id: number) =>
     request<void>(`/manual-crypto/${id}`, { method: "DELETE" }),
   exportManualCrypto: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/manual-crypto/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -692,7 +692,7 @@ export const api = {
     request<void>(`/credit-cards/${cardId}/installments/${installmentId}`, { method: "DELETE" }),
 
   importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/manual-crypto/import`, {
@@ -728,7 +728,7 @@ export const api = {
     }),
 
   exportBesHoldings: async () => {
-    const token = getToken();
+    const token = getAccessToken();
     const res = await fetch(`${BASE}/portfolio/bes/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -743,7 +743,7 @@ export const api = {
   },
 
   importBesHoldings: async (file: File): Promise<BesHoldingDTO[]> => {
-    const token = getToken();
+    const token = getAccessToken();
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`${BASE}/portfolio/bes/import`, {

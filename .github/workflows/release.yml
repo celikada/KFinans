@@ -342,6 +342,17 @@ jobs:
         working-directory: frontend
         run: npx playwright install chromium --with-deps
 
+      - name: Smoke test sayisini dogrula (TEST-009 fix)
+        working-directory: frontend
+        run: |
+          # @smoke etiketi olan en az 1 test bulunmali; aksi halde gate sahte yesildir
+          count=$(npx playwright test --grep @smoke --list 2>&1 | grep -E "^\s+[0-9]+\s" | wc -l)
+          echo "@smoke etiketli test sayisi: $count"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::No @smoke tagged tests found — release smoke gate would be falsely green"
+            exit 1
+          fi
+
       - name: Smoke test calistir (production)
         working-directory: frontend
         env:
@@ -349,7 +360,7 @@ jobs:
           API_BASE_URL: https://kfinans.app/api  # path-based ingress (Faz D1)
         run: |
           # Sadece smoke etiketli testleri calistir
-          # Smoke suite: /health, /, /auth/login (401 with bad creds)
+          # Smoke suite: login sayfa erisilebilirligi + token'siz /dashboard yonlendirme
           npx playwright test --grep @smoke --reporter=github
 
       - name: Test raporu artifact'i
