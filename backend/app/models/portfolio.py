@@ -52,7 +52,9 @@ class AssetPosition(Base):
     staked_quantity: Mapped[Decimal] = mapped_column(Numeric(28, 8), nullable=False, default=0)
     pending_rewards: Mapped[Decimal] = mapped_column(Numeric(28, 8), nullable=False, default=0)
 
-    unit_price_tl: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    # FIN-018 (FAZ H): SHIB/PEPE gibi mikro fiyatlar (0.0000003 USD) icin
+    # 4 ondalik yetersiz; 28,10 ile 0.0000000001 TRY hassasiyet.
+    unit_price_tl: Mapped[Decimal] = mapped_column(Numeric(28, 10), nullable=False)
     total_value_tl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     weight_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=0)
 

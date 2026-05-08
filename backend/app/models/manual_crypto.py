@@ -31,7 +31,9 @@ class ManualCryptoHolding(Base):
     avg_cost_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     # 'auto' (Binance+CoinGecko), 'manual' (kullanıcı), 'linked' (asset catalog)
     price_source: Mapped[str] = mapped_column(String(20), nullable=False, default="auto", server_default="auto")
-    manual_unit_price_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    # FIN-018 (FAZ H): SHIB/PEPE gibi mikro fiyatlar icin Numeric(28, 10)
+    # (asset_positions.unit_price_tl ile tutarli)
+    manual_unit_price_tl: Mapped[Decimal | None] = mapped_column(Numeric(28, 10), nullable=True)
     # 'linked' modunda hedef kaynağa işaret eder
     linked_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # binance|coingecko|tefas|commodity
     linked_id: Mapped[str | None] = mapped_column(String(100), nullable=True)     # ETH|tether-gold|AFA|XAU
