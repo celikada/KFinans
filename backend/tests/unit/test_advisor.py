@@ -5,9 +5,12 @@ Tum dis cagri (Anthropic API) AsyncMock ile patchlenir; gercek aga gidilmez.
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import anthropic
+import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.config import settings
 from app.services.advisor import AdvisorService
@@ -127,3 +130,98 @@ class TestAdvisorGenerate:
         system = mock_create.call_args.kwargs["system"]
         assert isinstance(system, list)
         assert system[0]["cache_control"]["type"] == "ephemeral"
+
+
+# AI-001 (FAZ H): Anthropic exception -> uygun HTTP status mapping
+class TestAdvisorExceptionMapping:
+    """Anthropic SDK exception'lari kullaniciya anlamli HTTP status doner."""
+
+    def _httpx_response(self, status_code: int = 500) -> httpx.Response:
+        return httpx.Response(status_code, request=httpx.Request("POST", "https://x"))
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_error_returns_429_with_retry_after(self):
+        settings.anthropic_api_key = "sk-ant-test"
+        svc = AdvisorService()
+
+        mock_create = AsyncMock(side_effect=anthropic.RateLimitError(
+            message="rate limit",
+            response=self._httpx_response(429),
+            body=None,
+        ))
+        with patch.object(svc._client.messages, "create", mock_create):
+            with pytest.raises(HTTPException) as exc:
+                await svc.generate(
+                    user=_fake_user(), snapshot=_fake_snapshot(), horizon="medium",
+                )
+        assert exc.value.status_code == 429
+        assert exc.value.headers and exc.value.headers.get("Retry-After") == "30"
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_returns_504(self):
+        settings.anthropic_api_key = "sk-ant-test"
+        svc = AdvisorService()
+
+        mock_create = AsyncMock(side_effect=anthropic.APITimeoutError(
+            request=httpx.Request("POST", "https://x"),
+        ))
+        with patch.object(svc._client.messages, "create", mock_create):
+            with pytest.raises(HTTPException) as exc:
+                await svc.generate(
+                    user=_fake_user(), snapshot=_fake_snapshot(), horizon="medium",
+                )
+        assert exc.value.status_code == 504
+
+    @pytest.mark.asyncio
+    async def test_connection_error_returns_503(self):
+        settings.anthropic_api_key = "sk-ant-test"
+        svc = AdvisorService()
+
+        mock_create = AsyncMock(side_effect=anthropic.APIConnectionError(
+            request=httpx.Request("POST", "https://x"),
+        ))
+        with patch.object(svc._client.messages, "create", mock_create):
+            with pytest.raises(HTTPException) as exc:
+                await svc.generate(
+                    user=_fake_user(), snapshot=_fake_snapshot(), horizon="medium",
+                )
+        assert exc.value.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_authentication_error_returns_500_critical_log(self, caplog):
+        settings.anthropic_api_key = "sk-ant-test"
+        svc = AdvisorService()
+
+        mock_create = AsyncMock(side_effect=anthropic.AuthenticationError(
+            message="invalid api key",
+            response=self._httpx_response(401),
+            body=None,
+        ))
+        with patch.object(svc._client.messages, "create", mock_create):
+            with pytest.raises(HTTPException) as exc:
+                with caplog.at_level("CRITICAL"):
+                    await svc.generate(
+                        user=_fake_user(), snapshot=_fake_snapshot(), horizon="medium",
+                    )
+        assert exc.value.status_code == 500
+        # Log critical (ops aksiyon gerekli)
+        assert any("Claude API key gecersiz" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_overloaded_error_returns_503(self):
+        """OverloadedError APIStatusError'in alt sinifi (status 529)."""
+        settings.anthropic_api_key = "sk-ant-test"
+        svc = AdvisorService()
+
+        # Anthropic SDK 0.x APIStatusError generic — 529 Overloaded
+        mock_create = AsyncMock(side_effect=anthropic.APIStatusError(
+            message="overloaded",
+            response=self._httpx_response(529),
+            body=None,
+        ))
+        with patch.object(svc._client.messages, "create", mock_create):
+            with pytest.raises(HTTPException) as exc:
+                await svc.generate(
+                    user=_fake_user(), snapshot=_fake_snapshot(), horizon="medium",
+                )
+        assert exc.value.status_code == 503

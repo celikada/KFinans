@@ -1,9 +1,19 @@
+import logging
+
 import anthropic
+from fastapi import HTTPException, status
+
 from app.config import settings
 from app.models.advice import InvestmentAdvice
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
 from app.services.aggregator import calculate_breakdown
+
+logger = logging.getLogger(__name__)
+
+# AI-001 (FAZ H): Claude API cagrisi timeout
+# httpx default no-timeout — slow Claude tarafi tum FastAPI worker'i bloke ederdi.
+_CLAUDE_TIMEOUT_SECONDS = 60.0
 
 _SYSTEM_PROMPT = """Deneyimli bir portföy danışmanısın.
 Türk yatırımcısı için gerçekçi, uygulanabilir tavsiyeler üretiyorsun.
@@ -21,7 +31,11 @@ class AdvisorService:
     def __init__(self):
         if not settings.anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY ayarlanmamış")
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        # AI-001: timeout sinirla — Claude askıda kalırsa istek 60sn'de fail eder.
+        self._client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            timeout=_CLAUDE_TIMEOUT_SECONDS,
+        )
 
     async def generate(self, user: User, snapshot: PortfolioSnapshot, horizon: str) -> InvestmentAdvice:
         breakdown = calculate_breakdown(snapshot)
@@ -42,18 +56,71 @@ class AdvisorService:
 
 {HORIZON_LABELS[horizon]} için yatırım tavsiyesi ver."""
 
-        message = await self._client.messages.create(
-            model=settings.claude_model,
-            max_tokens=settings.claude_max_tokens,
-            system=[
-                {
-                    "type": "text",
-                    "text": _SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},  # prompt caching
-                }
-            ],
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # AI-001 (FAZ H): Anthropic exception -> uygun HTTP status mapping.
+        # FastAPI exception handler raw 500 yerine kullaniciya anlamli hata doner.
+        try:
+            message = await self._client.messages.create(
+                model=settings.claude_model,
+                max_tokens=settings.claude_max_tokens,
+                system=[
+                    {
+                        "type": "text",
+                        "text": _SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},  # prompt caching
+                    }
+                ],
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.RateLimitError as exc:
+            logger.warning("Claude rate limit (user=%s): %s", user.id, exc)
+            # 429 + Retry-After header (default 30sn — Anthropic anlik degeri saglamiyor)
+            retry_after = "30"
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Claude API rate limit'e takildi, lutfen bir dakika bekleyin",
+                headers={"Retry-After": retry_after},
+            ) from exc
+        except anthropic.APITimeoutError as exc:
+            logger.warning("Claude timeout (user=%s, %ss): %s", user.id, _CLAUDE_TIMEOUT_SECONDS, exc)
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Claude API zaman asimina ugradi, tekrar deneyin",
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            logger.warning("Claude baglanti hatasi (user=%s): %s", user.id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Claude API'ye baglanti kurulamadi, tekrar deneyin",
+            ) from exc
+        except anthropic.AuthenticationError as exc:
+            # API key gecersiz/expired — KULLANICI HATASI DEGIL, ops/dev problemi
+            logger.critical("Claude API key gecersiz: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI servis konfigurasyon hatasi, destege bildirin",
+            ) from exc
+        except anthropic.BadRequestError as exc:
+            # Prompt format hatasi, model adi yanlis vb.
+            logger.error("Claude bad request (user=%s): %s", user.id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI istegi olusturulamadi (format hatasi)",
+            ) from exc
+        except anthropic.APIStatusError as exc:
+            # 5xx genel veya OverloadedError (529)
+            logger.warning("Claude APIStatusError (status=%s, user=%s): %s",
+                           exc.status_code, user.id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Claude API gecici olarak ulasilamiyor, tekrar deneyin",
+            ) from exc
+        except anthropic.AnthropicError as exc:
+            # SDK base exception — beklenmedik tipler icin generic fallback
+            logger.error("Claude API beklenmedik hata (user=%s): %s", user.id, exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI servisi su anda kullanilamiyor",
+            ) from exc
 
         content = message.content[0].text
 
