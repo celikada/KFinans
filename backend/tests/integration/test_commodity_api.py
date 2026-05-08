@@ -11,7 +11,7 @@ import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
 # ---------------------------------------------------------------------------
 # TCMB XML yanıtı — USD/TRY = 40.0
@@ -78,13 +78,6 @@ def mock_metal_http():
 # ---------------------------------------------------------------------------
 # Yardımcılar
 # ---------------------------------------------------------------------------
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "Guclu-Sifre-2026!"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
 
 def _gram(metal: str, qty: float, notes: str | None = None) -> dict:
     return {"unit_type": "gram", "metal": metal, "quantity": qty, "notes": notes}
@@ -107,7 +100,7 @@ BASE = "/api/v1/portfolio/commodities"
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
     """Yeni kullanıcı için boş özet dönmeli."""
-    headers = await _make_user(client, "com_empty@example.com")
+    headers = await make_user(client, "com_empty@example.com")
     resp = await client.get(BASE, headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -120,7 +113,7 @@ async def test_empty_list(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_gram_gold(client: AsyncClient):
     """Gram altın oluşturma — 201 ve doğru alanlar."""
-    headers = await _make_user(client, "com_gram_gold@example.com")
+    headers = await make_user(client, "com_gram_gold@example.com")
     resp = await client.post(BASE, json=_gram("gold", 10.0, "Evde saklı"), headers=headers)
     assert resp.status_code == 201
     data = resp.json()
@@ -134,7 +127,7 @@ async def test_create_gram_gold(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_gram_silver(client: AsyncClient):
     """Gram gümüş oluşturma — 201 ve metal=silver."""
-    headers = await _make_user(client, "com_gram_silver@example.com")
+    headers = await make_user(client, "com_gram_silver@example.com")
     resp = await client.post(BASE, json=_gram("silver", 50.0), headers=headers)
     assert resp.status_code == 201
     assert resp.json()["metal"] == "silver"
@@ -143,7 +136,7 @@ async def test_create_gram_silver(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_biga_gold(client: AsyncClient):
     """BiGA A01 (1 gram altın) oluşturma."""
-    headers = await _make_user(client, "com_biga_gold@example.com")
+    headers = await make_user(client, "com_biga_gold@example.com")
     resp = await client.post(BASE, json=_biga("A01", 5.0), headers=headers)
     assert resp.status_code == 201
     data = resp.json()
@@ -155,7 +148,7 @@ async def test_create_biga_gold(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_biga_silver(client: AsyncClient):
     """BiGA G01 (1 gram gümüş) oluşturma."""
-    headers = await _make_user(client, "com_biga_silver@example.com")
+    headers = await make_user(client, "com_biga_silver@example.com")
     resp = await client.post(BASE, json=_biga("G01", 3.0), headers=headers)
     assert resp.status_code == 201
     data = resp.json()
@@ -166,7 +159,7 @@ async def test_create_biga_silver(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_coin_ceyrek(client: AsyncClient):
     """Çeyrek altın sikke oluşturma."""
-    headers = await _make_user(client, "com_ceyrek@example.com")
+    headers = await make_user(client, "com_ceyrek@example.com")
     resp = await client.post(BASE, json=_coin("ceyrek", 2.0), headers=headers)
     assert resp.status_code == 201
     data = resp.json()
@@ -178,7 +171,7 @@ async def test_create_coin_ceyrek(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_coin_tam(client: AsyncClient):
     """Tam altın sikke oluşturma."""
-    headers = await _make_user(client, "com_tam@example.com")
+    headers = await make_user(client, "com_tam@example.com")
     resp = await client.post(BASE, json=_coin("tam", 1.0), headers=headers)
     assert resp.status_code == 201
     assert resp.json()["coin_type"] == "tam"
@@ -187,7 +180,7 @@ async def test_create_coin_tam(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_coin_cumhuriyet(client: AsyncClient):
     """Cumhuriyet altını sikke oluşturma."""
-    headers = await _make_user(client, "com_cumhuriyet@example.com")
+    headers = await make_user(client, "com_cumhuriyet@example.com")
     resp = await client.post(BASE, json=_coin("cumhuriyet", 1.0), headers=headers)
     assert resp.status_code == 201
     assert resp.json()["coin_type"] == "cumhuriyet"
@@ -196,7 +189,7 @@ async def test_create_coin_cumhuriyet(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_coin_resat(client: AsyncClient):
     """Reşat altını sikke oluşturma."""
-    headers = await _make_user(client, "com_resat@example.com")
+    headers = await make_user(client, "com_resat@example.com")
     resp = await client.post(BASE, json=_coin("resat", 1.0), headers=headers)
     assert resp.status_code == 201
     assert resp.json()["coin_type"] == "resat"
@@ -205,7 +198,7 @@ async def test_create_coin_resat(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_coin_ata(client: AsyncClient):
     """Ata altını sikke oluşturma."""
-    headers = await _make_user(client, "com_ata@example.com")
+    headers = await make_user(client, "com_ata@example.com")
     resp = await client.post(BASE, json=_coin("ata", 1.0), headers=headers)
     assert resp.status_code == 201
     assert resp.json()["coin_type"] == "ata"
@@ -214,7 +207,7 @@ async def test_create_coin_ata(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_invalid_biga_code(client: AsyncClient):
     """Geçersiz BiGA kodu → 422."""
-    headers = await _make_user(client, "com_bad_biga@example.com")
+    headers = await make_user(client, "com_bad_biga@example.com")
     resp = await client.post(
         BASE, json={"unit_type": "biga", "biga_code": "Z99", "quantity": 1.0}, headers=headers
     )
@@ -224,7 +217,7 @@ async def test_invalid_biga_code(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_invalid_coin_type(client: AsyncClient):
     """Geçersiz sikke türü → 422."""
-    headers = await _make_user(client, "com_bad_coin@example.com")
+    headers = await make_user(client, "com_bad_coin@example.com")
     resp = await client.post(
         BASE, json={"unit_type": "coin", "coin_type": "altin", "quantity": 1.0}, headers=headers
     )
@@ -234,7 +227,7 @@ async def test_invalid_coin_type(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_zero_quantity(client: AsyncClient):
     """Sıfır miktar → 422."""
-    headers = await _make_user(client, "com_zero@example.com")
+    headers = await make_user(client, "com_zero@example.com")
     resp = await client.post(BASE, json=_gram("gold", 0.0), headers=headers)
     assert resp.status_code == 422
 
@@ -242,7 +235,7 @@ async def test_zero_quantity(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_quantity(client: AsyncClient):
     """Miktar güncelleme — yeni değer dönmeli."""
-    headers = await _make_user(client, "com_update@example.com")
+    headers = await make_user(client, "com_update@example.com")
     create = await client.post(BASE, json=_gram("gold", 10.0), headers=headers)
     hid = create.json()["id"]
 
@@ -254,7 +247,7 @@ async def test_update_quantity(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_delete_holding(client: AsyncClient):
     """Silme — 204 ve liste boş."""
-    headers = await _make_user(client, "com_delete@example.com")
+    headers = await make_user(client, "com_delete@example.com")
     create = await client.post(BASE, json=_gram("gold", 5.0), headers=headers)
     hid = create.json()["id"]
 
@@ -268,8 +261,8 @@ async def test_delete_holding(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_idor_update(client: AsyncClient):
     """Başka kullanıcının varlığını güncelleyemez → 404."""
-    h1 = await _make_user(client, "com_idor1@example.com")
-    h2 = await _make_user(client, "com_idor2@example.com")
+    h1 = await make_user(client, "com_idor1@example.com")
+    h2 = await make_user(client, "com_idor2@example.com")
 
     create = await client.post(BASE, json=_gram("gold", 10.0), headers=h1)
     hid = create.json()["id"]
@@ -281,8 +274,8 @@ async def test_idor_update(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_idor_delete(client: AsyncClient):
     """Başka kullanıcının varlığını silemez → 404."""
-    h1 = await _make_user(client, "com_idor3@example.com")
-    h2 = await _make_user(client, "com_idor4@example.com")
+    h1 = await make_user(client, "com_idor3@example.com")
+    h2 = await make_user(client, "com_idor4@example.com")
 
     create = await client.post(BASE, json=_gram("gold", 10.0), headers=h1)
     hid = create.json()["id"]
@@ -301,7 +294,7 @@ async def test_unauthenticated(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_summary_total_value_positive(client: AsyncClient):
     """GET /portfolio/commodities total_value_tl > 0 olmalı."""
-    headers = await _make_user(client, "com_total@example.com")
+    headers = await make_user(client, "com_total@example.com")
 
     # 10 gram altın + 5 çeyrek sikke
     await client.post(BASE, json=_gram("gold", 10.0), headers=headers)

@@ -12,15 +12,8 @@ import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 # ─── Auth + validation ─────────────────────────────────────────────────────
@@ -35,7 +28,7 @@ async def test_asset_catalog_requires_auth(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_asset_catalog_limit_validation(client: AsyncClient):
     """limit < 1 veya > 100 → 422."""
-    headers = await _make_user(client, "ac_limit@example.com")
+    headers = await make_user(client, "ac_limit@example.com")
     bad = await client.get("/api/v1/asset-catalog?limit=0", headers=headers)
     assert bad.status_code == 422
     bad2 = await client.get("/api/v1/asset-catalog?limit=200", headers=headers)
@@ -45,7 +38,7 @@ async def test_asset_catalog_limit_validation(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_asset_catalog_q_max_length(client: AsyncClient):
     """q > 100 char → 422."""
-    headers = await _make_user(client, "ac_q_long@example.com")
+    headers = await make_user(client, "ac_q_long@example.com")
     long_q = "x" * 101
     resp = await client.get(f"/api/v1/asset-catalog?q={long_q}", headers=headers)
     assert resp.status_code == 422
@@ -58,7 +51,7 @@ async def test_asset_catalog_q_max_length(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_commodity_xau_search(client: AsyncClient):
     """source=commodity + q=XAU → altın bulunur."""
-    headers = await _make_user(client, "ac_xau@example.com")
+    headers = await make_user(client, "ac_xau@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=XAU&source=commodity", headers=headers
     )
@@ -76,7 +69,7 @@ async def test_asset_catalog_commodity_xau_search(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_commodity_silver_tr_search(client: AsyncClient):
     """Türkçe arama: 'Gümüş' → XAG bulunur (case-insensitive)."""
-    headers = await _make_user(client, "ac_silver@example.com")
+    headers = await make_user(client, "ac_silver@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=gümüş&source=commodity", headers=headers
     )
@@ -90,7 +83,7 @@ async def test_asset_catalog_commodity_silver_tr_search(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_commodity_no_match(client: AsyncClient):
     """source=commodity + q='hiç_eşleşmeyen' → boş liste."""
-    headers = await _make_user(client, "ac_nomatch@example.com")
+    headers = await make_user(client, "ac_nomatch@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=zzznonexistentzzz&source=commodity", headers=headers
     )
@@ -102,7 +95,7 @@ async def test_asset_catalog_commodity_no_match(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_commodity_empty_q_returns_all(client: AsyncClient):
     """source=commodity + q='' → 2 commodity (XAU + XAG)."""
-    headers = await _make_user(client, "ac_all_commodity@example.com")
+    headers = await make_user(client, "ac_all_commodity@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=&source=commodity", headers=headers
     )
@@ -120,7 +113,7 @@ async def test_asset_catalog_commodity_empty_q_returns_all(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_limit_one(client: AsyncClient):
     """limit=1 → en fazla 1 sonuç."""
-    headers = await _make_user(client, "ac_limit_1@example.com")
+    headers = await make_user(client, "ac_limit_1@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?source=commodity&limit=1", headers=headers
     )
@@ -144,7 +137,7 @@ async def test_asset_catalog_binance_filter(client: AsyncClient):
             {"symbol": "BTCBUSD", "price": "50000"},  # USDT pariteli değil
         ])
     )
-    headers = await _make_user(client, "ac_binance@example.com")
+    headers = await make_user(client, "ac_binance@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=BTC&source=binance", headers=headers
     )
@@ -160,7 +153,7 @@ async def test_asset_catalog_binance_filter(client: AsyncClient):
 @respx.mock
 async def test_asset_catalog_invalid_source_returns_empty(client: AsyncClient):
     """source=geçersiz_değer → boş liste (validation hatası değil, silent)."""
-    headers = await _make_user(client, "ac_bad_source@example.com")
+    headers = await make_user(client, "ac_bad_source@example.com")
     resp = await client.get(
         "/api/v1/asset-catalog?q=BTC&source=nonexistent", headers=headers
     )

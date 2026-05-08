@@ -15,7 +15,7 @@ import respx
 from decimal import Decimal
 from httpx import AsyncClient, Response
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
 # ---------------------------------------------------------------------------
 # TCMB XML: USD/TRY=40, GBP/TRY=52
@@ -101,19 +101,13 @@ _STOCKS_BASE = "/api/v1/portfolio/stocks"
 _TEFAS_BASE = "/api/v1/portfolio/tefas"
 
 
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    await client.post("/api/v1/auth/register", json={"email": email, "password": _PWD})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": _PWD})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
 
 # ---------------------------------------------------------------------------
 # Test 1: Hisse holding kaydederken avg_cost_tl içerir, GET'te geri döner
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_put_and_get_avg_cost(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_put@example.com")
+    headers = await make_user(client, "cb_stock_put@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "name": "THY", "avg_cost_tl": 700.0}]
     resp = await client.put(f"{_STOCKS_BASE}/holdings", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -130,7 +124,7 @@ async def test_stock_put_and_get_avg_cost(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_preview_no_cost_returns_none(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_no_cost@example.com")
+    headers = await make_user(client, "cb_stock_no_cost@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "name": "THY"}]
     resp = await client.post(f"{_STOCKS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -147,7 +141,7 @@ async def test_stock_preview_no_cost_returns_none(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_preview_gain_positive(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_gain@example.com")
+    headers = await make_user(client, "cb_stock_gain@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "name": "THY", "avg_cost_tl": 700.0}]
     resp = await client.post(f"{_STOCKS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -165,7 +159,7 @@ async def test_stock_preview_gain_positive(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_preview_gain_negative(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_loss@example.com")
+    headers = await make_user(client, "cb_stock_loss@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "name": "THY", "avg_cost_tl": 800.0}]
     resp = await client.post(f"{_STOCKS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -181,7 +175,7 @@ async def test_stock_preview_gain_negative(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_preview_gain_loss_pct_usd(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_pct@example.com")
+    headers = await make_user(client, "cb_stock_pct@example.com")
     payload = [{"ticker": "AAPL", "quantity": 5.0, "name": "Apple", "avg_cost_tl": 7000.0}]
     resp = await client.post(f"{_STOCKS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -200,7 +194,7 @@ async def test_stock_preview_gain_loss_pct_usd(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_tefas_put_and_get_avg_cost(client: AsyncClient):
-    headers = await _make_user(client, "cb_tefas_put@example.com")
+    headers = await make_user(client, "cb_tefas_put@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi", "avg_cost_tl": 9.5}]
     resp = await client.put(f"{_TEFAS_BASE}/holdings", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -217,7 +211,7 @@ async def test_tefas_put_and_get_avg_cost(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_tefas_preview_no_cost_returns_none(client: AsyncClient):
-    headers = await _make_user(client, "cb_tefas_no_cost@example.com")
+    headers = await make_user(client, "cb_tefas_no_cost@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi"}]
     resp = await client.post(f"{_TEFAS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -234,7 +228,7 @@ async def test_tefas_preview_no_cost_returns_none(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_tefas_preview_gain_positive(client: AsyncClient):
-    headers = await _make_user(client, "cb_tefas_gain@example.com")
+    headers = await make_user(client, "cb_tefas_gain@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi", "avg_cost_tl": 9.0}]
     resp = await client.post(f"{_TEFAS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -252,7 +246,7 @@ async def test_tefas_preview_gain_positive(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_tefas_preview_gain_negative(client: AsyncClient):
-    headers = await _make_user(client, "cb_tefas_loss@example.com")
+    headers = await make_user(client, "cb_tefas_loss@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi", "avg_cost_tl": 11.0}]
     resp = await client.post(f"{_TEFAS_BASE}/preview", json=payload, headers=headers)
     assert resp.status_code == 200
@@ -267,7 +261,7 @@ async def test_tefas_preview_gain_negative(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_avg_cost_zero_normalizes_to_none(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_zero@example.com")
+    headers = await make_user(client, "cb_stock_zero@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "avg_cost_tl": 0.0}]
     resp = await client.put(f"{_STOCKS_BASE}/holdings", json=payload, headers=headers)
     assert resp.status_code in (200, 201)
@@ -280,7 +274,7 @@ async def test_stock_avg_cost_zero_normalizes_to_none(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_stock_avg_cost_negative_normalizes_to_none(client: AsyncClient):
-    headers = await _make_user(client, "cb_stock_neg@example.com")
+    headers = await make_user(client, "cb_stock_neg@example.com")
     payload = [{"ticker": "THYAO.IS", "quantity": 10.0, "avg_cost_tl": -100.0}]
     resp = await client.put(f"{_STOCKS_BASE}/holdings", json=payload, headers=headers)
     assert resp.status_code in (200, 201)
@@ -293,7 +287,7 @@ async def test_stock_avg_cost_negative_normalizes_to_none(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_tefas_avg_cost_negative_normalizes_to_none(client: AsyncClient):
-    headers = await _make_user(client, "cb_tefas_neg@example.com")
+    headers = await make_user(client, "cb_tefas_neg@example.com")
     payload = [{"code": "YAC", "quantity": 100.0, "avg_cost_tl": -5.0}]
     resp = await client.put(f"{_TEFAS_BASE}/holdings", json=payload, headers=headers)
     assert resp.status_code in (200, 201)
@@ -306,8 +300,8 @@ async def test_tefas_avg_cost_negative_normalizes_to_none(client: AsyncClient):
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_idor_stock_holdings(client: AsyncClient):
-    h1 = await _make_user(client, "cb_idor1@example.com")
-    h2 = await _make_user(client, "cb_idor2@example.com")
+    h1 = await make_user(client, "cb_idor1@example.com")
+    h2 = await make_user(client, "cb_idor2@example.com")
 
     # h1 holding kaydeder
     await client.put(

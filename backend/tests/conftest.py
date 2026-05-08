@@ -1,4 +1,6 @@
 import os
+import uuid
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -81,3 +83,24 @@ async def verify_user_email(email: str) -> None:
             )
         )
         await session.commit()
+
+
+async def make_user(client: AsyncClient, email: str | None = None) -> dict:
+    """TEST-002 (FAZ H): Tum integration testleri icin tek auth helper.
+
+    Onceki durum: 18 test dosyasinin her birinde ayni 6-satirlik `_make_user`
+    helper'i kopyalanmisti. Artik conftest'ten import edilir.
+
+    Kullanim:
+        headers = await make_user(client, "ozel@example.com")  # belirli email
+        headers = await make_user(client)                       # uuid auto
+
+    Doner: dict {"Authorization": "Bearer <access_token>"}
+    """
+    if email is None:
+        email = f"u-{uuid.uuid4().hex[:12]}@example.com"
+    pwd = "guclu-sifre-123"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    await verify_user_email(email)
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}

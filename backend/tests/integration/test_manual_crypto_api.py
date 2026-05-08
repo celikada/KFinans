@@ -9,7 +9,7 @@ import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
 BASE = "/api/v1/manual-crypto"
 
@@ -77,15 +77,6 @@ def mock_external_http():
         yield mock
 
 
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "Guclu-Sifre-2026!"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": pwd}
-    )
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
 
 # ---------------------------------------------------------------------------
 # CRUD testleri
@@ -93,7 +84,7 @@ async def _make_user(client: AsyncClient, email: str) -> dict:
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
     """Yeni kullanıcıda boş özet dönmeli."""
-    headers = await _make_user(client, "mc_empty@example.com")
+    headers = await make_user(client, "mc_empty@example.com")
     resp = await client.get(BASE, headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -105,7 +96,7 @@ async def test_empty_list(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_minimal(client: AsyncClient):
     """Zorunlu alanlarla oluşturma — avg_cost None."""
-    headers = await _make_user(client, "mc_create@example.com")
+    headers = await make_user(client, "mc_create@example.com")
     payload = {
         "exchange": "binancetr",
         "symbol": "BTC",
@@ -123,7 +114,7 @@ async def test_create_minimal(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_symbol_uppercased(client: AsyncClient):
     """Sembol otomatik büyük harfe çevrilmeli."""
-    headers = await _make_user(client, "mc_upper@example.com")
+    headers = await make_user(client, "mc_upper@example.com")
     resp = await client.post(BASE, json={"exchange": "icrypex", "symbol": "eth", "quantity": 2}, headers=headers)
     assert resp.json()["symbol"] == "ETH"
 
@@ -131,7 +122,7 @@ async def test_symbol_uppercased(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_zero_avg_cost_becomes_none(client: AsyncClient):
     """avg_cost_tl=0 → None (validator)."""
-    headers = await _make_user(client, "mc_zero_cost@example.com")
+    headers = await make_user(client, "mc_zero_cost@example.com")
     resp = await client.post(
         BASE,
         json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1, "avg_cost_tl": 0},
@@ -149,7 +140,7 @@ async def test_list_with_prices(client: AsyncClient):
     ETH 2 @ 3000 USDT → 2 * 3000 * 40 = 240.000 TL
     Toplam = 1.440.000 TL
     """
-    headers = await _make_user(client, "mc_list@example.com")
+    headers = await make_user(client, "mc_list@example.com")
     await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers)
     await client.post(BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 2}, headers=headers)
 
@@ -168,7 +159,7 @@ async def test_list_with_prices(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_unknown_symbol_listed(client: AsyncClient):
     """Binance'te bulunmayan sembol unknown_symbols listesine girer + value 0."""
-    headers = await _make_user(client, "mc_unknown@example.com")
+    headers = await make_user(client, "mc_unknown@example.com")
     await client.post(BASE, json={"exchange": "other", "symbol": "FAKECOIN", "quantity": 100}, headers=headers)
 
     resp = await client.get(BASE, headers=headers)
@@ -186,7 +177,7 @@ async def test_gain_loss_calculated(client: AsyncClient):
     Anlık değer = 1 * 60000 * 40 = 2.400.000
     Kâr = 1.400.000 (+140%)
     """
-    headers = await _make_user(client, "mc_gain@example.com")
+    headers = await make_user(client, "mc_gain@example.com")
     await client.post(
         BASE,
         json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1, "avg_cost_tl": 1_000_000},
@@ -203,7 +194,7 @@ async def test_gain_loss_calculated(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update(client: AsyncClient):
     """PUT endpoint quantity değiştirir."""
-    headers = await _make_user(client, "mc_update@example.com")
+    headers = await make_user(client, "mc_update@example.com")
     create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
     holding_id = create.json()["id"]
 
@@ -215,7 +206,7 @@ async def test_update(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_delete(client: AsyncClient):
     """DELETE endpoint pozisyonu siler."""
-    headers = await _make_user(client, "mc_delete@example.com")
+    headers = await make_user(client, "mc_delete@example.com")
     create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
     holding_id = create.json()["id"]
 
@@ -230,8 +221,8 @@ async def test_delete(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_idor_protection(client: AsyncClient):
     """Başkasının kaydını silemez/güncelleyemez."""
-    h1 = await _make_user(client, "mc_idor1@example.com")
-    h2 = await _make_user(client, "mc_idor2@example.com")
+    h1 = await make_user(client, "mc_idor1@example.com")
+    h2 = await make_user(client, "mc_idor2@example.com")
     create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=h1)
     holding_id = create.json()["id"]
 
@@ -245,7 +236,7 @@ async def test_idor_protection(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_export_excel(client: AsyncClient):
     """Excel export başlık + 1 satır içerir."""
-    headers = await _make_user(client, "mc_export@example.com")
+    headers = await make_user(client, "mc_export@example.com")
     await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers)
 
     resp = await client.get(f"{BASE}/export", headers=headers)
@@ -265,7 +256,7 @@ async def test_export_excel(client: AsyncClient):
 async def test_manual_price_used(client: AsyncClient):
     """price_source='manual' → manual_unit_price_tl kullanılır, Binance lookup'lanmaz.
     100 adet × 50 TL = 5000 TL toplam."""
-    headers = await _make_user(client, "mc_manual_price@example.com")
+    headers = await make_user(client, "mc_manual_price@example.com")
     payload = {
         "exchange": "icrypex", "symbol": "XAGX", "quantity": 100,
         "price_source": "manual", "manual_unit_price_tl": 50,
@@ -288,7 +279,7 @@ async def test_linked_commodity_silver(client: AsyncClient):
     """price_source='linked', linked_source='commodity', linked_id='XAG'
     → commodity service'ten anlık gümüş gr fiyatı.
     35 USD/oz / 31.10 × 40 ≈ 45 TRY/g."""
-    headers = await _make_user(client, "mc_linked_xag@example.com")
+    headers = await make_user(client, "mc_linked_xag@example.com")
     payload = {
         "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
         "price_source": "linked", "linked_source": "commodity", "linked_id": "XAG",
@@ -308,7 +299,7 @@ async def test_linked_commodity_silver(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_linked_commodity_gold(client: AsyncClient):
     """linked=commodity:XAU → 3000/31.10×40 ≈ 3861 TRY/g."""
-    headers = await _make_user(client, "mc_linked_xau@example.com")
+    headers = await make_user(client, "mc_linked_xau@example.com")
     payload = {
         "exchange": "icrypex", "symbol": "XAUT", "quantity": 1,
         "price_source": "linked", "linked_source": "commodity", "linked_id": "XAU",
@@ -323,7 +314,7 @@ async def test_linked_commodity_gold(client: AsyncClient):
 async def test_linked_binance_eth(client: AsyncClient):
     """linked=binance:ETH → ETHUSDT fiyatından TL hesabı.
     ETH=3000 USDT × 40 TRY/USD = 120000 TRY/birim."""
-    headers = await _make_user(client, "mc_linked_eth@example.com")
+    headers = await make_user(client, "mc_linked_eth@example.com")
     # 'CUSTOM' adlı bir token, fiyatı ETH'a peg
     payload = {
         "exchange": "other", "symbol": "MYETHTOKEN", "quantity": 2,
@@ -339,7 +330,7 @@ async def test_linked_binance_eth(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_manual_without_price_zero(client: AsyncClient):
     """price_source='manual' ama manual_unit_price_tl boş → 0 değer + unknown_symbols'da."""
-    headers = await _make_user(client, "mc_manual_empty@example.com")
+    headers = await make_user(client, "mc_manual_empty@example.com")
     payload = {
         "exchange": "other", "symbol": "FAKECOIN", "quantity": 100,
         "price_source": "manual",  # manual_unit_price_tl gönderilmiyor
@@ -354,7 +345,7 @@ async def test_manual_without_price_zero(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_price_source_clears_manual(client: AsyncClient):
     """price_source 'manual'dan 'auto'ya geçince manual_unit_price_tl temizlenir."""
-    headers = await _make_user(client, "mc_clear_manual@example.com")
+    headers = await make_user(client, "mc_clear_manual@example.com")
     create = await client.post(BASE, json={
         "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
         "price_source": "manual", "manual_unit_price_tl": 100,
@@ -371,7 +362,7 @@ async def test_update_price_source_clears_manual(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_price_source_clears_linked(client: AsyncClient):
     """linked'tan auto'ya geçince linked_source/linked_id temizlenir."""
-    headers = await _make_user(client, "mc_clear_linked@example.com")
+    headers = await make_user(client, "mc_clear_linked@example.com")
     create = await client.post(BASE, json={
         "exchange": "icrypex", "symbol": "XAGX", "quantity": 10,
         "price_source": "linked", "linked_source": "commodity", "linked_id": "XAG",
@@ -387,7 +378,7 @@ async def test_update_price_source_clears_linked(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_asset_catalog_search_commodity(client: AsyncClient):
     """asset-catalog 'silver' arar, commodity:XAG bulur."""
-    headers = await _make_user(client, "mc_catalog@example.com")
+    headers = await make_user(client, "mc_catalog@example.com")
     resp = await client.get("/api/v1/asset-catalog?q=silver", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -398,7 +389,7 @@ async def test_asset_catalog_search_commodity(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_asset_catalog_filter_source(client: AsyncClient):
     """source=commodity filtresi sadece commodity döner."""
-    headers = await _make_user(client, "mc_catalog_filter@example.com")
+    headers = await make_user(client, "mc_catalog_filter@example.com")
     resp = await client.get("/api/v1/asset-catalog?source=commodity", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -409,7 +400,7 @@ async def test_asset_catalog_filter_source(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_import_replaces_existing(client: AsyncClient):
     """Import replace-all: mevcut silinir, yeniler eklenir."""
-    headers = await _make_user(client, "mc_import@example.com")
+    headers = await make_user(client, "mc_import@example.com")
     # Önce 1 mevcut kayıt
     await client.post(BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 5}, headers=headers)
 

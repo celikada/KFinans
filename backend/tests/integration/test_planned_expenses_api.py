@@ -2,15 +2,8 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 def _loan(
@@ -40,7 +33,7 @@ def _loan(
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
-    headers = await _make_user(client, "pe_empty@example.com")
+    headers = await make_user(client, "pe_empty@example.com")
     resp = await client.get("/api/v1/planned-expenses", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -48,7 +41,7 @@ async def test_empty_list(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_monthly_loan(client: AsyncClient):
-    headers = await _make_user(client, "pe_create@example.com")
+    headers = await make_user(client, "pe_create@example.com")
     resp = await client.post("/api/v1/planned-expenses", json=_loan(), headers=headers)
     assert resp.status_code == 201
     data = resp.json()
@@ -62,7 +55,7 @@ async def test_create_monthly_loan(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_yearly_tax(client: AsyncClient):
-    headers = await _make_user(client, "pe_yearly@example.com")
+    headers = await make_user(client, "pe_yearly@example.com")
     payload = {
         "title": "Gelir Vergisi",
         "amount": 8000.0,
@@ -82,7 +75,7 @@ async def test_create_yearly_tax(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_custom_recurrence(client: AsyncClient):
-    headers = await _make_user(client, "pe_custom@example.com")
+    headers = await make_user(client, "pe_custom@example.com")
     payload = {
         "title": "Sigorta Primi",
         "amount": 3000.0,
@@ -99,7 +92,7 @@ async def test_create_custom_recurrence(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_invalid_category_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "pe_badcat@example.com")
+    headers = await make_user(client, "pe_badcat@example.com")
     payload = _loan(category="yolo")
     resp = await client.post("/api/v1/planned-expenses", json=payload, headers=headers)
     assert resp.status_code == 422
@@ -107,7 +100,7 @@ async def test_create_invalid_category_returns_422(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_invalid_recurrence_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "pe_badrec@example.com")
+    headers = await make_user(client, "pe_badrec@example.com")
     payload = _loan(recurrence="weekly")
     resp = await client.post("/api/v1/planned-expenses", json=payload, headers=headers)
     assert resp.status_code == 422
@@ -115,7 +108,7 @@ async def test_create_invalid_recurrence_returns_422(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_update_planned_expense(client: AsyncClient):
-    headers = await _make_user(client, "pe_update@example.com")
+    headers = await make_user(client, "pe_update@example.com")
     create = await client.post("/api/v1/planned-expenses", json=_loan(), headers=headers)
     pe_id = create.json()["id"]
 
@@ -132,7 +125,7 @@ async def test_update_planned_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_planned_expense(client: AsyncClient):
-    headers = await _make_user(client, "pe_delete@example.com")
+    headers = await make_user(client, "pe_delete@example.com")
     create = await client.post("/api/v1/planned-expenses", json=_loan(), headers=headers)
     pe_id = create.json()["id"]
 
@@ -147,8 +140,8 @@ async def test_delete_planned_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_idor_update_returns_404(client: AsyncClient):
-    h1 = await _make_user(client, "pe_idor1@example.com")
-    h2 = await _make_user(client, "pe_idor2@example.com")
+    h1 = await make_user(client, "pe_idor1@example.com")
+    h2 = await make_user(client, "pe_idor2@example.com")
     create = await client.post("/api/v1/planned-expenses", json=_loan(), headers=h1)
     pe_id = create.json()["id"]
 
@@ -162,8 +155,8 @@ async def test_idor_update_returns_404(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_idor_delete_returns_404(client: AsyncClient):
-    h1 = await _make_user(client, "pe_idor3@example.com")
-    h2 = await _make_user(client, "pe_idor4@example.com")
+    h1 = await make_user(client, "pe_idor3@example.com")
+    h2 = await make_user(client, "pe_idor4@example.com")
     create = await client.post("/api/v1/planned-expenses", json=_loan(), headers=h1)
     pe_id = create.json()["id"]
 
@@ -183,7 +176,7 @@ async def test_unauthenticated_returns_401(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_forecast_empty(client: AsyncClient):
-    headers = await _make_user(client, "pe_fc_empty@example.com")
+    headers = await make_user(client, "pe_fc_empty@example.com")
     resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -196,7 +189,7 @@ async def test_forecast_empty(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_forecast_monthly_loan(client: AsyncClient):
     """Aylik kredi 12 ay boyunca her ayda gorünmeli."""
-    headers = await _make_user(client, "pe_fc_loan@example.com")
+    headers = await make_user(client, "pe_fc_loan@example.com")
     await client.post("/api/v1/planned-expenses", json=_loan(start_date="2026-01-15", remaining_count=12), headers=headers)
 
     resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
@@ -209,7 +202,7 @@ async def test_forecast_monthly_loan(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_forecast_yearly_tax(client: AsyncClient):
     """Yillik vergi sadece Mart'ta gorünmeli."""
-    headers = await _make_user(client, "pe_fc_tax@example.com")
+    headers = await make_user(client, "pe_fc_tax@example.com")
     await client.post(
         "/api/v1/planned-expenses",
         json={
@@ -234,7 +227,7 @@ async def test_forecast_yearly_tax(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_forecast_custom_recurrence(client: AsyncClient):
     """Ozel tekrar: [3, 9] → sadece Mart ve Eylul'de gorünmeli."""
-    headers = await _make_user(client, "pe_fc_custom@example.com")
+    headers = await make_user(client, "pe_fc_custom@example.com")
     await client.post(
         "/api/v1/planned-expenses",
         json={
@@ -258,7 +251,7 @@ async def test_forecast_custom_recurrence(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_forecast_is_estimated_flag(client: AsyncClient):
-    headers = await _make_user(client, "pe_fc_est@example.com")
+    headers = await make_user(client, "pe_fc_est@example.com")
     await client.post(
         "/api/v1/planned-expenses",
         json={

@@ -2,15 +2,8 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 def _exp(amount: float, category: str, date: str, description: str | None = None) -> dict:
@@ -21,7 +14,7 @@ def _exp(amount: float, category: str, date: str, description: str | None = None
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
-    headers = await _make_user(client, "exp_empty@example.com")
+    headers = await make_user(client, "exp_empty@example.com")
     resp = await client.get("/api/v1/expenses", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -29,7 +22,7 @@ async def test_empty_list(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_expense(client: AsyncClient):
-    headers = await _make_user(client, "exp_create@example.com")
+    headers = await make_user(client, "exp_create@example.com")
     resp = await client.post(
         "/api/v1/expenses",
         json=_exp(150.50, "groceries", "2026-05-02", "Migros haftalik"),
@@ -46,7 +39,7 @@ async def test_create_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_invalid_category_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "exp_bad_cat@example.com")
+    headers = await make_user(client, "exp_bad_cat@example.com")
     resp = await client.post(
         "/api/v1/expenses",
         json=_exp(50, "yolo", "2026-05-02"),
@@ -57,7 +50,7 @@ async def test_create_invalid_category_returns_422(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_create_negative_amount_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "exp_neg@example.com")
+    headers = await make_user(client, "exp_neg@example.com")
     resp = await client.post(
         "/api/v1/expenses",
         json=_exp(-10, "food", "2026-05-02"),
@@ -69,7 +62,7 @@ async def test_create_negative_amount_returns_422(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_zero_amount_returns_422(client: AsyncClient):
     """gt=0 — tam sifir kabul edilmez."""
-    headers = await _make_user(client, "exp_zero@example.com")
+    headers = await make_user(client, "exp_zero@example.com")
     resp = await client.post(
         "/api/v1/expenses",
         json=_exp(0, "food", "2026-05-02"),
@@ -80,7 +73,7 @@ async def test_create_zero_amount_returns_422(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_update_expense(client: AsyncClient):
-    headers = await _make_user(client, "exp_update@example.com")
+    headers = await make_user(client, "exp_update@example.com")
     create = await client.post(
         "/api/v1/expenses",
         json=_exp(50, "food", "2026-05-02", "ilk"),
@@ -101,7 +94,7 @@ async def test_update_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_update_nonexistent_returns_404(client: AsyncClient):
-    headers = await _make_user(client, "exp_404@example.com")
+    headers = await make_user(client, "exp_404@example.com")
     resp = await client.put(
         "/api/v1/expenses/99999",
         json={"amount": 100},
@@ -112,7 +105,7 @@ async def test_update_nonexistent_returns_404(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_expense(client: AsyncClient):
-    headers = await _make_user(client, "exp_delete@example.com")
+    headers = await make_user(client, "exp_delete@example.com")
     create = await client.post(
         "/api/v1/expenses",
         json=_exp(50, "food", "2026-05-02"),
@@ -129,7 +122,7 @@ async def test_delete_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_filters_by_year_month(client: AsyncClient):
-    headers = await _make_user(client, "exp_filter@example.com")
+    headers = await make_user(client, "exp_filter@example.com")
     await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-04-15"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(200, "food", "2026-05-10"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(300, "food", "2026-05-20"), headers=headers)
@@ -144,7 +137,7 @@ async def test_list_filters_by_year_month(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_filters_by_category(client: AsyncClient):
-    headers = await _make_user(client, "exp_cat_filter@example.com")
+    headers = await make_user(client, "exp_cat_filter@example.com")
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-01"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(100, "transport", "2026-05-02"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(75, "food", "2026-05-03"), headers=headers)
@@ -157,14 +150,14 @@ async def test_list_filters_by_category(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_list_invalid_category_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "exp_bad_filter@example.com")
+    headers = await make_user(client, "exp_bad_filter@example.com")
     resp = await client.get("/api/v1/expenses?category=invalid", headers=headers)
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_list_sorted_desc_by_date(client: AsyncClient):
-    headers = await _make_user(client, "exp_sort@example.com")
+    headers = await make_user(client, "exp_sort@example.com")
     await client.post("/api/v1/expenses", json=_exp(10, "food", "2026-05-01"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(20, "food", "2026-05-15"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(30, "food", "2026-05-10"), headers=headers)
@@ -178,7 +171,7 @@ async def test_list_sorted_desc_by_date(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_summary_empty_month(client: AsyncClient):
-    headers = await _make_user(client, "sum_empty@example.com")
+    headers = await make_user(client, "sum_empty@example.com")
     resp = await client.get("/api/v1/expenses/summary?year=2026&month=5", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -191,7 +184,7 @@ async def test_summary_empty_month(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_summary_with_data(client: AsyncClient):
-    headers = await _make_user(client, "sum_data@example.com")
+    headers = await make_user(client, "sum_data@example.com")
     await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-05"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-10"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(200, "transport", "2026-05-12"), headers=headers)
@@ -214,8 +207,8 @@ async def test_summary_with_data(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_user_a_cannot_see_user_b_expenses(client: AsyncClient):
-    a = await _make_user(client, "exp_idor_a@example.com")
-    b = await _make_user(client, "exp_idor_b@example.com")
+    a = await make_user(client, "exp_idor_a@example.com")
+    b = await make_user(client, "exp_idor_b@example.com")
     await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-02"), headers=b)
 
     resp_a = await client.get("/api/v1/expenses", headers=a)
@@ -224,8 +217,8 @@ async def test_user_a_cannot_see_user_b_expenses(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_user_a_cannot_update_user_b_expense(client: AsyncClient):
-    a = await _make_user(client, "exp_idor_upd_a@example.com")
-    b = await _make_user(client, "exp_idor_upd_b@example.com")
+    a = await make_user(client, "exp_idor_upd_a@example.com")
+    b = await make_user(client, "exp_idor_upd_b@example.com")
     create = await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-02"), headers=b)
     b_expense_id = create.json()["id"]
 
@@ -239,8 +232,8 @@ async def test_user_a_cannot_update_user_b_expense(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_user_a_cannot_delete_user_b_expense(client: AsyncClient):
-    a = await _make_user(client, "exp_idor_del_a@example.com")
-    b = await _make_user(client, "exp_idor_del_b@example.com")
+    a = await make_user(client, "exp_idor_del_a@example.com")
+    b = await make_user(client, "exp_idor_del_b@example.com")
     create = await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-02"), headers=b)
     b_expense_id = create.json()["id"]
 

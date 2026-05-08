@@ -2,20 +2,13 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest.mark.asyncio
 async def test_get_goal_empty(client: AsyncClient):
-    headers = await _make_user(client, "goal_empty@example.com")
+    headers = await make_user(client, "goal_empty@example.com")
     resp = await client.get("/api/v1/user/goal", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -27,7 +20,7 @@ async def test_get_goal_empty(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_set_goal_try(client: AsyncClient):
-    headers = await _make_user(client, "goal_try@example.com")
+    headers = await make_user(client, "goal_try@example.com")
     resp = await client.put(
         "/api/v1/user/goal",
         json={"amount": 50000, "currency": "TRY"},
@@ -45,7 +38,7 @@ async def test_set_goal_try(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_set_goal_usd(client: AsyncClient):
-    headers = await _make_user(client, "goal_usd@example.com")
+    headers = await make_user(client, "goal_usd@example.com")
     resp = await client.put(
         "/api/v1/user/goal",
         json={"amount": 3000, "currency": "USD"},
@@ -63,7 +56,7 @@ async def test_set_goal_usd(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_set_goal_eur(client: AsyncClient):
-    headers = await _make_user(client, "goal_eur@example.com")
+    headers = await make_user(client, "goal_eur@example.com")
     resp = await client.put(
         "/api/v1/user/goal",
         json={"amount": 2000, "currency": "EUR"},
@@ -77,7 +70,7 @@ async def test_set_goal_eur(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_set_goal_invalid_currency(client: AsyncClient):
-    headers = await _make_user(client, "goal_badcur@example.com")
+    headers = await make_user(client, "goal_badcur@example.com")
     resp = await client.put(
         "/api/v1/user/goal",
         json={"amount": 1000, "currency": "JPY"},
@@ -88,7 +81,7 @@ async def test_set_goal_invalid_currency(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_set_goal_invalid_amount(client: AsyncClient):
-    headers = await _make_user(client, "goal_badamt@example.com")
+    headers = await make_user(client, "goal_badamt@example.com")
     resp = await client.put(
         "/api/v1/user/goal",
         json={"amount": -100, "currency": "USD"},
@@ -99,7 +92,7 @@ async def test_set_goal_invalid_amount(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_get_goal_after_set(client: AsyncClient):
-    headers = await _make_user(client, "goal_get@example.com")
+    headers = await make_user(client, "goal_get@example.com")
     await client.put("/api/v1/user/goal", json={"amount": 3000, "currency": "USD"}, headers=headers)
     resp = await client.get("/api/v1/user/goal", headers=headers)
     assert resp.status_code == 200

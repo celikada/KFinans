@@ -16,7 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 from app.core.security import address_fingerprint, decrypt_secret
-from tests.conftest import TestSession
+from tests.conftest import TestSession, make_user
 
 
 VALID_BTC_XPUB = (
@@ -26,19 +26,11 @@ VALID_ETH_LOWER = "0x1234567890123456789012345678901234567890"
 VALID_ETH_CHECKSUM = "0x1234567890123456789012345678901234567890"  # checksum varies; lowercase normalize ile aynidir
 
 
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    from tests.conftest import verify_user_email
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
 
 @pytest.mark.asyncio
 async def test_db_stores_only_ciphertext_no_plaintext(client: AsyncClient):
     """Kritik: DB'de plaintext address ASLA bulunmamali."""
-    headers = await _make_user(client, "wallet_enc_db@example.com")
+    headers = await make_user(client, "wallet_enc_db@example.com")
     resp = await client.post(
         "/api/v1/wallets",
         json={"chain": "bitcoin", "address": VALID_BTC_XPUB, "label": "BTC xpub"},
@@ -66,7 +58,7 @@ async def test_db_stores_only_ciphertext_no_plaintext(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
     """ORM uzerinden okunan address her zaman plaintext olmali (transparent decrypt)."""
-    headers = await _make_user(client, "wallet_enc_orm@example.com")
+    headers = await make_user(client, "wallet_enc_orm@example.com")
     add_resp = await client.post(
         "/api/v1/wallets",
         json={"chain": "ethereum", "address": VALID_ETH_LOWER},
@@ -105,7 +97,7 @@ async def test_decrypt_round_trip_via_helper():
 @pytest.mark.asyncio
 async def test_uniqueness_via_fingerprint_blocks_case_variants(client: AsyncClient):
     """Ayni address farkli case ile ikinci kez eklenirse 409 dönmeli."""
-    headers = await _make_user(client, "wallet_enc_unique@example.com")
+    headers = await make_user(client, "wallet_enc_unique@example.com")
     eth_lower = "0xaaaa000000000000000000000000000000000099"
     eth_upper = "0xAAAA000000000000000000000000000000000099"
 
@@ -127,8 +119,8 @@ async def test_uniqueness_via_fingerprint_blocks_case_variants(client: AsyncClie
 @pytest.mark.asyncio
 async def test_idor_unchanged_after_encryption(client: AsyncClient):
     """User A'nin wallet'i User B icin gorunmemeli (mevcut IDOR davranisi korunsun)."""
-    user_a = await _make_user(client, "idor_a@example.com")
-    user_b = await _make_user(client, "idor_b@example.com")
+    user_a = await make_user(client, "idor_a@example.com")
+    user_b = await make_user(client, "idor_b@example.com")
 
     await client.post(
         "/api/v1/wallets",

@@ -2,20 +2,13 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
-    headers = await _make_user(client, "bgt_empty@example.com")
+    headers = await make_user(client, "bgt_empty@example.com")
     resp = await client.get("/api/v1/budgets", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -23,7 +16,7 @@ async def test_empty_list(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_upsert_create(client: AsyncClient):
-    headers = await _make_user(client, "bgt_create@example.com")
+    headers = await make_user(client, "bgt_create@example.com")
     resp = await client.put("/api/v1/budgets/food", json={"amount": 3000}, headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -35,7 +28,7 @@ async def test_upsert_create(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_upsert_update(client: AsyncClient):
-    headers = await _make_user(client, "bgt_update@example.com")
+    headers = await make_user(client, "bgt_update@example.com")
     await client.put("/api/v1/budgets/food", json={"amount": 3000}, headers=headers)
     resp = await client.put("/api/v1/budgets/food", json={"amount": 4500}, headers=headers)
     assert resp.status_code == 200
@@ -47,21 +40,21 @@ async def test_upsert_update(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_upsert_invalid_category(client: AsyncClient):
-    headers = await _make_user(client, "bgt_badcat@example.com")
+    headers = await make_user(client, "bgt_badcat@example.com")
     resp = await client.put("/api/v1/budgets/crypto", json={"amount": 1000}, headers=headers)
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_upsert_negative_amount(client: AsyncClient):
-    headers = await _make_user(client, "bgt_neg@example.com")
+    headers = await make_user(client, "bgt_neg@example.com")
     resp = await client.put("/api/v1/budgets/food", json={"amount": -500}, headers=headers)
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_delete_budget(client: AsyncClient):
-    headers = await _make_user(client, "bgt_delete@example.com")
+    headers = await make_user(client, "bgt_delete@example.com")
     await client.put("/api/v1/budgets/food", json={"amount": 3000}, headers=headers)
     resp = await client.delete("/api/v1/budgets/food", headers=headers)
     assert resp.status_code == 204
@@ -72,7 +65,7 @@ async def test_delete_budget(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_nonexistent(client: AsyncClient):
-    headers = await _make_user(client, "bgt_del404@example.com")
+    headers = await make_user(client, "bgt_del404@example.com")
     resp = await client.delete("/api/v1/budgets/food", headers=headers)
     assert resp.status_code == 404
 
@@ -85,7 +78,7 @@ async def test_unauthenticated(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_comparison_no_data(client: AsyncClient):
-    headers = await _make_user(client, "bgt_cmp_empty@example.com")
+    headers = await make_user(client, "bgt_cmp_empty@example.com")
     resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -93,7 +86,7 @@ async def test_comparison_no_data(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_comparison_under_budget(client: AsyncClient):
-    headers = await _make_user(client, "bgt_cmp_under@example.com")
+    headers = await make_user(client, "bgt_cmp_under@example.com")
     await client.put("/api/v1/budgets/food", json={"amount": 5000}, headers=headers)
     await client.post(
         "/api/v1/expenses",
@@ -113,7 +106,7 @@ async def test_comparison_under_budget(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_comparison_over_budget(client: AsyncClient):
-    headers = await _make_user(client, "bgt_cmp_over@example.com")
+    headers = await make_user(client, "bgt_cmp_over@example.com")
     await client.put("/api/v1/budgets/transport", json={"amount": 1000}, headers=headers)
     await client.post(
         "/api/v1/expenses",
@@ -129,7 +122,7 @@ async def test_comparison_over_budget(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_comparison_expense_without_budget(client: AsyncClient):
-    headers = await _make_user(client, "bgt_cmp_nobgt@example.com")
+    headers = await make_user(client, "bgt_cmp_nobgt@example.com")
     await client.post(
         "/api/v1/expenses",
         json={"amount": 800, "category": "health", "date": "2026-05-12"},
@@ -145,7 +138,7 @@ async def test_comparison_expense_without_budget(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_comparison_multiple_categories(client: AsyncClient):
-    headers = await _make_user(client, "bgt_cmp_multi@example.com")
+    headers = await make_user(client, "bgt_cmp_multi@example.com")
     await client.put("/api/v1/budgets/food",      json={"amount": 3000}, headers=headers)
     await client.put("/api/v1/budgets/transport",  json={"amount": 1000}, headers=headers)
     await client.put("/api/v1/budgets/bills",      json={"amount": 2000}, headers=headers)
@@ -161,8 +154,8 @@ async def test_comparison_multiple_categories(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_idor_budgets(client: AsyncClient):
-    h1 = await _make_user(client, "bgt_idor1@example.com")
-    h2 = await _make_user(client, "bgt_idor2@example.com")
+    h1 = await make_user(client, "bgt_idor1@example.com")
+    h2 = await make_user(client, "bgt_idor2@example.com")
     await client.put("/api/v1/budgets/food", json={"amount": 3000}, headers=h1)
 
     resp = await client.get("/api/v1/budgets", headers=h2)

@@ -15,15 +15,8 @@ import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 def _mock_tcmb(usd_to_tl: float = 40.0, eur_to_tl: float = 44.0, gbp_to_tl: float = 50.0):
@@ -82,7 +75,7 @@ async def test_cash_requires_auth(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_list_cash_empty(client: AsyncClient):
-    headers = await _make_user(client, "cash_empty@example.com")
+    headers = await make_user(client, "cash_empty@example.com")
     resp = await client.get("/api/v1/cash", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
@@ -96,7 +89,7 @@ async def test_list_cash_empty(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_cash_try(client: AsyncClient):
-    headers = await _make_user(client, "cash_create_try@example.com")
+    headers = await make_user(client, "cash_create_try@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "Garanti TL", "amount": "5000.00", "currency": "TRY"},
@@ -116,7 +109,7 @@ async def test_create_cash_try(client: AsyncClient):
 async def test_create_cash_usd_converts_to_tl(client: AsyncClient):
     """USD holding amount_tl = amount × USD/TRY kuru."""
     _mock_tcmb(usd_to_tl=40.0)
-    headers = await _make_user(client, "cash_usd@example.com")
+    headers = await make_user(client, "cash_usd@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "Wise USD", "amount": "100", "currency": "USD"},
@@ -137,7 +130,7 @@ async def test_create_cash_eur_uses_tcmb_eur_rate_not_usd(client: AsyncClient):
     Dogru:    100 EUR × 44 EUR/TL = 4400 TL
     """
     _mock_tcmb(usd_to_tl=40.0, eur_to_tl=44.0)
-    headers = await _make_user(client, "cash_eur@example.com")
+    headers = await make_user(client, "cash_eur@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "Wise EUR", "amount": "100", "currency": "EUR"},
@@ -156,7 +149,7 @@ async def test_create_cash_eur_uses_tcmb_eur_rate_not_usd(client: AsyncClient):
 async def test_create_cash_gbp_uses_tcmb_gbp_rate(client: AsyncClient):
     """FIN-007: GBP holding TCMB GBP/TRY ile cevrilir."""
     _mock_tcmb(usd_to_tl=40.0, gbp_to_tl=50.0)
-    headers = await _make_user(client, "cash_gbp@example.com")
+    headers = await make_user(client, "cash_gbp@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "Revolut GBP", "amount": "200", "currency": "GBP"},
@@ -169,7 +162,7 @@ async def test_create_cash_gbp_uses_tcmb_gbp_rate(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_cash_label_required(client: AsyncClient):
-    headers = await _make_user(client, "cash_no_label@example.com")
+    headers = await make_user(client, "cash_no_label@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"amount": "100", "currency": "TRY"},  # label yok
@@ -181,7 +174,7 @@ async def test_create_cash_label_required(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_cash_negative_amount_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "cash_negative@example.com")
+    headers = await make_user(client, "cash_negative@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "Eksi", "amount": "-100", "currency": "TRY"},
@@ -193,7 +186,7 @@ async def test_create_cash_negative_amount_returns_422(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_create_cash_invalid_currency_returns_422(client: AsyncClient):
-    headers = await _make_user(client, "cash_bad_curr@example.com")
+    headers = await make_user(client, "cash_bad_curr@example.com")
     resp = await client.post(
         "/api/v1/cash",
         json={"label": "x", "amount": "100", "currency": "JPY"},  # desteklenmiyor
@@ -208,7 +201,7 @@ async def test_create_cash_invalid_currency_returns_422(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_update_cash_partial_label_only(client: AsyncClient):
-    headers = await _make_user(client, "cash_update@example.com")
+    headers = await make_user(client, "cash_update@example.com")
     create = await client.post(
         "/api/v1/cash",
         json={"label": "Eski", "amount": "100", "currency": "TRY"},
@@ -230,7 +223,7 @@ async def test_update_cash_partial_label_only(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_update_cash_not_found_returns_404(client: AsyncClient):
-    headers = await _make_user(client, "cash_404@example.com")
+    headers = await make_user(client, "cash_404@example.com")
     resp = await client.put(
         "/api/v1/cash/99999",
         json={"label": "x"},
@@ -245,7 +238,7 @@ async def test_update_cash_not_found_returns_404(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_delete_cash_succeeds(client: AsyncClient):
-    headers = await _make_user(client, "cash_delete@example.com")
+    headers = await make_user(client, "cash_delete@example.com")
     create = await client.post(
         "/api/v1/cash",
         json={"label": "Silinecek", "amount": "50", "currency": "TRY"},
@@ -265,7 +258,7 @@ async def test_delete_cash_succeeds(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_delete_cash_not_found(client: AsyncClient):
-    headers = await _make_user(client, "cash_del_404@example.com")
+    headers = await make_user(client, "cash_del_404@example.com")
     resp = await client.delete("/api/v1/cash/99999", headers=headers)
     assert resp.status_code == 404
 
@@ -276,8 +269,8 @@ async def test_delete_cash_not_found(client: AsyncClient):
 @pytest.mark.asyncio
 @respx.mock
 async def test_user_b_cannot_see_user_a_cash(client: AsyncClient):
-    headers_a = await _make_user(client, "cash_idor_a@example.com")
-    headers_b = await _make_user(client, "cash_idor_b@example.com")
+    headers_a = await make_user(client, "cash_idor_a@example.com")
+    headers_b = await make_user(client, "cash_idor_b@example.com")
 
     await client.post(
         "/api/v1/cash",
@@ -293,8 +286,8 @@ async def test_user_b_cannot_see_user_a_cash(client: AsyncClient):
 @respx.mock
 async def test_user_b_cannot_update_user_a_cash(client: AsyncClient):
     """B, A'nın cash_id'sini biliyor olsa bile update edemez (404)."""
-    headers_a = await _make_user(client, "cash_idor_upd_a@example.com")
-    headers_b = await _make_user(client, "cash_idor_upd_b@example.com")
+    headers_a = await make_user(client, "cash_idor_upd_a@example.com")
+    headers_b = await make_user(client, "cash_idor_upd_b@example.com")
 
     create = await client.post(
         "/api/v1/cash",

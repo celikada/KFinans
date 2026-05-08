@@ -9,15 +9,8 @@ import openpyxl
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import verify_user_email
+from tests.conftest import make_user, verify_user_email
 
-
-async def _make_user(client: AsyncClient, email: str) -> dict:
-    pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
-    await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 def _holding(plan: str, principal=0, returns=0, govt=0, govt_returns=0, contract=None):
@@ -33,7 +26,7 @@ def _holding(plan: str, principal=0, returns=0, govt=0, govt_returns=0, contract
 
 @pytest.mark.asyncio
 async def test_empty_user_returns_no_holdings(client: AsyncClient):
-    headers = await _make_user(client, "bes_empty@example.com")
+    headers = await make_user(client, "bes_empty@example.com")
     resp = await client.get("/api/v1/portfolio/bes/holdings", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -41,7 +34,7 @@ async def test_empty_user_returns_no_holdings(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_save_and_retrieve_bes_holdings(client: AsyncClient):
-    headers = await _make_user(client, "bes_save@example.com")
+    headers = await make_user(client, "bes_save@example.com")
     holdings = [
         _holding("AvivaSA Atak Hisse", principal=80000, returns=20000, govt=20000, govt_returns=5000.50, contract="AVS-12345"),
         _holding("Anadolu Hayat OKS", principal=50000, returns=15000, govt=10000, govt_returns=500),
@@ -63,7 +56,7 @@ async def test_save_and_retrieve_bes_holdings(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_put_replaces_existing_holdings(client: AsyncClient):
     """PUT /holdings idempotent — eski silinir, yenisi yazilir."""
-    headers = await _make_user(client, "bes_replace@example.com")
+    headers = await make_user(client, "bes_replace@example.com")
     await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[_holding("Plan A", principal=1000)],
@@ -81,7 +74,7 @@ async def test_put_replaces_existing_holdings(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_empty_put_clears_holdings(client: AsyncClient):
-    headers = await _make_user(client, "bes_clear@example.com")
+    headers = await make_user(client, "bes_clear@example.com")
     await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[_holding("Plan A", principal=1000)],
@@ -95,7 +88,7 @@ async def test_empty_put_clears_holdings(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_negative_value_rejected(client: AsyncClient):
     """ge=0 kisitlamasi 4 alandan herhangi birinde calisiyor."""
-    headers = await _make_user(client, "bes_neg@example.com")
+    headers = await make_user(client, "bes_neg@example.com")
     resp = await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[_holding("Plan", principal=-1.0)],
@@ -106,7 +99,7 @@ async def test_negative_value_rejected(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_empty_plan_name_rejected(client: AsyncClient):
-    headers = await _make_user(client, "bes_empty_name@example.com")
+    headers = await make_user(client, "bes_empty_name@example.com")
     resp = await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[_holding("", principal=1000)],
@@ -117,7 +110,7 @@ async def test_empty_plan_name_rejected(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_excel_export(client: AsyncClient):
-    headers = await _make_user(client, "bes_export@example.com")
+    headers = await make_user(client, "bes_export@example.com")
     await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[_holding("Plan X", principal=10000, returns=2000, govt=2500, govt_returns=345.67, contract="X-99")],
@@ -146,7 +139,7 @@ async def test_excel_export(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_excel_import(client: AsyncClient):
-    headers = await _make_user(client, "bes_import@example.com")
+    headers = await make_user(client, "bes_import@example.com")
 
     wb = openpyxl.Workbook()
     ws = wb.active
