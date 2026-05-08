@@ -37,11 +37,25 @@ spec:
       labels:
         app: frontend
     spec:
+      # FAZ H DEVOPS-002 + DEVOPS-003: PSS restricted uyumlu (frontend Dockerfile zaten nextjs:1001)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           # frontend/Dockerfile multi-stage build; standalone output kullanilir
-          image: kfinans-frontend:latest
+          # DEVOPS-001 (FAZ H): kustomize images: transformer override eder
+          image: ghcr.io/celikada/kfinans-frontend:v0.0.0  # placeholder
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
           ports:
             - containerPort: 3000
               name: http

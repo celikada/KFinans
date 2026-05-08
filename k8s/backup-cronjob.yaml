@@ -1,0 +1,115 @@
+---
+# DEVOPS-009 (FAZ H): Günlük Postgres logical backup
+#
+# Strateji:
+# - Her gün 02:00 Europe/Istanbul (Pazar 23:00 snapshot cron'undan sonra)
+# - pg_dump | gzip → PVC üzerinde 30 gün retention (sonra cleanup CronJob)
+# - Sonraki seviye: Oracle Object Storage (S3-compatible) sync, PITR için pgBackRest
+#
+# Restore:
+#   kubectl exec -n kfinans postgres-0 -- bash -c "gunzip -c /backups/kfinans-YYYY-MM-DD.sql.gz | psql -U kfinans kfinans"
+#
+# Test (kuru çalıştırma):
+#   kubectl create job --from=cronjob/postgres-backup postgres-backup-manual -n kfinans
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backups
+  namespace: kfinans
+  labels:
+    app: postgres-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName belirtilmedi — K3s default `local-path` kullanılır
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: kfinans
+  labels:
+    app: postgres-backup
+spec:
+  schedule: "0 23 * * *"  # 23:00 UTC = 02:00 Europe/Istanbul (DST'de 01:00 yaz)
+  timeZone: "Europe/Istanbul"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          # PSS restricted uyumlu
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999  # postgres user (postgres image default)
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false  # /tmp + pg_dump çıktısı için
+                capabilities:
+                  drop: [ALL]
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: kfinans-secrets
+                      key: POSTGRES_USER
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kfinans-secrets
+                      key: POSTGRES_PASSWORD
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: kfinans-secrets
+                      key: POSTGRES_DB
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
+                  BACKUP_FILE="/backups/kfinans-${TIMESTAMP}.sql.gz"
+                  echo "Postgres backup baslıyor: ${BACKUP_FILE}"
+                  pg_dump --format=plain --no-owner --no-acl | gzip -9 > "${BACKUP_FILE}"
+                  ls -lh "${BACKUP_FILE}"
+                  echo "Backup tamamlandi."
+
+                  # 30 gun'den eski yedekleri temizle
+                  echo "Eski yedekler temizleniyor (>30 gun):"
+                  find /backups -name "kfinans-*.sql.gz" -mtime +30 -print -delete || true
+
+                  echo "Disk kullanimi:"
+                  du -sh /backups
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backups

@@ -9,7 +9,17 @@ resources:
   - backend.yaml
   - frontend.yaml
   - ingress.yaml
+  - backup-cronjob.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans
   app.kubernetes.io/managed-by: kustomize
+
+# DEVOPS-001 (FAZ H): Image tag transformer
+# release.yml'da: `kustomize edit set image kfinans-backend=ghcr.io/celikada/kfinans-backend:$TAG`
+# Manifest'lerdeki :v0.0.0 placeholder'lari bu transformer ile prod tag'e cevrilir
+images:
+  - name: ghcr.io/celikada/kfinans-backend
+    newTag: v0.0.0
+  - name: ghcr.io/celikada/kfinans-frontend
+    newTag: v0.0.0

@@ -263,35 +263,47 @@ jobs:
           ssh -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} \
             "cd ${{ env.REPO_PATH }} && git fetch --all --tags && git checkout ${{ steps.version.outputs.tag }}"
 
-      - name: K8s manifest'lerini uygula (idempotent)
+      - name: K8s image tag'lerini set et + atomic apply (DEVOPS-001+004 fix)
         run: |
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
-            -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} \
-            "cd ${{ env.REPO_PATH }} && sudo kubectl apply -k k8s/"
-
-      - name: Deployment image'larini yeni tag'e cek
-        run: |
+          # FAZ H: kustomize images: transformer ile semver tag set + tek atomic apply
+          # Eski yöntem (kubectl set image race) yerine: edit + apply
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} "
+            cd ${{ env.REPO_PATH }}/k8s
             TAG=${{ steps.version.outputs.tag }}
-            for svc in backend frontend; do
-              echo \"Setting image for \$svc -> ghcr.io/celikada/kfinans-\$svc:\$TAG\"
-              sudo kubectl set image deployment/\$svc \\
-                \$svc=ghcr.io/celikada/kfinans-\$svc:\$TAG \\
-                -n ${{ env.K8S_NAMESPACE }} \\
-                || echo \"WARNING: deployment/\$svc bulunamadi (ilk deploy?)\"
-            done
+
+            # kustomize binary check (k3s ile gelir, yoksa kubectl kustomize var)
+            if command -v kustomize >/dev/null 2>&1; then
+              kustomize edit set image \\
+                ghcr.io/celikada/kfinans-backend=ghcr.io/celikada/kfinans-backend:\$TAG \\
+                ghcr.io/celikada/kfinans-frontend=ghcr.io/celikada/kfinans-frontend:\$TAG
+              cd .. && sudo kubectl apply -k k8s/
+            else
+              # Fallback: kubectl kustomize stdout > file > apply
+              cd ..
+              sudo kubectl apply -k k8s/
+              # Sonra set image (eski yöntem fallback)
+              for svc in backend frontend; do
+                sudo kubectl set image deployment/\$svc \\
+                  \$svc=ghcr.io/celikada/kfinans-\$svc:\$TAG \\
+                  -n ${{ env.K8S_NAMESPACE }} \\
+                  || echo \"WARNING: deployment/\$svc bulunamadi (ilk deploy?)\"
+              done
+            fi
           "
 
-      - name: Rollout durumunu bekle (max 6 dk)
+      - name: Rollout durumunu bekle (max 6 dk) + fail durumunda otomatik rollback (DEVOPS-005)
         run: |
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} "
             for svc in backend frontend; do
               echo \"Waiting for \$svc rollout...\"
-              sudo kubectl rollout status deployment/\$svc \\
-                -n ${{ env.K8S_NAMESPACE }} --timeout=360s \\
-                || { echo \"ERROR: \$svc rollout timeout\"; exit 1; }
+              if ! sudo kubectl rollout status deployment/\$svc \\
+                  -n ${{ env.K8S_NAMESPACE }} --timeout=360s; then
+                echo \"::error::\$svc rollout timeout — UNDO çalıştırıyor\"
+                sudo kubectl rollout undo deployment/\$svc -n ${{ env.K8S_NAMESPACE }} || true
+                exit 1
+              fi
             done
           "
 
