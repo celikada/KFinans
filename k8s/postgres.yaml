@@ -80,4 +80,22 @@ spec:
         resources:
           requests:
             storage: 50Gi
-        # storageClassName: standard  # cluster default kullanilir; gerekirse buradan belirtin
+        # DEVOPS-027 (FAZ H): Single-node K3s'de cluster default StorageClass
+        # `local-path` (k3s built-in) kullanilir — node'a bagli, multi-node'a
+        # gecildiginde pod baska node'a giderse stuck Pending olur.
+        #
+        # Multi-node migration plani:
+        #   1. Oracle Block Storage CSI: oracle.com/storage class
+        #      (cloud-managed, ReadWriteOnce, ~$1.78/TB/ay)
+        #      storageClassName: oci-bv (block volume)
+        #   2. Longhorn: replicated/distributed storage (3 replica default)
+        #      kubectl apply -f longhorn.yaml
+        #      storageClassName: longhorn
+        #   3. NFS / RWX shared: Read-write-many (postgres icin DEGIL — replication
+        #      yerine logical/streaming replication kullan).
+        #
+        # Single-node prod icin local-path kabul edilebilir (DEVOPS-009 backup +
+        # DEVOPS-005 auto-rollback ile telafi); multi-node'a gecmeden once burayi
+        # belirtin (uncomment + gercek class adi).
+        # storageClassName: oci-bv  # Oracle Block Volume (multi-node)
+        storageClassName: local-path  # K3s default — single-node Oracle
