@@ -19,6 +19,21 @@ VALID_CHAINS = {
 }
 
 
+def _mask_address(addr: str) -> str:
+    """COMP-024 (FAZ H): xpub/adres maskeleme — Excel sizmasinda riski azaltir.
+    Ilk 6 + son 4 karakter, ortasi *** ile gizlenir.
+
+    Ornek: xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKEy5jp48n4XwRY3VntPj1iqksXc2D4D
+    -> xpub6C...XC2D4D
+    """
+    if not addr:
+        return ""
+    if len(addr) <= 12:
+        # Kisa adres (BTC P2PKH ~34) — standart 6+4 mask
+        return f"{addr[:4]}...{addr[-4:]}" if len(addr) > 8 else addr
+    return f"{addr[:6]}...{addr[-4:]}"
+
+
 @router.get("", response_model=list[WalletOut])
 async def list_wallets(
     current_user: User = Depends(get_current_user),
@@ -99,9 +114,21 @@ async def remove_wallet(
 
 @router.get("/export")
 async def export_wallets(
+    request: Request,
+    include_full_address: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """COMP-024 (FAZ H): Wallet export'ta xpub maskelenir (default).
+
+    Default: adres maskeli (`xpub6C...4D4D` formatinda) — Excel sizmasinda
+    blockchain bakiye gecmisi acigi onlenir.
+
+    `?include_full_address=true`: Tam adres dahil edilir (kullanici acik
+    onay vermis sayilir). Audit log'da `full=true` extra ile isaretlenir;
+    KVKK m.12 ihlal halinde forensic icin kim/ne zaman tam xpub indirdi
+    izlenebilir.
+    """
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 
@@ -114,22 +141,48 @@ async def export_wallets(
     ws = wb.active
     ws.title = "Blockchain Cüzdanları"
 
-    headers = ["Zincir", "Adres", "Etiket"]
+    # Guvenlik uyari satiri (row 1) — Excel'in en ustunde gorunur
+    warning_text = (
+        "GUVENLIK UYARISI: Bu dosya kripto cuzdan adreslerinizi icerir. "
+        "xpub/extended public key sizmasi blockchain bakiye gecmisinizi acik "
+        "yapar. Bu dosyayi e-postayla paylasmayin, bulut deposunda sifresiz "
+        "tutmayin. Tam adres icin ?include_full_address=true ile yeniden indirin."
+    )
+    warning_cell = ws.cell(row=1, column=1, value=warning_text)
+    warning_cell.font = Font(bold=True, color="C53030")
+    warning_cell.fill = PatternFill("solid", fgColor="FED7D7")
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+
+    headers = ["Zincir", "Adres" + ("" if include_full_address else " (maskeli)"), "Etiket"]
     header_fill = PatternFill("solid", fgColor="7C3AED")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
+        cell = ws.cell(row=2, column=col, value=h)
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center")
 
-    for row_idx, w in enumerate(rows, 2):
+    for row_idx, w in enumerate(rows, 3):
         ws.cell(row=row_idx, column=1, value=w.chain)
-        ws.cell(row=row_idx, column=2, value=w.address)
+        addr = w.address if include_full_address else _mask_address(w.address)
+        ws.cell(row=row_idx, column=2, value=addr)
         ws.cell(row=row_idx, column=3, value=w.label or "")
 
-    for col, width in zip("ABC", [18, 50, 20]):
+    for col, width in zip("ABC", [18, 80 if include_full_address else 30, 20]):
         ws.column_dimensions[col].width = width
+
+    # Audit log — tam xpub indirildi mi izle (forensic icin kritik)
+    await log_audit(
+        db, request,
+        action=AuditAction.WALLET_EXPORT,
+        user_id=current_user.id,
+        resource="wallet:export.xlsx",
+        extra={
+            "wallet_count": len(rows),
+            "include_full_address": include_full_address,
+        },
+    )
+    await db.commit()
 
     buf = io.BytesIO()
     wb.save(buf)

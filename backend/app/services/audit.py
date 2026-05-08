@@ -48,6 +48,7 @@ class AuditAction(str, Enum):
     # Wallets (blockchain adresleri)
     WALLET_ADD = "wallet.add"
     WALLET_DELETE = "wallet.delete"
+    WALLET_EXPORT = "wallet.export"  # FAZ H — COMP-024 (xpub Excel export izleme)
 
     # KVKK
     KVKK_DATA_EXPORT = "kvkk.data_export"
