@@ -124,6 +124,18 @@ class AdvisorService:
 
         content = message.content[0].text
 
+        # AI-002 (FAZ H): Prompt cache metriklerini cek + log'a yaz.
+        # SDK 0.40+ Usage objesinde cache_read_input_tokens / cache_creation_input_tokens.
+        # Eski SDK'da yok -> getattr fallback (None).
+        cache_read = getattr(message.usage, "cache_read_input_tokens", None)
+        cache_creation = getattr(message.usage, "cache_creation_input_tokens", None)
+        if cache_read or cache_creation:
+            logger.info(
+                "Claude cache metrikleri (user=%s): read=%s creation=%s prompt=%s output=%s",
+                user.id, cache_read, cache_creation,
+                message.usage.input_tokens, message.usage.output_tokens,
+            )
+
         return InvestmentAdvice(
             user_id=user.id,
             snapshot_id=snapshot.id,
@@ -131,4 +143,6 @@ class AdvisorService:
             content=content,
             prompt_tokens=message.usage.input_tokens,
             completion_tokens=message.usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
         )

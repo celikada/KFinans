@@ -20,6 +20,12 @@ class InvestmentAdvice(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     completion_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    # AI-002 (FAZ H): Anthropic prompt caching token metrikleri.
+    # cache_read_tokens > 0 -> system prompt cache HIT (%95 maliyet tasarrufu).
+    # cache_creation_tokens > 0 -> ilk istek (cache yazildi, bedeli orta).
+    # Cache hit oranı = sum(cache_read) / sum(cache_read + cache_creation + prompt)
+    cache_read_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    cache_creation_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     credits_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     generated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
