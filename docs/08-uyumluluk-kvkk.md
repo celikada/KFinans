@@ -102,23 +102,30 @@ PATCH /api/v1/me
 { "email": "yeni@x.com", "risk_profile": "balanced" }
 ```
 
-### 4.3 Silme — "Unutulma Hakkı" (Yapılacak)
-```
-DELETE /api/v1/me/account
-```
+### 4.3 Silme — "Unutulma Hakkı" (Kısmen Aktif)
+
+✅ **Soft-delete altyapısı aktif (FAZ C6):** `DELETE /api/v1/user/me` `users.deleted_at = now()` set eder + audit log (`account.soft_delete`) yazar.
+
+⏳ **30 gün cayma süresi + hard-delete cron:** Faz 3'te eklenecek.
+
 **Yumuşak silme akışı (30 gün cayma süresi):**
 ```
-1. soft delete: users.deleted_at = now()
-2. tüm aktif session'lar iptal (refresh token blacklist)
-3. integrations.is_active = false (API key'leri kullanma)
-4. 30 gün sonra (cron job): hard delete
+1. soft delete: users.deleted_at = now()                        ✅ FAZ C6
+   audit log: account.soft_delete (kim, ne zaman, IP)           ✅ FAZ C6
+2. tüm aktif session'lar iptal (revoked_tokens blacklist)       ⏳ user logout endpoint'i çağırılırsa OK; otomatik bulk iptal Faz 3
+3. integrations.is_active = false (API key'leri kullanma)       ⏳ Faz 3
+4. 30 gün sonra (cron job): hard delete                         ⏳ Faz 3
    - PII alanları anonimleştir veya SİL
    - email → '<deleted-{uuid}>'
-   - encrypted_key, encrypted_secret, encrypted_extra → NULL
-   - wallet_addresses, holdings, integrations CASCADE silinir
+   - encrypted_key, encrypted_secret → NULL
+   - wallet_addresses (address_encrypted, address_fingerprint) CASCADE silinir
+   - holdings, integrations CASCADE silinir
    - portfolio_snapshots, asset_positions, advice → KORUNUR (anonim) — istatistik için
+   - audit_logs → user_id NULL set (ON DELETE SET NULL ile otomatik) — forensic için
    - credit_transactions → KORUNUR (TTK m.82, 10 yıl)
 ```
+
+**Kritik:** `audit_logs.user_id` ON DELETE **SET NULL** (CASCADE değil) — kullanıcı silinse bile log kayıtları **anonimleştirilerek** korunur. Sebep: KVKK m.12 forensic incident tracing + meşru menfaat.
 
 ### 4.4 İşleme İtiraz / Kısıtlama (Yapılacak)
 ```
@@ -235,12 +242,51 @@ ancak güvenliğiniz için kapalı tutmanız gerekir.
 
 ---
 
-## 9. Veri İhlali Müdahale Planı
+## 9. Veri Güvenliği ve İhlal Müdahalesi (KVKK m.12)
 
-### 9.1 KVKK m.12 Bildirim Yükümlülüğü
+KVKK m.12 — veri sorumlusunun (KFinans/Mayotek) kişisel verilerin **hukuka aykırı işlenmesi ve erişimini önlemek + muhafazasını sağlamak** için **uygun güvenlik tedbirlerini** alma yükümlülüğü.
+
+### 9.0 Aktif Teknik Tedbirler ✅ (FAZ A+B+C tamamlandı)
+
+| Tedbir | Uygulama | Faz |
+|--------|----------|-----|
+| Şifre güvenliği | bcrypt one-way hash | Faz 1 |
+| Exchange API key encryption | Fernet (AES-128-CBC), .env'deki master key | Faz 1 |
+| **Wallet xpub encryption** | Fernet + SHA-256 fingerprint lookup | **FAZ C1** |
+| Transport security | HTTPS zorunlu (`.app` TLD HSTS preload) + manuel HSTS header (1 yıl + preload) | FAZ C2 + Faz D1 |
+| **Tarayıcı güvenlik header'ları** | X-Frame-Options DENY, X-Content-Type-Options, Referrer-Policy, CSP `default-src 'none'`, Permissions-Policy, COOP, CORP | **FAZ C2** |
+| **Host header injection koruması** | TrustedHostMiddleware + `settings.allowed_hosts` env | **FAZ C3** |
+| Rate limiting (auth) | slowapi: login 10/dk, register 5/dk, refresh 30/dk | Faz 1 |
+| JWT blacklist + logout | `revoked_tokens` tablosu + jti claim | Faz 2 |
+| **JWT refresh rotation** | `/auth/refresh` her çağrıda eski jti blacklist + yeni token; sızan refresh ikinci kullanımda 401 | **FAZ C4** |
+| **JWT TTL prod env** | Access 30 dk (prod), refresh 7 gün | **FAZ C4** |
+| **revoked_tokens cleanup** | Günlük 03:00 Europe/Istanbul cron | **FAZ C5** |
+| **Audit log altyapısı** | `audit_logs` tablosu + 8+ kritik eylem hook (auth, wallet, integration, snapshot, account); `GET /audit-logs` IDOR korumalı endpoint | **FAZ C6** |
+| User izolasyonu (IDOR koruması) | Tüm endpoint'lerde `user_id == current_user.id` filtresi | Tüm fazlar |
+| E-posta doğrulama zorunlu | Login öncesi `email_verified=True` hard block; doğrulama token TTL 24 saat | Faz 2 |
+| Account enumeration koruması | `/auth/resend-verification` her zaman 202 döner | Faz 2 |
+| **Soft-delete altyapısı** | `users.deleted_at` + audit log `account.soft_delete` | **FAZ C6** |
+| **Bağımlılık güvenlik tarama** | gitleaks + Trivy fs + pip-audit (osv strict) + npm-audit + CodeQL (Python+TS) — her PR/push + haftalık | **FAZ B4** |
+| **Container image vulnerability scan** | Trivy image scan release pipeline'ında (HIGH/CRITICAL → fail) | **FAZ B3** |
+| **Dependabot otomatik güncelleme** | pip + npm + actions + docker, haftalık gruplandırılmış PR | **FAZ A4** |
+
+### 9.1 İdari Tedbirler
+
+| Tedbir | Durum |
+|--------|-------|
+| Erişim kontrolleri (en az yetki ilkesi) | ✅ K8s Secret + namespace izolasyonu |
+| Secret yönetimi | ✅ Kubernetes Secret + `.gitignore` + `.gitleaks.toml` allowlist; production'da External Secrets Operator (Faz 3) |
+| Geliştirici onboarding güvenlik eğitimi | ⏳ Faz 3 (CONTRIBUTING.md temel kuralları içerir) |
+| Düzenli sızma testi | ⏳ Faz 4 (yıllık bağımsız) |
+| KVKK Sözleşmesi (Anthropic, Resend, Oracle Cloud) | ⏳ Faz 3 (DPA — Data Processing Agreement imzalanması gerekir) |
+| Audit log review (manuel inceleme) | ⏳ Faz 3 (admin paneli) |
+
+### 9.2 KVKK m.12 Bildirim Yükümlülüğü
 **Veri ihlali tespit edildikten sonra 72 saat içinde** Kişisel Verileri Koruma Kurumu'na (KVKK Kurulu) ve etkilenen kullanıcılara bildirim zorunludur.
 
-### 9.2 Müdahale Adımları
+**Audit log forensic erişim:** İhlal tespit edildiğinde, etkilenen kullanıcı(lar)ın `audit_logs` kayıtları + `revoked_tokens` blacklist'i + uygulama log'ları (Sentry/Loki — Faz 3) birleştirilerek **kapsam belirleme** yapılır. KFinans'ta `audit_logs.user_id` ON DELETE SET NULL ile saklanır — silinmiş kullanıcılar için bile forensic mümkün.
+
+### 9.3 Müdahale Adımları
 ```
 1. TESPIT
    ↓ Sentry/log alarmı, kullanıcı şikayeti, dış taraf bildirimi
@@ -263,7 +309,7 @@ ancak güvenliğiniz için kapalı tutmanız gerekir.
    ↓ Süreç güncellemesi, yeni güvenlik kontrolleri, audit log
 ```
 
-### 9.3 Bildirim Şablonu (Kullanıcıya)
+### 9.4 Bildirim Şablonu (Kullanıcıya)
 ```
 Konu: Hesabınızı ilgilendiren önemli güvenlik bilgilendirmesi
 
@@ -339,12 +385,14 @@ Production'a çıktıktan sonra yıllık penetration testing önerilir (TÜBİTA
 - [ ] AI tavsiye sayfasında SPK uyarısı banner
 
 ### Faz 3 (Kredi sistemi öncesi)
-- [ ] `users.deleted_at` kolonu + soft delete migration
-- [ ] `GET /me/data-export` endpoint
-- [ ] `DELETE /me/account` endpoint (30 gün cayma + cron)
-- [ ] `audit_logs` tablosu + tüm sensitive eylemlerde kayıt
-- [ ] Veri ihlali müdahale planı operasyonel doküman
-- [ ] Anthropic için açık rıza akışı (AI tavsiye'ye ilk girişte modal)
+- [x] `users.deleted_at` kolonu + soft delete migration ✅ (Faz 1+2)
+- [x] `audit_logs` tablosu + 8+ sensitive eylem kayıt ✅ (FAZ C6)
+- [x] Soft-delete endpoint (`DELETE /user/me`) + audit log ✅ (FAZ C6)
+- [ ] `GET /user/data-export` endpoint (KVKK m.11/1.b — kullanıcı kendi verisini JSON+Excel olarak alır)
+- [ ] 30 gün cayma süresi sonrası hard-delete cron job
+- [ ] Anthropic için açık rıza akışı (AI tavsiye'ye ilk girişte modal — `users.anthropic_consent_at`)
+- [ ] Veri İhlali Müdahale Planı operasyonel doküman (PDF — KVKK Kurulu denetimi için)
+- [ ] DPA (Data Processing Agreement) — Anthropic, Resend, Oracle Cloud ile imzalanmalı
 
 ### Faz 4 (Uluslararası)
 - [ ] GDPR uyum (AB kullanıcıları)
