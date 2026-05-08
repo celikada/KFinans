@@ -539,6 +539,87 @@ INDEX ix_manual_crypto_holdings_user_exchange (user_id, exchange)
 
 > Migration `f5a6b7c8d9e0`. API erişimi olmayan borsalardaki bakiyeleri portföye dahil etmek için. Anlık fiyat: `aggregator.fetch_spot_prices()` (Binance USDT) + `fetch_usd_to_tl()` (TCMB); bulunmayan semboller `unknown_symbols` listesinde döner (TL=0). Snapshot entegrasyonu `_gather_manual_crypto_assets()` → `asset_type="crypto"`, `provider="manual:{exchange}"`. `User.manual_crypto_holdings` ilişkisi cascade all, delete-orphan.
 
+#### `cash_holdings` (Faz 3 — nakit ve banka hesabı bakiyesi)
+```sql
+id          BIGSERIAL PK
+user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+label       VARCHAR(100) NOT NULL                  -- 'Garanti TL', 'Wise EUR' vb.
+amount      NUMERIC(18, 2) NOT NULL
+currency    VARCHAR(3)  NOT NULL DEFAULT 'TRY'     -- TRY|USD|EUR|GBP
+notes       TEXT
+updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+
+INDEX ix_cash_holdings_user_id (user_id)
+```
+
+> Migration `d3e4f5a6b7c8`. Manuel bakiyeler — TCMB döviz kuruyla TL'ye çevrilir. Snapshot servisi `_gather_cash_assets()` ile `asset_type="cash"`, `provider="cash:{currency}"` olarak entegre eder. **FIN-007 (FAZ H):** TCMB GBP/USD opsiyonel, fail durumunda `health_issues`'a kaydedilip 0 yerine son cache değeri kullanılır.
+
+#### `recurring_incomes` (Faz 3 — periyodik gelir tahminleri)
+```sql
+id            BIGSERIAL PK
+user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+title         VARCHAR(100) NOT NULL                       -- 'Maaş', 'Kira A daire'
+amount        NUMERIC(18, 2) NOT NULL
+category      VARCHAR(20)  NOT NULL                       -- salary|rental|dividend|bonus|freelance|other
+recurrence    VARCHAR(20)  NOT NULL                       -- one_time|monthly|quarterly|biannual|yearly|custom
+months        INTEGER[]                                    -- custom için [1-12] aylar
+day_of_month  INTEGER NOT NULL DEFAULT 1
+start_date    DATE  NOT NULL
+end_date      DATE                                         -- NULL = süresiz
+notes         TEXT
+created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+> Migration `c8d9e0f1a2b3`. Tek seferlik gelirler `incomes` tablosunda kalır; bu tablo sadece "yıl sonuna kadar X kazanmayı bekliyorum" tahmini için. **Realize akışı:** `POST /income/recurring/{id}/realize` (tek dönem), `realize-past` (start_date'ten bugüne), `realize-all-past` (toplu) → `incomes` satırı üretir; `incomes.recurring_income_id` (FK→recurring_incomes, ON DELETE SET NULL, migration `d9e0f1a2b3c4`) ve `(recurring_income_id, date)` UNIQUE çift realize'ı engeller.
+
+#### `credit_cards` + `credit_card_statements` + `credit_card_installments` (Faz 3 — kart borcu + ekstre + taksit)
+```sql
+credit_cards
+  id                   BIGSERIAL PK
+  user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+  name                 VARCHAR(100) NOT NULL                -- 'Garanti Bonus'
+  bank_name            VARCHAR(60)
+  last_4               VARCHAR(4)                            -- son 4 hane (PCI dışı sayım)
+  credit_limit         NUMERIC(18, 2)
+  statement_day        INTEGER NOT NULL DEFAULT 1            -- ay içi kesim günü
+  payment_due_day      INTEGER NOT NULL DEFAULT 10
+  current_period_debt  NUMERIC(18, 2) NOT NULL DEFAULT 0     -- ekstreye düşmemiş tutar (manuel)
+  notes                TEXT
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+
+credit_card_statements
+  id                BIGSERIAL PK
+  card_id           BIGINT NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE
+  period_year       INTEGER NOT NULL
+  period_month      INTEGER NOT NULL
+  statement_amount  NUMERIC(18, 2) NOT NULL
+  statement_date    DATE NOT NULL
+  due_date          DATE NOT NULL
+  paid_at           TIMESTAMPTZ                              -- NULL = ödenmedi
+  notes             TEXT
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+
+  UNIQUE (card_id, period_year, period_month) AS uq_statement_card_period
+  INDEX ix_credit_card_statements_card_id (card_id)
+
+credit_card_installments
+  id                       BIGSERIAL PK
+  card_id                  BIGINT NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE
+  description              VARCHAR(200) NOT NULL              -- 'Buzdolabı 12 taksit'
+  total_amount             NUMERIC(18, 2) NOT NULL
+  monthly_amount           NUMERIC(18, 2) NOT NULL
+  installments_total       INTEGER NOT NULL
+  installments_remaining   INTEGER NOT NULL                   -- her ay otomatik düşmez (manuel)
+  first_due_date           DATE NOT NULL
+  notes                    TEXT
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+
+  INDEX ix_credit_card_installments_card_id (card_id)
+```
+
+> Migration'lar `e0f1a2b3c4d5` (credit_cards) + `f1a2b3c4d5e6` (statements + installments). **Çift sayım kuralı:** Kredi kartından ödenen ve gerçekleşmiş bir `expenses` kaydı (`credit_card_id IS NOT NULL AND is_paid = true`) zaten kart borcu/ekstresiyle sayıldığı için **`/expenses/summary`, `/budgets/comparison`, `/planned-expenses/forecast`** toplamlarından hariç tutulur (filtre: `or_(credit_card_id IS NULL, is_paid = false)`). Liste endpoint'leri (`/expenses`, `/planned-expenses`) tüm kayıtları gösterir; frontend rozetlerle (`💳 kart`, `✓ ödendi`) durumu belirtir. **Cash flow projeksiyonu:** Aylık gider tahmininde her aktif `installments_remaining > 0` olan installment için `monthly_amount` katkı düşülür; statement `due_date < ay sonu` ve `paid_at IS NULL` ise gerçekleşmiş gider hesabına alınır.
+
 #### `revoked_tokens` (JWT blacklist)
 ```sql
 jti          TEXT PRIMARY KEY                       -- JWT'nin jti claim'i (uuid4.hex)
