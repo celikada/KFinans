@@ -58,6 +58,9 @@ class AuditAction(str, Enum):
     # Account
     ACCOUNT_SOFT_DELETE = "account.soft_delete"
 
+    # AI / Advice (FAZ H — AI-004)
+    ADVICE_GENERATE = "advice.generate"
+
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
     """X-Forwarded-For (proxy/ingress arkasinda) > client.host."""
