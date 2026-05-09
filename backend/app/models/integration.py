@@ -15,7 +15,11 @@ class Integration(Base):
     __tablename__ = "integrations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # DBA-001 (FAZ H): User silinince integration cascade silinir; pg_dump restore'da
+    # FK violation onlenir.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
     # binance | icrypex | tefas | bes
     provider: Mapped[str] = mapped_column(String(20), nullable=False)
     encrypted_key: Mapped[Optional[str]] = mapped_column(Text)
@@ -39,7 +43,10 @@ class WalletAddress(Base):
     __tablename__ = "wallet_addresses"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # DBA-001 (FAZ H): User silinince wallet cascade.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+    )
     # ethereum | sonic | avalanche_c | avalanche_p | bitcoin | solana | cardano | algorand | polkadot | litecoin
     chain: Mapped[str] = mapped_column(String(20), nullable=False)
     address_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
