@@ -19,6 +19,10 @@ class User(Base):
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     verify_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
     verify_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # SEC-001 (FAZ H): Password reset akisi — secrets.token_urlsafe(32), 1 saat TTL.
+    # verify_token pattern'i kopyalanir (idempotent token rotation, generic response).
+    reset_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
+    reset_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # SEC-002 (FAZ H): Account lockout (OWASP ASVS V2.2.1)
     # Basarili login sonrasi 0'a sifirlanir; basarisiz login arttirir; 10 ust ustte

@@ -64,3 +64,52 @@ async def send_verification_email(*, to: str, token: str) -> bool:
     except Exception:
         logger.exception("Doğrulama e-postası gönderilemedi: %s", to)
         return False
+
+
+# SEC-001 (FAZ H): Sifre sifirlama e-postasi (OWASP Forgot Password Cheat Sheet).
+def _password_reset_html(reset_url: str, expire_hours: int) -> str:
+    return f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1f2937;">
+      <h2 style="color: #111827; margin-bottom: 16px;">Şifre sıfırlama isteği</h2>
+      <p style="color: #4b5563; line-height: 1.5;">
+        KFinans hesabınız için şifre sıfırlama talebi aldık. Yeni bir şifre belirlemek için aşağıdaki bağlantıya tıklayın:
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="{reset_url}"
+           style="background: #dc2626; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 500; display: inline-block;">
+          Şifremi Sıfırla
+        </a>
+      </p>
+      <p style="color: #6b7280; font-size: 14px;">
+        Bağlantı çalışmıyorsa kopyalayın:<br>
+        <span style="font-family: monospace; word-break: break-all; color: #374151;">{reset_url}</span>
+      </p>
+      <p style="color: #9ca3af; font-size: 13px; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+        Bu bağlantı {expire_hours} saat içinde geçerlidir.
+        Bu isteği siz yapmadıysanız e-postayı görmezden gelin; hesabınız güvende.
+      </p>
+    </div>
+    """
+
+
+async def send_password_reset_email(*, to: str, token: str) -> bool:
+    """Kullanıcıya sifre sifirlama linki gonderir."""
+    if not _configure():
+        logger.warning("RESEND_API_KEY tanımlı değil; reset e-postası gönderilmedi (to=%s)", to)
+        return False
+
+    reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={token}"
+    payload = {
+        "from": settings.email_from,
+        "to": [to],
+        "subject": "KFinans — Şifre sıfırlama",
+        "html": _password_reset_html(reset_url, settings.password_reset_expire_hours),
+    }
+
+    try:
+        await asyncio.to_thread(resend.Emails.send, payload)
+        logger.info("Sifre sifirlama e-postasi gonderildi: %s", to)
+        return True
+    except Exception:
+        logger.exception("Sifre sifirlama e-postasi gonderilemedi: %s", to)
+        return False

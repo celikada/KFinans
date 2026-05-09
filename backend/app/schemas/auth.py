@@ -22,6 +22,18 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+# SEC-001 (FAZ H): Password reset akisi (OWASP Forgot Password Cheat Sheet).
+# 1) /forgot-password (email) -> token uretilir, mail gonderilir, generic 202 doner.
+# 2) /reset-password (token + new_password) -> token dogrulanip yeni hash kaydedilir.
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

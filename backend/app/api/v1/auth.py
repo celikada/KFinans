@@ -23,16 +23,18 @@ from app.core.security import (
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from app.services.audit import AuditAction, log_audit
-from app.services.email import send_verification_email
+from app.services.email import send_password_reset_email, send_verification_email
 
 _oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -48,6 +50,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _new_verify_token() -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verify_token_expire_hours)
+    return token, expires_at
+
+
+def _new_reset_token() -> tuple[str, datetime]:
+    """SEC-001 (FAZ H): secrets.token_urlsafe(32) — 256 bit random; URL-safe.
+    Default 1 saat TTL (OWASP onerisi)."""
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.password_reset_expire_hours)
     return token, expires_at
 
 
@@ -326,3 +336,97 @@ async def resend_verification(
 
     await send_verification_email(to=user.email, token=token)
     return generic_response
+
+
+
+# ─── SEC-001 (FAZ H): Password reset (OWASP Forgot Password Cheat Sheet) ───
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/minute")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Sifre sifirlama e-postasi gonderir. Bilgi sizdirmamak icin kullanici
+    bulunmasa veya silinmis olsa bile generic 202 doner. Audit log her durumda
+    yazilir (email payload'da) — saldirgan kullanici listesi cikaramaz.
+
+    Token rotation: ayni email icin yeni istek eski token'i gecersiz kilar.
+    """
+    generic_response = {"detail": "Sifre sifirlama e-postasi gonderilecek"}
+
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    # Audit her durumda yazilir (saldirgan email listesi cikaramaz)
+    await log_audit(
+        db, request,
+        action=AuditAction.PASSWORD_RESET_REQUEST,
+        user_id=user.id if user else None,
+        extra={"email": payload.email, "user_exists": bool(user)},
+    )
+
+    # Sadece var olan + dogrulanmis + silinmemis kullanici icin token uret
+    if user and user.email_verified and user.deleted_at is None:
+        token, expires_at = _new_reset_token()
+        user.reset_token = token
+        user.reset_token_expires_at = expires_at
+        await db.commit()
+        await send_password_reset_email(to=user.email, token=token)
+    else:
+        await db.commit()
+
+    return generic_response
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Token ile yeni sifre belirler. Tek kullanimlik — token + expiry tuketilir.
+
+    400 token gecersiz/expire (timing-safe degil ama enumerasyon icin generic
+    mesaj — saldirgan eposta varligi cikaramaz).
+    """
+    result = await db.execute(select(User).where(User.reset_token == payload.token))
+    user = result.scalar_one_or_none()
+
+    if (
+        not user
+        or not user.reset_token_expires_at
+        or user.reset_token_expires_at < datetime.now(timezone.utc)
+    ):
+        # Audit anonim — token'i kim denedi izlenir
+        await log_audit(
+            db, request,
+            action=AuditAction.PASSWORD_RESET_COMPLETE,
+            user_id=user.id if user else None,
+            extra={"success": False, "reason": "invalid_or_expired_token"},
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Sifirlama bagsantisi gecersiz ya da suresi dolmus.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token = None
+    user.reset_token_expires_at = None
+    # SEC-002 ile uyum: sifre degistiginde lockout state'i de sifirla
+    user.failed_login_count = 0
+    user.locked_until = None
+
+    await log_audit(
+        db, request,
+        action=AuditAction.PASSWORD_RESET_COMPLETE,
+        user_id=user.id,
+        extra={"success": True, "email": user.email},
+    )
+    await db.commit()
+    logger.info("Sifre sifirlandi: %s", user.email)
+    return {"detail": "Sifre basariyla degistirildi. Yeni sifrenizle giris yapabilirsiniz."}

@@ -336,3 +336,186 @@ async def test_lockout_expiry_unlocks_account(client: AsyncClient):
     user_after = await _get_user(email)
     assert user_after.failed_login_count == 0
     assert user_after.locked_until is None
+
+
+# ─── SEC-001 (FAZ H): Password reset (OWASP Forgot Password Cheat Sheet) ──
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_known_user_creates_token(client: AsyncClient):
+    """Bilinen + dogrulanmis kullanici icin reset_token uretilir."""
+    email = "reset_known@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    resp = await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    assert resp.status_code == 202
+
+    user_after = await _get_user(email)
+    assert user_after.reset_token is not None
+    assert len(user_after.reset_token) >= 32  # token_urlsafe(32) ~43 char
+    assert user_after.reset_token_expires_at is not None
+    assert user_after.reset_token_expires_at > datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_unknown_email_returns_202_silently(client: AsyncClient):
+    """Bilinmeyen e-posta da 202 doner (kullanici enumeration onlenir)."""
+    resp = await client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "yok_boyle_biri@example.com"},
+    )
+    assert resp.status_code == 202
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_unverified_user_no_token_generated(client: AsyncClient):
+    """Henuz dogrulanmamis kullanici icin token uretilmez (yine 202)."""
+    email = "reset_unverified@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    # verify_user_email() cagrilmadi - email_verified = False
+
+    resp = await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    assert resp.status_code == 202
+
+    user_after = await _get_user(email)
+    assert user_after.reset_token is None
+
+
+@pytest.mark.asyncio
+async def test_reset_password_completes_with_valid_token(client: AsyncClient):
+    """Token ile yeni sifre kaydedilir, token tuketilir, eski sifre invalid."""
+    email = "reset_complete@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+
+    user = await _get_user(email)
+    token = user.reset_token
+
+    new_password = "yepyeni-sifre-456"
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": new_password},
+    )
+    assert resp.status_code == 200
+
+    # Token tuketildi
+    user_after = await _get_user(email)
+    assert user_after.reset_token is None
+    assert user_after.reset_token_expires_at is None
+
+    # Eski sifre artik calismaz
+    bad_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": TEST_PASSWORD},
+    )
+    assert bad_login.status_code == 401
+
+    # Yeni sifre calisir
+    good_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": new_password},
+    )
+    assert good_login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_reset_password_invalid_token_returns_400(client: AsyncClient):
+    """Bilinmeyen token 400 doner."""
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "x" * 40, "new_password": "yeni-sifre-789"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_password_expired_token_returns_400(client: AsyncClient):
+    """Suresi dolmus token reddedilir, sifre degismez."""
+    email = "reset_expired@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+
+    # Manuel olarak expire et
+    user = await _get_user(email)
+    token = user.reset_token
+    async with TestSession() as session:
+        await session.execute(
+            update(User).where(User.email == email).values(
+                reset_token_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+            )
+        )
+        await session.commit()
+
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "new_password": "yeni-sifre-789"},
+    )
+    assert resp.status_code == 400
+
+    # Eski sifre hala gecerli
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": TEST_PASSWORD},
+    )
+    assert login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_reset_password_token_rotation(client: AsyncClient):
+    """Ikinci forgot-password yeni token uretir; eski token gecersiz olur."""
+    email = "reset_rotate@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    user_first = await _get_user(email)
+    token1 = user_first.reset_token
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    user_second = await _get_user(email)
+    token2 = user_second.reset_token
+
+    assert token1 != token2
+
+    # Eski token (token1) artik DB'de yok -> reset_password 400
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token1, "new_password": "yeni-sifre-rotate"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_password_clears_lockout_state(client: AsyncClient):
+    """Sifre sifirlama SEC-002 lockout state'i de sifirlar (failed_count + locked_until)."""
+    email = "reset_lockout@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    # Manuel olarak lockout simule et
+    async with TestSession() as session:
+        await session.execute(
+            update(User).where(User.email == email).values(
+                failed_login_count=10,
+                locked_until=datetime.now(timezone.utc) + timedelta(minutes=15),
+            )
+        )
+        await session.commit()
+
+    await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    user = await _get_user(email)
+
+    new_password = "lockout-aldim-sifirla-1"
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": user.reset_token, "new_password": new_password},
+    )
+    assert resp.status_code == 200
+
+    # Lockout state sifirlandi
+    user_after = await _get_user(email)
+    assert user_after.failed_login_count == 0
+    assert user_after.locked_until is None

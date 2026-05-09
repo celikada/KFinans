@@ -115,11 +115,13 @@ async def _fk_ondelete(table: str, column: str) -> str | None:
 async def test_migration_head_after_upgrade(fresh_db):
     """upgrade head sonrasi en son revision DB'de markedir."""
     _run_alembic("upgrade", "head")
-    # Head migration f7a8b9c0d1e2 oldugu varsayilir (DBA-001 + SEC-002).
     cols = await _table_columns("users")
     # SEC-002 kolonlari mevcut
     assert "failed_login_count" in cols
     assert "locked_until" in cols
+    # SEC-001 kolonlari mevcut
+    assert "reset_token" in cols
+    assert "reset_token_expires_at" in cols
 
 
 @pytest.mark.asyncio
@@ -149,31 +151,35 @@ async def test_dba001_fk_ondelete_after_upgrade(fresh_db):
 
 @pytest.mark.asyncio
 async def test_round_trip_downgrade_then_upgrade(fresh_db):
-    """f7a8b9c0d1e2 (DBA-001 + SEC-002) downgrade + upgrade round-trip.
+    """f7a8b9c0d1e2 (DBA-001 + SEC-002) ve a8b9c0d1e2f3 (SEC-001) round-trip.
 
-    Down sonrasi:
-      - users.failed_login_count, users.locked_until silinmis olmali
-      - FK ondelete default (NO ACTION = 'a') durumuna donmus olmali
+    Down 2 step (SEC-001 + SEC-002):
+      - users.failed_login_count, locked_until silinmis olmali
+      - users.reset_token, reset_token_expires_at silinmis olmali
+      - FK ondelete default (NO ACTION) durumuna donmus olmali
     Up sonrasi:
-      - Kolonlar tekrar mevcut, FK CASCADE tekrar aktif
+      - Tum kolonlar tekrar mevcut, FK CASCADE
     """
     _run_alembic("upgrade", "head")
-    _run_alembic("downgrade", "-1")
+    # SEC-001 + SEC-002 + DBA-001'i geri al (3 yeni migration -> f7a8 oncesine)
+    _run_alembic("downgrade", "-2")
 
     cols = await _table_columns("users")
     assert "failed_login_count" not in cols
     assert "locked_until" not in cols
+    assert "reset_token" not in cols
 
-    # FK NO ACTION durumuna dondu (downgrade default'a yazdi)
+    # FK NO ACTION durumuna dondu
     deltype = await _fk_ondelete("integrations", "user_id")
     assert deltype == "a", f"downgrade sonrasi NO ACTION bekleniyor, gelen={deltype}"
 
-    # Upgrade — kolonlar geri gelmeli, FK CASCADE
+    # Upgrade — tum kolonlar + FK CASCADE
     _run_alembic("upgrade", "head")
 
     cols = await _table_columns("users")
     assert "failed_login_count" in cols
     assert "locked_until" in cols
+    assert "reset_token" in cols
     deltype = await _fk_ondelete("integrations", "user_id")
     assert deltype == "c"
 

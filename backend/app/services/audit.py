@@ -40,6 +40,9 @@ class AuditAction(str, Enum):
     PASSWORD_CHANGE = "auth.password_change"
     EMAIL_VERIFIED = "auth.email_verified"
     REGISTER = "auth.register"
+    # SEC-001 (FAZ H): Password reset akisi
+    PASSWORD_RESET_REQUEST = "auth.password_reset_request"
+    PASSWORD_RESET_COMPLETE = "auth.password_reset_complete"
 
     # Integrations (exchange API key'ler)
     INTEGRATION_ADD = "integration.add"

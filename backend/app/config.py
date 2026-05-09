@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     email_from: str = "KFinans <noreply@kfinans.app>"
     frontend_url: str = "http://localhost:3000"
     verify_token_expire_hours: int = 24
+    # SEC-001 (FAZ H): Password reset token TTL — OWASP onerisi 1 saat.
+    password_reset_expire_hours: int = 1
 
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
