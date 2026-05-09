@@ -64,13 +64,20 @@ class AuditAction(str, Enum):
 
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
-    """X-Forwarded-For (proxy/ingress arkasinda) > client.host."""
+    """SEC-004 (FAZ H): Sadece `request.client.host` kullan.
+
+    Onceki kod X-Forwarded-For'u kor korune okuyordu — saldirgan
+    `X-Forwarded-For: 127.0.0.1` gondererek audit log + rate limit'i
+    spoofing edebilirdi. Uvicorn `--proxy-headers` + `--forwarded-allow-ips`
+    flag'i ile **trusted proxy** zincirinden gelen X-F-F'i `request.client.host`
+    olarak normalize eder; biz sadece bu (dogrulanmis) degeri okuyoruz.
+
+    Production setup (k8s/Oracle):
+      uvicorn ... --proxy-headers --forwarded-allow-ips="10.0.0.0/8,127.0.0.0/8"
+    Bu flag yoksa Uvicorn X-F-F'i hic dikkate almaz — direkt client.host doner.
+    """
     if request is None:
         return None
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        # Birden fazla IP varsa en soldaki orijinal client'tir
-        return xff.split(",")[0].strip()
     if request.client:
         return request.client.host
     return None

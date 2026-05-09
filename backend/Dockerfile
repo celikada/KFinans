@@ -30,4 +30,9 @@ USER kfinans
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# SEC-004 (FAZ H): --proxy-headers + --forwarded-allow-ips ile X-F-F sadece
+# guvenilir IP araliklarindan (k8s ingress + localhost) kabul edilir; saldirgan
+# `X-Forwarded-For: 127.0.0.1` gondererek audit log/rate limit'i atlatamaz.
+# K8s Pod CIDR Oracle'da 10.0.0.0/8 araligindadir.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", \
+     "--proxy-headers", "--forwarded-allow-ips", "10.0.0.0/8,127.0.0.0/8"]
