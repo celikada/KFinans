@@ -464,6 +464,18 @@ async def _gather_stock_assets(
             price_tl = (q.price / Decimal("100")) * gbp_usd * usd_tl
         else:
             price_tl = q.price * usd_tl
+        # FIN-004 (FAZ H): Stale fiyat kullaniciya rozet + health_issues uyarisi.
+        # halted/delisted hisseler haftalarca ayni fiyatta sabitlenir; kullanici
+        # "anlik" zannedip yanlis pozisyon hesaplamasin.
+        if q.is_stale:
+            issues.append({
+                "source": "stocks",
+                "code": "stale_price",
+                "msg": f"{h.ticker}: anlik fiyat alinamadi, son bilinen kapanis kullanildi",
+                "level": "warn",
+                "symbol": h.ticker,
+                "provider": q.market_state or "unknown",
+            })
         out.append(AssetData(
             symbol=q.ticker,
             name=h.name or q.name,

@@ -32,3 +32,7 @@ class StockPositionOut(BaseModel):
     gain_loss_tl: Decimal | None = None
     gain_loss_pct: float | None = None
     distributor: str | None = None
+    # FIN-004 (FAZ H): Eski fiyat (chartPreviousClose fallback ya da regularMarketTime
+    # >30 saat). True ise UI rozet gosterir; halted/delisted ihtimaline karsi uyari.
+    is_stale: bool = False
+    market_state: str | None = None

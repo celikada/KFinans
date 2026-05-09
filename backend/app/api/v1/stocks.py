@@ -124,6 +124,9 @@ async def stock_preview(
             gain_loss_tl=gain_loss,
             gain_loss_pct=gain_loss_pct,
             distributor=h.distributor,
+            # FIN-004 (FAZ H): stale flag UI rozet icin
+            is_stale=q.is_stale,
+            market_state=q.market_state,
         ))
     return out
 
