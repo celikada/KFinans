@@ -20,6 +20,13 @@ class User(Base):
     verify_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
     verify_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # SEC-002 (FAZ H): Account lockout (OWASP ASVS V2.2.1)
+    # Basarili login sonrasi 0'a sifirlanir; basarisiz login arttirir; 10 ust ustte
+    # `locked_until = now + 15 dk` set edilir, hesap o sureyi gecene kadar login alamaz.
+    # Per-IP rate limit (slowapi) saldirgan IP rotasyonu yaparsa atlatilabilir;
+    # per-account counter aynı email'e farklı IP'lerden gelen brute-force'i durdurur.
+    failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    locked_until: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     goal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")

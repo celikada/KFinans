@@ -256,3 +256,83 @@ async def test_resend_verification_already_verified_returns_202_silently(client:
     user_after = await _get_user(email)
     assert user_after.verify_token is None
     assert user_after.email_verified is True
+
+
+# ─── SEC-002 (FAZ H): Account lockout ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_failed_login_increments_counter(client: AsyncClient):
+    """Yanlis sifre denemesi failed_login_count'i artirir, basarili login sifirlar."""
+    email = "lockout_inc@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    # 3 yanlis deneme
+    for _ in range(3):
+        resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "yanlis"})
+        assert resp.status_code == 401
+
+    user = await _get_user(email)
+    assert user.failed_login_count == 3
+    assert user.locked_until is None  # 10'a ulasmadi
+
+    # Dogru login -> counter sifirlanir
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    assert resp.status_code == 200
+
+    user_after = await _get_user(email)
+    assert user_after.failed_login_count == 0
+
+
+@pytest.mark.asyncio
+async def test_account_locks_after_threshold(client: AsyncClient):
+    """10 ust uste basarisiz login -> hesap 15 dk kilitlenir, sonraki istek 423."""
+    email = "lockout_lock@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    # 10 yanlis deneme
+    for _ in range(10):
+        resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "yanlis"})
+        assert resp.status_code == 401
+
+    user = await _get_user(email)
+    assert user.failed_login_count == 10
+    assert user.locked_until is not None
+    assert user.locked_until > datetime.now(timezone.utc)
+    assert user.locked_until <= datetime.now(timezone.utc) + timedelta(minutes=15, seconds=10)
+
+    # Kilitli iken dogru sifreyle bile login alinamaz
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    assert resp.status_code == 423
+    body = resp.json()
+    assert "kilitli" in body["detail"].lower()
+    assert resp.headers.get("Retry-After")
+    assert int(resp.headers["Retry-After"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_lockout_expiry_unlocks_account(client: AsyncClient):
+    """locked_until gecmisi ise dogru sifreyle login basarili olur ve counter sifirlanir."""
+    email = "lockout_expire@example.com"
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await verify_user_email(email)
+
+    # Manuel olarak gecmis bir locked_until set et (otomatik 15 dk beklemek istemiyoruz)
+    async with TestSession() as session:
+        await session.execute(
+            update(User).where(User.email == email).values(
+                failed_login_count=10,
+                locked_until=datetime.now(timezone.utc) - timedelta(minutes=1),  # gecmis
+            )
+        )
+        await session.commit()
+
+    # Dogru sifre -> 200 ve counter sifirlanir
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    assert resp.status_code == 200
+
+    user_after = await _get_user(email)
+    assert user_after.failed_login_count == 0
+    assert user_after.locked_until is None

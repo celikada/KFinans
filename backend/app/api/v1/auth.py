@@ -36,6 +36,11 @@ from app.services.email import send_verification_email
 
 _oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+# SEC-002 (FAZ H): Account lockout esikleri.
+# 10 ust uste basarisiz login = 15 dakika kilit (OWASP ASVS V2.2.1).
+_FAILED_LOGIN_THRESHOLD = 10
+_LOCK_DURATION = timedelta(minutes=15)
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -51,14 +56,46 @@ def _new_verify_token() -> tuple[str, datetime]:
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
+
+    # SEC-002 (FAZ H): Account lockout — locked_until > now ise direkt 423.
+    # Bu kontrol parola dogrulamasindan ONCE; saldirgan kilit suresi icinde
+    # yeni denemeler yaparak counter'i kabartamaz.
+    if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        retry_seconds = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
+        logger.warning("Kilitli hesap login denedi: %s (kalan=%ssn)", payload.email, retry_seconds)
+        await log_audit(
+            db, request,
+            action=AuditAction.LOGIN_FAILED,
+            user_id=user.id,
+            extra={"email": payload.email, "reason": "locked"},
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Hesap guvenlik nedeniyle gecici kilitli. Lutfen {retry_seconds // 60 + 1} dk sonra deneyin.",
+            headers={"Retry-After": str(retry_seconds)},
+        )
+
     if not user or not verify_password(payload.password, user.password_hash):
         logger.warning("Başarısız giriş denemesi: %s", payload.email)
+        # SEC-002: User varsa counter'i artir; threshold'u asarsa kilitle.
+        if user:
+            user.failed_login_count = (user.failed_login_count or 0) + 1
+            if user.failed_login_count >= _FAILED_LOGIN_THRESHOLD:
+                user.locked_until = datetime.now(timezone.utc) + _LOCK_DURATION
+                logger.warning(
+                    "Account lockout: %s (%s deneme)", payload.email, user.failed_login_count
+                )
         # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
         await log_audit(
             db, request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id if user else None,
-            extra={"email": payload.email},
+            extra={
+                "email": payload.email,
+                "failed_count": user.failed_login_count if user else None,
+                "locked": bool(user and user.locked_until),
+            },
         )
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
@@ -68,6 +105,12 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             status_code=status.HTTP_403_FORBIDDEN,
             detail="E-posta adresiniz henüz doğrulanmadı. Lütfen gelen kutunuzu kontrol edin.",
         )
+
+    # SEC-002: Basarili login -> counter sifirla (kilit suresi gecmis ve dogru parola).
+    if user.failed_login_count or user.locked_until:
+        user.failed_login_count = 0
+        user.locked_until = None
+
     logger.info("Kullanıcı giriş yaptı: %s", payload.email)
     await log_audit(
         db, request,
