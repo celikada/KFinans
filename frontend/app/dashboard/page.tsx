@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
+import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS, MONTH_NAMES } from "@/lib/api";
 import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
@@ -86,6 +86,10 @@ export default function DashboardPage() {
 
   // Bütçe
   const [budgetOverCount, setBudgetOverCount] = useState<number | null>(null);
+
+  // Finans ozeti — bu ay ve gelecek ay net (gelir - gider)
+  const [currentMonthNet, setCurrentMonthNet] = useState<number | null>(null);
+  const [nextMonthNet, setNextMonthNet] = useState<number | null>(null);
 
   // Finansal hedef
   const [goalPct, setGoalPct] = useState<number | null>(null);
@@ -180,6 +184,21 @@ export default function DashboardPage() {
     api.getIncomeDashboard(now.getFullYear(), now.getMonth() + 1).then((d) => {
       const est = parseFloat(d.year_total_estimate);
       if (est > 0) setIncomeYearEstimate(est);
+    }).catch(() => {});
+
+    // Finans ozeti: bu ay ve gelecek ay net (gelir - gider)
+    // Aralik ise gelecek ay sonraki yilin Ocak'idir; iki yil paralel cek.
+    const currentMonthIdx = now.getMonth() + 1;  // 1-12
+    const isDecember = currentMonthIdx === 12;
+    const fetches = [api.getCashFlow(now.getFullYear())];
+    if (isDecember) fetches.push(api.getCashFlow(now.getFullYear() + 1));
+    Promise.all(fetches).then(([thisYear, nextYear]) => {
+      const thisMonth = thisYear.months.find((m) => m.month === currentMonthIdx);
+      if (thisMonth) setCurrentMonthNet(parseFloat(thisMonth.net));
+      const nextMonthData = isDecember
+        ? nextYear?.months.find((m) => m.month === 1)
+        : thisYear.months.find((m) => m.month === currentMonthIdx + 1);
+      if (nextMonthData) setNextMonthNet(parseFloat(nextMonthData.net));
     }).catch(() => {});
 
     api.listCreditCards().then((s) => {
@@ -345,7 +364,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-end justify-between mb-6">
+        <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Toplam Portföy</p>
             {grandTotal > 0 ? (
@@ -353,6 +372,33 @@ export default function DashboardPage() {
             ) : (
               <p className="text-3xl font-bold text-gray-300">—</p>
             )}
+          </div>
+
+          {/* Finans ozeti: bu ay + gelecek ay net (gelir - gider) */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Finans (Net Bakiye)</p>
+            <div className="flex items-baseline gap-6">
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{MONTH_NAMES[new Date().getMonth()]}</p>
+                {currentMonthNet !== null ? (
+                  <p className={`text-2xl font-bold tabular-nums ${currentMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {currentMonthNet >= 0 ? "+" : ""}{fmtTL(currentMonthNet)} ₺
+                  </p>
+                ) : (
+                  <p className="text-2xl font-bold text-gray-300">—</p>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{MONTH_NAMES[(new Date().getMonth() + 1) % 12]}</p>
+                {nextMonthNet !== null ? (
+                  <p className={`text-2xl font-bold tabular-nums ${nextMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                    {nextMonthNet >= 0 ? "+" : ""}{fmtTL(nextMonthNet)} ₺
+                  </p>
+                ) : (
+                  <p className="text-2xl font-bold text-gray-300">—</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         {snapshotMsg && (
