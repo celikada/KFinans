@@ -28,6 +28,7 @@ from app.services.aggregator import (
     fetch_usd_to_tl,
     lookup_usd_price,
 )
+from app.services.tefas import fetch_tefas_prices_by_codes
 
 router = APIRouter(prefix="/manual-crypto", tags=["manual-crypto"])
 
@@ -42,20 +43,6 @@ def _calc_gain_loss(
     gain_loss = (total_tl - cost_basis).quantize(Decimal("0.01"))
     pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
     return cost_basis, gain_loss, pct
-
-
-async def _fetch_tefas_prices_for_codes(codes: list[str]) -> dict[str, Decimal]:
-    """Verilen TEFAS fon kodları için TL/birim fiyat döner. Bulunmayanlar yer almaz."""
-    if not codes:
-        return {}
-    from app.services.tefas import TefasService
-    payload = [{"code": c, "quantity": 1, "name": c} for c in codes]
-    try:
-        assets = await TefasService(payload).fetch()
-        return {a.symbol: a.unit_price_tl for a in assets if a.unit_price_tl > 0}
-    except Exception as e:
-        logger.warning("TEFAS linked fiyat çekilemedi: %s", e)
-        return {}
 
 
 async def _enrich_positions(
@@ -100,7 +87,7 @@ async def _enrich_positions(
         await fetch_coingecko_prices_by_ids(cg_linked_ids) if cg_linked_ids else {}
     )
     tefas_prices: dict[str, Decimal] = (
-        await _fetch_tefas_prices_for_codes(tefas_linked_codes) if tefas_linked_codes else {}
+        await fetch_tefas_prices_by_codes(tefas_linked_codes) if tefas_linked_codes else {}
     )
 
     positions: list[ManualCryptoPositionOut] = []

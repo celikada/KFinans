@@ -6,6 +6,29 @@ from app.services.base import BaseIntegration, AssetData
 
 logger = logging.getLogger(__name__)
 
+
+# ARC-001 (FAZ H): API katmaninin (api/v1/manual_crypto.py) onceden bu helper'i
+# tasidigi durum kaldirildi — service katmani API'ye bagimli olamaz (dependency
+# inversion). Manuel kripto + snapshot servisleri linked_id 'tefas:CODE' icin
+# burayi cagirir.
+
+
+async def fetch_tefas_prices_by_codes(codes: list[str]) -> dict[str, Decimal]:
+    """Verilen TEFAS fon kodlari icin TL/birim fiyat doner. Bulunmayanlar yer almaz.
+
+    Hata durumunda (httpx error, JSON parse vb.) bos dict doner — caller best-effort
+    enrichment yapar (manual_unit_price_tl=None ise pozisyon 0 TL gozukur).
+    """
+    if not codes:
+        return {}
+    payload = [{"code": c, "quantity": 1, "name": c} for c in codes]
+    try:
+        assets = await TefasService(payload).fetch()
+        return {a.symbol: a.unit_price_tl for a in assets if a.unit_price_tl > 0}
+    except Exception as e:
+        logger.warning("TEFAS linked fiyat cekilemedi: %s", e)
+        return {}
+
 _EXPORT_URL = "https://www.tefas.gov.tr/api/fund-returns/export"
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

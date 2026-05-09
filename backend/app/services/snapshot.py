@@ -324,8 +324,9 @@ async def _gather_manual_crypto_assets(
     tefas_prices: dict[str, Decimal] = {}
     if tefas_codes:
         try:
-            from app.api.v1.manual_crypto import _fetch_tefas_prices_for_codes
-            tefas_prices = await _fetch_tefas_prices_for_codes(tefas_codes)
+            # ARC-001 (FAZ H): API katmaninda olan fonksiyon services/tefas.py'a tasindi.
+            from app.services.tefas import fetch_tefas_prices_by_codes
+            tefas_prices = await fetch_tefas_prices_by_codes(tefas_codes)
         except Exception as exc:
             logger.warning("Snapshot manuel kripto: TEFAS linked fiyatları çekilemedi: %s", exc)
 
