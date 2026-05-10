@@ -1,0 +1,106 @@
+"use client";
+/**
+ * FE-003 (FAZ H): Snapshot saglik uyari modal'i.
+ *
+ * Snapshot al butonuna tiklandiginda preview endpoint'i issues dondururse
+ * kullaniciya uyari listesi gosterilip "yine de kaydet / iptal" secenegi
+ * sunulur. page.tsx'ten extract edildi.
+ */
+import * as React from "react";
+
+import type { SnapshotHealthIssue } from "@/lib/api";
+
+
+export interface PendingIssues {
+  issues: SnapshotHealthIssue[];
+  total: number;
+}
+
+
+function fmtTL(val: number) {
+  return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+
+export function SnapshotIssuesModal({
+  pending, onCancel, onConfirm, saving,
+}: {
+  pending: PendingIssues;
+  onCancel: () => void;
+  onConfirm: () => void;
+  saving: boolean;
+}) {
+  const warns = pending.issues.filter((i) => (i.level ?? "warn") === "warn");
+  const infos = pending.issues.filter((i) => i.level === "info");
+
+  return (
+    <div
+      role="presentation"
+      onClick={onCancel}
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
+      >
+        <h3 className="text-base font-semibold text-gray-900 mb-1">
+          Snapshot uyarıları
+          {warns.length > 0 && <span className="text-amber-600"> · {warns.length} sorun</span>}
+          {infos.length > 0 && <span className="text-blue-600"> · {infos.length} bilgi</span>}
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Toplam: <span className="font-semibold text-gray-700">{fmtTL(pending.total)} ₺</span>.
+          {warns.length > 0 && " Sorunlu kayıtlar var; yine de kaydetmek ister misiniz? "}
+          {warns.length === 0 && infos.length > 0 && " Bilgi notları var (manuel/bağlı fiyatlar). "}
+          Sorunlar/notlar geçmişte de görünür kalır.
+        </p>
+        <ul className="space-y-2 max-h-72 overflow-y-auto mb-4">
+          {pending.issues.map((iss, i) => {
+            const isInfo = iss.level === "info";
+            return (
+              <li
+                key={i}
+                className={`rounded-lg px-3 py-2 text-xs border ${
+                  isInfo
+                    ? "bg-blue-50 border-blue-100"
+                    : "bg-amber-50 border-amber-100"
+                }`}
+              >
+                <p className={`font-semibold ${isInfo ? "text-blue-800" : "text-amber-800"}`}>
+                  {isInfo ? "ⓘ" : "⚠"} {iss.source}
+                  {iss.exchange && ` · ${iss.exchange}`}
+                  {iss.symbol && ` · ${iss.symbol}`}
+                  {iss.chain && ` · ${iss.chain}`}
+                  {iss.provider && ` · ${iss.provider}`}
+                  {iss.label && ` · ${iss.label}`}
+                </p>
+                <p className="text-gray-700 mt-0.5">{iss.msg}</p>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="flex gap-2 justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50"
+          >
+            İptal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? "Kaydediliyor..." : "Yine de kaydet"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

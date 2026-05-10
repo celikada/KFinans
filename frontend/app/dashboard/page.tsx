@@ -7,16 +7,15 @@ import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { TLValue, useUsdRate } from "@/app/_components/TLValue";
-import type { SnapshotHealthIssue } from "@/lib/api";
+
+// FE-003 (FAZ H): page.tsx 970+ satirdi; dashboard kart bilesenleri ve
+// snapshot uyari modal'i ayri _components/ modullerine tasindi.
+import { Card, GoalCard, BudgetCard, type TopItem } from "./_components/DashboardCard";
+import { SnapshotIssuesModal, type PendingIssues } from "./_components/SnapshotIssuesModal";
 
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-interface TopItem {
-  label: string;
-  value: number;
 }
 
 function top3<T>(items: T[], valueFn: (i: T) => number, labelFn: (i: T) => string): TopItem[] {
@@ -101,10 +100,7 @@ export default function DashboardPage() {
   const usdRate = useUsdRate();
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
   // Snapshot uyarı popup state
-  const [pendingIssues, setPendingIssues] = useState<{
-    issues: SnapshotHealthIssue[];
-    total: number;
-  } | null>(null);
+  const [pendingIssues, setPendingIssues] = useState<PendingIssues | null>(null);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -629,84 +625,14 @@ export default function DashboardPage() {
         </section>
       </main>
 
-      {/* Snapshot uyarı popup'ı */}
+      {/* FE-003: Snapshot uyari modal'i — extract edildi */}
       {pendingIssues && (
-        <div
-          role="presentation"
-          onClick={() => setPendingIssues(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setPendingIssues(null); }}
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
-          >
-            {(() => {
-              const warns = pendingIssues.issues.filter((i) => (i.level ?? "warn") === "warn");
-              const infos = pendingIssues.issues.filter((i) => i.level === "info");
-              return (
-                <>
-                  <h3 className="text-base font-semibold text-gray-900 mb-1">
-                    Snapshot uyarıları
-                    {warns.length > 0 && <span className="text-amber-600"> · {warns.length} sorun</span>}
-                    {infos.length > 0 && <span className="text-blue-600"> · {infos.length} bilgi</span>}
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Toplam: <span className="font-semibold text-gray-700">{fmtTL(pendingIssues.total)} ₺</span>.
-                    {warns.length > 0 && " Sorunlu kayıtlar var; yine de kaydetmek ister misiniz? "}
-                    {warns.length === 0 && infos.length > 0 && " Bilgi notları var (manuel/bağlı fiyatlar). "}
-                    Sorunlar/notlar geçmişte de görünür kalır.
-                  </p>
-                  <ul className="space-y-2 max-h-72 overflow-y-auto mb-4">
-                    {pendingIssues.issues.map((iss, i) => {
-                      const isInfo = iss.level === "info";
-                      return (
-                        <li
-                          key={i}
-                          className={`rounded-lg px-3 py-2 text-xs border ${
-                            isInfo
-                              ? "bg-blue-50 border-blue-100"
-                              : "bg-amber-50 border-amber-100"
-                          }`}
-                        >
-                          <p className={`font-semibold ${isInfo ? "text-blue-800" : "text-amber-800"}`}>
-                            {isInfo ? "ⓘ" : "⚠"} {iss.source}
-                            {iss.exchange && ` · ${iss.exchange}`}
-                            {iss.symbol && ` · ${iss.symbol}`}
-                            {iss.chain && ` · ${iss.chain}`}
-                            {iss.provider && ` · ${iss.provider}`}
-                            {iss.label && ` · ${iss.label}`}
-                          </p>
-                          <p className="text-gray-700 mt-0.5">{iss.msg}</p>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
-              );
-            })()}
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setPendingIssues(null)}
-                className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50"
-              >
-                İptal
-              </button>
-              <button
-                type="button"
-                onClick={saveConfirmedSnapshot}
-                disabled={snapshotting}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {snapshotting ? "Kaydediliyor..." : "Yine de kaydet"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SnapshotIssuesModal
+          pending={pendingIssues}
+          onCancel={() => setPendingIssues(null)}
+          onConfirm={saveConfirmedSnapshot}
+          saving={snapshotting}
+        />
       )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">
@@ -726,246 +652,3 @@ export default function DashboardPage() {
   );
 }
 
-const COLOR_MAP: Record<string, { bg: string; border: string; text: string; accent: string }> = {
-  blue:    { bg: "bg-blue-50",    border: "hover:border-blue-200",    text: "text-blue-600",    accent: "bg-blue-500" },
-  orange:  { bg: "bg-orange-50",  border: "hover:border-orange-200",  text: "text-orange-500",  accent: "bg-orange-500" },
-  indigo:  { bg: "bg-indigo-50",  border: "hover:border-indigo-200",  text: "text-indigo-600",  accent: "bg-indigo-500" },
-  purple:  { bg: "bg-purple-50",  border: "hover:border-purple-200",  text: "text-purple-600",  accent: "bg-purple-500" },
-  green:   { bg: "bg-green-50",   border: "hover:border-green-200",   text: "text-green-600",   accent: "bg-green-500" },
-  red:     { bg: "bg-red-50",     border: "hover:border-red-200",     text: "text-red-500",     accent: "bg-red-500" },
-  violet:  { bg: "bg-violet-50",  border: "hover:border-violet-200",  text: "text-violet-600",  accent: "bg-violet-500" },
-  emerald: { bg: "bg-emerald-50", border: "hover:border-emerald-200", text: "text-emerald-600", accent: "bg-emerald-500" },
-  amber:   { bg: "bg-amber-50",   border: "hover:border-amber-200",   text: "text-amber-600",   accent: "bg-amber-500" },
-};
-
-type IconName = "tefas" | "crypto" | "stocks" | "wallets" | "bes" | "expenses" | "planned" | "income" | "goal" | "commodities" | "budget" | "cash" | "creditCard";
-
-const ICONS: Record<IconName, React.ReactNode> = {
-  tefas: (
-    // Pie chart — yatırım fonu portföy dağılımını çağrıştırır
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 2v10h10" />
-      <path d="M12 12L4.93 19.07" />
-    </svg>
-  ),
-  crypto: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727" />
-    </svg>
-  ),
-  stocks: (
-    // Candlestick chart — hisse senedi göstergesi (wick + body)
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <line x1="6"  y1="3"  x2="6"  y2="21" />
-      <rect x="4"  y="7"  width="4" height="7" fill="currentColor" stroke="none" />
-      <line x1="12" y1="5"  x2="12" y2="19" />
-      <rect x="10" y="13" width="4" height="4" fill="currentColor" stroke="none" />
-      <line x1="18" y1="2"  x2="18" y2="22" />
-      <rect x="16" y="6"  width="4" height="9" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-  wallets: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </svg>
-  ),
-  bes: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="2" y="7" width="20" height="14" rx="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
-  ),
-  expenses: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="1" y="4" width="22" height="16" rx="2" />
-      <line x1="1" y1="10" x2="23" y2="10" />
-    </svg>
-  ),
-  planned: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8"  y1="2" x2="8"  y2="6" />
-      <line x1="3"  y1="10" x2="21" y2="10" />
-    </svg>
-  ),
-  income: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-    </svg>
-  ),
-  goal: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
-  ),
-  commodities: (
-    // Coin stack — üst üste 3 madeni para (altın/gümüş)
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <ellipse cx="12" cy="5"  rx="8" ry="2.5" />
-      <path d="M4 5v3.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5" />
-      <path d="M4 11v3.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V11" />
-      <path d="M4 17v2c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-2" />
-    </svg>
-  ),
-  budget: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-      <path d="M22 12A10 10 0 0 0 12 2v10z" />
-    </svg>
-  ),
-  cash: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="2" y="6" width="20" height="12" rx="2" />
-      <circle cx="12" cy="12" r="2" />
-      <path d="M6 12h.01M18 12h.01" />
-    </svg>
-  ),
-  creditCard: (
-    // Kredi kartı — chip ile birlikte
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="2" y="5" width="20" height="14" rx="2" />
-      <line x1="2" y1="10" x2="22" y2="10" />
-      <rect x="5" y="13" width="4" height="3" rx="0.5" fill="currentColor" stroke="none" />
-    </svg>
-  ),
-};
-
-interface CardProps {
-  href: string;
-  icon: IconName;
-  color: keyof typeof COLOR_MAP;
-  title: string;
-  total: number | null;
-  count?: number;
-  countLabel?: string;
-  loading?: boolean;
-  top: TopItem[];
-  placeholder: string;
-  footer?: React.ReactNode;
-}
-
-function GoalCard({ href, pct, passive }: { href: string; pct: number | null; passive: number | null }) {
-  const router = useRouter();
-  const hasData = pct !== null;
-
-  return (
-    <button
-      onClick={() => router.push(href)}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md hover:border-violet-200 transition-all group"
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 group-hover:bg-violet-100 transition-colors">
-          {ICONS.goal}
-        </div>
-        {hasData && (
-          <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
-            %{pct!.toFixed(0)}
-          </span>
-        )}
-      </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">Finansal Hedef</h3>
-
-      {hasData ? (
-        <>
-          <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mb-2">
-            <div
-              className="h-full bg-violet-500 rounded-full transition-all"
-              style={{ width: `${Math.min(pct!, 100)}%` }}
-            />
-          </div>
-          {passive !== null && (
-            <p className="text-xs text-gray-400">
-              Pasif gelir: <span className="font-medium text-gray-600">{fmtTL(passive)} ₺/ay</span>
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="text-xs text-gray-400">Aylık ihtiyacını gir, hedefini hesapla</p>
-      )}
-    </button>
-  );
-}
-
-function BudgetCard({ href, overCount }: { href: string; overCount: number | null }) {
-  const router = useRouter();
-  return (
-    <button
-      onClick={() => router.push(href)}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md hover:border-amber-200 transition-all group"
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 group-hover:bg-amber-100 transition-colors">
-          {ICONS.budget}
-        </div>
-        {overCount !== null && overCount > 0 && (
-          <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-            {overCount} aşım
-          </span>
-        )}
-        {overCount !== null && overCount === 0 && (
-          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-            Dahilinde
-          </span>
-        )}
-      </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">Bütçe Takibi</h3>
-      {overCount === null
-        ? <p className="text-xs text-gray-400">Kategori bazında limit belirle</p>
-        : overCount === 0
-          ? <p className="text-xs text-emerald-600">Tüm kategoriler bütçe dahilinde</p>
-          : <p className="text-xs text-red-500">{overCount} kategori bütçeyi aştı</p>
-      }
-    </button>
-  );
-}
-
-function Card({ href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer }: CardProps) {
-  const router = useRouter();
-  const c = COLOR_MAP[color];
-  // total === 0 da geçerli yüklenmiş değer (örn. kredi kartı borç yoksa).
-  // Sadece null = henüz fetch gelmedi.
-  const hasTotal = total !== null;
-
-  return (
-    <button
-      onClick={() => router.push(href)}
-      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md ${c.border} transition-all group`}
-    >
-      <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} mb-3 group-hover:opacity-80 transition-opacity`}>
-        {ICONS[icon]}
-      </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
-
-      {hasTotal ? (
-        <TLValue tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />
-      ) : (count ?? 0) > 0 ? (
-        <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>
-      ) : loading ? (
-        <p className="text-xs text-gray-400">Yükleniyor...</p>
-      ) : (
-        <p className="text-xs text-gray-400">{placeholder}</p>
-      )}
-
-      {top.length > 0 && (
-        <ul className="mt-3 pt-3 border-t border-gray-50 space-y-1.5">
-          {top.map((it) => (
-            <li key={it.label} className="flex justify-between items-center text-xs">
-              <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
-              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">{fmtTL(it.value)} ₺</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {footer && (
-        <div className="mt-3 pt-3 border-t border-gray-50 text-xs text-gray-500">
-          {footer}
-        </div>
-      )}
-    </button>
-  );
-}
