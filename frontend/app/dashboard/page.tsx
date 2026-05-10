@@ -111,153 +111,217 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    api.getTefasHoldings().then((holdings) => {
-      if (!holdings.length) return;
-      setTefasFundCount(holdings.length);
-      api.tefasPreview(holdings).then((positions) => {
-        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
-        setTefasTotal(total);
-        setTefasTop(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.code));
-      }).catch(() => {});
-    }).catch(() => {});
+    // FE-004 (FAZ H): Dashboard fetch orchestration.
+    // Once 14 ayri api.X().then().catch(() => {}) silent error + race condition
+    // (component unmount sonrasi setState uyarisi). Yeni yapi:
+    //   - cancelled flag: cleanup'ta true; her .then() oncesi kontrol -> race-safe
+    //   - safe(): try/catch wrapper, hata console.warn'a (silent degil)
+    //   - Promise.allSettled: tum fetch'ler paralel; biri fail digerlerini
+    //     bloke etmez; toplu sonuc tek log satirinda
+    let cancelled = false;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = now.getMonth() + 1;
+    const isDecember = mm === 12;
+
+    function safeSet<T>(setter: (v: T) => void): (v: T) => void {
+      return (v) => { if (!cancelled) setter(v); };
+    }
+
+    async function safe<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
+      try {
+        return await fn();
+      } catch (err) {
+        if (!cancelled) console.warn(`[dashboard:${label}]`, err);
+        return null;
+      }
+    }
 
     setCryptoLoading(true);
-    api.getCryptoPositions().then(({ positions }) => {
-      const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
-      if (filtered.length === 0) return;
-      const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
-      setCryptoTotal(total);
-      setCryptoTop(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
-    }).catch(() => {}).finally(() => setCryptoLoading(false));
-
-    api.getStockHoldings().then((holdings) => {
-      if (!holdings.length) return;
-      setStockHoldingCount(holdings.length);
-      api.stockPreview(holdings).then((positions) => {
-        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
-        setStockTotal(total);
-        setStockTop(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.ticker));
-      }).catch(() => {});
-    }).catch(() => {});
-
     setWalletLoading(true);
-    api.getWalletPositions().then(({ positions }) => {
-      const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
-      if (filtered.length === 0) return;
-      const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
-      setWalletTotal(total);
-      setWalletTop(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
-    }).catch(() => {}).finally(() => setWalletLoading(false));
 
-    api.getBesHoldings().then((holdings) => {
-      if (!holdings.length) return;
-      setBesPlanCount(holdings.length);
-      const items = holdings.map((h) => ({
-        plan_name: h.plan_name,
-        total:
-          (parseFloat(h.paid_principal.toString()) || 0) +
-          (parseFloat(h.paid_returns.toString()) || 0) +
-          (parseFloat(h.govt_contribution.toString()) || 0) +
-          (parseFloat(h.govt_returns.toString()) || 0),
-      }));
-      const total = items.reduce((s, i) => s + i.total, 0);
-      setBesTotal(total);
-      setBesTop(top3(items, (i) => i.total, (i) => i.plan_name));
-    }).catch(() => {});
+    const tasks: Promise<unknown>[] = [
+      // TEFAS: holdings -> preview chain
+      safe("tefas", async () => {
+        const holdings = await api.getTefasHoldings();
+        if (!holdings.length) return;
+        safeSet(setTefasFundCount)(holdings.length);
+        const positions = await api.tefasPreview(holdings);
+        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        safeSet(setTefasTotal)(total);
+        safeSet(setTefasTop)(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.code));
+      }),
 
-    const now = new Date();
-    api.getIncomeSummary(now.getFullYear(), now.getMonth() + 1).then((sum) => {
-      if (sum.count === 0) return;
-      setIncomeTotal(parseFloat(sum.total));
-      setIncomeCount(sum.count);
-      setIncomeTop(top3(
-        sum.by_category,
-        (b) => parseFloat(b.total),
-        (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
-      ));
-    }).catch(() => {});
+      // Kripto (Binance/iCrypex)
+      safe("crypto", async () => {
+        const { positions } = await api.getCryptoPositions();
+        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+        if (filtered.length === 0) return;
+        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        safeSet(setCryptoTotal)(total);
+        safeSet(setCryptoTop)(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
+      }).finally(() => { if (!cancelled) setCryptoLoading(false); }),
 
-    api.getIncomeDashboard(now.getFullYear(), now.getMonth() + 1).then((d) => {
-      const est = parseFloat(d.year_total_estimate);
-      if (est > 0) setIncomeYearEstimate(est);
-    }).catch(() => {});
+      // Hisse senedi: holdings -> preview chain
+      safe("stocks", async () => {
+        const holdings = await api.getStockHoldings();
+        if (!holdings.length) return;
+        safeSet(setStockHoldingCount)(holdings.length);
+        const positions = await api.stockPreview(holdings);
+        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        safeSet(setStockTotal)(total);
+        safeSet(setStockTop)(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.ticker));
+      }),
 
-    // Finans ozeti: bu ay ve gelecek ay net (gelir - gider)
-    // Aralik ise gelecek ay sonraki yilin Ocak'idir; iki yil paralel cek.
-    const currentMonthIdx = now.getMonth() + 1;  // 1-12
-    const isDecember = currentMonthIdx === 12;
-    const fetches = [api.getCashFlow(now.getFullYear())];
-    if (isDecember) fetches.push(api.getCashFlow(now.getFullYear() + 1));
-    Promise.all(fetches).then(([thisYear, nextYear]) => {
-      const thisMonth = thisYear.months.find((m) => m.month === currentMonthIdx);
-      if (thisMonth) setCurrentMonthNet(parseFloat(thisMonth.net));
-      const nextMonthData = isDecember
-        ? nextYear?.months.find((m) => m.month === 1)
-        : thisYear.months.find((m) => m.month === currentMonthIdx + 1);
-      if (nextMonthData) setNextMonthNet(parseFloat(nextMonthData.net));
-    }).catch(() => {});
+      // Blockchain cüzdanlar
+      safe("wallets", async () => {
+        const { positions } = await api.getWalletPositions();
+        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+        if (filtered.length === 0) return;
+        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        safeSet(setWalletTotal)(total);
+        safeSet(setWalletTop)(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
+      }).finally(() => { if (!cancelled) setWalletLoading(false); }),
 
-    api.listCreditCards().then((s) => {
-      setCreditCardTotal(parseFloat(s.total_debt));
-      setCreditCardPeriod(parseFloat(s.total_period_debt));
-      setCreditCardCount(s.cards.length);
-    }).catch(() => {});
+      // BES
+      safe("bes", async () => {
+        const holdings = await api.getBesHoldings();
+        if (!holdings.length) return;
+        safeSet(setBesPlanCount)(holdings.length);
+        const items = holdings.map((h) => ({
+          plan_name: h.plan_name,
+          total:
+            (parseFloat(h.paid_principal.toString()) || 0) +
+            (parseFloat(h.paid_returns.toString()) || 0) +
+            (parseFloat(h.govt_contribution.toString()) || 0) +
+            (parseFloat(h.govt_returns.toString()) || 0),
+        }));
+        const total = items.reduce((s, i) => s + i.total, 0);
+        safeSet(setBesTotal)(total);
+        safeSet(setBesTop)(top3(items, (i) => i.total, (i) => i.plan_name));
+      }),
 
-    api.getCommodities().then((s) => {
-      const total = parseFloat(s.total_value_tl);
-      if (s.positions.length > 0) {
-        setCommodityTotal(total);
-        setCommodityCount(s.positions.length);
-      }
-    }).catch(() => {});
-
-    api.listCash().then((s) => {
-      const total = parseFloat(s.total_tl);
-      if (s.holdings.length > 0) {
-        setCashTotal(total);
-        setCashCount(s.holdings.length);
-      }
-    }).catch(() => {});
-
-    api.listManualCrypto().then((s) => {
-      const total = parseFloat(s.total_value_tl);
-      if (s.positions.length > 0) {
-        setManualCryptoTotal(total);
-        setManualCryptoCount(s.positions.length);
-        setManualCryptoTop(top3(
-          s.positions,
-          (p) => parseFloat(p.total_value_tl),
-          (p) => p.symbol,
+      // Gelir özeti (bu ay)
+      safe("income-summary", async () => {
+        const sum = await api.getIncomeSummary(yyyy, mm);
+        if (sum.count === 0) return;
+        safeSet(setIncomeTotal)(parseFloat(sum.total));
+        safeSet(setIncomeCount)(sum.count);
+        safeSet(setIncomeTop)(top3(
+          sum.by_category,
+          (b) => parseFloat(b.total),
+          (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
         ));
+      }),
+
+      // Gelir dashboard (yıl sonu beklentisi)
+      safe("income-dashboard", async () => {
+        const d = await api.getIncomeDashboard(yyyy, mm);
+        const est = parseFloat(d.year_total_estimate);
+        if (est > 0) safeSet(setIncomeYearEstimate)(est);
+      }),
+
+      // Cash flow (bu ay + gelecek ay net)
+      safe("cash-flow", async () => {
+        const fetches = [api.getCashFlow(yyyy)];
+        if (isDecember) fetches.push(api.getCashFlow(yyyy + 1));
+        const [thisYear, nextYear] = await Promise.all(fetches);
+        const thisMonth = thisYear.months.find((m) => m.month === mm);
+        if (thisMonth) safeSet(setCurrentMonthNet)(parseFloat(thisMonth.net));
+        const nextMonthData = isDecember
+          ? nextYear?.months.find((m) => m.month === 1)
+          : thisYear.months.find((m) => m.month === mm + 1);
+        if (nextMonthData) safeSet(setNextMonthNet)(parseFloat(nextMonthData.net));
+      }),
+
+      // Kredi kartları
+      safe("credit-cards", async () => {
+        const s = await api.listCreditCards();
+        safeSet(setCreditCardTotal)(parseFloat(s.total_debt));
+        safeSet(setCreditCardPeriod)(parseFloat(s.total_period_debt));
+        safeSet(setCreditCardCount)(s.cards.length);
+      }),
+
+      // Kıymetli madenler
+      safe("commodities", async () => {
+        const s = await api.getCommodities();
+        const total = parseFloat(s.total_value_tl);
+        if (s.positions.length > 0) {
+          safeSet(setCommodityTotal)(total);
+          safeSet(setCommodityCount)(s.positions.length);
+        }
+      }),
+
+      // Nakit / Banka
+      safe("cash", async () => {
+        const s = await api.listCash();
+        const total = parseFloat(s.total_tl);
+        if (s.holdings.length > 0) {
+          safeSet(setCashTotal)(total);
+          safeSet(setCashCount)(s.holdings.length);
+        }
+      }),
+
+      // Manuel kripto
+      safe("manual-crypto", async () => {
+        const s = await api.listManualCrypto();
+        const total = parseFloat(s.total_value_tl);
+        if (s.positions.length > 0) {
+          safeSet(setManualCryptoTotal)(total);
+          safeSet(setManualCryptoCount)(s.positions.length);
+          safeSet(setManualCryptoTop)(top3(
+            s.positions,
+            (p) => parseFloat(p.total_value_tl),
+            (p) => p.symbol,
+          ));
+        }
+      }),
+
+      // Bütçe karşılaştırma
+      safe("budget", async () => {
+        const rows = await api.getBudgetComparison(yyyy, mm);
+        const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
+        safeSet(setBudgetOverCount)(overCount);
+      }),
+
+      // Finansal hedef
+      safe("goal", async () => {
+        const g = await api.getGoal();
+        if (g.progress_pct !== null) safeSet(setGoalPct)(g.progress_pct);
+        if (g.passive_income_tl) safeSet(setGoalPassive)(parseFloat(g.passive_income_tl));
+      }),
+
+      // Planlı ödemeler (yıllık tahmin)
+      safe("planned", async () => {
+        const fc = await api.getForecast(yyyy);
+        const total = parseFloat(fc.year_total);
+        if (total > 0) safeSet(setPlannedTotal)(total);
+      }),
+
+      // Harcama özeti (bu ay)
+      safe("expenses", async () => {
+        const sum = await api.getExpenseSummary(yyyy, mm);
+        if (sum.count === 0) return;
+        safeSet(setExpenseTotal)(parseFloat(sum.total));
+        safeSet(setExpenseCount)(sum.count);
+        safeSet(setExpenseTop)(top3(
+          sum.by_category,
+          (b) => parseFloat(b.total),
+          (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
+        ));
+      }),
+    ];
+
+    // Tum fetch'lerin tamamlanmasini bekle (orchestration sonu telemetri)
+    Promise.allSettled(tasks).then((results) => {
+      if (cancelled) return;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        console.warn(`[dashboard] ${failed}/${tasks.length} fetch fail`);
       }
-    }).catch(() => {});
+    });
 
-    api.getBudgetComparison(now.getFullYear(), now.getMonth() + 1).then((rows) => {
-      const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
-      setBudgetOverCount(overCount);
-    }).catch(() => {});
-
-    api.getGoal().then((g) => {
-      if (g.progress_pct !== null) setGoalPct(g.progress_pct);
-      if (g.passive_income_tl) setGoalPassive(parseFloat(g.passive_income_tl));
-    }).catch(() => {});
-
-    api.getForecast(now.getFullYear()).then((fc) => {
-      const total = parseFloat(fc.year_total);
-      if (total > 0) setPlannedTotal(total);
-    }).catch(() => {});
-
-    api.getExpenseSummary(now.getFullYear(), now.getMonth() + 1).then((sum) => {
-      const total = parseFloat(sum.total);
-      if (sum.count === 0) return;
-      setExpenseTotal(total);
-      setExpenseCount(sum.count);
-      setExpenseTop(top3(
-        sum.by_category,
-        (b) => parseFloat(b.total),
-        (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
-      ));
-    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [router]);
 
   async function logout() {
