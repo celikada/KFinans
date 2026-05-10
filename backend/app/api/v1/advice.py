@@ -3,6 +3,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.deps import get_db, get_current_user
+from app.core.limiter import limiter
 from app.models.advice import InvestmentAdvice
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
@@ -10,6 +11,13 @@ from app.schemas.advice import AdviceGenerateRequest, AdviceOut
 from app.services.audit import AuditAction, log_audit
 
 router = APIRouter(prefix="/advice", tags=["advice"])
+
+# AI-007 (FAZ H): Bir tavsiye uretiminin maliyeti.
+# Kullanici credit_balance >= ADVICE_COST olmadan istegi reddedilir (402 Payment Required).
+# Her basarili uretim DB'ye atomik (commit oncesi) credit_balance dusurur ve
+# investment_advice.credits_used kolonuna yazar. Faz 3 monetizasyon plani:
+# kullanici 1 USD ile ~50 tavsiye alir (Anthropic Sonnet ortalama maliyet kalibrasyonu).
+ADVICE_COST = 1
 
 
 @router.get("", response_model=list[AdviceOut])
@@ -28,14 +36,24 @@ async def list_advice(
 
 
 @router.post("/generate", response_model=AdviceOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/hour")
 async def generate_advice(
-    payload: AdviceGenerateRequest,
     request: Request,
+    payload: AdviceGenerateRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy.orm import selectinload
     from app.services.advisor import AdvisorService
+
+    # AI-007 (FAZ H): Kredi kontrolu LLM cagrisindan ONCE — Anthropic API'yi bos
+    # cagirip credit yetersiz dememek icin. Slowapi rate limit ek koruma katmani
+    # (saldirgan API key bilse bile saatte 5 istek).
+    if (current_user.credit_balance or 0) < ADVICE_COST:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Yetersiz kredi. Tavsiye basina {ADVICE_COST} kredi gerekir; mevcut: {current_user.credit_balance}.",
+        )
 
     snapshot_result = await db.execute(
         select(PortfolioSnapshot)
@@ -54,6 +72,11 @@ async def generate_advice(
         snapshot=snapshot,
         horizon=payload.horizon,
     )
+    # AI-007 (FAZ H): Atomik dusum — advice.credits_used + user.credit_balance ayni
+    # commit'te. Anthropic basariyla yanit verdikten sonra dusurulur (fail durumunda
+    # advisor.generate() exception firlatir, buraya kadar gelinmez).
+    advice.credits_used = ADVICE_COST
+    current_user.credit_balance = (current_user.credit_balance or 0) - ADVICE_COST
     db.add(advice)
 
     # AI-004 (FAZ H): Audit log — KVKK m.12 uclu taraf veri aktarimi izleme.
@@ -69,6 +92,8 @@ async def generate_advice(
             "prompt_tokens": advice.prompt_tokens,
             "completion_tokens": advice.completion_tokens,
             "snapshot_date": snapshot.snapshot_date.isoformat(),
+            "credits_used": ADVICE_COST,
+            "credit_balance_after": current_user.credit_balance,
         },
     )
 

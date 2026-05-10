@@ -1,6 +1,7 @@
+import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class AdviceGenerateRequest(BaseModel):
@@ -12,7 +13,9 @@ class AdviceGenerateRequest(BaseModel):
 
 
 class AdviceOut(BaseModel):
-    id: str
+    # AI-007 (FAZ H): id artik UUID (DB tipi); from_attributes ile UUID otomatik
+    # cekilir, JSON response'ta string'e cevrilir.
+    id: uuid.UUID
     horizon: str
     content: str
     prompt_tokens: Optional[int]
@@ -22,3 +25,7 @@ class AdviceOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer("id")
+    def _serialize_id(self, v: uuid.UUID) -> str:
+        return str(v)
