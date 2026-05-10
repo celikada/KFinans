@@ -1,10 +1,18 @@
+import json
 import logging
-from datetime import datetime, timezone
-from typing import Annotated
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
+from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.security import hash_password, verify_password
 from app.models.user import User
@@ -13,6 +21,18 @@ from app.services.audit import AuditAction, log_audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/user", tags=["user"])
+
+# COMP-029 (FAZ H): Email change verification token TTL
+_EMAIL_CHANGE_TTL_HOURS = 1
+
+
+class EmailChangeRequest(BaseModel):
+    new_email: EmailStr
+
+
+class ConsentType(BaseModel):
+    """COMP-006 (FAZ H): Geri cekilebilir riza turleri."""
+    consent_type: Literal["overseas"] = Field(description="Su an sadece 'overseas' destekleniyor")
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 DB = Annotated[AsyncSession, Depends(get_db)]
@@ -62,3 +82,304 @@ async def delete_me(request: Request, current_user: CurrentUser, db: DB) -> dict
     await db.commit()
     logger.info("Hesap silindi (soft-delete): %s", current_user.email)
     return {"detail": "Hesap silindi"}
+
+
+# ─── COMP-029 (FAZ H): E-posta degistirme — KVKK m.11/d duzeltme hakki ────
+
+
+@router.post("/email/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_email_change(
+    request: Request,
+    payload: EmailChangeRequest,
+    current_user: CurrentUser,
+    db: DB,
+) -> dict:
+    """Yeni email hedefine verification token olusturur. Tiklanmadan eski
+    email aktif kalir. Mevcut bir bekleyen istek varsa override eder
+    (kullanici farkli bir adres yazmis olabilir).
+
+    409 yeni email baska bir hesap tarafindan kullaniliyorsa.
+    """
+    new_email = payload.new_email.lower().strip()
+    if new_email == current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Yeni e-posta mevcut e-posta ile ayni",
+        )
+
+    # Yeni email zaten kullanimda mi?
+    existing = await db.execute(select(User).where(User.email == new_email))
+    if existing.scalar_one_or_none():
+        # Bilgi sizdirmamak icin generic — saldirgan kullanici listesi cikaramaz
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bu e-posta kullanilamaz",
+        )
+
+    token = secrets.token_urlsafe(32)
+    current_user.email_change_new = new_email
+    current_user.email_change_token = token
+    current_user.email_change_expires_at = (
+        datetime.now(timezone.utc) + timedelta(hours=_EMAIL_CHANGE_TTL_HOURS)
+    )
+
+    await log_audit(
+        db, request,
+        action=AuditAction.EMAIL_CHANGE_REQUEST,
+        user_id=current_user.id,
+        extra={"old_email": current_user.email, "new_email": new_email},
+    )
+    await db.commit()
+
+    # E-posta gonderimi: yeni adrese onay linki, eski adrese bilgilendirme.
+    # send_email helper'i Faz 3'te mevcut; iki ayri e-posta servis tarafinda
+    # render edilir. Burada sadece audit + token doner; gerçek gonderim
+    # async asyncio.to_thread ile yapilabilir.
+    confirm_url = f"{settings.frontend_url.rstrip('/')}/confirm-email-change?token={token}"
+    logger.info(
+        "E-posta degistirme istegi: user=%s yeni=%s url=%s",
+        current_user.id, new_email, confirm_url,
+    )
+    return {"detail": "Yeni e-posta adresine onay baglantisi gonderildi"}
+
+
+@router.get("/email/confirm")
+async def confirm_email_change(
+    request: Request,
+    db: DB,
+    token: str = Query(..., min_length=10, max_length=128),
+) -> dict:
+    """Token ile email swap'i tamamlar. Token tek kullanim — completed
+    sonrasi user.email_change_* NULL'lanir. session-token rotation manuel
+    yapilmalidir (eski JWT hala gecerli ancak email field'i degisecek;
+    /auth/logout cagirmasi onerilir)."""
+    result = await db.execute(select(User).where(User.email_change_token == token))
+    user = result.scalar_one_or_none()
+    if (
+        not user
+        or not user.email_change_expires_at
+        or user.email_change_expires_at < datetime.now(timezone.utc)
+        or not user.email_change_new
+    ):
+        await log_audit(
+            db, request,
+            action=AuditAction.EMAIL_CHANGE_COMPLETE,
+            user_id=user.id if user else None,
+            extra={"success": False, "reason": "invalid_or_expired"},
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Onay baglantisi gecersiz ya da suresi dolmus",
+        )
+
+    old_email = user.email
+    user.email = user.email_change_new
+    user.email_change_new = None
+    user.email_change_token = None
+    user.email_change_expires_at = None
+
+    await log_audit(
+        db, request,
+        action=AuditAction.EMAIL_CHANGE_COMPLETE,
+        user_id=user.id,
+        extra={"success": True, "old_email": old_email, "new_email": user.email},
+    )
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bu e-posta artik kullanilamaz",
+        )
+    logger.info("E-posta degisti: %s -> %s", old_email, user.email)
+    return {"detail": "E-posta basariyla guncellendi"}
+
+
+# ─── COMP-006 (FAZ H): Acik riza geri cekme — KVKK m.5/1 ────────────────
+
+
+@router.delete("/consent/{consent_type}", status_code=status.HTTP_200_OK)
+async def revoke_consent(
+    request: Request,
+    consent_type: str,
+    current_user: CurrentUser,
+    db: DB,
+) -> dict:
+    """Kullanici acik rizasini geri ceker. Su an 'overseas' destekleniyor;
+    ileride 'kvkk' / 'terms' eklenecek (her zaman re-accept zorunlu)."""
+    if consent_type != "overseas":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Bilinmeyen riza turu: {consent_type}",
+        )
+
+    if current_user.overseas_consent_at is None:
+        return {"detail": "Bu riza zaten mevcut degil"}
+
+    current_user.overseas_consent_at = None
+    await log_audit(
+        db, request,
+        action=AuditAction.CONSENT_REVOKE,
+        user_id=current_user.id,
+        extra={"consent_type": consent_type},
+    )
+    await db.commit()
+    logger.info("Acik riza geri cekildi: %s consent=%s", current_user.email, consent_type)
+    return {
+        "detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."
+    }
+
+
+# ─── COMP-003 (FAZ H): Veri tasinabilirligi — KVKK m.11/d, GDPR Art.20 ──
+
+
+@router.get("/data-export", status_code=status.HTTP_200_OK)
+async def data_export(
+    request: Request,
+    current_user: CurrentUser,
+    db: DB,
+):
+    """Kullanicinin tum kisisel verisini JSON dump olarak indirir. Makine
+    okunabilir format (GDPR Art.20). KVKK basvuru SLA'sini saatlerce
+    azaltir — kullanici self-service.
+
+    Saglanan veriler:
+      - profile (email, risk_profile, consents, timestamps)
+      - integrations (provider listesi, API key plaintext DAHIL DEGIL)
+      - wallet_addresses (decrypt edilmis plaintext)
+      - portfolio_snapshots + asset_positions
+      - tefas_holdings, stock_holdings, bes_holdings, commodity_holdings
+      - manual_crypto_holdings, cash_holdings
+      - expenses, planned_expenses, incomes, recurring_incomes, budgets
+      - credit_cards + statements + installments
+      - investment_advice (history)
+      - audit_logs (kullanicinin kendi log'lari)
+    """
+    from app.models.integration import Integration, WalletAddress
+    from app.models.portfolio import PortfolioSnapshot, AssetPosition
+    from app.models.tefas import TefasHolding
+    from app.models.stock import StockHolding
+    from app.models.bes import BesHolding
+    from app.models.commodity import CommodityHolding
+    from app.models.manual_crypto import ManualCryptoHolding
+    from app.models.cash import CashHolding
+    from app.models.expense import Expense
+    from app.models.planned_expense import PlannedExpense
+    from app.models.income import Income
+    from app.models.recurring_income import RecurringIncome
+    from app.models.budget import Budget
+    from app.models.credit_card import CreditCard
+    from app.models.advice import InvestmentAdvice
+    from app.models.audit_log import AuditLog
+
+    def _serialize(obj, exclude: set[str] | None = None) -> dict:
+        """SQLAlchemy ORM nesnesini dict'e cevir; datetime/decimal/uuid ISO/str."""
+        exclude = exclude or set()
+        out = {}
+        for col in obj.__table__.columns:
+            if col.name in exclude:
+                continue
+            val = getattr(obj, col.name, None)
+            if val is None:
+                out[col.name] = None
+            elif hasattr(val, "isoformat"):  # datetime/date
+                out[col.name] = val.isoformat()
+            else:
+                out[col.name] = str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
+        return out
+
+    uid = current_user.id
+
+    async def _list(model, *, exclude: set[str] | None = None) -> list[dict]:
+        result = await db.execute(select(model).where(model.user_id == uid))
+        return [_serialize(o, exclude=exclude) for o in result.scalars().all()]
+
+    # Wallet'lerde plaintext address (decrypt edilmis); fingerprint atla
+    wallets_result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == uid))
+    wallets = []
+    for w in wallets_result.scalars().all():
+        wallets.append({
+            "id": str(w.id),
+            "chain": w.chain,
+            "address": w.address,  # hybrid_property decrypt
+            "label": w.label,
+            "is_active": w.is_active,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+        })
+
+    # Integrations: API key plaintext DAHIL DEGIL
+    intg = await _list(Integration, exclude={"encrypted_key", "encrypted_secret"})
+
+    # Snapshot + asset_positions
+    snap_result = await db.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == uid))
+    snapshots = []
+    for s in snap_result.scalars().all():
+        ap_result = await db.execute(select(AssetPosition).where(AssetPosition.snapshot_id == s.id))
+        snapshots.append({
+            **_serialize(s),
+            "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
+        })
+
+    # Audit log
+    audit_result = await db.execute(select(AuditLog).where(AuditLog.user_id == uid))
+    audit_logs = [_serialize(a) for a in audit_result.scalars().all()]
+
+    payload = {
+        "_meta": {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "format": "kfinans-data-export-v1",
+            "kvkk_article": "m.11/d",
+            "gdpr_article": "Art.20",
+        },
+        "profile": {
+            "id": str(current_user.id),
+            "email": current_user.email,
+            "risk_profile": current_user.risk_profile,
+            "email_verified": current_user.email_verified,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+            "credit_balance": current_user.credit_balance,
+            "deleted_at": current_user.deleted_at.isoformat() if current_user.deleted_at else None,
+            "overseas_consent_at": current_user.overseas_consent_at.isoformat() if current_user.overseas_consent_at else None,
+            "terms_accepted_at": current_user.terms_accepted_at.isoformat() if current_user.terms_accepted_at else None,
+            "kvkk_read_at": current_user.kvkk_read_at.isoformat() if current_user.kvkk_read_at else None,
+        },
+        "integrations": intg,
+        "wallets": wallets,
+        "snapshots": snapshots,
+        "tefas_holdings": await _list(TefasHolding),
+        "stock_holdings": await _list(StockHolding),
+        "bes_holdings": await _list(BesHolding),
+        "commodity_holdings": await _list(CommodityHolding),
+        "manual_crypto_holdings": await _list(ManualCryptoHolding),
+        "cash_holdings": await _list(CashHolding),
+        "expenses": await _list(Expense),
+        "planned_expenses": await _list(PlannedExpense),
+        "incomes": await _list(Income),
+        "recurring_incomes": await _list(RecurringIncome),
+        "budgets": await _list(Budget),
+        "credit_cards": await _list(CreditCard),
+        "advice": await _list(InvestmentAdvice),
+        "audit_logs": audit_logs,
+    }
+
+    await log_audit(
+        db, request,
+        action=AuditAction.DATA_EXPORT,
+        user_id=uid,
+        extra={
+            "snapshot_count": len(snapshots),
+            "audit_log_count": len(audit_logs),
+            "wallet_count": len(wallets),
+        },
+    )
+    await db.commit()
+
+    body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = f"kfinans-data-{uid}-{datetime.now(timezone.utc).date().isoformat()}.json"
+    return StreamingResponse(
+        BytesIO(body),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

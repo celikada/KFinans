@@ -23,6 +23,16 @@ class User(Base):
     # verify_token pattern'i kopyalanir (idempotent token rotation, generic response).
     reset_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
     reset_token_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # COMP-006 (FAZ H): KVKK m.5/1 ispat yuku — register'da rizalar timestamp'lenir,
+    # revoke edilince NULL. terms / kvkk versiyonlanabilir (ileride re-accept).
+    overseas_consent_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    terms_accepted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    kvkk_read_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # COMP-029 (FAZ H): E-posta degistirme token rotation — yeni email hedefi
+    # bekler, token tiklanip swap ettirilince eski email NULL'lanir.
+    email_change_new: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    email_change_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True, index=True)
+    email_change_expires_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # SEC-002 (FAZ H): Account lockout (OWASP ASVS V2.2.1)
     # Basarili login sonrasi 0'a sifirlanir; basarisiz login arttirir; 10 ust ustte

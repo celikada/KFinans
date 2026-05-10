@@ -22,6 +22,19 @@ class RegisterRequest(BaseModel):
         default=False,
         description="18 yasimi doldurdum (KVKK 2018/482, TMK m.16)",
     )
+    # COMP-006 (FAZ H): KVKK m.5/1 ispat yuku — rizalar register'da timestamp'lenir.
+    overseas_consent: bool = Field(
+        default=False,
+        description="Yurt disi veri aktarimina acik riza (KVKK m.9)",
+    )
+    terms_accepted: bool = Field(
+        default=False,
+        description="Kullanim Sartlari ve Gizlilik Politikasi kabul",
+    )
+    kvkk_read: bool = Field(
+        default=False,
+        description="KVKK Aydinlatma Metni okundu",
+    )
 
 
 class ResendVerificationRequest(BaseModel):

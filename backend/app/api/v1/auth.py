@@ -262,12 +262,19 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta zaten kayıtlı")
 
     token, expires_at = _new_verify_token()
+    # COMP-006 (FAZ H): Acik rizalar timestamp'le kaydedilir (KVKK m.5/1 ispat yuku).
+    # Eksik/False ise NULL kalir; opsiyonel rizalar (overseas) NULL durumunda
+    # advice endpoint'i 403 doner.
+    now = datetime.now(timezone.utc)
     user = User(
         email=payload.email,
         password_hash=hash_password(payload.password),
         risk_profile=payload.risk_profile,
         verify_token=token,
         verify_token_expires_at=expires_at,
+        overseas_consent_at=now if payload.overseas_consent else None,
+        terms_accepted_at=now if payload.terms_accepted else None,
+        kvkk_read_at=now if payload.kvkk_read else None,
     )
     db.add(user)
     await db.flush()  # user.id'yi al

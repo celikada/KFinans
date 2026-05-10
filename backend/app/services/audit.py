@@ -43,6 +43,13 @@ class AuditAction(str, Enum):
     # SEC-001 (FAZ H): Password reset akisi
     PASSWORD_RESET_REQUEST = "auth.password_reset_request"
     PASSWORD_RESET_COMPLETE = "auth.password_reset_complete"
+    # COMP-029 (FAZ H): E-posta degistirme — KVKK m.11/d duzeltme hakki
+    EMAIL_CHANGE_REQUEST = "user.email_change_request"
+    EMAIL_CHANGE_COMPLETE = "user.email_change_complete"
+    # COMP-006 (FAZ H): Acik riza geri cekme — KVKK m.5/1
+    CONSENT_REVOKE = "user.consent_revoke"
+    # COMP-003 (FAZ H): Veri tasinabilirligi (KVKK m.11/d, GDPR Art.20)
+    DATA_EXPORT = "user.data_export"
 
     # Integrations (exchange API key'ler)
     INTEGRATION_ADD = "integration.add"
