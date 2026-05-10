@@ -7,7 +7,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import delete, select, text
 
+from app.config import settings
 from app.database import AsyncSessionLocal
+from app.models.audit_log import AuditLog
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.services.snapshot import compute_and_save_snapshot
@@ -132,6 +134,32 @@ async def _cleanup_revoked_tokens_job(session_factory=None) -> None:
     logger.info("revoked_tokens cleanup: %d expired kayit silindi", deleted)
 
 
+async def _purge_old_audit_logs_job(session_factory=None) -> None:
+    """COMP-022 (FAZ H): KVKK m.7 saklama suresi sonu — eski audit_logs sil.
+
+    Default 365 gun (settings.audit_log_retention_days). Forensic icin 1 yillik
+    pencere yeterli; ondan eski kayitlar IP/user_agent/email PII icerdiginden
+    fiziksel silinir (anonimlestirme yetersiz — kombinasyondan kimlik cikar).
+
+    Her gun 04:30 Europe/Istanbul'da calisir.
+    """
+    sf = session_factory or AsyncSessionLocal
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.audit_log_retention_days)
+    async with sf() as session:
+        result = await session.execute(
+            delete(AuditLog).where(AuditLog.created_at < cutoff)
+        )
+        await session.commit()
+        deleted = result.rowcount or 0
+    if deleted:
+        logger.info(
+            "COMP-022 audit retention: %d eski kayit silindi (>%d gun)",
+            deleted, settings.audit_log_retention_days,
+        )
+    else:
+        logger.debug("COMP-022 audit retention: silinecek kayit yok")
+
+
 async def _hard_delete_expired_users_job(session_factory=None) -> None:
     """COMP-004 (FAZ H): Soft-delete'ten 30 gun gecmis kullanicilari fiziksel siler.
 
@@ -194,10 +222,18 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _purge_old_audit_logs_job,
+        CronTrigger(hour=4, minute=30, timezone=_TZ),
+        id="purge_old_audit_logs",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
         "Zamanlayici baslatildi (haftalik snapshot: Pazar 23:00, "
-        "revoked_tokens cleanup: gunluk 03:00, hard-delete cron: gunluk 04:00 Europe/Istanbul)"
+        "revoked_tokens cleanup: gunluk 03:00, hard-delete: 04:00, "
+        "audit retention: 04:30 Europe/Istanbul)"
     )
 
 

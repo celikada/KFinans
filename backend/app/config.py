@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # K8s deploy'da `redis://kfinans-redis:6379/0` gibi set edilir.
     redis_url: str = ""
 
+    # ─── COMP-022 (FAZ H): audit_logs retention (KVKK m.7) ────────────
+    # 365 gun = forensic icin 1 yillik makul saklama. _purge_old_audit_logs_job
+    # her gun 04:30 Europe/Istanbul'da bu suredan eski kayitlari fiziksel siler.
+    audit_log_retention_days: int = 365
+
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections

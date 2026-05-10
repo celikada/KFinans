@@ -21,6 +21,7 @@ from app.scheduler import (
     _cleanup_revoked_tokens_job,
     _hard_delete_expired_users_job,
     _HARD_DELETE_RETENTION_DAYS,
+    _purge_old_audit_logs_job,
     _SCHEDULER_LOCK_KEY,
     _try_acquire_lock,
     _release_lock,
@@ -197,3 +198,75 @@ async def test_advisory_lock_blocks_second_attempt_in_other_session():
         ok3 = await _try_acquire_lock(s3, _SCHEDULER_LOCK_KEY)
         assert ok3 is True
         await _release_lock(s3, _SCHEDULER_LOCK_KEY)
+
+
+# ─── COMP-022 (FAZ H): audit_logs retention ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_purge_old_audit_logs_deletes_after_retention():
+    """retention_days'den eski kayitlar fiziksel silinir."""
+    from app.config import settings
+    from app.models.audit_log import AuditLog
+
+    user = await _make_user_in_db()
+    cutoff_past = datetime.now(timezone.utc) - timedelta(
+        days=settings.audit_log_retention_days + 5
+    )
+    recent = datetime.now(timezone.utc) - timedelta(days=10)
+
+    async with TestSession() as session:
+        old_log = AuditLog(
+            user_id=user.id,
+            action="auth.login",
+            ip_address="1.2.3.4",
+        )
+        session.add(old_log)
+        await session.flush()
+        # created_at default now() — manuel old'a cek
+        await session.execute(
+            AuditLog.__table__.update().where(AuditLog.id == old_log.id).values(created_at=cutoff_past)
+        )
+        recent_log = AuditLog(
+            user_id=user.id,
+            action="auth.login",
+            ip_address="5.6.7.8",
+        )
+        session.add(recent_log)
+        await session.flush()
+        await session.execute(
+            AuditLog.__table__.update().where(AuditLog.id == recent_log.id).values(created_at=recent)
+        )
+        await session.commit()
+        old_id = old_log.id
+        recent_id = recent_log.id
+
+    await _purge_old_audit_logs_job(session_factory=TestSession)
+
+    async with TestSession() as session:
+        old_check = await session.execute(select(AuditLog).where(AuditLog.id == old_id))
+        recent_check = await session.execute(select(AuditLog).where(AuditLog.id == recent_id))
+        assert old_check.scalar_one_or_none() is None, "Eski kayit silinmeliydi"
+        assert recent_check.scalar_one_or_none() is not None, "Guncel kayit korunmaliydi"
+
+
+@pytest.mark.asyncio
+async def test_purge_audit_logs_no_old_records_no_op():
+    """Hicbir kayit eski degilse silinen 0 (no-op)."""
+    from app.models.audit_log import AuditLog
+
+    user = await _make_user_in_db()
+    async with TestSession() as session:
+        for _ in range(3):
+            session.add(AuditLog(user_id=user.id, action="auth.login"))
+        await session.commit()
+
+    # Cron calistir
+    await _purge_old_audit_logs_job(session_factory=TestSession)
+
+    # Hepsi duruyor olmali
+    async with TestSession() as session:
+        result = await session.execute(
+            select(AuditLog).where(AuditLog.user_id == user.id)
+        )
+        assert len(result.scalars().all()) == 3
