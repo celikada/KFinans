@@ -137,6 +137,11 @@ Detaylı teknik dokümanlar için → [`docs/`](./docs/README.md):
 8. KVKK Uyumluluğu
 9. Altyapı, Deployment, Test
 
+**Sürüm geçmişi:** [CHANGELOG.md](./CHANGELOG.md) — Faz bazli tarihsel
+ozet (Added / Changed / Fixed / Security).
+**Yasal süreç:** [docs/legal/incident-response-plan.md](./docs/legal/incident-response-plan.md)
+— Veri ihlali müdahale planı (ISO 27035 esinli, KVKK m.12/5).
+
 ---
 
 ## Geri Bildirim — Bug, Feature, Soru
