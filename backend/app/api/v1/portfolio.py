@@ -8,6 +8,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
+from app.core.limiter import limiter
 from app.core.security import decrypt_secret
 from app.models.integration import Integration, WalletAddress
 from app.models.portfolio import PortfolioSnapshot
@@ -54,7 +55,9 @@ async def get_usd_rate(
 
 
 @router.post("/snapshot/preview", response_model=SnapshotPreviewOut)
+@limiter.limit("6/hour")
 async def preview_snapshot(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -78,7 +81,9 @@ async def preview_snapshot(
 
 
 @router.post("/snapshot", response_model=SnapshotOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("6/hour")
 async def create_snapshot(
+    request: Request,
     force: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

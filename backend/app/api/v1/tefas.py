@@ -2,11 +2,12 @@ import io
 import logging
 from decimal import Decimal
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
+from app.core.limiter import limiter
 from app.models.tefas import TefasHolding as TefasHoldingModel
 from app.models.user import User
 from app.schemas.tefas import TefasHolding, TefasPositionOut
@@ -72,7 +73,9 @@ def _calc_gain_loss(
 
 
 @router.post("/preview", response_model=list[TefasPositionOut])
+@limiter.limit("30/minute")
 async def tefas_preview(
+    request: Request,
     holdings: list[TefasHolding],
     _: Annotated[User, Depends(get_current_user)],
 ):

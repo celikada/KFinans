@@ -3,11 +3,12 @@ import io
 import logging
 from decimal import Decimal
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
+from app.core.limiter import limiter
 from app.models.stock import StockHolding as StockHoldingModel
 from app.models.user import User
 from app.schemas.stocks import StockHolding, StockPositionOut
@@ -77,7 +78,9 @@ async def save_stock_holdings(
 
 
 @router.post("/preview", response_model=list[StockPositionOut])
+@limiter.limit("30/minute")
 async def stock_preview(
+    request: Request,
     holdings: list[StockHolding],
     _: Annotated[User, Depends(get_current_user)],
 ):

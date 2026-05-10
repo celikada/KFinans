@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.deps import get_current_user, get_db
+from app.core.limiter import limiter
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.user import PasswordChange, ProfileUpdate, UserMeOut
@@ -93,6 +94,7 @@ async def delete_me(request: Request, current_user: CurrentUser, db: DB) -> dict
 
 
 @router.post("/email/request", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/minute")
 async def request_email_change(
     request: Request,
     payload: EmailChangeRequest,
@@ -241,6 +243,7 @@ async def revoke_consent(
 
 
 @router.get("/data-export", status_code=status.HTTP_200_OK)
+@limiter.limit("5/hour")
 async def data_export(
     request: Request,
     current_user: CurrentUser,
@@ -394,6 +397,7 @@ async def data_export(
 
 
 @router.post("/anthropic-consent", status_code=status.HTTP_200_OK)
+@limiter.limit("10/hour")
 async def grant_anthropic_consent(
     request: Request,
     current_user: CurrentUser,
@@ -418,6 +422,7 @@ async def grant_anthropic_consent(
 
 
 @router.delete("/anthropic-consent", status_code=status.HTTP_200_OK)
+@limiter.limit("10/hour")
 async def revoke_anthropic_consent(
     request: Request,
     current_user: CurrentUser,
