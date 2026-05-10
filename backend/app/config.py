@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     # her gun 04:30 Europe/Istanbul'da bu suredan eski kayitlari fiziksel siler.
     audit_log_retention_days: int = 365
 
+    # ─── PERF-004 (FAZ H): Request timing middleware ─────────────────
+    # >= slow_request_threshold_ms requestler WARNING log'a yazilir.
+    # /metrics/performance endpoint metrics_token bos ise 404 doner
+    # (production'da env ile set edilir; dev'de devre disi).
+    slow_request_threshold_ms: int = 500
+    metrics_token: str = ""
+
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections

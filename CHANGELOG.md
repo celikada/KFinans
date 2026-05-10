@@ -62,6 +62,12 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Request timing middleware** (#75 PERF-004): `RequestTimingMiddleware`
+  her response'a `X-Response-Time` header'ı ekler; `>= 500ms` requestler
+  WARNING log'a yazılır. Per-route ring buffer (deque maxlen=1000,
+  template path ile gruplanır). `GET /api/v1/metrics/performance`
+  token korumalı snapshot endpoint'i (p50/p95/p99/max + slow_count).
+  OBS-001 (Sentry/OTel) eklenince deprecate edilebilir.
 
 #### Changed — Mevcut davranış değişiklikleri
 
@@ -146,8 +152,8 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 
 #### Test — Kapsam genişlemesi (FAZ H sonu)
 
-- **177 unit test** (FAZ G öncesi 60'lı seviye; FAZ H ile 177).
-- **343 integration test** (FAZ G öncesi 200'lü seviye; FAZ H ile 343).
+- **185 unit test** (FAZ G öncesi 60'lı seviye; FAZ H ile 185).
+- **357 integration test** (FAZ G öncesi 200'lü seviye; FAZ H ile 357).
 - **TEST-001 + TEST-020** servis unit test'leri: audit (10), bitcoin (8),
   solana (5), reports (11), evm_tokens (17), simple_rest blockchain (9),
   binance (10), email (8), advisor (19), aggregator/exchange/security/

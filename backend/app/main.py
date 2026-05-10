@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
-from app.core.middleware import SecurityHeadersMiddleware
+from app.core.middleware import RequestTimingMiddleware, SecurityHeadersMiddleware
 from app.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -120,13 +120,17 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # (en SON add edilen request'te İLK çalışır).
 #
 # add sırası                 →  request flow              →  response flow
-# 1. SecurityHeaders         →  4. çalışır                →  1. çalışır (her response'a header)
-# 2. TrustedHost             →  3. çalışır (Host check)   →  2. çalışır
-# 3. CORS (en son add)       →  1. çalışır (preflight)    →  3. çalışır
+# 1. RequestTiming (innermost)  →  5. çalışır (app'e en yakın) →  1. çalışır (timing app + SecurityHeaders dahil değil)
+# 2. SecurityHeaders         →  4. çalışır                →  2. çalışır (her response'a header)
+# 3. TrustedHost             →  3. çalışır (Host check)   →  3. çalışır
+# 4. CORS (en son add)       →  1. çalışır (preflight)    →  4. çalışır
 #
+# RequestTiming en içte: app handler süresini (+ SecurityHeaders dispatch'i) ölçer;
+# X-Response-Time header'i set edilir, sonraki middleware'ler header'a dokunmaz.
 # CORS en son add ediliyor çünkü preflight OPTIONS isteklerini diğer
 # middleware'lerden önce yakalaması ve CORS error response'larına da
 # güvenlik header'larının uygulanması gerekiyor.
+app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # TrustedHost (FAZ C3): Host header injection koruması.

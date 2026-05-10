@@ -218,6 +218,8 @@ cd frontend && npm install && npm run dev
 
 **Generic exception handler (BACK-008 + ARC-006):** `main.py`'a `IntegrityError → 409`, `SQLAlchemyError → 500 db_error`, `Exception → 500 internal_error` handler'ları. Hepsi `{detail, code, request_id}` sanitized format — internal SQL/exception trace frontend'e sızmaz, log'da tam trace.
 
+**Request timing middleware (PERF-004):** `app/core/middleware.py::RequestTimingMiddleware` her request için `time.perf_counter()` ile süre ölçer; `X-Response-Time: 35.7ms` header'ı ekler ve `>= settings.slow_request_threshold_ms` (default 500) requestler `WARNING SLOW_REQUEST` log'a yazılır. Per-route ring buffer (`app/core/perf_metrics.py`, deque maxlen=1000) endpoint template path'i (`POST /api/v1/auth/login`) ile gruplar — UUID/path-param leak yok, dict cardinality bounded. `GET /api/v1/metrics/performance` endpoint'i `X-Metrics-Token` header `settings.metrics_token` ile eşleşirse `{count, p50_ms, p95_ms, p99_ms, max_ms, slow_count}` snapshot döner; token boş veya yanlışsa 404 (varlık sızdırılmaz). Middleware en içte (ilk add edilir) — app handler süresini ölçer, X-Response-Time header sonraki middleware'lerden geçer. OBS-001 (Sentry/OTel) eklenince deprecate edilebilir.
+
 ## Geliştirme Kuralları
 
 - Tüm dokümantasyon ve commit mesajları Türkçe; kod içi identifier ve yorumlar İngilizce
@@ -226,5 +228,5 @@ cd frontend && npm install && npm run dev
 - **Pydantic v2 modern stiller (DEPS-001):** `model_config = ConfigDict(...)` (NOT `class Config:`); validation için `@field_validator + classmethod` (NOT `model_post_init`). Yeni schema'lar v1 stillerini kullanmamalıdır.
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
-- **Test sayıları:** 177 unit + 350 integration (FAZ H sonu). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
+- **Test sayıları:** 185 unit + 357 integration (FAZ H sonu — PERF-004 dahil). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
 - **Migration head:** `c0d1e2f3a4b5` (AI-005 anthropic_consent kolonları, 2026-05-10). Yeni migration `down_revision = "c0d1e2f3a4b5"`.

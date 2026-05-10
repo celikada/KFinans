@@ -1,4 +1,6 @@
 """Custom ASGI/Starlette middleware'leri."""
+import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -6,6 +8,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.config import settings
+from app.core import perf_metrics
+
+logger = logging.getLogger(__name__)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -70,3 +75,60 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Server"] = "kfinans"
 
         return response
+
+
+class RequestTimingMiddleware(BaseHTTPMiddleware):
+    """PERF-004 (FAZ H): Endpoint bazinda response time olcumu.
+
+    - `X-Response-Time` header (ms, 1 ondalik) her response'a eklenir.
+    - `>= settings.slow_request_threshold_ms` requestler WARNING log'a yazilir.
+    - Per-route ring buffer'a duration kaydedilir; `/metrics/performance` ile
+      p50/p95/p99 cikariminda kullanilir.
+
+    Route key: matched route template (`/api/v1/portfolio/snapshot/{snapshot_date}`)
+    — UUID/path-param leak yok, dict cardinality bounded. Eslemeyen path icin
+    `<unmatched>` kullanilir (404'ler tek bucket'a toplanir).
+    """
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Ölçümü hata anında da yapalım — exception handler 500 dondurur,
+            # ama buradan sonra metrics'e dusmez. Yine de raise et.
+            duration_ms = (time.perf_counter() - start) * 1000
+            route_key = _route_key(request)
+            slow = duration_ms >= settings.slow_request_threshold_ms
+            await perf_metrics.record(route_key, duration_ms, slow=slow)
+            if slow:
+                logger.warning(
+                    "SLOW_REQUEST(error) %s %s duration_ms=%.1f",
+                    request.method, route_key, duration_ms,
+                )
+            raise
+
+        duration_ms = (time.perf_counter() - start) * 1000
+        route_key = _route_key(request)
+        slow = duration_ms >= settings.slow_request_threshold_ms
+        await perf_metrics.record(route_key, duration_ms, slow=slow)
+        response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
+        if slow:
+            logger.warning(
+                "SLOW_REQUEST %s %s duration_ms=%.1f status=%s",
+                request.method, route_key, duration_ms, response.status_code,
+            )
+        return response
+
+
+def _route_key(request: Request) -> str:
+    """Matched route template + method dondurur. Match yoksa <unmatched>."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if template:
+        return f"{request.method} {template}"
+    return f"{request.method} <unmatched>"
