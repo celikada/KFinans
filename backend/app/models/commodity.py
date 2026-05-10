@@ -18,6 +18,7 @@ class CommodityHolding(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # PERF-003 (FAZ H)
     )
     # gram | biga | coin
     unit_type: Mapped[str] = mapped_column(String(10), nullable=False)

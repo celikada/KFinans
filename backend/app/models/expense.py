@@ -24,6 +24,7 @@ class Expense(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # PERF-003 (FAZ H)
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     # food | transport | bills | groceries | health | entertainment |

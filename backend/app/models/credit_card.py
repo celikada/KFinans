@@ -19,6 +19,7 @@ class CreditCard(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # PERF-003 (FAZ H)
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     bank_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)

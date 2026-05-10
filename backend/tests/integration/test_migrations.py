@@ -164,8 +164,8 @@ async def test_round_trip_downgrade_then_upgrade(fresh_db):
       - Tum kolonlar tekrar mevcut, FK CASCADE
     """
     _run_alembic("upgrade", "head")
-    # AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
-    _run_alembic("downgrade", "-4")
+    # PERF-003 + AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
+    _run_alembic("downgrade", "-5")
 
     cols = await _table_columns("users")
     assert "failed_login_count" not in cols

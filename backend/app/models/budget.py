@@ -18,6 +18,7 @@ class Budget(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,  # PERF-003 (FAZ H)
     )
     # same categories as Expense
     category: Mapped[str] = mapped_column(String(20), nullable=False)
