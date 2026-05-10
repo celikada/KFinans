@@ -31,5 +31,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  return <>{children}</>;
+  // A11Y-001 (FAZ H): Skip-to-content link — klavye kullanicisi tab tusu ile
+  // her sayfada nav menu'sunu atlayip ana icerige ulasabilsin (WCAG 2.4.1).
+  // sr-only default; focus alindiginda gorunur olur.
+  // Sayfalar kendi <main> elementlerine sahip — wrapper olarak <div> kullaniyoruz
+  // (cift main landmark olusmasini onlemek icin).
+  return (
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg"
+      >
+        Ana içeriğe atla
+      </a>
+      <div id="main-content">{children}</div>
+    </>
+  );
 }

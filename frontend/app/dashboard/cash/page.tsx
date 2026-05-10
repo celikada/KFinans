@@ -164,10 +164,11 @@ export default function CashPage() {
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => handleDelete(h.id, h.label)}
-                        className="text-gray-400 hover:text-red-500 text-sm"
+                        className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                         title="Sil"
+                        aria-label={`${h.label} kaydını sil`}
                       >
-                        ✕
+                        <span aria-hidden="true">✕</span>
                       </button>
                     </td>
                   </tr>

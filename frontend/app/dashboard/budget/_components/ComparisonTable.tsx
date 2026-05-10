@@ -49,10 +49,11 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                 {budget !== null && (
                   <button
                     onClick={() => onDelete(row.category)}
-                    className="text-gray-400 hover:text-red-500 text-sm font-medium transition-colors"
+                    className="text-gray-400 hover:text-red-500 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                     title="Bütçeyi kaldır"
+                    aria-label={`${row.category} kategorisinin bütçesini kaldır`}
                   >
-                    ✕
+                    <span aria-hidden="true">✕</span>
                   </button>
                 )}
               </div>

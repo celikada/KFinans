@@ -66,9 +66,10 @@ export function CommodityList({ positions, onDeleted }: Props) {
                 <button
                   onClick={() => handleDelete(pos.id)}
                   disabled={deletingId === pos.id}
-                  className="text-gray-300 hover:text-red-400 transition-colors disabled:opacity-50 text-xs"
+                  className="text-gray-300 hover:text-red-400 transition-colors disabled:opacity-50 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
+                  aria-label="Kaydı sil"
                 >
-                  ✕
+                  <span aria-hidden="true">✕</span>
                 </button>
               </td>
             </tr>

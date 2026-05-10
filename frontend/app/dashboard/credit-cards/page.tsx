@@ -331,10 +331,11 @@ export default function CreditCardsPage() {
                           <button
                             type="button"
                             onClick={() => handleDelete(c.id, c.name)}
-                            className="text-gray-400 hover:text-red-500 text-sm"
+                            className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                             title="Sil"
+                            aria-label={`${c.name} kartını sil`}
                           >
-                            ✕
+                            <span aria-hidden="true">✕</span>
                           </button>
                         </div>
                       </td>

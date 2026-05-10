@@ -225,8 +225,8 @@ export default function TefasPage() {
                     className={`flex-1 min-w-[160px] ${INPUT_CLS}`}
                   />
                   {holdings.length > 1 && (
-                    <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1">
-                      ×
+                    <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label="Satırı sil">
+                      <span aria-hidden="true">×</span>
                     </button>
                   )}
                 </div>

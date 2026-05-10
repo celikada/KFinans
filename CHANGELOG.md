@@ -62,6 +62,14 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Erişilebilirlik temel eklemeler** (#76 A11Y-001): `<html lang="tr">`,
+  dashboard layout'ta sr-only "Ana içeriğe atla" skip-link, `useFocusTrap`
+  hook (Tab/Shift+Tab modal döngüsü + Esc + initial focus restore),
+  `SnapshotIssuesModal` aria-labelledby/describedby + focus trap, login
+  formu `htmlFor` + `autoComplete=email|current-password` + error toast
+  `role="alert" aria-live="assertive"`. 11 dosyada icon-only `✕` butonlarına
+  aria-label + `<span aria-hidden="true">` + `focus-visible:ring-2`. 4 yeni
+  Playwright @smoke test (`a11y.spec.ts`). Axe-core entegrasyonu ileride.
 - **Request timing middleware** (#75 PERF-004): `RequestTimingMiddleware`
   her response'a `X-Response-Time` header'ı ekler; `>= 500ms` requestler
   WARNING log'a yazılır. Per-route ring buffer (deque maxlen=1000,

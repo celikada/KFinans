@@ -483,10 +483,11 @@ export default function ManualCryptoPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => handleDelete(p.id, p.symbol)}
-                          className="text-gray-400 hover:text-red-500 text-sm"
+                          className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                           title="Sil"
+                          aria-label={`${p.symbol} kaydını sil`}
                         >
-                          ✕
+                          <span aria-hidden="true">✕</span>
                         </button>
                       </td>
                     </tr>

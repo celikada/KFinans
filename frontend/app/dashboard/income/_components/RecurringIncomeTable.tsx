@@ -178,10 +178,11 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Pr
                         type="button"
                         onClick={() => handleDelete(it.id, it.title)}
                         disabled={busy === `del-${it.id}`}
-                        className="text-gray-400 hover:text-red-500 text-sm disabled:opacity-50"
+                        className="text-gray-400 hover:text-red-500 text-sm disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
                         title="Sil"
+                        aria-label={`${it.title} kaydını sil`}
                       >
-                        ✕
+                        <span aria-hidden="true">✕</span>
                       </button>
                     </div>
                   </td>

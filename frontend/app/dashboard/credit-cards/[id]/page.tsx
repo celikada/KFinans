@@ -267,7 +267,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(parseFloat(s.statement_amount))} ₺</span>
                 <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">Düzenle</button>
-                <button onClick={() => handleDelete(s)} className="text-xs text-red-400 hover:text-red-600">✕</button>
+                <button onClick={() => handleDelete(s)} aria-label="Ekstreyi sil" className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
             </li>
           ))}
@@ -415,7 +415,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
                   </p>
                 </div>
                 <button onClick={() => startEdit(i)} className="text-xs text-gray-500 hover:text-gray-800">Düzenle</button>
-                <button onClick={() => handleDelete(i)} className="text-xs text-red-400 hover:text-red-600">✕</button>
+                <button onClick={() => handleDelete(i)} aria-label="Taksiti sil" className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
             </li>
           ))}

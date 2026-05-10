@@ -1,6 +1,7 @@
 "use client";
 /**
  * FE-003 (FAZ H): Snapshot saglik uyari modal'i.
+ * A11Y-001 (FAZ H): useFocusTrap + aria-labelledby/aria-describedby.
  *
  * Snapshot al butonuna tiklandiginda preview endpoint'i issues dondururse
  * kullaniciya uyari listesi gosterilip "yine de kaydet / iptal" secenegi
@@ -9,6 +10,7 @@
 import * as React from "react";
 
 import type { SnapshotHealthIssue } from "@/lib/api";
+import { useFocusTrap } from "@/app/_hooks/useFocusTrap";
 
 
 export interface PendingIssues {
@@ -32,27 +34,29 @@ export function SnapshotIssuesModal({
 }) {
   const warns = pending.issues.filter((i) => (i.level ?? "warn") === "warn");
   const infos = pending.issues.filter((i) => i.level === "info");
+  const containerRef = useFocusTrap(true, onCancel);
 
   return (
     <div
       role="presentation"
       onClick={onCancel}
-      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
       className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
     >
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="snapshot-issues-title"
+        aria-describedby="snapshot-issues-desc"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
       >
-        <h3 className="text-base font-semibold text-gray-900 mb-1">
+        <h3 id="snapshot-issues-title" className="text-base font-semibold text-gray-900 mb-1">
           Snapshot uyarıları
           {warns.length > 0 && <span className="text-amber-600"> · {warns.length} sorun</span>}
           {infos.length > 0 && <span className="text-blue-600"> · {infos.length} bilgi</span>}
         </h3>
-        <p className="text-xs text-gray-500 mb-4">
+        <p id="snapshot-issues-desc" className="text-xs text-gray-600 mb-4">
           Toplam: <span className="font-semibold text-gray-700">{fmtTL(pending.total)} ₺</span>.
           {warns.length > 0 && " Sorunlu kayıtlar var; yine de kaydetmek ister misiniz? "}
           {warns.length === 0 && infos.length > 0 && " Bilgi notları var (manuel/bağlı fiyatlar). "}
@@ -71,7 +75,9 @@ export function SnapshotIssuesModal({
                 }`}
               >
                 <p className={`font-semibold ${isInfo ? "text-blue-800" : "text-amber-800"}`}>
-                  {isInfo ? "ⓘ" : "⚠"} {iss.source}
+                  <span aria-hidden="true">{isInfo ? "ⓘ" : "⚠"} </span>
+                  <span className="sr-only">{isInfo ? "Bilgi:" : "Uyarı:"} </span>
+                  {iss.source}
                   {iss.exchange && ` · ${iss.exchange}`}
                   {iss.symbol && ` · ${iss.symbol}`}
                   {iss.chain && ` · ${iss.chain}`}
@@ -87,7 +93,7 @@ export function SnapshotIssuesModal({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             İptal
           </button>
@@ -95,7 +101,7 @@ export function SnapshotIssuesModal({
             type="button"
             onClick={onConfirm}
             disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
           >
             {saving ? "Kaydediliyor..." : "Yine de kaydet"}
           </button>
