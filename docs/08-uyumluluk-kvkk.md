@@ -246,6 +246,12 @@ ancak güvenliğiniz için kapalı tutmanız gerekir.
 
 KVKK m.12 — veri sorumlusunun (KFinans/Mayotek) kişisel verilerin **hukuka aykırı işlenmesi ve erişimini önlemek + muhafazasını sağlamak** için **uygun güvenlik tedbirlerini** alma yükümlülüğü.
 
+> **COMP-021 (FAZ H, 2026-05-10):** Bölüm 9 yüksek seviye akışı operasyonel
+> hale getirildi: [docs/legal/incident-response-plan.md](./legal/incident-response-plan.md).
+> ISO 27035 esinli, rol/sorumluluk + iletişim ağacı + KEP gönderim şablonu +
+> kullanıcı bildirim e-postası + basın açıklaması taslak + yıllık tatbikat
+> programı. İlk table-top egzersiz: 2027-01.
+
 ### 9.0 Aktif Teknik Tedbirler ✅ (FAZ A+B+C tamamlandı)
 
 | Tedbir | Uygulama | Faz |

@@ -131,28 +131,80 @@ jobs:
           pattern: coverage-*
           path: coverage-reports
           merge-multiple: false
-      - name: Coverage rapor (en son XML)
+      - name: Coverage rapor (line + branch + critical path)
         run: |
-          # Bu adım coverage threshold'unu kontrol eder.
-          # Mevcut hedef: %50 (Faz 2.5 — 2026-05-02). Faz 3'te %70'e çekilecek.
-          # XML'lerden coverage yüzdesini parse et:
+          # TEST-007 (FAZ H): Coverage gate genisletildi.
+          #   - Genel line-rate %60 (Faz H ile Faz 2.5 %50'den yukseltildi)
+          #   - Branch-rate %50 (kosullu mantiklarda kapsam dogrulanir)
+          #   - Critical path (auth, security, masking) %90
+          # Faz 3'te genel hedef %70'e cekilecek.
           python <<'EOF'
           import xml.etree.ElementTree as ET
           from pathlib import Path
-          totals = []
+
+          # Genel coverage (en iyi XML)
+          totals_line = []
+          totals_branch = []
+          critical_path_lines = {}
+          # Critical path dosyalari — yuksek hedef gate
+          CRITICAL_FILES = (
+              "app/core/security.py",
+              "app/api/v1/auth.py",
+              "app/core/masking.py",
+          )
+
           for xml in Path("coverage-reports").rglob("coverage.xml"):
               root = ET.parse(xml).getroot()
               line_rate = float(root.attrib.get("line-rate", 0)) * 100
-              totals.append(line_rate)
-              print(f"  {xml}: %{line_rate:.2f}")
-          if not totals:
-              print("UYARI: coverage XML bulunamadı")
+              branch_rate = float(root.attrib.get("branch-rate", 0)) * 100
+              totals_line.append(line_rate)
+              totals_branch.append(branch_rate)
+              print(f"  {xml}: line=%{line_rate:.2f} branch=%{branch_rate:.2f}")
+
+              # Critical path'lerin per-file line-rate'i
+              for cls in root.iter("class"):
+                  filename = cls.attrib.get("filename", "")
+                  for cf in CRITICAL_FILES:
+                      if filename.endswith(cf):
+                          rate = float(cls.attrib.get("line-rate", 0)) * 100
+                          critical_path_lines[cf] = max(critical_path_lines.get(cf, 0), rate)
+
+          if not totals_line:
+              print("UYARI: coverage XML bulunamadi")
               exit(0)
-          best = max(totals)
-          THRESHOLD = 50.0
-          print(f"En iyi coverage: %{best:.2f} (hedef: %{THRESHOLD})")
-          if best < THRESHOLD:
-              print(f"❌ Coverage %{THRESHOLD} altına düştü")
+
+          best_line = max(totals_line)
+          best_branch = max(totals_branch) if totals_branch else 0
+          LINE_THRESHOLD = 60.0
+          BRANCH_THRESHOLD = 50.0
+          CRITICAL_THRESHOLD = 90.0
+
+          print(f"\nEn iyi line coverage: %{best_line:.2f} (hedef: %{LINE_THRESHOLD})")
+          print(f"En iyi branch coverage: %{best_branch:.2f} (hedef: %{BRANCH_THRESHOLD})")
+
+          failed = False
+          if best_line < LINE_THRESHOLD:
+              print(f"X Line coverage %{LINE_THRESHOLD} altina dustu")
+              failed = True
+
+          # Branch gate sadece raporlanmis ise zorlanir (XML'de attribute yoksa skip)
+          if any(t > 0 for t in totals_branch) and best_branch < BRANCH_THRESHOLD:
+              print(f"X Branch coverage %{BRANCH_THRESHOLD} altina dustu")
+              failed = True
+
+          # Critical path: bulunmayan dosya UYARI (henuz test yok); bulunan dusukse FAIL
+          for cf in CRITICAL_FILES:
+              if cf in critical_path_lines:
+                  rate = critical_path_lines[cf]
+                  status = "OK" if rate >= CRITICAL_THRESHOLD else "X"
+                  print(f"  {status} {cf}: %{rate:.2f} (hedef: %{CRITICAL_THRESHOLD})")
+                  if rate < CRITICAL_THRESHOLD:
+                      failed = True
+              else:
+                  print(f"  ! {cf}: coverage XML'de bulunamadi (test koselerinde olmayabilir)")
+
+          if failed:
+              print("\nX Coverage gate FAIL")
               exit(1)
-          print("✅ Coverage gate geçti")
+          print("\nOK Coverage gate gecti")
           EOF
