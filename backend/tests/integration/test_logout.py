@@ -186,3 +186,24 @@ async def test_refresh_rotation_preserves_user_isolation(client: AsyncClient):
         "/api/v1/auth/refresh", json={"refresh_token": session_b["refresh_token"]}
     )
     assert rb.status_code == 200
+
+
+
+# ─── TEST-005 (FAZ H): Refresh rotation idempotency (sequential) ──────
+
+
+@pytest.mark.asyncio
+async def test_refresh_rotation_blacklist_after_use(client: AsyncClient):
+    """Tek refresh_token iki kez kullanildiginda ikinci 401: SEC C4 rotation.
+
+    NOT: ASGITransport tek session paylastiği icin gerçek paralelizm test
+    edilemez (production'da her istek ayri session). Sequential test
+    rotation'in idempotent + tekil basarili davranisini dogrular."""
+    session = await _register_and_login(client, "rotate_seq@example.com")
+    refresh_token = session["refresh_token"]
+
+    r1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert r1.status_code == 200
+
+    r2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert r2.status_code == 401, "Eski refresh ikinci kullanim 401 olmali (rotation)"
