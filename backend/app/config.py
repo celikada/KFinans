@@ -67,6 +67,15 @@ class Settings(BaseSettings):
     # her gun 04:30 Europe/Istanbul'da bu suredan eski kayitlari fiziksel siler.
     audit_log_retention_days: int = 365
 
+    # ─── OBS-001 (FAZ H): Sentry + OpenTelemetry ─────────────────────
+    # Hepsi opt-in. DSN/endpoint bos ise no-op (dev'de aktif degil).
+    sentry_dsn: str = ""
+    sentry_env: str = "development"
+    sentry_traces_sample_rate: float = 0.1   # %10 trace ornegi
+    sentry_profiles_sample_rate: float = 0.0  # CPU profiling — kapali default
+    otel_endpoint: str = ""                   # Tempo/Jaeger/Honeycomb OTLP HTTP
+    otel_service_name: str = "kfinans-backend"
+
     # ─── PERF-004 (FAZ H): Request timing middleware ─────────────────
     # >= slow_request_threshold_ms requestler WARNING log'a yazilir.
     # /metrics/performance endpoint metrics_token bos ise 404 doner

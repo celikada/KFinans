@@ -14,6 +14,7 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
 from app.core.middleware import RequestTimingMiddleware, SecurityHeadersMiddleware
+from app.observability import init_otel, init_sentry
 from app.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("KFinans API başlatılıyor")
+    # OBS-001: Sentry/OTel opt-in init (DSN/endpoint bos = no-op).
+    # Sentry once — exception capture FastAPI handler'larini sarmalamadan once aktif.
+    init_sentry()
+    init_otel(app)
     start_scheduler()
     yield
     stop_scheduler()

@@ -62,6 +62,14 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Sentry + OpenTelemetry distributed tracing** (#77 OBS-001):
+  `app/observability.py::init_sentry/init_otel` `main.py` lifespan startup'ta
+  çağrılır. Hepsi opt-in: `SENTRY_DSN` boş = no-op; `OTEL_ENDPOINT` boş = no-op.
+  Sentry FastAPI + SQLAlchemy integration (exception capture, breadcrumb,
+  perf monitoring, `send_default_pii=False` KVKK güvenli). OTel: FastAPI +
+  SQLAlchemy + asyncpg + httpx instrumentation, `OTLPSpanExporter` HTTP.
+  `traces_sample_rate` default %10. 7 yeni unit test (192 toplam unit).
+  Frontend Sentry (`@sentry/nextjs`) ayrı issue.
 - **Erişilebilirlik temel eklemeler** (#76 A11Y-001): `<html lang="tr">`,
   dashboard layout'ta sr-only "Ana içeriğe atla" skip-link, `useFocusTrap`
   hook (Tab/Shift+Tab modal döngüsü + Esc + initial focus restore),
@@ -160,7 +168,7 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 
 #### Test — Kapsam genişlemesi (FAZ H sonu)
 
-- **185 unit test** (FAZ G öncesi 60'lı seviye; FAZ H ile 185).
+- **192 unit test** (FAZ G öncesi 60'lı seviye; FAZ H ile 192).
 - **357 integration test** (FAZ G öncesi 200'lü seviye; FAZ H ile 357).
 - **TEST-001 + TEST-020** servis unit test'leri: audit (10), bitcoin (8),
   solana (5), reports (11), evm_tokens (17), simple_rest blockchain (9),
