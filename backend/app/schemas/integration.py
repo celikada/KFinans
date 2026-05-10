@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 from app.core.masking import mask_address
 
@@ -18,9 +18,12 @@ class IntegrationCreate(BaseModel):
     api_key: str
     api_secret: Optional[str] = None
 
-    def model_post_init(self, __context):
-        if self.provider not in EXCHANGE_PROVIDERS:
+    @field_validator("provider")
+    @classmethod
+    def _validate_provider(cls, v: str) -> str:
+        if v not in EXCHANGE_PROVIDERS:
             raise ValueError(f"Geçersiz provider. Desteklenenler: {EXCHANGE_PROVIDERS}")
+        return v
 
 
 class IntegrationOut(BaseModel):
@@ -29,8 +32,7 @@ class IntegrationOut(BaseModel):
     is_active: bool
     last_synced_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WalletCreate(BaseModel):
@@ -38,20 +40,22 @@ class WalletCreate(BaseModel):
     address: str
     label: Optional[str] = None
 
-    def model_post_init(self, __context):
-        if self.chain not in CHAINS:
+    @field_validator("chain")
+    @classmethod
+    def _validate_chain(cls, v: str) -> str:
+        if v not in CHAINS:
             raise ValueError(f"Geçersiz zincir. Desteklenenler: {CHAINS}")
+        return v
 
 
 class WalletOut(BaseModel):
     id: uuid.UUID
     chain: str
     address: str
-    label: Optional[str]
+    label: Optional[str] = None
     is_active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     # BACK-013 (FAZ H): xpub leak engeli — JSON response'ta address maskelenir.
     # DB'de Fernet sifreli (FAZ C1); buradaki maskeleme network/proxy/log sizmasini

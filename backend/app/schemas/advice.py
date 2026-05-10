@@ -1,15 +1,18 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 
 class AdviceGenerateRequest(BaseModel):
     horizon: str  # medium | long
 
-    def model_post_init(self, __context):
-        if self.horizon not in {"medium", "long"}:
+    @field_validator("horizon")
+    @classmethod
+    def _validate_horizon(cls, v: str) -> str:
+        if v not in {"medium", "long"}:
             raise ValueError("horizon 'medium' veya 'long' olmalıdır")
+        return v
 
 
 class AdviceOut(BaseModel):
@@ -23,8 +26,7 @@ class AdviceOut(BaseModel):
     credits_used: int
     generated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @field_serializer("id")
     def _serialize_id(self, v: uuid.UUID) -> str:

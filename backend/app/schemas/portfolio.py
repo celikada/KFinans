@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 from app.core.masking import mask_address
 
@@ -21,8 +21,7 @@ class AssetPositionOut(BaseModel):
     total_value_tl: Decimal
     weight_pct: Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SnapshotOut(BaseModel):
@@ -33,8 +32,7 @@ class SnapshotOut(BaseModel):
     health_issues: list[dict] | None = None
     asset_positions: list[AssetPositionOut] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SnapshotHealthIssue(BaseModel):
@@ -119,7 +117,7 @@ class WalletPositionOut(BaseModel):
     wallet_id: str
     chain: str
     address: str
-    label: str | None
+    label: str | None = None
     symbol: str
     liquid_quantity: Decimal
     staked_quantity: Decimal
