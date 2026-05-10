@@ -21,6 +21,9 @@ from app.scheduler import (
     _cleanup_revoked_tokens_job,
     _hard_delete_expired_users_job,
     _HARD_DELETE_RETENTION_DAYS,
+    _SCHEDULER_LOCK_KEY,
+    _try_acquire_lock,
+    _release_lock,
 )
 from tests.conftest import TestSession
 
@@ -162,3 +165,35 @@ async def test_hard_delete_skips_active_users():
     async with TestSession() as session:
         result = await session.execute(select(User).where(User.id == active_user.id))
         assert result.scalar_one_or_none() is not None, "Aktif kullanici yanlislikla silindi"
+
+
+# ─── ARC-011 (FAZ H): pg advisory lock leader election ────────────────
+
+
+@pytest.mark.asyncio
+async def test_advisory_lock_acquire_release_round_trip():
+    """pg_try_advisory_lock alinabilir, release sonrasi tekrar alinabilir."""
+    async with TestSession() as session:
+        ok = await _try_acquire_lock(session, _SCHEDULER_LOCK_KEY)
+        assert ok is True
+        await _release_lock(session, _SCHEDULER_LOCK_KEY)
+
+
+@pytest.mark.asyncio
+async def test_advisory_lock_blocks_second_attempt_in_other_session():
+    """Bir session lock tutarken, baska session ayni key'i alamaz (multi-replica)."""
+    async with TestSession() as s1:
+        ok1 = await _try_acquire_lock(s1, _SCHEDULER_LOCK_KEY)
+        assert ok1 is True
+
+        async with TestSession() as s2:
+            ok2 = await _try_acquire_lock(s2, _SCHEDULER_LOCK_KEY)
+            assert ok2 is False, "Lock multi-replica leader election icin tek pod'a kilitli olmali"
+
+        await _release_lock(s1, _SCHEDULER_LOCK_KEY)
+
+    # s1 release ettigine gore yeni session lock alabilmeli
+    async with TestSession() as s3:
+        ok3 = await _try_acquire_lock(s3, _SCHEDULER_LOCK_KEY)
+        assert ok3 is True
+        await _release_lock(s3, _SCHEDULER_LOCK_KEY)

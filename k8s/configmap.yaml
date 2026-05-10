@@ -32,6 +32,16 @@ data:
   CLAUDE_MODEL: "claude-sonnet-4-6"
   CLAUDE_MAX_TOKENS: "1024"
 
+  # ARC-011 (FAZ H): Multi-replica scheduler safety.
+  # Tum pod'lar default'ta scheduler'i baslatir (SCHEDULER_ENABLED=true) ama
+  # job icindeki pg advisory lock sadece bir pod'un yurutmesini saglar (digerleri
+  # skip). Tek leader pod ile calisilmak istenirse bu env'i sadece 1 replica'ya
+  # `false` overlay ile verin (kustomize patch).
+  SCHEDULER_ENABLED: "true"
+  # ARC-003 (FAZ H): Haftalik snapshot job paralel kullanici sayisi.
+  # 5 default — dis API rate limit altinda kalmak icin guvenli.
+  SNAPSHOT_PARALLELISM: "5"
+
   # Frontend (build-time'da bake edilir; runtime'da etkili degil — release.yml
   # frontend Dockerfile build-arg NEXT_PUBLIC_API_URL="" ile gecmeli).
   # frontend/lib/api.ts: `${NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1`
