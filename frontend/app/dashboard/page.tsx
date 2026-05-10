@@ -366,7 +366,15 @@ export default function DashboardPage() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Toplam Portföy</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+              Toplam Portföy
+              {(cryptoLoading || walletLoading) && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
+                  <span className="inline-block w-3 h-3 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                  Yükleniyor...
+                </span>
+              )}
+            </p>
             {grandTotal > 0 ? (
               <TLValue tl={grandTotal} className="text-3xl font-bold text-gray-900 tabular-nums" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             ) : (
