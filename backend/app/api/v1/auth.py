@@ -249,6 +249,14 @@ async def logout(
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    # COMP-010 (FAZ H): 18+ yas dogrulama (KVKK 2018/482, TMK m.16).
+    # Frontend register form'unda zorunlu checkbox; eksik/False ise reddet.
+    if not payload.age_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Kayit icin 18 yasini doldurmus olmaniz gerekir.",
+        )
+
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta zaten kayıtlı")

@@ -21,6 +21,7 @@ export default function RegisterPage() {
   const [kvkkRead, setKvkkRead] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [overseasConsent, setOverseasConsent] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);  // COMP-010
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -52,10 +53,14 @@ export default function RegisterPage() {
       setError("Yurt dışı veri aktarımı için açık rıza vermeniz gerekir");
       return;
     }
+    if (!ageConfirmed) {
+      setError("Kayıt için 18 yaşını doldurmuş olmanız gerekir");
+      return;
+    }
 
     setLoading(true);
     try {
-      const data = await api.register(email, password, riskProfile);
+      const data = await api.register(email, password, riskProfile, ageConfirmed);
       setSuccess(true);
       setEmailSent(data.verification_email_sent);
     } catch (err) {
@@ -237,6 +242,21 @@ export default function RegisterPage() {
                   KVKK Aydınlatma Metni
                 </Link>
                 &apos;nde).
+              </span>
+            </label>
+
+            {/* COMP-010 (FAZ H): 18+ yas dogrulama (KVKK 2018/482, TMK m.16) */}
+            <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ageConfirmed}
+                onChange={(e) => setAgeConfirmed(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>
+                <strong>18 yaşımı doldurdum.</strong> KFinans finansal bir hizmet
+                sunduğundan kayıt için 18 yaş şartı zorunludur (KVKK Kurul kararı
+                2018/482, TMK m.16).
               </span>
             </label>
           </div>

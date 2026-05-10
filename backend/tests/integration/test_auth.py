@@ -27,6 +27,7 @@ async def test_register_creates_user(client: AsyncClient):
     resp = await client.post("/api/v1/auth/register", json={
         "email": TEST_EMAIL,
         "password": TEST_PASSWORD,
+        "age_confirmed": True,
     })
     assert resp.status_code == 201
     data = resp.json()
@@ -44,6 +45,7 @@ async def test_register_with_risk_profile(client: AsyncClient):
         "email": "rp_aggressive@example.com",
         "password": TEST_PASSWORD,
         "risk_profile": "aggressive",
+        "age_confirmed": True,
     })
     assert resp.status_code == 201
     assert resp.json()["risk_profile"] == "aggressive"
@@ -55,6 +57,7 @@ async def test_register_invalid_risk_profile_returns_422(client: AsyncClient):
         "email": "rp_bad@example.com",
         "password": TEST_PASSWORD,
         "risk_profile": "yolo",
+        "age_confirmed": True,
     })
     assert resp.status_code == 422
 
@@ -64,22 +67,47 @@ async def test_register_short_password_returns_422(client: AsyncClient):
     resp = await client.post("/api/v1/auth/register", json={
         "email": "shortpw@example.com",
         "password": "abc",
+        "age_confirmed": True,
     })
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email_returns_409(client: AsyncClient):
-    payload = {"email": "dup@example.com", "password": "pass1234"}
+    payload = {"email": "dup@example.com", "password": "pass1234", "age_confirmed": True}
     await client.post("/api/v1/auth/register", json=payload)
     resp = await client.post("/api/v1/auth/register", json=payload)
     assert resp.status_code == 409
 
 
+# COMP-010 (FAZ H): 18+ yas dogrulama
+@pytest.mark.asyncio
+async def test_register_without_age_confirmation_returns_422(client: AsyncClient):
+    """age_confirmed=False -> 422 (KVKK 2018/482, TMK m.16)."""
+    resp = await client.post("/api/v1/auth/register", json={
+        "email": "no_age@example.com",
+        "password": TEST_PASSWORD,
+        # age_confirmed eksik (default False)
+    })
+    assert resp.status_code == 422
+    assert "18 yasini" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_register_explicit_age_false_returns_422(client: AsyncClient):
+    """age_confirmed=False acikca verilse de 422."""
+    resp = await client.post("/api/v1/auth/register", json={
+        "email": "age_false@example.com",
+        "password": TEST_PASSWORD,
+        "age_confirmed": False,
+    })
+    assert resp.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_register_persists_verify_token(client: AsyncClient):
     email = "verify_token@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     user = await _get_user(email)
     assert user.verify_token is not None
     assert len(user.verify_token) >= 30
@@ -91,8 +119,8 @@ async def test_register_persists_verify_token(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_login_unverified_returns_403(client: AsyncClient):
     email = "unverified_login@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
-    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert resp.status_code == 403
     assert "doğrula" in resp.json()["detail"].lower()
 
@@ -100,9 +128,9 @@ async def test_login_unverified_returns_403(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_login_returns_tokens_after_verification(client: AsyncClient):
     email = "verified_login@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
-    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
@@ -113,7 +141,7 @@ async def test_login_returns_tokens_after_verification(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_login_wrong_password_returns_401(client: AsyncClient):
     email = "wrong_pw@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "yanlis-sifre"})
     assert resp.status_code == 401
@@ -131,9 +159,9 @@ async def test_login_unknown_email_returns_401(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_refresh_returns_new_tokens(client: AsyncClient):
     email = "refresh_user@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     refresh_token = login.json()["refresh_token"]
 
     resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
@@ -146,9 +174,9 @@ async def test_refresh_returns_new_tokens(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_refresh_with_access_token_returns_401(client: AsyncClient):
     email = "refresh_wrong@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     access_token = login.json()["access_token"]
 
     resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": access_token})
@@ -158,7 +186,7 @@ async def test_refresh_with_access_token_returns_401(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_verify_email_succeeds_with_valid_token(client: AsyncClient):
     email = "verify_ok@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     user = await _get_user(email)
     token = user.verify_token
 
@@ -171,7 +199,7 @@ async def test_verify_email_succeeds_with_valid_token(client: AsyncClient):
     assert user_after.verify_token_expires_at is None
 
     # Login artik calismali
-    login_resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    login_resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert login_resp.status_code == 200
 
 
@@ -184,7 +212,7 @@ async def test_verify_email_invalid_token_returns_400(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_verify_email_expired_token_returns_400(client: AsyncClient):
     email = "verify_expired@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     user = await _get_user(email)
     token = user.verify_token
 
@@ -205,7 +233,7 @@ async def test_verify_email_expired_token_returns_400(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_verify_email_already_verified_is_idempotent(client: AsyncClient):
     email = "verify_idem@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     user = await _get_user(email)
     token = user.verify_token
 
@@ -220,7 +248,7 @@ async def test_verify_email_already_verified_is_idempotent(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_resend_verification_for_existing_user(client: AsyncClient):
     email = "resend_ok@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     user_before = await _get_user(email)
     old_token = user_before.verify_token
 
@@ -246,7 +274,7 @@ async def test_resend_verification_unknown_email_returns_202_silently(client: As
 @pytest.mark.asyncio
 async def test_resend_verification_already_verified_returns_202_silently(client: AsyncClient):
     email = "resend_verified@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     resp = await client.post("/api/v1/auth/resend-verification", json={"email": email})
@@ -265,7 +293,7 @@ async def test_resend_verification_already_verified_returns_202_silently(client:
 async def test_failed_login_increments_counter(client: AsyncClient):
     """Yanlis sifre denemesi failed_login_count'i artirir, basarili login sifirlar."""
     email = "lockout_inc@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     # 3 yanlis deneme
@@ -278,7 +306,7 @@ async def test_failed_login_increments_counter(client: AsyncClient):
     assert user.locked_until is None  # 10'a ulasmadi
 
     # Dogru login -> counter sifirlanir
-    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert resp.status_code == 200
 
     user_after = await _get_user(email)
@@ -289,7 +317,7 @@ async def test_failed_login_increments_counter(client: AsyncClient):
 async def test_account_locks_after_threshold(client: AsyncClient):
     """10 ust uste basarisiz login -> hesap 15 dk kilitlenir, sonraki istek 423."""
     email = "lockout_lock@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     # 10 yanlis deneme
@@ -304,7 +332,7 @@ async def test_account_locks_after_threshold(client: AsyncClient):
     assert user.locked_until <= datetime.now(timezone.utc) + timedelta(minutes=15, seconds=10)
 
     # Kilitli iken dogru sifreyle bile login alinamaz
-    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert resp.status_code == 423
     body = resp.json()
     assert "kilitli" in body["detail"].lower()
@@ -316,7 +344,7 @@ async def test_account_locks_after_threshold(client: AsyncClient):
 async def test_lockout_expiry_unlocks_account(client: AsyncClient):
     """locked_until gecmisi ise dogru sifreyle login basarili olur ve counter sifirlanir."""
     email = "lockout_expire@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     # Manuel olarak gecmis bir locked_until set et (otomatik 15 dk beklemek istemiyoruz)
@@ -330,7 +358,7 @@ async def test_lockout_expiry_unlocks_account(client: AsyncClient):
         await session.commit()
 
     # Dogru sifre -> 200 ve counter sifirlanir
-    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD})
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     assert resp.status_code == 200
 
     user_after = await _get_user(email)
@@ -345,7 +373,7 @@ async def test_lockout_expiry_unlocks_account(client: AsyncClient):
 async def test_forgot_password_known_user_creates_token(client: AsyncClient):
     """Bilinen + dogrulanmis kullanici icin reset_token uretilir."""
     email = "reset_known@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     resp = await client.post("/api/v1/auth/forgot-password", json={"email": email})
@@ -372,7 +400,7 @@ async def test_forgot_password_unknown_email_returns_202_silently(client: AsyncC
 async def test_forgot_password_unverified_user_no_token_generated(client: AsyncClient):
     """Henuz dogrulanmamis kullanici icin token uretilmez (yine 202)."""
     email = "reset_unverified@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     # verify_user_email() cagrilmadi - email_verified = False
 
     resp = await client.post("/api/v1/auth/forgot-password", json={"email": email})
@@ -386,7 +414,7 @@ async def test_forgot_password_unverified_user_no_token_generated(client: AsyncC
 async def test_reset_password_completes_with_valid_token(client: AsyncClient):
     """Token ile yeni sifre kaydedilir, token tuketilir, eski sifre invalid."""
     email = "reset_complete@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
     await client.post("/api/v1/auth/forgot-password", json={"email": email})
 
@@ -408,7 +436,7 @@ async def test_reset_password_completes_with_valid_token(client: AsyncClient):
     # Eski sifre artik calismaz
     bad_login = await client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": TEST_PASSWORD},
+        json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True},
     )
     assert bad_login.status_code == 401
 
@@ -434,7 +462,7 @@ async def test_reset_password_invalid_token_returns_400(client: AsyncClient):
 async def test_reset_password_expired_token_returns_400(client: AsyncClient):
     """Suresi dolmus token reddedilir, sifre degismez."""
     email = "reset_expired@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
     await client.post("/api/v1/auth/forgot-password", json={"email": email})
 
@@ -458,7 +486,7 @@ async def test_reset_password_expired_token_returns_400(client: AsyncClient):
     # Eski sifre hala gecerli
     login = await client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": TEST_PASSWORD},
+        json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True},
     )
     assert login.status_code == 200
 
@@ -467,7 +495,7 @@ async def test_reset_password_expired_token_returns_400(client: AsyncClient):
 async def test_reset_password_token_rotation(client: AsyncClient):
     """Ikinci forgot-password yeni token uretir; eski token gecersiz olur."""
     email = "reset_rotate@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     await client.post("/api/v1/auth/forgot-password", json={"email": email})
@@ -492,7 +520,7 @@ async def test_reset_password_token_rotation(client: AsyncClient):
 async def test_reset_password_clears_lockout_state(client: AsyncClient):
     """Sifre sifirlama SEC-002 lockout state'i de sifirlar (failed_count + locked_until)."""
     email = "reset_lockout@example.com"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True})
     await verify_user_email(email)
 
     # Manuel olarak lockout simule et

@@ -152,10 +152,11 @@ export const api = {
     });
   },
 
-  register: (email: string, password: string, risk_profile: string) =>
+  register: (email: string, password: string, risk_profile: string, age_confirmed: boolean) =>
     request<RegisterResponseDTO>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, risk_profile }),
+      // COMP-010 (FAZ H): age_confirmed zorunlu — backend False ise 422 doner
+      body: JSON.stringify({ email, password, risk_profile, age_confirmed }),
     }),
 
   verifyEmail: (token: string) =>

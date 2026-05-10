@@ -100,7 +100,11 @@ async def make_user(client: AsyncClient, email: str | None = None) -> dict:
     if email is None:
         email = f"u-{uuid.uuid4().hex[:12]}@example.com"
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    # COMP-010 (FAZ H): age_confirmed zorunlu — testler default True gonderir.
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": pwd, "age_confirmed": True},
+    )
     await verify_user_email(email)
     login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}

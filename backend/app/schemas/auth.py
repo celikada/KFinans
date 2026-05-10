@@ -16,6 +16,12 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     risk_profile: RiskProfile = "balanced"
+    # COMP-010 (FAZ H): 18+ yas dogrulama (KVKK Kurul karari 2018/482, TMK m.16).
+    # Frontend zorunlu checkbox; backend False/eksik -> 422.
+    age_confirmed: bool = Field(
+        default=False,
+        description="18 yasimi doldurdum (KVKK 2018/482, TMK m.16)",
+    )
 
 
 class ResendVerificationRequest(BaseModel):
