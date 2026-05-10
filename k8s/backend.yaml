@@ -23,7 +23,11 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2
+  # SEC-003 (FAZ H): replicas=2 -> 1 dusuruldu. slowapi MemoryStorage default'tu;
+  # 2 replica saldirgana 2x kota verir (login 10/dk -> 20/dk). Redis backend
+  # ekleninceye kadar (Faz I) replicas=1 kalir; Redis enable edilince
+  # REDIS_URL configmap'e set edilip replicas tekrar 2+'ya cikarilir.
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:

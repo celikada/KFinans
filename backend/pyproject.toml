@@ -32,6 +32,8 @@ dependencies = [
     "substrate-interface>=1.7",
     "slowapi>=0.1.9",
     "resend>=2.0",
+    # SEC-003 (FAZ H): slowapi storage_uri="redis://..." icin gerek
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]

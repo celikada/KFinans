@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # SEC-001 (FAZ H): Password reset token TTL — OWASP onerisi 1 saat.
     password_reset_expire_hours: int = 1
 
+    # ─── SEC-003 (FAZ H): Redis URL — slowapi distributed rate limiting ──
+    # Default bos = MemoryStorage (tek replica icin uygun). Multi-replica
+    # K8s deploy'da `redis://kfinans-redis:6379/0` gibi set edilir.
+    redis_url: str = ""
+
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections
