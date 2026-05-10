@@ -17,7 +17,11 @@ from sqlalchemy import select
 
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
-from app.scheduler import _cleanup_revoked_tokens_job
+from app.scheduler import (
+    _cleanup_revoked_tokens_job,
+    _hard_delete_expired_users_job,
+    _HARD_DELETE_RETENTION_DAYS,
+)
 from tests.conftest import TestSession
 
 
@@ -104,3 +108,57 @@ async def test_cleanup_preserves_recently_expired_within_seconds():
             select(RevokedToken).where(RevokedToken.jti == ftk_jti)
         )).scalar_one_or_none()
         assert remaining is not None, "Hala gecerli token silinmemeliydi"
+
+
+# ─── COMP-004 (FAZ H): Hard-delete cron ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_removes_users_after_retention():
+    """deleted_at > 30 gun once olanlar fiziksel silinir."""
+    user = await _make_user_in_db()
+    expired_email = user.email
+    cutoff_past = datetime.now(timezone.utc) - timedelta(days=_HARD_DELETE_RETENTION_DAYS + 5)
+
+    async with TestSession() as session:
+        await session.execute(
+            User.__table__.update().where(User.id == user.id).values(deleted_at=cutoff_past)
+        )
+        await session.commit()
+
+    await _hard_delete_expired_users_job(session_factory=TestSession)
+
+    async with TestSession() as session:
+        result = await session.execute(select(User).where(User.email == expired_email))
+        assert result.scalar_one_or_none() is None, "30 gun gecmis kullanici silinmeliydi"
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_keeps_recently_soft_deleted():
+    """deleted_at < 30 gun yeni soft-delete'lar korunur (geri alma penceresi)."""
+    user = await _make_user_in_db()
+    recent_delete = datetime.now(timezone.utc) - timedelta(days=5)
+
+    async with TestSession() as session:
+        await session.execute(
+            User.__table__.update().where(User.id == user.id).values(deleted_at=recent_delete)
+        )
+        await session.commit()
+
+    await _hard_delete_expired_users_job(session_factory=TestSession)
+
+    async with TestSession() as session:
+        result = await session.execute(select(User).where(User.id == user.id))
+        assert result.scalar_one_or_none() is not None, "5 gunluk soft-delete erken silindi"
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_skips_active_users():
+    """deleted_at = NULL olan aktif kullanicilar dokunulmaz."""
+    active_user = await _make_user_in_db()
+
+    await _hard_delete_expired_users_job(session_factory=TestSession)
+
+    async with TestSession() as session:
+        result = await session.execute(select(User).where(User.id == active_user.id))
+        assert result.scalar_one_or_none() is not None, "Aktif kullanici yanlislikla silindi"
