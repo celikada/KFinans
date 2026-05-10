@@ -33,13 +33,31 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 | 502 | Bad Gateway          | Snapshot — tüm kaynaklar fail           |
 | 503 | Service Unavailable  | Snapshot — kritik USD/TL kuru alınamadı |
 
-### 1.4 Rate Limiting (slowapi, in-memory)
-| Endpoint              | Limit                                |
-| --------------------- | ------------------------------------ |
-| `POST /auth/login`    | 10/dakika                            |
-| `POST /auth/register` | 5/dakika                             |
-| `POST /auth/refresh`  | 30/dakika                            |
-| Diğer                 | Henüz limit yok (Faz 3'te eklenecek) |
+### 1.4 Rate Limiting (slowapi)
+
+> **SEC-003 (FAZ H):** `settings.redis_url` set ise distributed Redis backend
+> (multi-replica güvenli); yoksa MemoryStorage. Production K8s şu an
+> `replicas: 1` (Redis enable olunca artırılabilir).
+
+| Endpoint                                  | Limit       | Sebep |
+| ----------------------------------------- | ----------- | ----- |
+| `POST /auth/login`                        | 10/dakika   | Brute-force koruması |
+| `POST /auth/register`                     | 5/dakika    | Spam hesap engeli |
+| `POST /auth/refresh`                      | 30/dakika   | Token rotation |
+| `POST /auth/forgot-password`              | 3/dakika    | Token spam engeli (SEC-001) |
+| `POST /auth/reset-password`               | 5/dakika    | Token brute-force engeli (SEC-001) |
+| `GET /auth/verify-email`                  | 20/dakika   | E-posta tıklama hızı |
+| `POST /auth/resend-verification`          | 3/dakika    | E-posta abuse engeli |
+| `POST /advice/generate`                   | 5/saat      | Anthropic API maliyet (AI-007) |
+| `POST /portfolio/snapshot`                | 6/saat      | 14 dış API tetikler (SEC-005) |
+| `POST /portfolio/snapshot/preview`        | 6/saat      | Aynı (SEC-005) |
+| `POST /portfolio/stocks/preview`          | 30/dakika   | Yahoo Finance rate limit (SEC-005) |
+| `POST /portfolio/tefas/preview`           | 30/dakika   | TEFAS API hızı (SEC-005) |
+| `POST /user/email/request`                | 3/dakika    | Token guess + spam (SEC-005) |
+| `GET  /user/data-export`                  | 5/saat      | Büyük JSON DoS koruma (SEC-005) |
+| `POST /user/anthropic-consent`            | 10/saat     | KVKK abuse engeli (SEC-005) |
+| `DELETE /user/anthropic-consent`          | 10/saat     | Aynı (SEC-005) |
+| Diğer                                     | Limitsiz    | Read-only veya hafif endpoint'ler |
 
 ---
 
@@ -1181,65 +1199,95 @@ slowapi `RemoteAddress`'e göre limit uygular; localhost'tan 10+ istek 429 döne
 
 ---
 
-## 17. Audit Log (`/api/v1/audit-logs`) — FAZ C6
+## 17. Audit Log (`/api/v1/audit-logs`) — FAZ C6 + PERF-001 pagination
 
 ### `GET /api/v1/audit-logs`
 Kullanıcının kendi audit log kayıtlarını döner (en yeniden eskiye). IDOR korumalı: sadece `user_id == current_user.id` filtreli kayıtlar.
 
-**Query params:**
-- `action_prefix` (opsiyonel) — `auth.`, `wallet.`, `integration.`, `snapshot.`, `account.` ile başlayanları filtreler
-- `limit` (opsiyonel, default 100, max 500)
+> **PERF-001 (FAZ H, 2026-05-10):** Response artık `PaginatedResponse[T]`
+> formatında — `items + total_count + has_next + limit + offset`. Frontend
+> sayfalama UI'ı için doğrudan kullanılabilir. **Geriye uyumsuz değişiklik:
+> response array değil object**.
 
-**Loglanan eylemler (FAZ C6 — `app/services/audit.py::AuditAction`):**
+**Query params:**
+- `action_prefix` (opsiyonel) — `auth.`, `wallet.`, `integration.`, `snapshot.`, `account.`, `kvkk.`, `user.` ile başlayanları filtreler
+- `limit` (opsiyonel, default 50, min 1, max 500)
+- `offset` (opsiyonel, default 0, min 0)
+
+**Loglanan eylemler (`app/services/audit.py::AuditAction`):**
 
 | Action | Trigger | Extra alanları |
 |--------|---------|----------------|
 | `auth.login` | Başarılı giriş | – |
-| `auth.login_failed` | Yanlış şifre / mevcut olmayan e-posta | `extra.email` |
+| `auth.login_failed` | Yanlış şifre / mevcut olmayan e-posta | `extra.email`, `extra.failed_count`, `extra.locked` |
 | `auth.logout` | `POST /auth/logout` | – |
 | `auth.register` | Yeni kullanıcı kaydı | `extra.email`, `extra.risk_profile` |
 | `auth.password_change` | `PUT /user/password` | – |
+| `auth.password_reset_request` | `POST /auth/forgot-password` (SEC-001) | `extra.email`, `extra.user_exists` |
+| `auth.password_reset_complete` | `POST /auth/reset-password` (SEC-001) | `extra.success`, `extra.email` |
+| `user.email_change_request` | `POST /user/email/request` (COMP-029) | `extra.old_email`, `extra.new_email` |
+| `user.email_change_complete` | `GET /user/email/confirm?token=...` | `extra.success`, `extra.old_email`, `extra.new_email` |
+| `user.consent_revoke` | `DELETE /user/consent/{type}` (COMP-006) | `extra.consent_type` |
+| `user.data_export` | `GET /user/data-export` (COMP-003) | `extra.snapshot_count`, `extra.audit_log_count`, `extra.wallet_count` |
+| `kvkk.anthropic_consent_grant` | `POST /user/anthropic-consent` (AI-005) | `extra.version` |
+| `kvkk.anthropic_consent_revoke` | `DELETE /user/anthropic-consent` (AI-005) | – |
 | `wallet.add` | `POST /wallets` | `extra.chain`, `extra.label`, `resource: wallet:{uuid}` |
 | `wallet.delete` | `DELETE /wallets/{id}` | `extra.chain`, `resource: wallet:{uuid}` |
+| `wallet.export` | `GET /wallets/export` (COMP-024) | `extra.wallet_count`, `extra.include_full_address` |
 | `integration.add` | `POST /integrations` | `extra.updated`, `resource: integration:{provider}` |
 | `integration.delete` | `DELETE /integrations/{provider}` | `resource: integration:{provider}` |
 | `snapshot.delete` | `DELETE /portfolio/snapshot/{date}` | `resource: snapshot:{date}` |
 | `account.soft_delete` | `DELETE /user/me` | `resource: user:{uuid}` |
+| `advice.generate` | `POST /advice/generate` (AI-004) | `extra.horizon`, `extra.model`, `extra.prompt_tokens`, `extra.credits_used` |
 
 ```json
-// 200 OK
-[
-  {
-    "id": "01H8X...",
-    "action": "wallet.add",
-    "resource": "wallet:550e8400-e29b-41d4-a716-446655440000",
-    "ip_address": "192.168.1.50",
-    "user_agent": "Mozilla/5.0 ...",
-    "extra": { "chain": "bitcoin", "label": "Ana cüzdan" },
-    "created_at": "2026-05-06T20:35:12.123Z"
-  },
-  {
-    "id": "01H8Y...",
-    "action": "auth.login",
-    "resource": null,
-    "ip_address": "192.168.1.50",
-    "user_agent": "Mozilla/5.0 ...",
-    "extra": null,
-    "created_at": "2026-05-06T20:34:55.001Z"
-  }
-]
+// 200 OK — PaginatedResponse[AuditLogOut]
+{
+  "items": [
+    {
+      "id": "01H8X...",
+      "action": "wallet.add",
+      "resource": "wallet:550e8400-e29b-41d4-a716-446655440000",
+      "ip_address": "192.168.1.50",
+      "user_agent": "Mozilla/5.0 ...",
+      "extra": { "chain": "bitcoin", "label": "Ana cüzdan" },
+      "created_at": "2026-05-06T20:35:12.123Z"
+    },
+    {
+      "id": "01H8Y...",
+      "action": "auth.login",
+      "resource": null,
+      "ip_address": "192.168.1.50",
+      "user_agent": "Mozilla/5.0 ...",
+      "extra": null,
+      "created_at": "2026-05-06T20:34:55.001Z"
+    }
+  ],
+  "total_count": 247,
+  "limit": 50,
+  "offset": 0,
+  "has_next": true
+}
 ```
 
 ### Örnek Kullanım
 ```bash
-# Tüm log'lar (son 100)
+# İlk sayfa (50 kayıt)
 curl https://kfinans.app/api/v1/audit-logs \
   -H "Authorization: Bearer eyJ..."
 
-# Sadece wallet eylemleri
-curl "https://kfinans.app/api/v1/audit-logs?action_prefix=wallet.&limit=50" \
+# Sonraki sayfa
+curl "https://kfinans.app/api/v1/audit-logs?offset=50" \
+  -H "Authorization: Bearer eyJ..."
+
+# Sadece wallet eylemleri (filtreli)
+curl "https://kfinans.app/api/v1/audit-logs?action_prefix=wallet.&limit=20" \
   -H "Authorization: Bearer eyJ..."
 ```
+
+> **COMP-022 (FAZ H):** Audit log'lar 365 gün retention sonrası
+> `_purge_old_audit_logs_job` cron'u ile fiziksel silinir (KVKK m.7).
+> Saklama detay: `docs/legal/incident-response-plan.md` §6.
 
 ---
 
