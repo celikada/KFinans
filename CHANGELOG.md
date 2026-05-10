@@ -62,6 +62,15 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **EN dil desteği foundation** (#78 i18n-001): Client-side cookie tabanlı
+  TR/EN. `app/_i18n/dictionaries/{tr,en}.json` (auth + common + legal +
+  footer anahtarları), `I18nProvider` React Context (`kfinans-locale`
+  cookie, samesite=lax, 1 yıl), `useTranslation()` hook + `t("auth.login")`,
+  `LanguageSwitcher` segmented (dashboard top-right + login top-right).
+  Eksik anahtarlar key fallback. `<html lang>` dinamik güncelleme (ekran
+  okuyucu duyurur). Login sayfası tam çevrildi (proof of concept). 16
+  dashboard sayfası TR-only kaldı — incremental ileride. `app/[lang]/...`
+  routing kullanılmadı (foundation için cookie context yeterli).
 - **Sentry + OpenTelemetry distributed tracing** (#77 OBS-001):
   `app/observability.py::init_sentry/init_otel` `main.py` lifespan startup'ta
   çağrılır. Hepsi opt-in: `SENTRY_DSN` boş = no-op; `OTEL_ENDPOINT` boş = no-op.

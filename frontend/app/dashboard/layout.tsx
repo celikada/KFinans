@@ -12,8 +12,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
@@ -42,8 +46,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg"
       >
-        Ana içeriğe atla
+        {t("common.skipToContent")}
       </a>
+      <div className="fixed top-3 right-3 z-40">
+        <LanguageSwitcher />
+      </div>
       <div id="main-content">{children}</div>
     </>
   );

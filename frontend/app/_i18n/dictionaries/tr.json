@@ -1,0 +1,37 @@
+{
+  "auth": {
+    "loginTitle": "Portföyünüze giriş yapın",
+    "login": "Giriş Yap",
+    "loggingIn": "Giriş yapılıyor...",
+    "logout": "Çıkış",
+    "register": "Kayıt ol",
+    "registerHint": "Hesabın yok mu?",
+    "email": "E-posta",
+    "emailPlaceholder": "ornek@email.com",
+    "password": "Şifre",
+    "passwordPlaceholder": "••••••••",
+    "showPassword": "Göster",
+    "hidePassword": "Gizle",
+    "loginFailed": "Giriş başarısız"
+  },
+  "common": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "loading": "Yükleniyor...",
+    "skipToContent": "Ana içeriğe atla",
+    "language": "Dil",
+    "languageSwitcher": "Dil değiştir"
+  },
+  "legal": {
+    "kvkk": "KVKK",
+    "privacy": "Gizlilik",
+    "terms": "Şartlar",
+    "cookies": "Çerezler"
+  },
+  "footer": {
+    "productOf": "ürünüdür",
+    "by": "Bir"
+  }
+}
