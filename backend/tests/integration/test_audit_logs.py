@@ -15,9 +15,9 @@ from tests.conftest import TestSession, verify_user_email
 
 async def _make_user(client: AsyncClient, email: str) -> dict:
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
     return {
         "headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
         "user_email": email,
@@ -49,7 +49,7 @@ async def test_failed_login_creates_audit_log(client: AsyncClient):
     # Once user yarat (ama login etme)
     await client.post(
         "/api/v1/auth/register",
-        json={"email": "audit_fail@example.com", "password": "guclu-sifre-123"},
+        json={"email": "audit_fail@example.com", "password": "guclu-sifre-123", "age_confirmed": True},
     )
     # Yanlis sifre dene
     bad = await client.post(

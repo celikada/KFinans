@@ -14,9 +14,9 @@ from tests.conftest import verify_user_email
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
     """User olustur, dogrula, login yap; tum tokenlari ve auth header'i don."""
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
     data = login.json()
     return {
         "access_token": data["access_token"],

@@ -39,9 +39,9 @@ def _clear_tcmb_cache():
 
 async def _register_login(client: AsyncClient, email: str) -> dict:
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd})
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd})
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 

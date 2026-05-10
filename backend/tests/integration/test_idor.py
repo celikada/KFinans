@@ -15,7 +15,7 @@ from tests.conftest import verify_user_email
 
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
     """Yeni kullanıcı oluştur, e-posta dogrulamasini simule et, token ile birlikte döndür."""
-    payload = {"email": email, "password": "guclu-sifre-123"}
+    payload = {"email": email, "password": "guclu-sifre-123", "age_confirmed": True}
     await client.post("/api/v1/auth/register", json=payload)
     await verify_user_email(email)
     resp = await client.post("/api/v1/auth/login", json=payload)
