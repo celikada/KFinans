@@ -8,6 +8,7 @@ import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { TLValue, useUsdRate } from "@/app/_components/TLValue";
 import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 // FE-003 (FAZ H): page.tsx 970+ satirdi; dashboard kart bilesenleri ve
 // snapshot uyari modal'i ayri _components/ modullerine tasindi.
@@ -28,6 +29,7 @@ function top3<T>(items: T[], valueFn: (i: T) => number, labelFn: (i: T) => strin
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   // TEFAS
   const [tefasTotal, setTefasTotal] = useState<number | null>(null);
@@ -417,10 +419,10 @@ export default function DashboardPage() {
             onClick={() => router.push("/dashboard/settings")}
             className="text-sm text-gray-400 hover:text-gray-600"
           >
-            Ayarlar
+            {t("common.settings")}
           </button>
           <button onClick={logout} className="text-sm text-gray-400 hover:text-gray-600">
-            Çıkış
+            {t("auth.logout")}
           </button>
         </div>
       </header>
@@ -429,11 +431,11 @@ export default function DashboardPage() {
         <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-              Toplam Portföy
+              {t("dashboard.totalPortfolio")}
               {(cryptoLoading || walletLoading) && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
                   <span className="inline-block w-3 h-3 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-                  Yükleniyor...
+                  {t("common.loading")}
                 </span>
               )}
             </p>

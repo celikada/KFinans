@@ -22,7 +22,17 @@
     "loading": "Yükleniyor...",
     "skipToContent": "Ana içeriğe atla",
     "language": "Dil",
-    "languageSwitcher": "Dil değiştir"
+    "languageSwitcher": "Dil değiştir",
+    "settings": "Ayarlar",
+    "back": "← Geri"
+  },
+  "dashboard": {
+    "totalPortfolio": "Toplam Portföy",
+    "snapshot": "Snapshot al",
+    "history": "Geçmiş",
+    "cashFlow": "Nakit Akışı",
+    "portfolio": "Portföy",
+    "finance": "Finans"
   },
   "legal": {
     "kvkk": "KVKK",

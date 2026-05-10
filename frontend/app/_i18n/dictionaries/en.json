@@ -22,7 +22,17 @@
     "loading": "Loading...",
     "skipToContent": "Skip to content",
     "language": "Language",
-    "languageSwitcher": "Switch language"
+    "languageSwitcher": "Switch language",
+    "settings": "Settings",
+    "back": "← Back"
+  },
+  "dashboard": {
+    "totalPortfolio": "Total Portfolio",
+    "snapshot": "Take snapshot",
+    "history": "History",
+    "cashFlow": "Cash Flow",
+    "portfolio": "Portfolio",
+    "finance": "Finance"
   },
   "legal": {
     "kvkk": "KVKK",
