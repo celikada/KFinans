@@ -135,8 +135,12 @@ async def test_list_audit_logs_returns_user_own_logs(client: AsyncClient):
     # En az 1 log olusturduk (login)
     resp = await client.get("/api/v1/audit-logs", headers=session["headers"])
     assert resp.status_code == 200
-    logs = resp.json()
+    body = resp.json()
+    # PERF-001: PaginatedResponse[T] format
+    assert "items" in body and "total_count" in body
+    logs = body["items"]
     assert len(logs) >= 1
+    assert body["total_count"] >= 1
     # En azindan auth.login olmali
     actions = {log["action"] for log in logs}
     assert "auth.login" in actions
@@ -158,7 +162,7 @@ async def test_list_audit_logs_idor_protection(client: AsyncClient):
     # B kendi log'larini cek — A'nin wallet.add'i gorunmemeli
     resp_b = await client.get("/api/v1/audit-logs", headers=session_b["headers"])
     assert resp_b.status_code == 200
-    actions_b = [log["action"] for log in resp_b.json()]
+    actions_b = [log["action"] for log in resp_b.json()["items"]]
     # B sadece kendi auth.login + auth.register'ini gorur, wallet.add yok
     assert "wallet.add" not in actions_b
 
@@ -178,7 +182,7 @@ async def test_list_audit_logs_action_prefix_filter(client: AsyncClient):
         headers=session["headers"],
     )
     assert resp.status_code == 200
-    logs = resp.json()
+    logs = resp.json()["items"]
     assert len(logs) >= 1
     for log in logs:
         assert log["action"].startswith("wallet.")
@@ -188,3 +192,66 @@ async def test_list_audit_logs_action_prefix_filter(client: AsyncClient):
 async def test_list_audit_logs_requires_auth(client: AsyncClient):
     resp = await client.get("/api/v1/audit-logs")
     assert resp.status_code == 401
+
+
+# ─── PERF-001 (FAZ H): Pagination ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_pagination_offset_limit(client: AsyncClient):
+    """offset+limit ile sayfalanir; has_next + total_count dogru."""
+    session = await _make_user(client, "audit_paginate@example.com")
+    # 5 wallet ekle -> 5 wallet.add log + auth.login + auth.register = 7 log
+    for i in range(5):
+        await client.post(
+            "/api/v1/wallets",
+            json={"chain": "ethereum", "address": f"0xPAGINATE{i:030x}"},
+            headers=session["headers"],
+        )
+
+    # Sayfa 1: ilk 3 log
+    page1 = await client.get(
+        "/api/v1/audit-logs?limit=3&offset=0",
+        headers=session["headers"],
+    )
+    assert page1.status_code == 200
+    body1 = page1.json()
+    assert len(body1["items"]) == 3
+    assert body1["limit"] == 3
+    assert body1["offset"] == 0
+    assert body1["total_count"] >= 7
+    assert body1["has_next"] is True
+
+    # Sayfa 2: offset=3, sonraki 3
+    page2 = await client.get(
+        "/api/v1/audit-logs?limit=3&offset=3",
+        headers=session["headers"],
+    )
+    body2 = page2.json()
+    assert len(body2["items"]) == 3
+    assert body2["offset"] == 3
+    # Page 1 ve 2'nin item'lari farkli (id'ler farkli)
+    page1_ids = {i["id"] for i in body1["items"]}
+    page2_ids = {i["id"] for i in body2["items"]}
+    assert page1_ids.isdisjoint(page2_ids)
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_pagination_invalid_limit_returns_422(client: AsyncClient):
+    """limit > 500 veya < 1 -> 422."""
+    session = await _make_user(client, "audit_pag_invalid@example.com")
+    resp = await client.get(
+        "/api/v1/audit-logs?limit=1000",
+        headers=session["headers"],
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_audit_logs_pagination_offset_negative_returns_422(client: AsyncClient):
+    session = await _make_user(client, "audit_pag_neg@example.com")
+    resp = await client.get(
+        "/api/v1/audit-logs?offset=-1",
+        headers=session["headers"],
+    )
+    assert resp.status_code == 422
