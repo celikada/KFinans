@@ -128,7 +128,13 @@ cd frontend && npm install && npm run dev
 
 **Veri akışı:** Her servis kendi kaynağından ham veriyi çeker → `aggregator.py` TL'ye normalize eder (kripto için anlık kur) → haftalık snapshot PostgreSQL'e yazılır → `advisor.py` bu snapshot'ı Claude API'ye gönderir.
 
-**Scheduler:** APScheduler her Pazar 23:00'de çalışır, haftanın son değerlerini `portfolio_snapshots` tablosuna yazar. Haftalık değişim bu tablo üzerinden hesaplanır. **MKK Excel import sonrası** snapshot best-effort olarak ayrıca tetiklenir (try/except — fail olsa bile import korunur).
+**Scheduler (4 cron job, Europe/Istanbul):**
+- Pazar 23:00 — haftalık portföy snapshot (`_weekly_snapshot_job`); ARC-003 ile `asyncio.gather + Semaphore(5)` paralel; ARC-011 ile `pg_try_advisory_lock` multi-replica leader election (yalnızca tek pod yürütür).
+- Her gün 03:00 — `revoked_tokens` cleanup (FAZ C5).
+- Her gün 04:00 — `_hard_delete_expired_users_job` 30 gün geçmiş soft-delete'leri fiziksel siler (COMP-004, KVKK m.7).
+- Her gün 04:30 — `_purge_old_audit_logs_job` 365 gün'den eski audit_logs siler (COMP-022, KVKK m.7).
+
+`SCHEDULER_ENABLED=false` env ile scheduler tamamen kapatılabilir (multi-replica deploy'da sadece 1 leader pod). MKK Excel import sonrası snapshot best-effort olarak ayrıca tetiklenir.
 
 **Snapshot timezone:** `services/snapshot.py` `snapshot_date` belirlerken `datetime.now(ZoneInfo("Europe/Istanbul")).date()` kullanır (UTC tabanlı `date.today()` değil). Backend Docker container UTC'de çalıştığı için Türkiye saatine göre 00:00–03:00 arası alınan ad-hoc snapshot'lar bir önceki güne yazılıyordu — düzeltildi. Scheduler zaten `Europe/Istanbul` ile çalışıyordu; manuel tetikleme ile tutarlı.
 
@@ -198,13 +204,27 @@ cd frontend && npm install && npm run dev
 
 **Avalanche P-Chain likit bakiye + cache:** `AvalanchePChainService.fetch()` önce **Glacier (Routescan) REST API** dener (`https://glacier-api.avax.network/v1/networks/mainnet/blockchains/p-chain/balances`), fail ederse `platform.getBalance` + `platform.getStake` JSON-RPC'ye fallback yapar (`P-` prefix'li adres + 429 backoff retry). Public Avalanche RPC sıkı rate-limit uygular (HTTP 429); Glacier daha gevşek olduğu için tercih edilir. Modül seviyesinde `_PCHAIN_CACHE` (10 dk TTL) + `_pchain_inflight` single-flight pattern (Bitcoin ile aynı). `unlockedUnstaked` → liquid; `lockedStaked + pendingStaked + unlockedStaked + lockedStakeable` → staked. `asset_type` staked > liquid ise `staked_crypto`.
 
-**Soft-delete:** `DELETE /user/me` `users.deleted_at = now()` set eder; hard-delete cron job (30 gün sonra fiziksel silme) Faz 3 TODO.
+**Soft-delete + hard-delete cron (COMP-004):** `DELETE /user/me` `users.deleted_at = now()` set eder. `_hard_delete_expired_users_job` her gün 04:00'de 30 gün geçmiş kayıtları fiziksel siler (FK CASCADE + audit_logs SET NULL ile anonim).
 
-**Tavsiye motoru:** `advisor.py` portföy dağılımını, haftalık/aylık değişimleri ve kullanıcının risk profilini Claude'a yapılandırılmış prompt olarak gönderir; yanıtı parse edip DB'ye kaydeder. Faz 3'te kredi tüketimli olarak aktive olacak.
+**audit_logs retention (COMP-022):** Tablo 365 gün retention; `_purge_old_audit_logs_job` her gün 04:30 eski PII'yi siler (KVKK m.7). Kullanıcı tarafından sayfalı erişim: `GET /audit-logs?limit=50&offset=0` (PERF-001 PaginatedResponse[T]).
+
+**Tavsiye motoru (AI-003 + AI-005 + AI-007 + AI-008):** `advisor.py` portföy dağılımını, haftalık/aylık değişimleri ve risk profilini Claude API'ye gönderir. System prompt 1500-2000 token (Anthropic prompt cache aktif), SPK uyumlu disclaimer hem prompt'a injekte hem post-processing footer (`_ensure_disclaimer`). `/advice/generate` çağrı sırası: (1) `anthropic_consent_at IS NULL` → 403 KVKK m.9, (2) `credit_balance < 1` → 402 yetersiz kredi, (3) slowapi 5/saat, (4) Anthropic çağrısı, (5) atomik `credits_used += 1` düşüm.
+
+**Pagination pattern (PERF-001):** Yeni list endpoint'leri `app/schemas/pagination.py::PaginatedResponse[T]` döner: `items + total_count + has_next + limit + offset`. Default limit=50, max 500. Şu an `/audit-logs` kullanıyor; `/expenses /incomes /wallets /planned-expenses` pagination Faz 4 TODO.
+
+**Rate limit stratejisi (SEC-003 + SEC-005):** `slowapi` Redis backend (`settings.redis_url` set ise multi-replica güvenli; yoksa MemoryStorage + K8s `replicas: 1`). Pahalı/spam'a açık endpoint'ler için zorunlu: auth (10/dk login, 5/dk register), advice generate (5/saat), snapshot (6/saat), stocks/tefas preview (30/dk), data export (5/saat), email change (3/dk), anthropic consent (10/saat). Detay: `docs/03-api-referansi.md §1.4`.
+
+**Address masking (BACK-013):** `app/core/masking.py::mask_address` (ilk 6 + son 4). `WalletOut.address` ve `WalletPositionOut.address` Pydantic `field_serializer` ile maskelenir — JSON response'ta xpub leak yok. DB'de Fernet şifreli (FAZ C1) + JSON'da masked (BACK-013) çift katmanlı koruma.
+
+**Generic exception handler (BACK-008 + ARC-006):** `main.py`'a `IntegrityError → 409`, `SQLAlchemyError → 500 db_error`, `Exception → 500 internal_error` handler'ları. Hepsi `{detail, code, request_id}` sanitized format — internal SQL/exception trace frontend'e sızmaz, log'da tam trace.
 
 ## Geliştirme Kuralları
 
-- Tüm dokümantasyon ve commit mesajları Türkçe
-- Kod içi identifier ve yorumlar İngilizce
+- Tüm dokümantasyon ve commit mesajları Türkçe; kod içi identifier ve yorumlar İngilizce
 - Her veri kaynağı servisi `fetch()` metodunu implement eden soyut `BaseIntegration` sınıfından türer
 - Secrets asla koda yazılmaz, sadece `.env` üzerinden `pydantic-settings` ile okunur
+- **Pydantic v2 modern stiller (DEPS-001):** `model_config = ConfigDict(...)` (NOT `class Config:`); validation için `@field_validator + classmethod` (NOT `model_post_init`). Yeni schema'lar v1 stillerini kullanmamalıdır.
+- **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
+- **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
+- **Test sayıları:** 177 unit + 350 integration (FAZ H sonu). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
+- **Migration head:** `c0d1e2f3a4b5` (AI-005 anthropic_consent kolonları, 2026-05-10). Yeni migration `down_revision = "c0d1e2f3a4b5"`.
