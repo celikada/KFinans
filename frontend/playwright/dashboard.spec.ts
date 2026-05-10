@@ -7,8 +7,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 test.describe.serial("Dashboard akışı (kayıt → giriş → dashboard)", () => {
   test.beforeAll(async ({ request }) => {
     // E2E kullanıcısını backend'e direkt kaydet
+    // COMP-010: age_confirmed=true zorunlu (KVKK 2018/482, TMK m.16)
     await request.post(`${API_URL}/api/v1/auth/register`, {
-      data: { email: TEST_EMAIL, password: TEST_PASSWORD },
+      data: { email: TEST_EMAIL, password: TEST_PASSWORD, age_confirmed: true },
     });
   });
 
