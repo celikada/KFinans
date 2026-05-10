@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 4.2
-**Tarih:** 2026-05-03
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme tamamlandı. AI tavsiye, kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
+**Versiyon:** 4.3
+**Tarih:** 2026-05-10
+**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme + **kredi kartları (kart + ekstre + taksit) + nakit/banka + yıllık nakit akış projeksiyonu (xlsx/pdf rapor) + manuel kripto (linked_source) + recurring income realize + snapshot health/usd_try_rate + audit_logs (FAZ C6)** tamamlandı. **FAZ H devam ediyor**: 0 critical, 21 high açık (SEC-001 ✓, SEC-002 ✓, SEC-004 ✓, DBA-001 ✓, DBA-003 ✓, DBA-004 ✓, FIN-004 ✓ kapatildi). AI tavsiye motoru aktif (AI-003 + AI-008 SPK uyumlu), kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
 **Üretici:** Mayotek
 
 ---
@@ -172,7 +172,7 @@ Kubernetes Ingress (nginx)
 
 ---
 
-## 7. Güncel Durum (2026-05-07)
+## 7. Güncel Durum (2026-05-10)
 
 ### ✅ FAZ A — OSS Hijyeni + Public Repo Hazırlığı (2026-05-06)
 - Repo public yapıldı (https://github.com/celikada/KFinans)
@@ -236,7 +236,11 @@ Production deploy bittikten sonra:
 
 ---
 
-## 8. Eski Durum (2026-04-30) — Faz 1+2+3 referansı
+## 8. Eski Durum (arşiv — 2026-04-30 — güncel sayılar §7'de)
+
+> **DOC-008 (FAZ H):** Bu bölüm tarihsel referans için saklanır; test sayıları ve durum kararları **§7 Güncel Durum**'dadır. Aşağıdaki "141 backend test" rakamı 2026-04-30 itibarıyladır; gerçek sayı 290+'a ulaştı (FAZ H'de pytest çıktıları).
+
+### Faz 1+2+3 referansı (2026-04-30)
 
 ### ✅ Faz 1 Tamamlandı
 - Backend iskeleti, JWT auth, slowapi rate limiting (login 10/dk, register 5/dk, refresh 30/dk), `/health` endpoint

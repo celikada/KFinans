@@ -14,18 +14,23 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
 | Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
 | E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
-| Ana Dashboard (11 kart, kullanıcı tarafından gizlenebilir) | `/dashboard` | ✅ Aktif |
+| Ana Dashboard (15 kart, kullanıcı tarafından gizlenebilir; Finans/Portföy iki grup + üstte Toplam Portföy ve Finans Net Bakiye özet kartları) | `/dashboard` | ✅ Aktif |
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
+| Manuel kripto (API'siz borsalar — BinanceTR/iCrypex/BTCTurk/Paribu vs. + asset catalog autocomplete + 3 fiyat modu: auto/manual/linked) | `/dashboard/manual-crypto` | ✅ Aktif (Faz 3) |
 | Hisse senedi portföyü (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/stocks` | ✅ Aktif |
 | Blockchain cüzdanları (10 zincir: BTC, ETH, Sonic, AVAX C/P, SOL, ADA, ALGO, DOT, LTC) | `/dashboard/wallets` | ✅ Aktif |
 | TEFAS holdings (preview + Excel + MKK + maliyet/kâr-zarar + kurum) | `/dashboard/tefas` | ✅ Aktif |
 | BES manuel giriş (plan adı + ₺ + Excel) | `/dashboard/bes` | ✅ Aktif |
 | Harcama takibi (form + tablo + pasta grafik + ay seçici + Excel) | `/dashboard/expenses` | ✅ Aktif (Faz 3 MVP) |
 | Planlı ödemeler & yıllık nakit akışı tahmini | `/dashboard/planned` | ✅ Aktif (Faz 3) |
-| Gelir takibi (form + tablo + pasta grafik + Excel) | `/dashboard/income` | ✅ Aktif (Faz 3) |
+| Gelir takibi (form + tablo + pasta grafik + Excel + recurring + realize) | `/dashboard/income` | ✅ Aktif (Faz 3) |
 | Bütçe takibi (kategori bazlı bütçe + comparison) | `/dashboard/budget` | ✅ Aktif (Faz 3) |
 | Kıymetli madenler (altın/gümüş — gram/BiGA/sikke + Excel) | `/dashboard/commodities` | ✅ Aktif (Faz 3) |
+| Nakit / Banka hesabı (manuel; TRY/USD/EUR/GBP — TCMB ile TL'ye normalize) | `/dashboard/cash` | ✅ Aktif (Faz 3) |
+| Yıllık nakit akış projeksiyonu (geçmiş + gelecek aylar — recharts ComposedChart + xlsx/pdf rapor) | `/dashboard/cash-flow` | ✅ Aktif (Faz 3) |
+| Kredi kartları (kart + ekstre + taksit nested CRUD; çift sayım kuralı) | `/dashboard/credit-cards` | ✅ Aktif (Faz 3) |
+| Kredi kartı detayı (kart bazlı statement + installment yönetimi) | `/dashboard/credit-cards/[id]` | ✅ Aktif (Faz 3) |
 | Finansal hedef (pasif gelir hedefi + USD/EUR/GBP/TRY) | `/dashboard/goal` | ✅ Aktif (Faz 3) |
 | Ayarlar (hesap özeti + risk + şifre + kart gizleme + hesap silme) | `/dashboard/settings` | ✅ Aktif (Faz 3) |
 
