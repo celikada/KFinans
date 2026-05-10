@@ -51,9 +51,15 @@ async def _create_snapshot_for(email: str) -> uuid.UUID:
 
 
 async def _set_credit_balance(email: str, balance: int) -> None:
+    """credit_balance + Anthropic consent set (AI-005 gate gecsin)."""
+    from datetime import datetime, timezone
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(credit_balance=balance)
+            update(User).where(User.email == email).values(
+                credit_balance=balance,
+                anthropic_consent_at=datetime.now(timezone.utc),
+                anthropic_consent_version="1.0",
+            )
         )
         await session.commit()
 

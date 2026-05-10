@@ -48,6 +48,9 @@ class AuditAction(str, Enum):
     EMAIL_CHANGE_COMPLETE = "user.email_change_complete"
     # COMP-006 (FAZ H): Acik riza geri cekme — KVKK m.5/1
     CONSENT_REVOKE = "user.consent_revoke"
+    # AI-005 (FAZ H): Anthropic ozel acik riza — KVKK m.9
+    ANTHROPIC_CONSENT_GRANT = "kvkk.anthropic_consent_grant"
+    ANTHROPIC_CONSENT_REVOKE = "kvkk.anthropic_consent_revoke"
     # COMP-003 (FAZ H): Veri tasinabilirligi (KVKK m.11/d, GDPR Art.20)
     DATA_EXPORT = "user.data_export"
 

@@ -46,6 +46,17 @@ async def generate_advice(
     from sqlalchemy.orm import selectinload
     from app.services.advisor import AdvisorService
 
+    # AI-005 (FAZ H): Anthropic ozel acik riza kontrolu (KVKK m.9).
+    # Yurt disi veri aktarimi icin spesifik onay gerekir; yoksa 403.
+    if current_user.anthropic_consent_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Anthropic API'ye veri aktarimi icin acik riza gerekli (KVKK m.9). "
+                "Ayarlar > Gizlilik bolumunden 'Anthropic AI tavsiye' onayini etkinlestirin."
+            ),
+        )
+
     # AI-007 (FAZ H): Kredi kontrolu LLM cagrisindan ONCE — Anthropic API'yi bos
     # cagirip credit yetersiz dememek icin. Slowapi rate limit ek koruma katmani
     # (saldirgan API key bilse bile saatte 5 istek).

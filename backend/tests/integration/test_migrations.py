@@ -151,10 +151,11 @@ async def test_dba001_fk_ondelete_after_upgrade(fresh_db):
 
 @pytest.mark.asyncio
 async def test_round_trip_downgrade_then_upgrade(fresh_db):
-    """Faz H migration zinciri (b9c0d1e2f3a4 KVKK haklari, a8b9c0d1e2f3 SEC-001,
-    f7a8b9c0d1e2 DBA-001+SEC-002) round-trip.
+    """Faz H migration zinciri (c0d1e2f3a4b5 AI-005, b9c0d1e2f3a4 KVKK haklari,
+    a8b9c0d1e2f3 SEC-001, f7a8b9c0d1e2 DBA-001+SEC-002) round-trip.
 
-    Down 3 step (KVKK + SEC-001 + SEC-002):
+    Down 4 step (AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001):
+      - users.anthropic_consent_at silinmis olmali
       - users.overseas_consent_at, email_change_token vs. silinmis olmali
       - users.failed_login_count, locked_until silinmis olmali
       - users.reset_token, reset_token_expires_at silinmis olmali
@@ -163,8 +164,8 @@ async def test_round_trip_downgrade_then_upgrade(fresh_db):
       - Tum kolonlar tekrar mevcut, FK CASCADE
     """
     _run_alembic("upgrade", "head")
-    # KVKK + SEC-001 + SEC-002 + DBA-001'i geri al (3 yeni migration -> f7a8 oncesi)
-    _run_alembic("downgrade", "-3")
+    # AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
+    _run_alembic("downgrade", "-4")
 
     cols = await _table_columns("users")
     assert "failed_login_count" not in cols

@@ -34,6 +34,11 @@ class ConsentType(BaseModel):
     """COMP-006 (FAZ H): Geri cekilebilir riza turleri."""
     consent_type: Literal["overseas"] = Field(description="Su an sadece 'overseas' destekleniyor")
 
+
+# AI-005 (FAZ H): Anthropic API icin acik riza metin versiyonu — guncellendiginde
+# artirilir, kullanici eski version ile rizali ise ileride re-accept zorunlu.
+ANTHROPIC_CONSENT_VERSION = "1.0"
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 DB = Annotated[AsyncSession, Depends(get_db)]
 
@@ -383,3 +388,51 @@ async def data_export(
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ─── AI-005 (FAZ H): Anthropic ozel acik riza (KVKK m.9) ────────────────
+
+
+@router.post("/anthropic-consent", status_code=status.HTTP_200_OK)
+async def grant_anthropic_consent(
+    request: Request,
+    current_user: CurrentUser,
+    db: DB,
+) -> dict:
+    """Kullanici Anthropic API'ye veri aktarimi icin acik riza verir.
+    /advice/generate cagrisi bu rizayi kontrol eder; yoksa 403."""
+    current_user.anthropic_consent_at = datetime.now(timezone.utc)
+    current_user.anthropic_consent_version = ANTHROPIC_CONSENT_VERSION
+    await log_audit(
+        db, request,
+        action=AuditAction.ANTHROPIC_CONSENT_GRANT,
+        user_id=current_user.id,
+        extra={"version": ANTHROPIC_CONSENT_VERSION},
+    )
+    await db.commit()
+    return {
+        "detail": "Anthropic veri aktarimi rizasi kaydedildi",
+        "consent_at": current_user.anthropic_consent_at.isoformat(),
+        "version": ANTHROPIC_CONSENT_VERSION,
+    }
+
+
+@router.delete("/anthropic-consent", status_code=status.HTTP_200_OK)
+async def revoke_anthropic_consent(
+    request: Request,
+    current_user: CurrentUser,
+    db: DB,
+) -> dict:
+    """Anthropic rizasini geri ceker; /advice/generate artik 403 doner."""
+    if current_user.anthropic_consent_at is None:
+        return {"detail": "Bu riza zaten mevcut degil"}
+
+    current_user.anthropic_consent_at = None
+    current_user.anthropic_consent_version = None
+    await log_audit(
+        db, request,
+        action=AuditAction.ANTHROPIC_CONSENT_REVOKE,
+        user_id=current_user.id,
+    )
+    await db.commit()
+    return {"detail": "Anthropic veri aktarimi rizasi geri cekildi. AI tavsiye ozelligi artik kullanilamaz."}

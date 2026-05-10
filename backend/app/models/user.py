@@ -28,6 +28,11 @@ class User(Base):
     overseas_consent_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     terms_accepted_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     kvkk_read_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # AI-005 (FAZ H): Anthropic API'ye veri aktarimi icin ozel acik riza
+    # (KVKK m.9). overseas_consent_at genel; bu kolon spesifik Anthropic.
+    # version metin guncellendiginde re-accept zorunlu kilmak icin.
+    anthropic_consent_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    anthropic_consent_version: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     # COMP-029 (FAZ H): E-posta degistirme token rotation — yeni email hedefi
     # bekler, token tiklanip swap ettirilince eski email NULL'lanir.
     email_change_new: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
