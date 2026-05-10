@@ -359,6 +359,46 @@ jobs:
         working-directory: frontend
         run: npx playwright install chromium --with-deps
 
+      # DEPLOY-001 (FAZ H): Curl-based smoke gate — Playwright'tan ONCE.
+      # 4 hizli check (~5 sn): backend up + DB chain + security headers + cert.
+      # Frontend up ama backend down ise Playwright sahte yesil verir; bu gate engeller.
+      - name: Curl smoke gate (backend health + auth + headers + cert)
+        run: |
+          set -euo pipefail
+          BASE="https://kfinans.app"
+          # Production ingress: kfinans.app -> backend service (path-based /api -> backend)
+          # Health endpoint backend root'unda (/health, prefix yok — bkz: app/main.py).
+          # Ingress /health -> backend gerekiyor; eksik ise bu check fail eder, deploy gate.
+          API="${BASE}/api/v1"
+
+          echo "=== 1) Frontend up check ==="
+          curl -fsS -o /dev/null -w "frontend HTTP %{http_code} ssl_verify=%{ssl_verify_result}\n" "$BASE"
+
+          echo "=== 2) Backend health check ==="
+          health=$(curl -fsS "${BASE}/health")
+          echo "$health"
+          echo "$health" | grep -q '"status":"ok"' || (echo "::error::backend /health JSON beklenmedik" && exit 1)
+
+          echo "=== 3) Auth chain smoke (DB + endpoint + slowapi) ==="
+          # Bogus creds -> 401 (DB lookup yapildi, password mismatch). 5xx ise DB/auth kirik.
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API}/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"smoke-bogus@kfinans.app","password":"wrong-pass-123"}')
+          echo "auth/login bogus -> HTTP $status"
+          if [ "$status" != "401" ]; then
+            echo "::error::auth/login bogus 401 bekleniyor, gelen $status (DB veya endpoint kirik?)"
+            exit 1
+          fi
+
+          echo "=== 4) Security headers smoke ==="
+          headers=$(curl -sI "$BASE")
+          echo "$headers" | grep -qi "strict-transport-security" || (echo "::error::HSTS header eksik" && exit 1)
+          echo "$headers" | grep -qi "x-frame-options" || (echo "::error::X-Frame-Options eksik" && exit 1)
+          echo "$headers" | grep -qi "content-security-policy" || (echo "::error::CSP eksik" && exit 1)
+          echo "Security headers OK (HSTS + X-Frame + CSP)"
+
+          echo "=== Curl smoke gate PASSED ==="
+
       - name: Smoke test sayisini dogrula (TEST-009 fix)
         working-directory: frontend
         run: |

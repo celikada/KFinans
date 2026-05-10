@@ -12,7 +12,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -48,9 +47,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         {t("common.skipToContent")}
       </a>
-      <div className="fixed top-3 right-3 z-40">
-        <LanguageSwitcher />
-      </div>
+      {/* LanguageSwitcher dashboard header'larina (page.tsx + PageHeader) yerlestirildi —
+          fixed position Ayarlar/Cikis butonlariyla cakisiyordu (kullanici 2026-05-10). */}
       <div id="main-content">{children}</div>
     </>
   );

@@ -214,7 +214,13 @@ ghcr.io/celikada/kfinans-backend:latest       # KULLANILMAYACAK — kafa karış
         │  Job 3: Oracle K3s Deploy                                     │
         │         SSH → kubectl apply -k k8s/ → set image → rollout     │
         ├───────────────────────────────────────────────────────────────┤
-        │  Job 4: Production Smoke Test (Playwright @smoke)             │
+        │  Job 4: Production Smoke Test (curl gate + Playwright @smoke) │
+        │         DEPLOY-001: Curl gate Playwright'tan ONCE (5sn):      │
+        │           1. frontend HTTPS up + cert validity                 │
+        │           2. /health JSON {status:ok}                          │
+        │           3. /auth/login bogus -> 401 (DB chain dogru)         │
+        │           4. HSTS + X-Frame + CSP header'lari mevcut          │
+        │         Curl fail ise Playwright bile calismaz.                │
         ├───────────────────────────────────────────────────────────────┤
         │  Job 5: GitHub Release (changelog otomatik)                   │
         └───────────────────────────────────────────────────────────────┘

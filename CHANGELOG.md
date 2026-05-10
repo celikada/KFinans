@@ -62,6 +62,15 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Production smoke test genişletme** (#79 DEPLOY-001):
+  `release.yml::smoke-test` job Playwright'tan ÖNCE 4-step curl gate
+  çalıştırır (~5 sn): frontend up, /health JSON, /auth/login bogus → 401,
+  HSTS + X-Frame + CSP. Curl fail = deploy gate. Lokal runner:
+  `frontend/scripts/smoke.sh` + `npm run smoke`. 2 yeni @smoke test
+  (security headers + i18n switcher). docs/09-altyapi-test.md güncel.
+- **i18n switcher overlap düzeltmesi**: TR/EN switcher dashboard
+  layout'ta fixed-position'dan dashboard header'ına ve PageHeader'ına
+  taşındı (kullanıcı geri bildirimi: Ayarlar/Çıkış üstüne biniyordu).
 - **EN dil desteği foundation** (#78 i18n-001): Client-side cookie tabanlı
   TR/EN. `app/_i18n/dictionaries/{tr,en}.json` (auth + common + legal +
   footer anahtarları), `I18nProvider` React Context (`kfinans-locale`

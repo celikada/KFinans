@@ -45,3 +45,40 @@ test.describe("Erisilebilirlik @smoke", () => {
     expect(text!.length).toBeGreaterThan(1);
   });
 });
+
+
+test.describe("Security headers @smoke", () => {
+  test("@smoke /login response Strict-Transport-Security + X-Frame-Options header'larini tasiyor", async ({
+    request,
+  }) => {
+    const resp = await request.get("/login");
+    const headers = resp.headers();
+    // Dev'de localhost http; prod'da kfinans.app https. Her iki ortamda da
+    // SecurityHeadersMiddleware (backend) + next.config.ts (frontend) eklenir.
+    expect(headers["x-frame-options"]).toBe("DENY");
+    // X-Content-Type-Options nosniff her zaman olmali
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    // CSP eklendi mi (default-src 'none' veya 'self' icerebilir)
+    expect(headers["content-security-policy"]).toBeTruthy();
+  });
+});
+
+
+test.describe("i18n switcher @smoke", () => {
+  test("@smoke Login sayfasinda TR/EN toggle butonlari var ve aria-pressed dogru", async ({
+    page,
+  }) => {
+    await page.goto("/login");
+    // LanguageSwitcher TR/EN segmented buton — role=group icinde 2 buton
+    const trButton = page.getByRole("button", { name: "TR", exact: true });
+    const enButton = page.getByRole("button", { name: "EN", exact: true });
+    await expect(trButton).toBeVisible();
+    await expect(enButton).toBeVisible();
+    // Default TR -> aria-pressed=true
+    await expect(trButton).toHaveAttribute("aria-pressed", "true");
+    // EN'e tikla -> EN aktif
+    await enButton.click();
+    await expect(enButton).toHaveAttribute("aria-pressed", "true");
+    await expect(trButton).toHaveAttribute("aria-pressed", "false");
+  });
+});

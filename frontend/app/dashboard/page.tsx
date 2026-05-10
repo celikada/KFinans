@@ -7,6 +7,7 @@ import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { TLValue, useUsdRate } from "@/app/_components/TLValue";
+import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 
 // FE-003 (FAZ H): page.tsx 970+ satirdi; dashboard kart bilesenleri ve
 // snapshot uyari modal'i ayri _components/ modullerine tasindi.
@@ -411,6 +412,7 @@ export default function DashboardPage() {
       <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between">
         <KFinansLogo />
         <div className="flex items-center gap-3">
+          <LanguageSwitcher />
           <button
             onClick={() => router.push("/dashboard/settings")}
             className="text-sm text-gray-400 hover:text-gray-600"
