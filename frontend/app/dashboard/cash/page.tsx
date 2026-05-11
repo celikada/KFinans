@@ -5,11 +5,13 @@ import { api, CashCurrency, CashSummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const CURRENCIES: CashCurrency[] = ["TRY", "USD", "EUR", "GBP"];
 
 export default function CashPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<CashSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -71,7 +73,7 @@ export default function CashPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Nakit / Banka Hesapları" />
+      <PageHeader title={t("pages.cash")} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Özet panel */}

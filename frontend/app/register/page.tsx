@@ -3,16 +3,13 @@ import { useState, FormEvent } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
+import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 type RiskProfile = "conservative" | "balanced" | "aggressive";
 
-const RISK_LABELS: Record<RiskProfile, string> = {
-  conservative: "Tutucu (düşük risk)",
-  balanced: "Dengeli",
-  aggressive: "Atak (yüksek risk)",
-};
-
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -29,32 +26,38 @@ export default function RegisterPage() {
   const [resending, setResending] = useState(false);
   const [resendNotice, setResendNotice] = useState("");
 
+  const riskOptions: { key: RiskProfile; labelKey: string }[] = [
+    { key: "conservative", labelKey: "auth.riskConservative" },
+    { key: "balanced", labelKey: "auth.riskBalanced" },
+    { key: "aggressive", labelKey: "auth.riskAggressive" },
+  ];
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
 
     if (password.length < 8) {
-      setError("Şifre en az 8 karakter olmalı");
+      setError(t("auth.passwordMinError"));
       return;
     }
     if (password !== passwordConfirm) {
-      setError("Şifreler eşleşmiyor");
+      setError(t("auth.passwordMismatch"));
       return;
     }
     if (!kvkkRead) {
-      setError("KVKK Aydınlatma Metni'ni okuduğunuzu onaylamanız gerekir");
+      setError(t("auth.kvkkRequired"));
       return;
     }
     if (!termsAccepted) {
-      setError("Kullanım Şartları ve Gizlilik Politikası'nı kabul etmeniz gerekir");
+      setError(t("auth.termsRequired"));
       return;
     }
     if (!overseasConsent) {
-      setError("Yurt dışı veri aktarımı için açık rıza vermeniz gerekir");
+      setError(t("auth.overseasRequired"));
       return;
     }
     if (!ageConfirmed) {
-      setError("Kayıt için 18 yaşını doldurmuş olmanız gerekir");
+      setError(t("auth.ageRequiredLong"));
       return;
     }
 
@@ -64,7 +67,7 @@ export default function RegisterPage() {
       setSuccess(true);
       setEmailSent(data.verification_email_sent);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kayıt başarısız");
+      setError(err instanceof Error ? err.message : t("auth.registerFailed"));
     } finally {
       setLoading(false);
     }
@@ -75,9 +78,9 @@ export default function RegisterPage() {
     setResendNotice("");
     try {
       await api.resendVerification(email);
-      setResendNotice("Yeni doğrulama bağlantısı gönderildi.");
+      setResendNotice(t("auth.resendSuccess"));
     } catch (err) {
-      setResendNotice(err instanceof Error ? err.message : "Gönderim başarısız");
+      setResendNotice(err instanceof Error ? err.message : t("auth.resendFailed"));
     } finally {
       setResending(false);
     }
@@ -85,22 +88,25 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 relative">
+        <div className="absolute top-3 right-3">
+          <LanguageSwitcher />
+        </div>
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
           <div className="flex justify-center mb-6">
             <KFinansLogo size="xl" />
           </div>
           <h2 className="text-base font-semibold text-gray-900 mb-2">
-            {emailSent ? "E-postanı kontrol et" : "Kayıt tamamlandı"}
+            {emailSent ? t("auth.checkEmail") : t("auth.registrationComplete")}
           </h2>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-sm text-gray-600 mb-6">
             {emailSent
-              ? `${email} adresine doğrulama bağlantısı gönderdik. Hesabını aktifleştirmek için bağlantıya tıklaman yeterli.`
-              : "Hesabın oluşturuldu ancak doğrulama e-postası şu an gönderilemedi. Aşağıdaki butonla tekrar dene."}
+              ? t("auth.verificationSent").replace("{email}", email)
+              : t("auth.verificationFailed")}
           </p>
 
           {resendNotice && (
-            <p className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg mb-4">{resendNotice}</p>
+            <p role="status" aria-live="polite" className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg mb-4">{resendNotice}</p>
           )}
 
           <button
@@ -108,14 +114,14 @@ export default function RegisterPage() {
             disabled={resending}
             className="w-full py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors mb-3"
           >
-            {resending ? "Gönderiliyor..." : "Doğrulama e-postasını yeniden gönder"}
+            {resending ? t("auth.resending") : t("auth.resendVerification")}
           </button>
 
           <Link
             href="/login"
             className="block text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
-            Giriş sayfasına dön
+            {t("auth.backToLogin")}
           </Link>
         </div>
       </div>
@@ -123,71 +129,83 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-8">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-8 relative">
+      <div className="absolute top-3 right-3">
+        <LanguageSwitcher />
+      </div>
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
         <div className="flex justify-center mb-6">
           <KFinansLogo size="xl" />
         </div>
-        <p className="text-sm text-gray-500 mb-8 text-center">Hesap oluştur</p>
+        <p className="text-sm text-gray-600 mb-8 text-center">{t("auth.registerTitle")}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-posta</label>
+            <label htmlFor="register-email" className="block text-sm font-medium text-gray-700 mb-1">{t("auth.email")}</label>
             <input
+              id="register-email"
+              name="email"
               type="email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="ornek@email.com"
+              placeholder={t("auth.emailPlaceholder")}
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label htmlFor="register-password" className="block text-sm font-medium text-gray-700">Şifre</label>
+              <label htmlFor="register-password" className="block text-sm font-medium text-gray-700">{t("auth.password")}</label>
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="text-xs text-gray-500 hover:text-gray-700"
               >
-                {showPassword ? "Gizle" : "Göster"}
+                {showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
               </button>
             </div>
             <input
               id="register-password"
+              name="new-password"
               type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
               required
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="En az 8 karakter"
+              placeholder={t("auth.passwordMin")}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Şifre (tekrar)</label>
+            <label htmlFor="register-password-confirm" className="block text-sm font-medium text-gray-700 mb-1">{t("auth.passwordRepeat")}</label>
             <input
+              id="register-password-confirm"
+              name="new-password-confirm"
               type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
               required
               minLength={8}
               value={passwordConfirm}
               onChange={(e) => setPasswordConfirm(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="••••••••"
+              placeholder={t("auth.passwordPlaceholder")}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Risk Profili</label>
+            <label htmlFor="register-risk" className="block text-sm font-medium text-gray-700 mb-1">{t("auth.riskProfile")}</label>
             <select
+              id="register-risk"
               value={riskProfile}
               onChange={(e) => setRiskProfile(e.target.value as RiskProfile)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {(Object.keys(RISK_LABELS) as RiskProfile[]).map((key) => (
-                <option key={key} value={key}>{RISK_LABELS[key]}</option>
+              {riskOptions.map((opt) => (
+                <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>
               ))}
             </select>
           </div>
@@ -200,12 +218,7 @@ export default function RegisterPage() {
                 onChange={(e) => setKvkkRead(e.target.checked)}
                 className="mt-0.5 accent-blue-600"
               />
-              <span>
-                <Link href="/legal/kvkk" target="_blank" className="text-blue-600 hover:underline">
-                  KVKK Aydınlatma Metni
-                </Link>
-                &apos;ni okudum, anladım.
-              </span>
+              <span>{t("auth.kvkkConsentLabel")}</span>
             </label>
 
             <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
@@ -215,16 +228,7 @@ export default function RegisterPage() {
                 onChange={(e) => setTermsAccepted(e.target.checked)}
                 className="mt-0.5 accent-blue-600"
               />
-              <span>
-                <Link href="/legal/terms" target="_blank" className="text-blue-600 hover:underline">
-                  Kullanım Şartları
-                </Link>
-                {" "}ve{" "}
-                <Link href="/legal/privacy" target="_blank" className="text-blue-600 hover:underline">
-                  Gizlilik Politikası
-                </Link>
-                &apos;nı kabul ediyorum.
-              </span>
+              <span>{t("auth.termsConsentLabel")}</span>
             </label>
 
             <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
@@ -234,15 +238,7 @@ export default function RegisterPage() {
                 onChange={(e) => setOverseasConsent(e.target.checked)}
                 className="mt-0.5 accent-blue-600"
               />
-              <span>
-                Kişisel verilerimin hizmet sağlayıcılar aracılığıyla{" "}
-                <strong>yurt dışına aktarılmasına</strong> KVKK m.9 kapsamında{" "}
-                <strong>açık rıza</strong> veriyorum (detaylar{" "}
-                <Link href="/legal/kvkk" target="_blank" className="text-blue-600 hover:underline">
-                  KVKK Aydınlatma Metni
-                </Link>
-                &apos;nde).
-              </span>
+              <span>{t("auth.overseasConsentLong")}</span>
             </label>
 
             {/* COMP-010 (FAZ H): 18+ yas dogrulama (KVKK 2018/482, TMK m.16) */}
@@ -253,16 +249,12 @@ export default function RegisterPage() {
                 onChange={(e) => setAgeConfirmed(e.target.checked)}
                 className="mt-0.5 accent-blue-600"
               />
-              <span>
-                <strong>18 yaşımı doldurdum.</strong> KFinans finansal bir hizmet
-                sunduğundan kayıt için 18 yaş şartı zorunludur (KVKK Kurul kararı
-                2018/482, TMK m.16).
-              </span>
+              <span>{t("auth.ageConfirmLong")}</span>
             </label>
           </div>
 
           {error && (
-            <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+            <p role="alert" aria-live="assertive" className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
           )}
 
           <button
@@ -270,29 +262,29 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}
+            {loading ? t("auth.registering") : t("auth.register")}
           </button>
         </form>
 
-        <p className="mt-4 text-xs text-gray-400 text-center">
-          Zaten hesabın var mı?{" "}
+        <p className="mt-4 text-xs text-gray-600 text-center">
+          {t("auth.loginHint")}{" "}
           <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
-            Giriş yap
+            {t("auth.login")}
           </Link>
         </p>
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-2">
-        <p className="text-xs text-gray-400">Bir</p>
+        <p className="text-xs text-gray-500">{t("footer.by")}</p>
         <MayotekLogo />
-        <p className="text-xs text-gray-400">ürünüdür</p>
+        <p className="text-xs text-gray-500">{t("footer.productOf")}</p>
       </div>
 
-      <div className="mt-4 flex gap-3 text-xs text-gray-400">
-        <Link href="/legal/kvkk" className="hover:text-gray-600">KVKK</Link>
-        <Link href="/legal/privacy" className="hover:text-gray-600">Gizlilik</Link>
-        <Link href="/legal/terms" className="hover:text-gray-600">Şartlar</Link>
-        <Link href="/legal/cookies" className="hover:text-gray-600">Çerezler</Link>
+      <div className="mt-4 flex gap-3 text-xs text-gray-500">
+        <Link href="/legal/kvkk" className="hover:text-gray-800">{t("legal.kvkk")}</Link>
+        <Link href="/legal/privacy" className="hover:text-gray-800">{t("legal.privacy")}</Link>
+        <Link href="/legal/terms" className="hover:text-gray-800">{t("legal.terms")}</Link>
+        <Link href="/legal/cookies" className="hover:text-gray-800">{t("legal.cookies")}</Link>
       </div>
     </div>
   );

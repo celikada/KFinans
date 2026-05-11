@@ -13,11 +13,13 @@ import { IncomeForm } from "./_components/IncomeForm";
 import { IncomeTable } from "./_components/IncomeTable";
 import { RecurringIncomeForm } from "./_components/RecurringIncomeForm";
 import { RecurringIncomeTable } from "./_components/RecurringIncomeTable";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 type Tab = "actual" | "recurring";
 
 export default function IncomePage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -113,7 +115,7 @@ export default function IncomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Gelir Takibi" />
+      <PageHeader title={t("pages.income")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* 3 metrik kartı */}

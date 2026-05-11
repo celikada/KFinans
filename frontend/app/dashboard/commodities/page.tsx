@@ -7,9 +7,11 @@ import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { CommodityForm } from "./_components/CommodityForm";
 import { CommodityList } from "./_components/CommodityList";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function CommoditiesPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<CommoditySummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -74,7 +76,7 @@ export default function CommoditiesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Altın & Gümüş" />
+      <PageHeader title={t("pages.commodities")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {(showGoldWarning || showSilverWarning) && (

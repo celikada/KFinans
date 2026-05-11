@@ -5,9 +5,11 @@ import { api, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO } from "@/lib
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function CreditCardsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<CreditCardSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -116,7 +118,7 @@ export default function CreditCardsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Kredi Kartları" />
+      <PageHeader title={t("pages.creditCards")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Birden fazla ödenmemiş ekstre uyarısı */}

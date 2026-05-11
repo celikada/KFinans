@@ -7,6 +7,7 @@ import { HoldingsForm, StockHoldingRow } from "./_components/HoldingsForm";
 import { Toolbar } from "./_components/Toolbar";
 import { StockPositionsTable } from "./_components/StockPositionsTable";
 import { MkkHint } from "@/app/_components/MkkHint";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 function toDTO(holdings: StockHoldingRow[]): StockHoldingDTO[] {
   return holdings
@@ -22,6 +23,7 @@ function toDTO(holdings: StockHoldingRow[]): StockHoldingDTO[] {
 
 export default function StocksPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [holdings, setHoldings] = useState<StockHoldingRow[]>([{ ticker: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   const [result, setResult] = useState<StockPositionDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -140,7 +142,7 @@ export default function StocksPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Hisse Senedi Portföyü" />
+      <PageHeader title={t("pages.stocks")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

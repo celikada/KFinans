@@ -448,10 +448,10 @@ export default function DashboardPage() {
 
           {/* Finans ozeti: bu ay + gelecek ay net (gelir - gider) */}
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Finans (Net Bakiye)</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">{t("dashboard.financeNetBalance")}</p>
             <div className="flex items-baseline gap-6">
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{MONTH_NAMES[new Date().getMonth()]}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{t(`months.${new Date().getMonth() + 1}`)}</p>
                 {currentMonthNet !== null ? (
                   <p className={`text-2xl font-bold tabular-nums ${currentMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                     {currentMonthNet >= 0 ? "+" : ""}{fmtTL(currentMonthNet)} ₺
@@ -461,7 +461,7 @@ export default function DashboardPage() {
                 )}
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{MONTH_NAMES[(new Date().getMonth() + 1) % 12]}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider">{t(`months.${((new Date().getMonth() + 1) % 12) + 1}`)}</p>
                 {nextMonthNet !== null ? (
                   <p className={`text-2xl font-bold tabular-nums ${nextMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                     {nextMonthNet >= 0 ? "+" : ""}{fmtTL(nextMonthNet)} ₺
@@ -480,12 +480,12 @@ export default function DashboardPage() {
         {/* FINANS GRUBU (yukarida) */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Finans</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">{t("dashboard.finance")}</h2>
             <button
               onClick={() => router.push("/dashboard/cash-flow")}
               className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
-              Nakit Akışı
+              {t("dashboard.cashFlow")}
             </button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -494,14 +494,14 @@ export default function DashboardPage() {
                 href="/dashboard/credit-cards"
                 icon="creditCard"
                 color="red"
-                title="Kredi Kartları (toplam borç)"
+                title={t("dashboard.cards.creditCards")}
                 total={creditCardTotal}
                 count={creditCardCount}
-                countLabel="kart"
+                countLabel={t("dashboard.card")}
                 top={[]}
-                placeholder="Kart tanımı + ekstre + taksit"
+                placeholder={t("dashboard.cards.creditCardsHint")}
                 footer={creditCardPeriod !== null && (
-                  <span>Dönem içi borç: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
+                  <span>{t("dashboard.currentPeriodDebt")}: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
                 )}
               />
             )}
@@ -511,14 +511,14 @@ export default function DashboardPage() {
                 href="/dashboard/income"
                 icon="income"
                 color="emerald"
-                title="Gelirler (bu ay)"
+                title={t("dashboard.cards.income")}
                 total={incomeTotal}
                 count={incomeCount}
-                countLabel="kayıt"
+                countLabel={t("dashboard.record")}
                 top={incomeTop}
-                placeholder="Maaş, kira, temettü..."
+                placeholder={t("dashboard.cards.incomeHint")}
                 footer={incomeYearEstimate !== null && (
-                  <span>Yıl sonu beklentisi: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
+                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
                 )}
               />
             )}
@@ -528,12 +528,12 @@ export default function DashboardPage() {
                 href="/dashboard/expenses"
                 icon="expenses"
                 color="red"
-                title="Harcamalar (bu ay)"
+                title={t("dashboard.cards.expenses")}
                 total={expenseTotal}
                 count={expenseCount}
-                countLabel="kayıt"
+                countLabel={t("dashboard.record")}
                 top={expenseTop}
-                placeholder="Aylık gider takibi"
+                placeholder={t("dashboard.cards.expensesHint")}
               />
             )}
 
@@ -542,10 +542,10 @@ export default function DashboardPage() {
                 href="/dashboard/planned"
                 icon="planned"
                 color="violet"
-                title="Planlı Harcamalar (bu yıl)"
+                title={t("dashboard.cards.planned")}
                 total={plannedTotal}
                 top={[]}
-                placeholder="Kredi, vergi, fatura planı"
+                placeholder={t("dashboard.cards.plannedHint")}
               />
             )}
 
@@ -562,20 +562,20 @@ export default function DashboardPage() {
         {/* PORTFÖY GRUBU (asagida) */}
         <section className="space-y-3 mt-8">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Portföy</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">{t("dashboard.portfolio")}</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => router.push("/dashboard/history")}
                 className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
               >
-                Geçmiş
+                {t("dashboard.history")}
               </button>
               <button
                 onClick={takeSnapshot}
                 disabled={snapshotting}
                 className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
               >
-                {snapshotting ? "Alınıyor..." : "Snapshot al"}
+                {snapshotting ? t("dashboard.snapshotting") : t("dashboard.snapshot")}
               </button>
             </div>
           </div>
@@ -585,12 +585,12 @@ export default function DashboardPage() {
                 href="/dashboard/bes"
                 icon="bes"
                 color="green"
-                title="BES"
+                title={t("dashboard.cards.bes")}
                 total={besTotal}
                 count={besPlanCount}
-                countLabel="plan"
+                countLabel={t("dashboard.plan")}
                 top={besTop}
-                placeholder="Bireysel emeklilik — manuel giriş"
+                placeholder={t("dashboard.cards.besHint")}
               />
             )}
 
@@ -599,12 +599,12 @@ export default function DashboardPage() {
                 href="/dashboard/tefas"
                 icon="tefas"
                 color="blue"
-                title="TEFAS Fonları"
+                title={t("dashboard.cards.tefas")}
                 total={tefasTotal}
                 count={tefasFundCount}
-                countLabel="fon"
+                countLabel={t("dashboard.fund")}
                 top={tefasTop}
-                placeholder="Yatırım fonu fiyatlarını canlı görüntüle"
+                placeholder={t("dashboard.cards.tefasHint")}
               />
             )}
 
@@ -613,12 +613,12 @@ export default function DashboardPage() {
                 href="/dashboard/stocks"
                 icon="stocks"
                 color="indigo"
-                title="Hisse Senedi"
+                title={t("dashboard.cards.stocks")}
                 total={stockTotal}
                 count={stockHoldingCount}
-                countLabel="hisse"
+                countLabel={t("dashboard.stock")}
                 top={stockTop}
-                placeholder="BIST + ABD + UK — Yahoo Finance"
+                placeholder={t("dashboard.cards.stocksHint")}
               />
             )}
 
@@ -627,11 +627,11 @@ export default function DashboardPage() {
                 href="/dashboard/wallets"
                 icon="wallets"
                 color="purple"
-                title="Blockchain Cüzdanlar"
+                title={t("dashboard.cards.wallets")}
                 total={walletTotal}
                 loading={walletLoading}
                 top={walletTop}
-                placeholder="Sonic, Avalanche, Ethereum"
+                placeholder={t("dashboard.cards.walletsHint")}
               />
             )}
 
@@ -640,11 +640,11 @@ export default function DashboardPage() {
                 href="/dashboard/crypto"
                 icon="crypto"
                 color="orange"
-                title="Kripto"
+                title={t("dashboard.cards.crypto")}
                 total={cryptoTotal}
                 loading={cryptoLoading}
                 top={cryptoTop}
-                placeholder="Binance & iCrypex"
+                placeholder={t("dashboard.cards.cryptoHint")}
               />
             )}
 
@@ -653,12 +653,12 @@ export default function DashboardPage() {
                 href="/dashboard/manual-crypto"
                 icon="crypto"
                 color="orange"
-                title="Manuel Kripto"
+                title={t("dashboard.cards.manualCrypto")}
                 total={manualCryptoTotal}
                 count={manualCryptoCount}
-                countLabel="pozisyon"
+                countLabel={t("dashboard.position")}
                 top={manualCryptoTop}
-                placeholder="API'siz borsalar (BinanceTR, iCrypex...)"
+                placeholder={t("dashboard.cards.manualCryptoHint")}
               />
             )}
 
@@ -667,12 +667,12 @@ export default function DashboardPage() {
                 href="/dashboard/commodities"
                 icon="commodities"
                 color="amber"
-                title="Altın & Gümüş"
+                title={t("dashboard.cards.commodities")}
                 total={commodityTotal}
                 count={commodityCount}
-                countLabel="pozisyon"
+                countLabel={t("dashboard.position")}
                 top={[]}
-                placeholder="Gram, BiGA, sikke (çeyrek, tam...)"
+                placeholder={t("dashboard.cards.commoditiesHint")}
               />
             )}
 
@@ -681,12 +681,12 @@ export default function DashboardPage() {
                 href="/dashboard/cash"
                 icon="cash"
                 color="green"
-                title="Nakit / Banka"
+                title={t("dashboard.cards.cash")}
                 total={cashTotal}
                 count={cashCount}
-                countLabel="hesap"
+                countLabel={t("dashboard.record")}
                 top={[]}
-                placeholder="Banka hesabı + nakit (manuel)"
+                placeholder={t("dashboard.cards.cashHint")}
               />
             )}
           </div>

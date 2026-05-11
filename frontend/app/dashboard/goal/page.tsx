@@ -5,6 +5,7 @@ import { api, GoalDTO, GoalCurrency, GOAL_CURRENCY_SYMBOLS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
 import { INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const MULTIPLIER = 300;
 const CURRENCIES: GoalCurrency[] = ["TRY", "USD", "EUR", "GBP"];
@@ -30,6 +31,7 @@ function ProgressBar({ pct }: { pct: number }) {
 
 export default function GoalPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [goal, setGoal] = useState<GoalDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,7 +90,7 @@ export default function GoalPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Finansal Hedef" />
+      <PageHeader title={t("pages.goal")} />
 
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         {loading && <p className="text-sm text-gray-400 text-center py-8">Yükleniyor...</p>}

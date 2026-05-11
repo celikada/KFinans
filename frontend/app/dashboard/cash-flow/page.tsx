@@ -15,11 +15,13 @@ import {
 import { api, CashFlowYearDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
 export default function CashFlowPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const now = new Date();
   const currentYear = now.getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -59,7 +61,7 @@ export default function CashFlowPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Nakit Akışı" />
+      <PageHeader title={t("pages.cashFlow")} />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         {/* Yıl seçici + indir butonları */}

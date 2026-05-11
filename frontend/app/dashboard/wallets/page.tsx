@@ -5,8 +5,10 @@ import { PageHeader } from "@/app/_components/PageHeader";
 import { WalletList } from "./_components/WalletList";
 import { WalletForm } from "./_components/WalletForm";
 import { WalletPositionsTable } from "./_components/WalletPositionsTable";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function WalletsPage() {
+  const { t } = useTranslation();
   const [wallets, setWallets] = useState<WalletDTO[]>([]);
   const [positions, setPositions] = useState<WalletPositionDTO[]>([]);
   const [loadingPositions, setLoadingPositions] = useState(false);
@@ -88,7 +90,7 @@ export default function WalletsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Blockchain Cüzdanları" />
+      <PageHeader title={t("pages.wallets")} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

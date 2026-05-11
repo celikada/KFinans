@@ -8,9 +8,11 @@ import { TLValue } from "@/app/_components/TLValue";
 import { PlannedForm } from "./_components/PlannedForm";
 import { PlannedList } from "./_components/PlannedList";
 import { YearlyForecast } from "./_components/YearlyForecast";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function PlannedPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [items, setItems] = useState<PlannedExpenseDTO[]>([]);
@@ -54,7 +56,7 @@ export default function PlannedPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Planlı Ödemeler" />
+      <PageHeader title={t("pages.planned")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Özet + yıl seçici */}

@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { api, SnapshotHealthIssue, SnapshotHistoryDTO } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 type Currency = "TRY" | "USD";
 
@@ -69,6 +70,7 @@ function valueIn(point: ChartPoint, key: keyof Pick<ChartPoint, "total"|"crypto"
 
 export default function HistoryPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [points, setPoints] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -144,9 +146,9 @@ export default function HistoryPage() {
           onClick={() => router.push("/dashboard")}
           className="text-gray-400 hover:text-gray-600 text-sm"
         >
-          ← Geri
+          {t("common.back")}
         </button>
-        <h1 className="text-lg font-semibold text-gray-900">Portföy Geçmişi</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{t("pages.history")}</h1>
 
         {/* Yıl seçici */}
         {availableYears.length > 0 && (

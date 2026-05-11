@@ -7,8 +7,10 @@ import { IntegrationForm } from "./_components/IntegrationForm";
 import { ProviderSummaryCards } from "./_components/ProviderSummaryCards";
 import { PositionsTable } from "./_components/PositionsTable";
 import { PROVIDER_LABELS } from "./_components/constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function CryptoPage() {
+  const { t } = useTranslation();
   const [integrations, setIntegrations] = useState<IntegrationDTO[]>([]);
   const [positions, setPositions] = useState<CryptoPositionDTO[]>([]);
   const [loadingPositions, setLoadingPositions] = useState(false);
@@ -73,7 +75,7 @@ export default function CryptoPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Kripto Portföyü" />
+      <PageHeader title={t("pages.crypto")} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

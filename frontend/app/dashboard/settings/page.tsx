@@ -5,6 +5,7 @@ import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
 import { getShowUsd, setShowUsd } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
   { key: "conservative", label: RISK_PROFILE_LABELS.conservative },
@@ -16,6 +17,7 @@ const CARD_CLS = "bg-white rounded-2xl border border-gray-100 shadow-sm p-6";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [user, setUser]       = useState<UserMeDTO | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -110,7 +112,7 @@ export default function SettingsPage() {
   if (loadingUser) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PageHeader title="Ayarlar" />
+        <PageHeader title={t("pages.settings")} />
         <p className="text-sm text-gray-400 text-center py-16">Yükleniyor...</p>
       </div>
     );
@@ -118,7 +120,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Ayarlar" />
+      <PageHeader title={t("pages.settings")} />
 
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
 

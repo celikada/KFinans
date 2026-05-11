@@ -8,9 +8,11 @@ import { TLValue } from "@/app/_components/TLValue";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { BudgetForm } from "./_components/BudgetForm";
 import { ComparisonTable } from "./_components/ComparisonTable";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function BudgetPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -51,7 +53,7 @@ export default function BudgetPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Bütçe Takibi" />
+      <PageHeader title={t("pages.budget")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Özet panel */}

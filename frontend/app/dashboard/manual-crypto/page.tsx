@@ -5,6 +5,7 @@ import { api, AssetCatalogItem, LinkedSource, ManualCryptoPriceSource, ManualCry
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const EXCHANGE_OPTIONS = [
   { value: "binancetr", label: "Binance TR" },
@@ -38,6 +39,7 @@ const LINKED_SOURCE_LABEL: Record<LinkedSource, string> = {
 
 export default function ManualCryptoPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<ManualCryptoSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -190,7 +192,7 @@ export default function ManualCryptoPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader title="Manuel Kripto (API'siz Borsalar)" />
+      <PageHeader title={t("pages.manualCrypto")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Bilgi banner */}

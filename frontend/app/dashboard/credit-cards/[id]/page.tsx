@@ -7,12 +7,14 @@ import {
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function CreditCardDetailPage({ params }: Readonly<{ params: Promise<{ id: string }> }>) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { id } = use(params);
   const cardId = parseInt(id);
 
@@ -40,7 +42,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PageHeader title="Kart Detayı" back="/dashboard/credit-cards" />
+        <PageHeader title={t("pages.creditCards")} back="/dashboard/credit-cards" />
         <p className="text-sm text-gray-400 text-center py-12">Yükleniyor...</p>
       </div>
     );
@@ -48,7 +50,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PageHeader title="Kart Detayı" back="/dashboard/credit-cards" />
+        <PageHeader title={t("pages.creditCards")} back="/dashboard/credit-cards" />
         <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl mx-6 my-6">{error}</p>
       </div>
     );
