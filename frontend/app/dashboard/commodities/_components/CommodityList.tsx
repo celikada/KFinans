@@ -25,7 +25,7 @@ export function CommodityList({ positions, onDeleted }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   if (positions.length === 0) {
-    return <p className="text-center text-sm text-gray-400 py-8">Henüz varlık eklenmedi.</p>;
+    return <p className="text-center text-sm text-gray-400 py-8">{t("empty.noCommodity")}</p>;
   }
 
   async function handleDelete(id: number) {

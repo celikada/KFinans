@@ -33,7 +33,7 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
   if (expenses.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center text-sm text-gray-400">
-        Bu ay için harcama kaydı yok.
+        {t("empty.noExpenseThisMonth")}
       </div>
     );
   }

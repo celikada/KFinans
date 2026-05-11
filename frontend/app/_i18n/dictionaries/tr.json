@@ -152,6 +152,37 @@
     "actualExpense": "Gerçek Gider",
     "forecastExpense": "Tahmini Gider"
   },
+  "form": {
+    "amountTL": "Tutar (₺)",
+    "amountPlaceholder": "0,00",
+    "datePlaceholder": "yyyy-aa-gg",
+    "optional": "Opsiyonel",
+    "saving": "Kaydediliyor...",
+    "add": "Ekle",
+    "update": "Güncelle",
+    "amountInvalid": "Geçerli bir tutar girin",
+    "saveFailed": "Kaydedilemedi",
+    "expenseNew": "Yeni Harcama",
+    "expenseEdit": "Harcamayı düzenle",
+    "incomeNew": "Yeni Gelir",
+    "incomeEdit": "Geliri düzenle",
+    "commodityNew": "Yeni Varlık",
+    "paymentMethod": "Ödeme yöntemi",
+    "paymentMethodHint": "(kart seçilirse bu harcama gider toplamına dahil edilmez — kart borcuyla zaten sayılır)",
+    "cashOrTransfer": "Nakit / Banka transferi"
+  },
+  "empty": {
+    "noManualCrypto": "Henüz manuel kripto kaydı yok.",
+    "noCashRecord": "Henüz nakit kaydı yok.",
+    "noCommodity": "Henüz varlık eklenmedi.",
+    "noStatement": "Henüz ekstre kaydı yok.",
+    "noInstallment": "Henüz taksit kaydı yok.",
+    "noIncomeThisMonth": "Bu ay gelir kaydı yok.",
+    "noExpenseThisMonth": "Bu ay için harcama kaydı yok.",
+    "noPlanned": "Henüz planlı ödeme yok.",
+    "noRecurring": "Henüz periyodik gelir kaydı yok.",
+    "pendingNoStatement": "Henüz ekstreye düşmemiş"
+  },
   "pages": {
     "tefas": "TEFAS Fonları",
     "stocks": "Hisse Senedi",

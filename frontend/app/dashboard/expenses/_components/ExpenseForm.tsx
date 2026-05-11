@@ -9,6 +9,7 @@ import {
   ExpenseDTO,
 } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   onSaved: (expense: ExpenseDTO) => void;
@@ -22,6 +23,7 @@ function todayIso(): string {
 }
 
 export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
+  const { t } = useTranslation();
   const isEdit = !!existing;
   const [amount, setAmount] = useState(existing?.amount ?? "");
   const [category, setCategory] = useState<ExpenseCategory>(existing?.category ?? "groceries");
@@ -52,7 +54,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
     e.preventDefault();
     setError("");
     const value = parseFloat(amount);
-    if (!value || value <= 0) { setError("Geçerli bir tutar girin"); return; }
+    if (!value || value <= 0) { setError(t("form.amountInvalid")); return; }
     setSaving(true);
     try {
       const payload = {
@@ -73,7 +75,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
         setCreditCardId("");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -81,22 +83,22 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? "Harcamayı düzenle" : "Yeni Harcama"}</h2>
+      <h2 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? t("form.expenseEdit") : t("form.expenseNew")}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Tutar (₺)</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
           <input
             type="number"
             step="0.01"
             min="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="0,00"
+            placeholder={t("form.amountPlaceholder")}
             className={`w-full text-right ${INPUT_CLS}`}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Kategori</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.category")}</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
@@ -108,7 +110,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Tarih</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.date")}</label>
           <input
             type="date"
             value={date}
@@ -117,12 +119,12 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Açıklama</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.description")}</label>
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Opsiyonel"
+            placeholder={t("form.optional")}
             maxLength={500}
             className={`w-full ${INPUT_CLS}`}
           />
@@ -133,15 +135,15 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
       {cards.length > 0 && (
         <div className="mt-3">
           <label className="block text-xs text-gray-500 mb-1">
-            Ödeme yöntemi
-            <span className="ml-1 text-[10px] text-gray-400">(kart seçilirse bu harcama gider toplamına dahil edilmez — kart borcuyla zaten sayılır)</span>
+            {t("form.paymentMethod")}
+            <span className="ml-1 text-[10px] text-gray-400">{t("form.paymentMethodHint")}</span>
           </label>
           <select
             value={creditCardId}
             onChange={(e) => setCreditCardId(e.target.value)}
             className={`w-full sm:w-1/2 ${INPUT_CLS}`}
           >
-            <option value="">Nakit / Banka transferi</option>
+            <option value="">{t("form.cashOrTransfer")}</option>
             {cards.map((c) => (
               <option key={c.id} value={c.id}>
                 💳 {c.name}{c.last_4 ? ` (**** ${c.last_4})` : ""}
@@ -157,9 +159,9 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
 
       {(() => {
         let submitLabel: string;
-        if (saving) submitLabel = "Kaydediliyor...";
-        else if (isEdit) submitLabel = "Güncelle";
-        else submitLabel = "Ekle";
+        if (saving) submitLabel = t("form.saving");
+        else if (isEdit) submitLabel = t("form.update");
+        else submitLabel = t("form.add");
         return (
           <div className="mt-4 flex items-center gap-2">
             <button
@@ -175,7 +177,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
                 onClick={onCancel}
                 className="px-4 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
               >
-                İptal
+                {t("common.cancel")}
               </button>
             )}
           </div>

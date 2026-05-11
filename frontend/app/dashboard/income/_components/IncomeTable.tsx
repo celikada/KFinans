@@ -3,6 +3,7 @@ import { api, IncomeDTO, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL, fmtDate } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   incomes: IncomeDTO[];
@@ -12,10 +13,11 @@ interface Props {
 
 export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
   const confirm = useConfirm();
+  const { t } = useTranslation();
   if (incomes.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <p className="text-sm text-gray-400 text-center py-4">Bu ay gelir kaydı yok.</p>
+        <p className="text-sm text-gray-400 text-center py-4">{t("empty.noIncomeThisMonth")}</p>
       </div>
     );
   }

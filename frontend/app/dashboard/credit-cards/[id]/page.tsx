@@ -100,7 +100,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
           </div>
           <div className="border-t border-gray-50 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-xs text-gray-400">Henüz ekstreye düşmemiş</p>
+              <p className="text-xs text-gray-400">{t("empty.pendingNoStatement")}</p>
               <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(currentPeriod)} ₺</p>
             </div>
             <div>
@@ -149,6 +149,8 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
   items: StatementDTO[];
   onChange: () => void;
 }>) {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const now = new Date();
   const [editing, setEditing] = useState<StatementDTO | null>(null);
   const [year, setYear] = useState(now.getFullYear().toString());
@@ -255,7 +257,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
       </form>
 
       {items.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-4">Henüz ekstre kaydı yok.</p>
+        <p className="text-sm text-gray-400 text-center py-4">{t("empty.noStatement")}</p>
       ) : (
         <ul className="divide-y divide-gray-50">
           {items.map((s) => (
@@ -289,6 +291,8 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
   items: InstallmentDTO[];
   onChange: () => void;
 }>) {
+  const { t } = useTranslation();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState<InstallmentDTO | null>(null);
   const [description, setDescription] = useState("");
   const [monthlyAmount, setMonthlyAmount] = useState("");
@@ -396,7 +400,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
       </form>
 
       {items.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-4">Henüz taksit kaydı yok.</p>
+        <p className="text-sm text-gray-400 text-center py-4">{t("empty.noInstallment")}</p>
       ) : (
         <ul className="divide-y divide-gray-50">
           {items.map((i) => (

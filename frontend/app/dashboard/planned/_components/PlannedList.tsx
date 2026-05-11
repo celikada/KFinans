@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   items: PlannedExpenseDTO[];
@@ -15,11 +16,12 @@ interface Props {
 
 export function PlannedList({ items, onDeleted }: Props) {
   const confirm = useConfirm();
+  const { t } = useTranslation();
 
   if (items.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <p className="text-sm text-gray-400 text-center py-4">Henüz planlı ödeme yok.</p>
+        <p className="text-sm text-gray-400 text-center py-4">{t("empty.noPlanned")}</p>
       </div>
     );
   }

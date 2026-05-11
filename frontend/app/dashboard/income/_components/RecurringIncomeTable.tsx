@@ -87,7 +87,7 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Pr
   }
 
   if (!items.length) {
-    return <p className="text-center text-sm text-gray-400 py-8">Henüz periyodik gelir kaydı yok.</p>;
+    return <p className="text-center text-sm text-gray-400 py-8">{t("empty.noRecurring")}</p>;
   }
 
   return (

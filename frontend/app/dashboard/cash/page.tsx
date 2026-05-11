@@ -139,7 +139,7 @@ export default function CashPage() {
         {/* Liste */}
         {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
         {!loading && summary && summary.holdings.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">Henüz nakit kaydı yok.</p>
+          <p className="text-center text-sm text-gray-400 py-8">{t("empty.noCashRecord")}</p>
         )}
         {!loading && summary && summary.holdings.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

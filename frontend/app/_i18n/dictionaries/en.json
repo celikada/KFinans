@@ -152,6 +152,37 @@
     "actualExpense": "Actual Expense",
     "forecastExpense": "Forecast Expense"
   },
+  "form": {
+    "amountTL": "Amount (₺)",
+    "amountPlaceholder": "0.00",
+    "datePlaceholder": "yyyy-mm-dd",
+    "optional": "Optional",
+    "saving": "Saving...",
+    "add": "Add",
+    "update": "Update",
+    "amountInvalid": "Enter a valid amount",
+    "saveFailed": "Save failed",
+    "expenseNew": "New Expense",
+    "expenseEdit": "Edit expense",
+    "incomeNew": "New Income",
+    "incomeEdit": "Edit income",
+    "commodityNew": "New Asset",
+    "paymentMethod": "Payment method",
+    "paymentMethodHint": "(if a card is selected, this expense is excluded from the total — it's already counted as card debt)",
+    "cashOrTransfer": "Cash / Bank transfer"
+  },
+  "empty": {
+    "noManualCrypto": "No manual crypto records yet.",
+    "noCashRecord": "No cash records yet.",
+    "noCommodity": "No assets added yet.",
+    "noStatement": "No statement records yet.",
+    "noInstallment": "No installment records yet.",
+    "noIncomeThisMonth": "No income records this month.",
+    "noExpenseThisMonth": "No expense records this month.",
+    "noPlanned": "No planned payments yet.",
+    "noRecurring": "No recurring income records yet.",
+    "pendingNoStatement": "Pending (no statement yet)"
+  },
   "pages": {
     "tefas": "TEFAS Funds",
     "stocks": "Stocks",
