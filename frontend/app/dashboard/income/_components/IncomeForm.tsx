@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api, IncomeInput, IncomeDTO, INCOME_CATEGORIES, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   onSaved: (inc: IncomeDTO) => void;
@@ -13,6 +14,7 @@ interface Props {
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export function IncomeForm({ onSaved, existing, onCancel }: Props) {
+  const { t } = useTranslation();
   const isEdit = !!existing;
   const [amount, setAmount] = useState(existing?.amount ?? "");
   const [category, setCategory] = useState<IncomeInput["category"]>(existing?.category ?? "salary");
@@ -50,7 +52,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
         setDescription("");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -58,23 +60,23 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h3 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? "Geliri düzenle" : "Gelir ekle"}</h3>
+      <h3 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? t("form.incomeEdit") : t("form.incomeNew")}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Tutar (₺)</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
           <input
             type="number"
             step="0.01"
             min="0.01"
             required
             className={INPUT_CLS}
-            placeholder="50000"
+            placeholder={t("form.amountPlaceholder")}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Kategori</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.category")}</label>
           <select
             className={INPUT_CLS}
             value={category}
@@ -86,7 +88,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Tarih</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.date")}</label>
           <input
             type="date"
             required
@@ -96,10 +98,10 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Açıklama</label>
+          <label className="block text-xs text-gray-500 mb-1">{t("table.description")}</label>
           <input
             className={INPUT_CLS}
-            placeholder="opsiyonel"
+            placeholder={t("form.optional")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={500}
@@ -109,9 +111,9 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
       {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
       {(() => {
         let submitLabel: string;
-        if (saving) submitLabel = "Kaydediliyor...";
-        else if (isEdit) submitLabel = "Güncelle";
-        else submitLabel = "Ekle";
+        if (saving) submitLabel = t("form.saving");
+        else if (isEdit) submitLabel = t("form.update");
+        else submitLabel = t("form.add");
         return (
       <div className="mt-4 flex items-center gap-2">
         <button
@@ -127,7 +129,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
             onClick={onCancel}
             className="text-sm px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50"
           >
-            İptal
+            {t("common.cancel")}
           </button>
         )}
       </div>

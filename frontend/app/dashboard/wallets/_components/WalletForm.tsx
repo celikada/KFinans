@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, WalletDTO } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
 import { CHAIN_ADDRESS_HINTS, CHAIN_LABELS, CHAIN_PLACEHOLDERS, Chain } from "./constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   hasWallets: boolean;
@@ -19,6 +20,7 @@ export function WalletForm({
   hasWallets, loadingPositions, exporting, importing,
   onAdded, onRefresh, onExport, onImport,
 }: Props) {
+  const { t } = useTranslation();
   const [chain, setChain] = useState<Chain>("sonic");
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
@@ -28,7 +30,7 @@ export function WalletForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!address.trim()) { setFormError("Adres zorunludur"); return; }
+    if (!address.trim()) { setFormError(t("form.addressRequired")); return; }
     setSaving(true);
     setFormError("");
     try {
@@ -37,7 +39,7 @@ export function WalletForm({
       setAddress("");
       setLabel("");
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Eklenemedi");
+      setFormError(err instanceof Error ? err.message : t("form.addFailed"));
     } finally {
       setSaving(false);
     }
@@ -47,14 +49,14 @@ export function WalletForm({
     <form onSubmit={handleSubmit} className="mt-5 space-y-3 border-t border-gray-50 pt-5">
       <div className="flex items-center gap-2">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Cüzdan Ekle
+          {t("form.addWallet")}
         </h3>
         <button
           type="button"
           onClick={() => setShowHint((s) => !s)}
           className="text-blue-500 hover:text-blue-700 transition-colors"
-          aria-label="Adres nereden bulunur?"
-          title="Adres nereden bulunur?"
+          aria-label={t("form.addressLookup")}
+          title={t("form.addressLookup")}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-4 h-4">
             <circle cx="12" cy="12" r="10" />
@@ -65,10 +67,10 @@ export function WalletForm({
       {showHint && (
         <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 text-xs text-gray-700 space-y-1">
           <p className="font-semibold text-blue-700">
-            {CHAIN_LABELS[chain]} adresi nereden alınır?
+            {CHAIN_LABELS[chain]} {t("form.chainAddressHowTo")}
           </p>
           <p>
-            <span className="font-medium text-gray-600">Format: </span>
+            <span className="font-medium text-gray-600">{t("form.chainAddressFormat")} </span>
             <span className="font-mono text-[11px]">{CHAIN_ADDRESS_HINTS[chain].format}</span>
           </p>
           <p className="whitespace-pre-line text-gray-600 leading-relaxed">
@@ -94,13 +96,13 @@ export function WalletForm({
           <option value="litecoin">Litecoin</option>
         </select>
         <input
-          placeholder={CHAIN_PLACEHOLDERS[chain] ?? "Adres..."}
+          placeholder={CHAIN_PLACEHOLDERS[chain] ?? t("form.addressPlaceholder")}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}
         />
         <input
-          placeholder="Etiket (isteğe bağlı)"
+          placeholder={t("form.labelPlaceholder")}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           className={`w-36 ${INPUT_CLS}`}
@@ -115,7 +117,7 @@ export function WalletForm({
           disabled={saving}
           className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {saving ? "Kaydediliyor..." : "Ekle"}
+          {saving ? t("form.saving") : t("form.add")}
         </button>
         {hasWallets && (
           <button
@@ -124,7 +126,7 @@ export function WalletForm({
             disabled={loadingPositions}
             className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
-            {loadingPositions ? "Yükleniyor..." : "Yenile"}
+            {loadingPositions ? t("form.refreshing") : t("form.refresh")}
           </button>
         )}
         <button
@@ -133,10 +135,10 @@ export function WalletForm({
           disabled={exporting || !hasWallets}
           className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
         >
-          {exporting ? "İndiriliyor..." : "Excel İndir"}
+          {exporting ? t("form.downloading") : t("form.excelDownload")}
         </button>
         <label className={`text-sm font-medium border px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${importing ? "text-gray-400 border-gray-100" : "text-gray-500 hover:text-gray-700 border-gray-200"}`}>
-          {importing ? "İçe aktarılıyor..." : "Excel Yükle"}
+          {importing ? t("form.uploading") : t("form.excelUpload")}
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={onImport} disabled={importing} />
         </label>
       </div>

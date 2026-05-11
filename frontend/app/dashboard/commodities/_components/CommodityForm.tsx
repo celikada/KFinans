@@ -6,12 +6,14 @@ import {
   COIN_LABELS, COIN_TYPES,
   type CommodityUnitType, type CommodityMetal, type CoinType,
 } from "@/lib/api";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   onAdded: () => void;
 }
 
 export function CommodityForm({ onAdded }: Props) {
+  const { t } = useTranslation();
   const [unitType, setUnitType] = useState<CommodityUnitType>("coin");
   const [metal, setMetal] = useState<CommodityMetal>("gold");
   const [bigaCode, setBigaCode] = useState("A01");
@@ -26,7 +28,7 @@ export function CommodityForm({ onAdded }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const qty = parseFloat(quantity);
-    if (!qty || qty <= 0) { setError("Geçerli bir miktar girin"); return; }
+    if (!qty || qty <= 0) { setError(t("form.amountInvalidQty")); return; }
     setSaving(true);
     setError("");
     try {
@@ -42,7 +44,7 @@ export function CommodityForm({ onAdded }: Props) {
       setNotes("");
       onAdded();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -50,22 +52,22 @@ export function CommodityForm({ onAdded }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-      <h2 className="text-sm font-semibold text-gray-700">Varlık Ekle</h2>
+      <h2 className="text-sm font-semibold text-gray-700">{t("form.addAsset")}</h2>
 
       {/* Tür seçimi */}
       <div className="flex gap-2">
-        {(["coin","gram","biga"] as CommodityUnitType[]).map((t) => (
+        {(["coin","gram","biga"] as CommodityUnitType[]).map((u) => (
           <button
-            key={t}
+            key={u}
             type="button"
-            onClick={() => setUnitType(t)}
+            onClick={() => setUnitType(u)}
             className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              unitType === t
+              unitType === u
                 ? "bg-amber-500 text-white border-amber-500"
                 : "border-gray-200 text-gray-600 hover:border-amber-300"
             }`}
           >
-            {t === "coin" ? "Sikke" : t === "gram" ? "Gram" : "BiGA"}
+            {u === "coin" ? t("form.coin") : u === "gram" ? t("form.gram") : t("form.biga")}
           </button>
         ))}
       </div>
@@ -78,8 +80,8 @@ export function CommodityForm({ onAdded }: Props) {
             onChange={(e) => setMetal(e.target.value as CommodityMetal)}
             className="flex-1 min-w-[140px] border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
-            <option value="gold">Altın (gram)</option>
-            <option value="silver">Gümüş (gram)</option>
+            <option value="gold">{t("form.goldGram")}</option>
+            <option value="silver">{t("form.silverGram")}</option>
           </select>
         )}
 
@@ -94,8 +96,8 @@ export function CommodityForm({ onAdded }: Props) {
               }}
               className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
             >
-              <option value="gold">Altın</option>
-              <option value="silver">Gümüş</option>
+              <option value="gold">{t("form.gold")}</option>
+              <option value="silver">{t("form.silver")}</option>
             </select>
             <select
               value={bigaCode}
@@ -128,12 +130,12 @@ export function CommodityForm({ onAdded }: Props) {
             type="number"
             min="0.0001"
             step="0.0001"
-            placeholder={unitType === "gram" ? "Gram" : "Adet"}
+            placeholder={unitType === "gram" ? t("form.gram") : t("table.count")}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             className="flex-1 text-sm text-gray-900 focus:outline-none placeholder:text-gray-400 w-24"
           />
-          <span className="text-gray-400 text-sm ml-1">{unitType === "gram" ? "g" : "adet"}</span>
+          <span className="text-gray-400 text-sm ml-1">{unitType === "gram" ? "g" : t("form.piece")}</span>
         </div>
 
         <button
@@ -141,13 +143,13 @@ export function CommodityForm({ onAdded }: Props) {
           disabled={saving}
           className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-xl transition-colors"
         >
-          {saving ? "Ekleniyor..." : "Ekle"}
+          {saving ? t("form.adding") : t("form.add")}
         </button>
       </div>
 
       <input
         type="text"
-        placeholder="Not (opsiyonel — örn. Ziraat Bankası)"
+        placeholder={t("form.notePlaceholder")}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-gray-400"

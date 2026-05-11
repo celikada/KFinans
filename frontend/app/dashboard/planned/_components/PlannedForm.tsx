@@ -12,6 +12,7 @@ import {
   MONTH_NAMES,
 } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   onAdded: (pe: PlannedExpenseDTO) => void;
@@ -20,6 +21,7 @@ interface Props {
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export function PlannedForm({ onAdded }: Readonly<Props>) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +78,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
       setIsEstimated(false); setCustomMonths([]); setOpen(false);
       setCreditCardId(""); setIsPaid(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -88,14 +90,14 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
         onClick={() => setOpen((v) => !v)}
         className="text-sm font-medium text-indigo-600 hover:text-indigo-800"
       >
-        {open ? "— İptal" : "+ Yeni planlı ödeme ekle"}
+        {open ? t("form.plannedToggleClose") : t("form.plannedToggleOpen")}
       </button>
 
       {open && (
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Başlık</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.titleLabel")}</label>
               <input
                 className={INPUT_CLS}
                 placeholder="Ziraat Konut Kredisi"
@@ -107,13 +109,13 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tutar (₺)</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
                 className={INPUT_CLS}
-                placeholder="5000.00"
+                placeholder={t("form.amountPlaceholder")}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
@@ -121,7 +123,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Kategori</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("table.category")}</label>
               <select
                 className={INPUT_CLS}
                 value={category}
@@ -134,7 +136,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Tekrar</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.recurrence")}</label>
               <select
                 className={INPUT_CLS}
                 value={recurrence}
@@ -147,7 +149,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Ayın kaçında</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.dayOfMonth")}</label>
               <input
                 type="number"
                 min="1"
@@ -159,7 +161,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Başlangıç tarihi</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.startDate")}</label>
               <input
                 type="date"
                 className={INPUT_CLS}
@@ -171,12 +173,12 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
 
             {recurrence === "monthly" && (
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Kalan taksit sayısı</label>
+                <label className="block text-xs text-gray-500 mb-1">{t("form.remainingInstallments")}</label>
                 <input
                   type="number"
                   min="1"
                   className={INPUT_CLS}
-                  placeholder="opsiyonel"
+                  placeholder={t("form.optional")}
                   value={remainingCount}
                   onChange={(e) => setRemainingCount(e.target.value)}
                 />
@@ -185,11 +187,11 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
 
             {recurrence !== "monthly" && (
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Bitiş tarihi</label>
+                <label className="block text-xs text-gray-500 mb-1">{t("form.endDate")}</label>
                 <input
                   type="date"
                   className={INPUT_CLS}
-                  placeholder="opsiyonel"
+                  placeholder={t("form.optional")}
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                 />
@@ -198,7 +200,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
 
             {recurrence === "custom" && (
               <div className="sm:col-span-2">
-                <label className="block text-xs text-gray-500 mb-2">Hangi aylarda?</label>
+                <label className="block text-xs text-gray-500 mb-2">{t("form.whichMonths")}</label>
                 <div className="flex flex-wrap gap-2">
                   {MONTH_NAMES.map((name, idx) => {
                     const m = idx + 1;
@@ -223,10 +225,10 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             )}
 
             <div className="sm:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Notlar</label>
+              <label className="block text-xs text-gray-500 mb-1">{t("form.notes")}</label>
               <input
                 className={INPUT_CLS}
-                placeholder="opsiyonel"
+                placeholder={t("form.optional")}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 maxLength={500}
@@ -242,7 +244,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
                 className="rounded"
               />
               <label htmlFor="is_estimated" className="text-xs text-gray-500">
-                Tutar tahmini (kesin değil)
+                {t("form.amountEstimated")}
               </label>
             </div>
 
@@ -251,9 +253,9 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
               <div className="sm:col-span-2 space-y-2">
                 <div>
                   <label htmlFor="credit_card" className="block text-xs text-gray-500 mb-1">
-                    Ödeme yöntemi
+                    {t("form.paymentMethod")}
                     <span className="ml-1 text-[10px] text-gray-400">
-                      (kart seçilirse + ödenmediyse → gider olarak sayılır; ödendiyse kart borcu sayar)
+                      {t("form.paymentMethodHintPlanned")}
                     </span>
                   </label>
                   <select
@@ -262,7 +264,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
                     onChange={(e) => setCreditCardId(e.target.value)}
                     className={INPUT_CLS}
                   >
-                    <option value="">Nakit / Banka transferi</option>
+                    <option value="">{t("form.cashOrTransfer")}</option>
                     {cards.map((c) => (
                       <option key={c.id} value={c.id}>
                         💳 {c.name}{c.last_4 ? ` (**** ${c.last_4})` : ""}
@@ -279,7 +281,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
                     className="rounded"
                   />
                   <label htmlFor="is_paid" className="text-xs text-gray-500">
-                    Yapıldı / ödendi (varsayılan: planlı, henüz yapılmadı)
+                    {t("form.paidLabel")}
                   </label>
                 </div>
               </div>
@@ -293,7 +295,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             disabled={saving}
             className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
           >
-            {saving ? "Kaydediliyor..." : "Kaydet"}
+            {saving ? t("form.saving") : t("form.save")}
           </button>
         </form>
       )}

@@ -1,12 +1,14 @@
 "use client";
 import { useState } from "react";
 import { api, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   onSaved: () => void;
 }
 
 export function BudgetForm({ onSaved }: Props) {
+  const { t } = useTranslation();
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
@@ -15,7 +17,7 @@ export function BudgetForm({ onSaved }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const val = parseFloat(amount);
-    if (!val || val <= 0) { setError("Geçerli bir tutar girin"); return; }
+    if (!val || val <= 0) { setError(t("form.amountInvalid")); return; }
     setSaving(true);
     setError("");
     try {
@@ -23,7 +25,7 @@ export function BudgetForm({ onSaved }: Props) {
       setAmount("");
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -31,7 +33,7 @@ export function BudgetForm({ onSaved }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-sm font-semibold text-gray-700 mb-4">Bütçe Limiti Belirle</h2>
+      <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("form.budgetSetLimit")}</h2>
       <div className="flex flex-wrap gap-3">
         <select
           value={category}
@@ -47,7 +49,7 @@ export function BudgetForm({ onSaved }: Props) {
             type="number"
             min="1"
             step="0.01"
-            placeholder="Aylık limit (₺)"
+            placeholder={t("form.monthlyLimit")}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="flex-1 text-sm text-gray-900 focus:outline-none placeholder:text-gray-400"
@@ -59,7 +61,7 @@ export function BudgetForm({ onSaved }: Props) {
           disabled={saving}
           className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-xl transition-colors"
         >
-          {saving ? "Kaydediliyor..." : "Kaydet"}
+          {saving ? t("form.saving") : t("form.save")}
         </button>
       </div>
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
