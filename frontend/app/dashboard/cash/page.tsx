@@ -146,9 +146,9 @@ export default function CashPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-6 py-3 text-left">Etiket</th>
-                  <th className="px-6 py-3 text-right">Tutar</th>
-                  <th className="px-6 py-3 text-right">TL Karşılığı</th>
+                  <th className="px-6 py-3 text-left">{t("table.label")}</th>
+                  <th className="px-6 py-3 text-right">{t("table.amount")}</th>
+                  <th className="px-6 py-3 text-right">{t("table.tlEquivalent")}</th>
                   <th className="px-6 py-3"></th>
                 </tr>
               </thead>

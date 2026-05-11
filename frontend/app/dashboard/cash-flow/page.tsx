@@ -158,12 +158,12 @@ export default function CashFlowPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Ay</th>
-                  <th className="px-4 py-3 text-right">Gerçek Gelir</th>
-                  <th className="px-4 py-3 text-right">Tahmini Gelir</th>
-                  <th className="px-4 py-3 text-right">Gerçek Gider</th>
-                  <th className="px-4 py-3 text-right">Tahmini Gider</th>
-                  <th className="px-4 py-3 text-right">Net</th>
+                  <th className="px-4 py-3 text-left">{t("table.month")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.actualIncome")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.forecastIncome")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.actualExpense")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.forecastExpense")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.net")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

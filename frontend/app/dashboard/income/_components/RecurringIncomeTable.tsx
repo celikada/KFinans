@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   items: RecurringIncomeDTO[];
@@ -20,6 +21,7 @@ const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "
 
 export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Props) {
   const confirm = useConfirm();
+  const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -115,12 +117,12 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Pr
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-              <th className="px-4 py-3 text-left">Başlık</th>
-              <th className="px-4 py-3 text-left">Kategori</th>
-              <th className="px-4 py-3 text-left">Periyot</th>
-              <th className="px-4 py-3 text-left">Tarih aralığı</th>
-              <th className="px-4 py-3 text-right">Tutar</th>
-              <th className="px-4 py-3 text-right">İşlemler</th>
+              <th className="px-4 py-3 text-left">{t("table.title")}</th>
+              <th className="px-4 py-3 text-left">{t("table.category")}</th>
+              <th className="px-4 py-3 text-left">{t("table.period")}</th>
+              <th className="px-4 py-3 text-left">{t("table.dateRange")}</th>
+              <th className="px-4 py-3 text-right">{t("table.amount")}</th>
+              <th className="px-4 py-3 text-right">{t("table.actions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">

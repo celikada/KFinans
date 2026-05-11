@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { api, COIN_LABELS, BIGA_GRAM_WEIGHTS, type CommodityPositionDTO } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   positions: CommodityPositionDTO[];
@@ -20,6 +21,7 @@ function unitLabel(pos: CommodityPositionDTO): string {
 }
 
 export function CommodityList({ positions, onDeleted }: Props) {
+  const { t } = useTranslation();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   if (positions.length === 0) {
@@ -41,10 +43,10 @@ export function CommodityList({ positions, onDeleted }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs text-gray-400 border-b border-gray-50">
-            <th className="text-left px-4 py-3 font-medium">Varlık</th>
-            <th className="text-right px-4 py-3 font-medium">Miktar</th>
-            <th className="text-right px-4 py-3 font-medium">Gram eşd.</th>
-            <th className="text-right px-4 py-3 font-medium">TL Değer</th>
+            <th className="text-left px-4 py-3 font-medium">{t("table.asset")}</th>
+            <th className="text-right px-4 py-3 font-medium">{t("table.quantity")}</th>
+            <th className="text-right px-4 py-3 font-medium">{t("table.gramEquivalent")}</th>
+            <th className="text-right px-4 py-3 font-medium">{t("table.tlValue")}</th>
             <th className="px-3 py-3" />
           </tr>
         </thead>

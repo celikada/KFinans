@@ -2,31 +2,33 @@
 import { StockPositionDTO } from "@/lib/api";
 import { fmtNum, fmtTL } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   positions: StockPositionDTO[];
 }
 
 export function StockPositionsTable({ positions }: Props) {
+  const { t } = useTranslation();
   const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
   const hasGainLoss = positions.some((p) => p.gain_loss_tl !== null);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">Portföy</h2>
+        <h2 className="text-sm font-semibold text-gray-700">{t("dashboard.portfolio")}</h2>
         <TLValue tl={totalTL} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
 
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-            <th className="px-6 py-3 text-left">Hisse</th>
-            <th className="px-6 py-3 text-right">Adet</th>
-            <th className="px-6 py-3 text-right">Birim Fiyat</th>
-            <th className="px-6 py-3 text-right">Toplam Değer</th>
-            {hasGainLoss && <th className="px-6 py-3 text-right">Kâr / Zarar</th>}
-            <th className="px-6 py-3 text-right">Ağırlık</th>
+            <th className="px-6 py-3 text-left">{t("table.stock")}</th>
+            <th className="px-6 py-3 text-right">{t("table.count")}</th>
+            <th className="px-6 py-3 text-right">{t("table.unitPrice")}</th>
+            <th className="px-6 py-3 text-right">{t("table.totalValue")}</th>
+            {hasGainLoss && <th className="px-6 py-3 text-right">{t("table.gainLoss")}</th>}
+            <th className="px-6 py-3 text-right">{t("table.weight")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">

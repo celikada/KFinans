@@ -266,13 +266,13 @@ export default function CreditCardsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Kart</th>
-                  <th className="px-4 py-3 text-center">Kesim / Son ödeme</th>
-                  <th className="px-4 py-3 text-right">Dönem içi (henüz ekstre)</th>
-                  <th className="px-4 py-3 text-right">Ödenmemiş ekstre</th>
-                  <th className="px-4 py-3 text-right">Gelecek taksit</th>
-                  <th className="px-4 py-3 text-right">Toplam borç</th>
-                  <th className="px-4 py-3 text-right">İşlemler</th>
+                  <th className="px-4 py-3 text-left">{t("table.card")}</th>
+                  <th className="px-4 py-3 text-center">{t("table.statementDue")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.periodPending")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.unpaidStatement")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.futureInstallment")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.totalDebt")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

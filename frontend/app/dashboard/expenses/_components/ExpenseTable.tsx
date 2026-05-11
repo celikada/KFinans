@@ -4,6 +4,7 @@ import { api, EXPENSE_CATEGORY_LABELS, ExpenseDTO } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   expenses: ExpenseDTO[];
@@ -13,6 +14,7 @@ interface Props {
 
 export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
   const confirm = useConfirm();
+  const { t } = useTranslation();
   const [removing, setRemoving] = useState<number | null>(null);
 
   async function handleDelete(id: number) {
@@ -48,10 +50,10 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-            <th className="px-6 py-3 text-left">Tarih</th>
-            <th className="px-6 py-3 text-left">Kategori</th>
-            <th className="px-6 py-3 text-left">Açıklama</th>
-            <th className="px-6 py-3 text-right">Tutar</th>
+            <th className="px-6 py-3 text-left">{t("table.date")}</th>
+            <th className="px-6 py-3 text-left">{t("table.category")}</th>
+            <th className="px-6 py-3 text-left">{t("table.description")}</th>
+            <th className="px-6 py-3 text-right">{t("table.amount")}</th>
             <th className="px-6 py-3"></th>
           </tr>
         </thead>

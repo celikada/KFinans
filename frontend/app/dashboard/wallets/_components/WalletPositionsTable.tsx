@@ -3,12 +3,14 @@ import { WalletPositionDTO } from "@/lib/api";
 import { fmtNum, shortAddr } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { CHAIN_LABELS } from "./constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   positions: WalletPositionDTO[];
 }
 
 export function WalletPositionsTable({ positions }: Props) {
+  const { t } = useTranslation();
   const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
 
   const sorted = [...positions].sort(
@@ -18,16 +20,16 @@ export function WalletPositionsTable({ positions }: Props) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">Pozisyonlar</h2>
+        <h2 className="text-sm font-semibold text-gray-700">{t("dashboard.position")}</h2>
         <TLValue tl={totalTL} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-            <th className="px-6 py-3 text-left">Zincir / Cüzdan</th>
-            <th className="px-6 py-3 text-right">Miktar</th>
-            <th className="px-6 py-3 text-right">Fiyat (USD)</th>
-            <th className="px-6 py-3 text-right">Toplam (₺)</th>
+            <th className="px-6 py-3 text-left">{t("table.chainWallet")}</th>
+            <th className="px-6 py-3 text-right">{t("table.quantity")}</th>
+            <th className="px-6 py-3 text-right">{t("table.priceUsd")}</th>
+            <th className="px-6 py-3 text-right">{t("table.totalTl")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">

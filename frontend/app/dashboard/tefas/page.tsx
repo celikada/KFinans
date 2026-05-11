@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
 import { MkkHint } from "@/app/_components/MkkHint";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Holding {
   code: string;
@@ -38,6 +39,7 @@ function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
 
 export default function TefasPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
   const [result, setResult] = useState<TefasPosition[]>([]);
   const [loading, setLoading] = useState(false);
@@ -280,14 +282,14 @@ export default function TefasPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-6 py-3 text-left">Fon</th>
-                  <th className="px-6 py-3 text-right">Adet</th>
-                  <th className="px-6 py-3 text-right">Birim Fiyat</th>
-                  <th className="px-6 py-3 text-right">Toplam Değer</th>
+                  <th className="px-6 py-3 text-left">{t("table.fund")}</th>
+                  <th className="px-6 py-3 text-right">{t("table.count")}</th>
+                  <th className="px-6 py-3 text-right">{t("table.unitPrice")}</th>
+                  <th className="px-6 py-3 text-right">{t("table.totalValue")}</th>
                   {result.some((p) => p.gain_loss_tl !== null) && (
-                    <th className="px-6 py-3 text-right">Kâr / Zarar</th>
+                    <th className="px-6 py-3 text-right">{t("table.gainLoss")}</th>
                   )}
-                  <th className="px-6 py-3 text-right">Ağırlık</th>
+                  <th className="px-6 py-3 text-right">{t("table.weight")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

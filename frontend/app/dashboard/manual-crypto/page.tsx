@@ -432,12 +432,12 @@ export default function ManualCryptoPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Borsa</th>
-                  <th className="px-4 py-3 text-left">Sembol</th>
-                  <th className="px-4 py-3 text-right">Miktar</th>
-                  <th className="px-4 py-3 text-right">Anlık Fiyat</th>
-                  <th className="px-4 py-3 text-right">TL Değer</th>
-                  <th className="px-4 py-3 text-right">Kâr/Zarar</th>
+                  <th className="px-4 py-3 text-left">{t("table.exchange")}</th>
+                  <th className="px-4 py-3 text-left">{t("table.symbol")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.quantity")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.livePrice")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.tlValue")}</th>
+                  <th className="px-4 py-3 text-right">{t("table.gainLoss")}</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
