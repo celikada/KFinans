@@ -1,5 +1,6 @@
 "use client";
 import { INPUT_CLS } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export interface StockHoldingRow {
   ticker: string;
@@ -17,8 +18,9 @@ interface Props {
 }
 
 export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Props) {
+  const { t } = useTranslation();
   if (initialLoad) {
-    return <p className="text-sm text-gray-400">Yükleniyor...</p>;
+    return <p className="text-sm text-gray-400">{t("common.loading")}</p>;
   }
 
   return (
@@ -26,14 +28,14 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
       {holdings.map((row, i) => (
         <div key={i} className="flex gap-2 items-center flex-wrap">
           <input
-            placeholder="Ticker (THYAO.IS)"
+            placeholder={t("form.stockTickerPlaceholder")}
             value={row.ticker}
             onChange={(e) => onUpdate(i, "ticker", e.target.value.toUpperCase())}
             className={`w-32 font-mono uppercase ${INPUT_CLS}`}
             maxLength={12}
           />
           <input
-            placeholder="Adet"
+            placeholder={t("table.count")}
             type="number"
             min="0"
             value={row.quantity}
@@ -41,7 +43,7 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
             className={`w-28 ${INPUT_CLS}`}
           />
           <input
-            placeholder="Ort. maliyet ₺"
+            placeholder={t("form.avgCostTl")}
             type="number"
             min="0"
             step="0.01"
@@ -51,7 +53,7 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
             title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
           />
           <input
-            placeholder="Kurum (İş Yatırım, Garanti...)"
+            placeholder={t("form.stockDistributorPlaceholder")}
             value={row.distributor}
             onChange={(e) => onUpdate(i, "distributor", e.target.value)}
             className={`w-44 ${INPUT_CLS}`}

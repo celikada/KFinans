@@ -97,6 +97,10 @@ export default function DashboardPage() {
   const [goalPct, setGoalPct] = useState<number | null>(null);
   const [goalPassive, setGoalPassive] = useState<number | null>(null);
 
+  // Dashboard ilk yukleme — tum task'lar tamamlanana kadar "Yukleniyor" spinner
+  // (kullanici 2026-05-11: TEFAS yuklenirken Toplam Portfoy yaninda spinner gozukmuyor)
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
 
@@ -315,13 +319,14 @@ export default function DashboardPage() {
       }),
     ];
 
-    // Tum fetch'lerin tamamlanmasini bekle (orchestration sonu telemetri)
+    // Tum fetch'lerin tamamlanmasini bekle (orchestration sonu telemetri + spinner kapat)
     Promise.allSettled(tasks).then((results) => {
       if (cancelled) return;
       const failed = results.filter((r) => r.status === "rejected").length;
       if (failed > 0) {
         console.warn(`[dashboard] ${failed}/${tasks.length} fetch fail`);
       }
+      setDashboardLoading(false);
     });
 
     return () => { cancelled = true; };
@@ -432,7 +437,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
               {t("dashboard.totalPortfolio")}
-              {(cryptoLoading || walletLoading) && (
+              {dashboardLoading && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
                   <span className="inline-block w-3 h-3 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
                   {t("common.loading")}
