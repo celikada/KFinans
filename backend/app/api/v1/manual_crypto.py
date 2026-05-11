@@ -161,20 +161,25 @@ async def _enrich_positions(
 
 
 async def _fetch_prices_safe(symbols: list[str]) -> tuple[dict[str, Decimal], Decimal]:
-    """Binance + CoinGecko fallback + USD/TL — hata durumunda 503."""
+    """Binance + CoinGecko fallback + USD/TL — hata durumunda 503.
+
+    SEC-007 (FAZ H): Exception detail'i client'a sizdirilmaz; full trace ops log'a.
+    """
     try:
         prices = await fetch_combined_prices(symbols)
-    except Exception as e:
+    except Exception:
+        logger.exception("fetch_combined_prices failed (manual_crypto)")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Fiyatlar çekilemedi: {e}",
+            detail="Fiyat bilgisi şu an alınamıyor. Lütfen daha sonra tekrar deneyin.",
         )
     try:
         usd_tl = await fetch_usd_to_tl()
-    except Exception as e:
+    except Exception:
+        logger.exception("fetch_usd_to_tl failed (manual_crypto)")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"USD/TL kuru çekilemedi: {e}",
+            detail="Döviz kuru şu an alınamıyor. Lütfen daha sonra tekrar deneyin.",
         )
     return prices, usd_tl
 
@@ -348,10 +353,13 @@ async def import_manual_crypto(
     content = await file.read()
     try:
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-    except Exception as e:
+    except Exception:
+        # SEC-007 (FAZ H): openpyxl InvalidFileException / BadZipFile mesaji
+        # dosya yapisi/path hakkinda ipucu verebilir. Sadece generic mesaj.
+        logger.exception("Excel parse failed (manual_crypto import)")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Excel okunamadı: {e}",
+            detail="Excel dosyası okunamadı. Lütfen .xlsx formatında geçerli bir dosya yükleyin.",
         )
     ws = wb.active
     if ws.max_row < 2:

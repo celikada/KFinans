@@ -62,6 +62,21 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Exception detail sanitization** (#81 SEC-007): 5 endpoint'te
+  `detail=f"...{e}"` ham exception interpolation kaldırıldı.
+  `logger.exception(...)` full trace ops log'a; client'a generic Türkçe
+  mesaj. Etkilenen: manual_crypto (price + USD/TL + Excel import),
+  portfolio (snapshot preview + create). tefas.py:88 ValueError korundu
+  (user-input echo, dokumante). 4 yeni integration test (DB URL/SQL/
+  secret leak'i regression önler). BACK-008 generic handler tamamlayıcı.
+- **i18n turn 1 dashboard + register tam çeviri** (#80 i18n-002 kısmi):
+  17 dashboard sayfa PageHeader title (`t("pages.xxx")`), dashboard ana
+  sayfa kart başlıkları + ipuçları (10+ kart), Finans grubu (Net Bakiye,
+  ay isimleri), Portföy grubu (Geçmiş, Snapshot al), register sayfası
+  tam çeviri (14+ string), history sayfası header, LanguageSwitcher
+  auth sayfalarında. Dictionary genişletmesi: pages + months + categories
+  + auth.* (register-spesifik 14+ key). Geriye form içi etiketler +
+  tablo başlıkları + legal + email templates kaldı (incremental).
 - **Production smoke test genişletme** (#79 DEPLOY-001):
   `release.yml::smoke-test` job Playwright'tan ÖNCE 4-step curl gate
   çalıştırır (~5 sn): frontend up, /health JSON, /auth/login bogus → 401,

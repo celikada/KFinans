@@ -71,10 +71,13 @@ async def preview_snapshot(
     """
     try:
         result = await compute_and_save_snapshot(current_user.id, db, dry_run=True)
-    except RuntimeError as e:
+    except RuntimeError:
+        # SEC-007 (FAZ H): RuntimeError mesaji internal (USD/TL fetch fail vs.)
+        # bilgi sizdirabilir. Full trace ops log'a; client'a generic mesaj.
+        logger.exception("Snapshot preflight failed user_id=%s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Snapshot ön kontrol başarısız: {e}",
+            detail="Snapshot ön kontrolü şu an yapılamıyor. Bazı veri kaynakları geçici olarak erişilemez.",
         )
     # dry_run=True her zaman dict döner, asla DB'ye yazmaz
     return result
@@ -99,10 +102,12 @@ async def create_snapshot(
     """
     try:
         snapshot = await compute_and_save_snapshot(current_user.id, db, force=force)
-    except RuntimeError as e:
+    except RuntimeError:
+        # SEC-007 (FAZ H): RuntimeError mesaji internal bilgi sizdirabilir.
+        logger.exception("Snapshot save failed user_id=%s force=%s", current_user.id, force)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Snapshot alinamadi: {e}",
+            detail="Snapshot kaydedilemedi. Lütfen birkaç dakika sonra tekrar deneyin.",
         )
     # BACK-001 (FAZ H): dry_run=False oldugu icin compute_and_save_snapshot her zaman
     # PortfolioSnapshot doner. dict fallback dual-type response_model'i bypass ediyordu;

@@ -85,6 +85,10 @@ async def tefas_preview(
     try:
         assets = await svc.fetch()
     except ValueError as e:
+        # SEC-007 (FAZ H): TefasService ValueError yalnizca "TEFAS'ta fon bulunamadı: <code>"
+        # mesaji icin raise edilir (services/tefas.py:56). User input echo'su — guvenli.
+        # Yeni leak kaynagi olusursa burada da sanitize gerekir.
+        logger.info("TEFAS validation failed: %s", e)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     # Servis holdings sırasını koruyarak asset döndürür → zip ile eşleştir
