@@ -2,6 +2,7 @@
 import { api, IncomeDTO, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL, fmtDate } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 interface Props {
   incomes: IncomeDTO[];
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
+  const confirm = useConfirm();
   if (incomes.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -21,7 +23,7 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
   const runningTotal = incomes.reduce((s, i) => s + parseFloat(i.amount), 0);
 
   async function handleDelete(id: number) {
-    if (!confirm("Bu gelir kaydı silinsin mi?")) return;
+    if (!(await confirm("Bu gelir kaydı silinsin mi?"))) return;
     await api.deleteIncome(id);
     onDeleted(id);
   }

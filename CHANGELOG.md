@@ -62,6 +62,12 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **Confirm dialog (a11y + i18n)** (#82 FE-013): Native `window.confirm()`
+  13 yerde kaldırıldı → `ConfirmDialogProvider` + `useConfirm()` async hook.
+  Dialog: `role="alertdialog"`, `aria-modal`, `aria-labelledby/describedby`,
+  `useFocusTrap` (A11Y-001 hook reuse), Esc kapatma, `autoFocus` confirm
+  butonuna. `destructive` flag kırmızı/mavi buton seçer. i18n: `common.*`
+  dictionary'den. Bir yeni @smoke test (alertdialog Esc).
 - **Exception detail sanitization** (#81 SEC-007): 5 endpoint'te
   `detail=f"...{e}"` ham exception interpolation kaldırıldı.
   `logger.exception(...)` full trace ops log'a; client'a generic Türkçe

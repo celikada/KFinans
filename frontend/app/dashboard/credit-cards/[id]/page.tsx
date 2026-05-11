@@ -8,6 +8,7 @@ import {
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -15,6 +16,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 export default function CreditCardDetailPage({ params }: Readonly<{ params: Promise<{ id: string }> }>) {
   const router = useRouter();
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { id } = use(params);
   const cardId = parseInt(id);
 
@@ -207,7 +209,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
   }
 
   async function handleDelete(s: StatementDTO) {
-    if (!confirm(`${s.period_year}-${MONTH_NAMES[s.period_month - 1]} ekstresi silinsin mi?`)) return;
+    if (!(await confirm(`${s.period_year}-${MONTH_NAMES[s.period_month - 1]} ekstresi silinsin mi?`))) return;
     try {
       await api.deleteStatement(cardId, s.id);
       onChange();
@@ -345,7 +347,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     : null;
 
   async function handleDelete(i: InstallmentDTO) {
-    if (!confirm(`"${i.description}" taksiti silinsin mi?`)) return;
+    if (!(await confirm(`"${i.description}" taksiti silinsin mi?`))) return;
     try {
       await api.deleteInstallment(cardId, i.id);
       onChange();

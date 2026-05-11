@@ -64,6 +64,41 @@ test.describe("Security headers @smoke", () => {
 });
 
 
+test.describe("ConfirmDialog @smoke", () => {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const email = `confirm_${Date.now()}@example.com`;
+  const password = "guclu-sifre-123";
+
+  test.beforeAll(async ({ request }) => {
+    await request.post(`${API_URL}/api/v1/auth/register`, {
+      data: { email, password, age_confirmed: true },
+    });
+  });
+
+  test("@smoke Hesap silme akisinda role=alertdialog acilir, Esc iptal eder", async ({ page }) => {
+    await page.goto("/login");
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+    await page.goto("/dashboard/settings");
+
+    // "Hesabımı sil" benzeri buton — text icabinda bolumlere bolunmus olabilir
+    const deleteBtn = page.getByRole("button", { name: /Hesab[ıi]?[mı]?[ıi]? sil/i }).first();
+    await deleteBtn.click();
+
+    // ConfirmDialog acildi
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible({ timeout: 3000 });
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    // Esc kapatir (focus trap'in onClose)
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden({ timeout: 3000 });
+  });
+});
+
+
 test.describe("i18n switcher @smoke", () => {
   test("@smoke Login sayfasinda TR/EN toggle butonlari var ve aria-pressed dogru", async ({
     page,

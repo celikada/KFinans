@@ -6,10 +6,12 @@ import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 export default function CreditCardsPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [summary, setSummary] = useState<CreditCardSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -96,7 +98,7 @@ export default function CreditCardsPage() {
   }
 
   async function handleDelete(id: number, cardName: string) {
-    if (!confirm(`"${cardName}" kartı silinsin mi? Bu kartla ilişkili ileride eklenecek ekstreler ve taksitler de silinecek.`)) return;
+    if (!(await confirm(`"${cardName}" kartı silinsin mi? Bu kartla ilişkili ileride eklenecek ekstreler ve taksitler de silinecek.`))) return;
     try {
       await api.deleteCreditCard(id);
       await refresh();

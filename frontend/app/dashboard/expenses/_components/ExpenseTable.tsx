@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api, EXPENSE_CATEGORY_LABELS, ExpenseDTO } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 interface Props {
   expenses: ExpenseDTO[];
@@ -11,10 +12,11 @@ interface Props {
 }
 
 export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
+  const confirm = useConfirm();
   const [removing, setRemoving] = useState<number | null>(null);
 
   async function handleDelete(id: number) {
-    if (!confirm("Bu harcamayı silmek istediğine emin misin?")) return;
+    if (!(await confirm("Bu harcamayı silmek istediğine emin misin?"))) return;
     setRemoving(id);
     try {
       await api.deleteExpense(id);

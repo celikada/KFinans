@@ -7,6 +7,7 @@ import {
   RECURRING_RECURRENCE_LABELS,
 } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 interface Props {
   items: RecurringIncomeDTO[];
@@ -18,11 +19,12 @@ interface Props {
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
 export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Props) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
 
   async function handleDelete(id: number, title: string) {
-    if (!confirm(`"${title}" periyodik gelir kaydı silinsin mi?\nNot: bu kayıttan oluşmuş gerçekleşmiş gelirler korunur (sadece bağlantı kopar).`)) return;
+    if (!(await confirm(`"${title}" periyodik gelir kaydı silinsin mi?\nNot: bu kayıttan oluşmuş gerçekleşmiş gelirler korunur (sadece bağlantı kopar).`))) return;
     setBusy(`del-${id}`);
     setMsg("");
     try {
@@ -52,7 +54,7 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Pr
   }
 
   async function handleRealizePast(it: RecurringIncomeDTO) {
-    if (!confirm(`"${it.title}" için ${it.start_date} tarihinden bugüne kadar olan TÜM geçmiş dönemler gelir kaydı olarak oluşturulacak. Devam edilsin mi?`)) return;
+    if (!(await confirm(`"${it.title}" için ${it.start_date} tarihinden bugüne kadar olan TÜM geçmiş dönemler gelir kaydı olarak oluşturulacak. Devam edilsin mi?`, { destructive: false }))) return;
     setBusy(`rp-${it.id}`);
     setMsg("");
     try {
@@ -68,7 +70,7 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Pr
 
   async function handleRealizeAllPast() {
     if (!items.length) return;
-    if (!confirm(`TÜM ${items.length} periyodik kayıt için bugüne kadar olan tüm geçmiş dönemler gelir olarak oluşturulacak. Devam edilsin mi?`)) return;
+    if (!(await confirm(`TÜM ${items.length} periyodik kayıt için bugüne kadar olan tüm geçmiş dönemler gelir olarak oluşturulacak. Devam edilsin mi?`, { destructive: false }))) return;
     setBusy("all-past");
     setMsg("");
     try {

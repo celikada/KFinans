@@ -6,6 +6,7 @@ import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
 import { getShowUsd, setShowUsd } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
   { key: "conservative", label: RISK_PROFILE_LABELS.conservative },
@@ -18,6 +19,7 @@ const CARD_CLS = "bg-white rounded-2xl border border-gray-100 shadow-sm p-6";
 export default function SettingsPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const [user, setUser]       = useState<UserMeDTO | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -98,7 +100,7 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
-    const confirmed = globalThis.confirm("Hesabınızı silmek istediğinizden emin misiniz?");
+    const confirmed = await confirm("Hesabınızı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.");
     if (!confirmed) return;
     try {
       await api.deleteAccount();

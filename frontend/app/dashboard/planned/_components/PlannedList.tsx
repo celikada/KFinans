@@ -6,6 +6,7 @@ import {
   PLANNED_RECURRENCE_LABELS,
 } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
+import { useConfirm } from "@/app/_components/ConfirmDialog";
 
 interface Props {
   items: PlannedExpenseDTO[];
@@ -13,6 +14,8 @@ interface Props {
 }
 
 export function PlannedList({ items, onDeleted }: Props) {
+  const confirm = useConfirm();
+
   if (items.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -22,7 +25,7 @@ export function PlannedList({ items, onDeleted }: Props) {
   }
 
   async function handleDelete(id: number, title: string) {
-    if (!confirm(`"${title}" silinsin mi?`)) return;
+    if (!(await confirm(`"${title}" silinsin mi?`))) return;
     await api.deletePlannedExpense(id);
     onDeleted(id);
   }
