@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.upload_validation import validate_excel_upload
 
 logger = logging.getLogger(__name__)
 from app.models.manual_crypto import ManualCryptoHolding
@@ -344,13 +345,8 @@ async def import_manual_crypto(
 ):
     """Excel import. Mevcut tüm manuel kayıtlar SİLİNİP yenisi yüklenir
     (replace-all semantik — expenses/income import ile aynı pattern)."""
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Lütfen .xlsx veya .xls dosyası yükleyin.",
-        )
-
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
     except Exception:

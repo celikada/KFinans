@@ -62,6 +62,14 @@ kalmadı; 3 critical KVKK kullanıcı aksiyonu (#11/#12/#13) bekliyor.
 - **Yükleniyor spinner**: Toplam Portföy başlığı yanında kripto + cüzdan
   loading durumunda spinner.
 - **CHANGELOG.md** (#68 DOC-010): Bu dosya.
+- **File upload magic-byte + size limit** (#83 SEC-009): 10 Excel import
+  endpoint (BES + commodity + income + expenses + manual_crypto + wallets
+  + stocks MKK + stocks manuel + tefas MKK + tefas manuel) artık ortak
+  `app/core/upload_validation.py::validate_excel_upload()` kullanır.
+  3 katmanlı: extension (case-insensitive), boyut (`settings.max_upload_size_mb`
+  default 5MB → 413), magic byte (`.xlsx`=ZIP `PK\x03\x04`, `.xls`=OLE2
+  `\xD0\xCF\x11...`). Polyglot saldırısı engellendi (evil.xlsx PDF payload).
+  10 unit + 100 regression test.
 - **Confirm dialog (a11y + i18n)** (#82 FE-013): Native `window.confirm()`
   13 yerde kaldırıldı → `ConfirmDialogProvider` + `useConfirm()` async hook.
   Dialog: `role="alertdialog"`, `aria-modal`, `aria-labelledby/describedby`,

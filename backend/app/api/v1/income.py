@@ -15,6 +15,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.upload_validation import validate_excel_upload
 from app.models.income import Income
 from app.models.recurring_income import RecurringIncome
 from app.models.user import User
@@ -240,7 +241,8 @@ async def import_incomes(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
 
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     except Exception:

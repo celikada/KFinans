@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.upload_validation import validate_excel_upload
 from app.models.commodity import CommodityHolding
 from app.models.user import User
 from app.schemas.commodity import (
@@ -244,7 +245,8 @@ async def import_commodities(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
 
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     except Exception:

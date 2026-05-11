@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.upload_validation import validate_excel_upload
 from app.models.bes import BesHolding as BesHoldingModel
 from app.models.user import User
 from app.schemas.bes import BesHolding
@@ -132,13 +133,8 @@ async def import_bes_holdings(
 ):
     from openpyxl import load_workbook
 
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Sadece .xlsx dosyası kabul edilir",
-        )
-
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active

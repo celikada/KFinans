@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     otel_endpoint: str = ""                   # Tempo/Jaeger/Honeycomb OTLP HTTP
     otel_service_name: str = "kfinans-backend"
 
+    # ─── SEC-009 (FAZ H): File upload validation ─────────────────────
+    # 10 Excel import endpoint'i (BES, expense, income, commodity, manual_crypto,
+    # wallets, stocks MKK + manuel, tefas MKK + manuel) bu limiti kullanir.
+    # DoS koruma — openpyxl memory blow engellenir. 5MB tipik Excel icin yeterli.
+    max_upload_size_mb: int = 5
+
     # ─── PERF-004 (FAZ H): Request timing middleware ─────────────────
     # >= slow_request_threshold_ms requestler WARNING log'a yazilir.
     # /metrics/performance endpoint metrics_token bos ise 404 doner

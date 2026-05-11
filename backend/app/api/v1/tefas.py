@@ -8,6 +8,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
 from app.core.limiter import limiter
+from app.core.upload_validation import validate_excel_upload
 from app.models.tefas import TefasHolding as TefasHoldingModel
 from app.models.user import User
 from app.schemas.tefas import TefasHolding, TefasPositionOut
@@ -195,12 +196,8 @@ async def import_tefas_mkk(
     """
     import xlrd
 
-    if not file.filename or not file.filename.lower().endswith((".xls", ".xlsx")):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Sadece .xls veya .xlsx dosyası kabul edilir",
-        )
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = xlrd.open_workbook(file_contents=content)
         sh = wb.sheet_by_index(0)
@@ -288,10 +285,8 @@ async def import_tefas_holdings(
 ):
     from openpyxl import load_workbook
 
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Sadece .xlsx dosyası kabul edilir")
-
-    content = await file.read()
+    # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
+    content = await validate_excel_upload(file)
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
