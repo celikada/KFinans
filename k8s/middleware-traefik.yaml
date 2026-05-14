@@ -1,0 +1,18 @@
+---
+# Traefik Middleware CRD — HTTP -> HTTPS redirect.
+# k8s/ingress.yaml `traefik.ingress.kubernetes.io/router.middlewares` annotation
+# bu Middleware'i referans alir (`kfinans-redirect-https@kubernetescrd`).
+#
+# Niye kalici redirect:
+# - .app TLD HSTS preload listesinde — tarayici zaten HTTPS zorunlu.
+# - Direkt `curl http://kfinans.app` veya HSTS pre-cache olmayan eski tarayicilar
+#   icin defense-in-depth. 308 Permanent Redirect HTTPS'e yonlendirir.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: kfinans
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

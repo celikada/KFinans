@@ -49,3 +49,7 @@ Proje kökü:
 - [`backend/README.md`](../backend/README.md) — Backend kurulumu, komutlar, .env
 - [`frontend/README.md`](../frontend/README.md) — Frontend yapısı, bileşenler, stil
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code asistanına proje yönergeleri
+
+Operasyonel belgeler:
+- [`production-deploy-checklist.md`](production-deploy-checklist.md) — İlk production deploy (v0.1.0) checklist
+- [`infrastructure-runbook.md`](infrastructure-runbook.md) — DNS, email (Resend), K3s, cert-manager kurulum kayıtları + periyodik bakım + acil durum komutları

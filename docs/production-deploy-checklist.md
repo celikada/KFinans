@@ -44,14 +44,19 @@
 
 ## 5. DNS — kfinans.app (Namecheap)
 
+> **Tüm kayıtların güncel durumu için bkz. [`infrastructure-runbook.md`](infrastructure-runbook.md) §1.1**
+
 | | Item | Durum |
 |---|------|-------|
-| [ ] | A record `@` → `141.144.243.54` (Oracle VM) | DNS panel |
-| [ ] | A record `www` → `141.144.243.54` | DNS panel |
-| [ ] | A record `api` → `141.144.243.54` (opsiyonel, path-based ingress var) | DNS panel |
-| [ ] | MX record `@` → mailbox sağlayıcı (Faz 1 mailbox setup sonrası) | DNS panel |
-| [ ] | TXT record SPF/DKIM/DMARC (Resend email gönderimi için) | DNS panel |
-| [ ] | DNS propagation kontrol: `dig kfinans.app` 141.144.243.54 göstermeli | Lokal CLI |
+| [x] | A record `@` → `141.144.243.54` (Oracle VM) | ✅ 2026-05-14 |
+| [x] | CNAME record `www` → `kfinans.app.` (apex CNAME, IP değişirse otomatik takip) | ✅ 2026-05-14 |
+| [ ] | A record `api` → `141.144.243.54` (opsiyonel, path-based ingress var, şu an gereksiz) | — |
+| [x] | TXT `resend._domainkey` (Resend DKIM) | ✅ 2026-05-14 |
+| [x] | MX `send` → `feedback-smtp.ap-northeast-1.amazonses.com` priority 10 (Resend SPF return-path) | ✅ 2026-05-14 |
+| [x] | TXT `send` → `v=spf1 include:amazonses.com ~all` (Resend SPF) | ✅ 2026-05-14 |
+| [x] | TXT `_dmarc` → `v=DMARC1; p=none;` (DMARC monitoring) | ✅ 2026-05-14 |
+| [x] | DNS propagation kontrol: `nslookup kfinans.app 8.8.8.8` → 141.144.243.54 | ✅ 2026-05-14 |
+| [ ] | MX record apex `@` → mailbox sağlayıcı (kvkk@/privacy@ inbound, yasal aksiyon ile birlikte) | ⏳ COMP-002 |
 
 ## 6. Oracle Cloud K3s
 
@@ -124,3 +129,12 @@ git push origin :refs/tags/v0.1.0
 - **3 critical kullanıcı aksiyonu** prod öncesi zorunlu — kod ile çözülemez.
 - **FAZ F (production rollout):** bu checklist'in tüm satırları ✓ olunca başlar.
 - Public production → kullanıcı kaydı → KVKK m.5 ispat yükü doğar.
+- **Operasyonel referans:** Periyodik bakım, acil durum komutları, key rotation prosedürleri için [`infrastructure-runbook.md`](infrastructure-runbook.md).
+- **Secret değerleri:** `.credentials.local.md` (gitignore'da). Production deploy v0.1.0 secret üretim tarihi: 2026-05-14.
+
+## Değişiklik Geçmişi
+
+| Tarih | Değişiklik |
+|-------|-----------|
+| 2026-05-10 | İlk versiyon (8d751c0) |
+| 2026-05-14 | DNS (A `@` + CNAME `www` + Resend DKIM/SPF/MX/DMARC) eklendi → ✅. Runbook'a referans eklendi. |

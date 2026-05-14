@@ -8,6 +8,7 @@ resources:
   - postgres.yaml
   - backend.yaml
   - frontend.yaml
+  - middleware-traefik.yaml
   - ingress.yaml
   - backup-cronjob.yaml
 
