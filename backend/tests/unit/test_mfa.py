@@ -41,12 +41,15 @@ class TestTotpEncodeDecode:
         assert totp.verify("000000", valid_window=1) is False
 
     def test_provisioning_uri_otpauth_formatinda(self):
+        from urllib.parse import unquote
+
         secret = pyotp.random_base32()
         uri = pyotp.TOTP(secret).provisioning_uri(
             name="user@example.com",
             issuer_name="KFinans",
         )
-        assert uri.startswith("otpauth://totp/KFinans:user@example.com")
+        # pyotp 2.9+ URL-encodes special chars: @ -> %40
+        assert unquote(uri).startswith("otpauth://totp/KFinans:user@example.com")
         assert f"secret={secret}" in uri
         assert "issuer=KFinans" in uri
 

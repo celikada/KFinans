@@ -86,10 +86,9 @@ def _disable_password_policy_by_default(request, monkeypatch):
     ettigi sembolleri monkey-patch ediyoruz.
     """
     if request.node.get_closest_marker("password_policy_enabled"):
-        # Gercek policy aktif — sadece HIBP'yi disable et (network yok)
-        from app.config import settings as app_settings
-
-        monkeypatch.setattr(app_settings, "hibp_check_enabled", False, raising=False)
+        # Gercek policy aktif — test kendisi respx ile HIBP mock'lar
+        # (hibp_check_enabled'a dokunma; aksi halde endpoint early-return 0
+        # ile mock'lar bypass edilir).
         yield
         return
 

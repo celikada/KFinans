@@ -49,8 +49,10 @@ async def test_mfa_setup_returns_secret_and_qr(client: AsyncClient):
     data = resp.json()
     # base32 secret
     assert len(data["secret_base32"]) == 32
-    # otpauth URI
-    assert data["otpauth_url"].startswith("otpauth://totp/KFinans:mfa_setup@example.com")
+    # otpauth URI (pyotp 2.9+ URL-encodes special chars: @ -> %40)
+    from urllib.parse import unquote
+
+    assert unquote(data["otpauth_url"]).startswith("otpauth://totp/KFinans:mfa_setup@example.com")
     # QR PNG data URL
     assert data["qr_png_base64"].startswith("data:image/png;base64,")
 

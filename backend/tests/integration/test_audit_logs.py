@@ -76,9 +76,11 @@ async def test_failed_login_creates_audit_log(client: AsyncClient):
             .all()
         )
         assert len(logs) >= 1
-        # extra alani email tasimali
+        # extra alani maskeli email tasimali (SEC-010 PII filter)
+        from app.core.masking import mask_email
+
         emails_logged = [log.extra.get("email") for log in logs if log.extra]
-        assert "audit_fail@example.com" in emails_logged
+        assert mask_email("audit_fail@example.com") in emails_logged
 
 
 @pytest.mark.asyncio
