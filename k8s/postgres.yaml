@@ -50,13 +50,15 @@ spec:
               chmod 0644 /cert-dst/server.crt
               chown -R 70:70 /cert-dst
               ls -la /cert-dst
-          # PodSecurity baseline yeterli (root entrypoint kabul); ama
-          # privilege escalation engelle
+          # PodSecurity baseline yeterli (root entrypoint kabul). chown
+          # icin CAP_CHOWN tutulur (drop ALL'dan istisna); baseline allowed
+          # capabilities listesindedir.
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
+              add: [CHOWN]
           volumeMounts:
             - name: cert-src
               mountPath: /cert-src
