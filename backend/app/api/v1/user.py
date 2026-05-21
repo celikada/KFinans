@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
+from app.core.masking import mask_email
+from app.core.password_policy import check_hibp_pwned, check_password_strength
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.user import PasswordChange, ProfileUpdate, UserMeOut
@@ -54,7 +56,11 @@ async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: 
     current_user.risk_profile = payload.risk_profile
     await db.commit()
     await db.refresh(current_user)
-    logger.info("Risk profili güncellendi: %s → %s", current_user.email, payload.risk_profile)
+    logger.info(
+        "Risk profili güncellendi: %s → %s",
+        mask_email(current_user.email),
+        payload.risk_profile,
+    )
     return UserMeOut.model_validate(current_user)
 
 
@@ -63,8 +69,34 @@ async def change_password(
     request: Request, payload: PasswordChange, current_user: CurrentUser, db: DB
 ) -> dict:
     if not verify_password(payload.current_password, current_user.password_hash):
-        logger.warning("Yanlış mevcut şifre girişi: %s", current_user.email)
+        logger.warning("Yanlış mevcut şifre girişi: %s", mask_email(current_user.email))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre hatalı")
+
+    # SEC (audit #5): zxcvbn + HIBP yeni sifrede de uygulanir.
+    email_local = current_user.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.new_password,
+        user_inputs=[current_user.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.new_password)
+    if leaked_count >= 1:
+        logger.info(
+            "Sizmis sifre reddedildi (change): email=%s leaked_count=%s",
+            mask_email(current_user.email), leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Bu sifre bilinen veri sizintilarinda bulundu. "
+                "Lutfen baska bir sifre secin."
+            ),
+        )
+
     current_user.password_hash = hash_password(payload.new_password)
     await log_audit(
         db, request,
@@ -72,7 +104,7 @@ async def change_password(
         user_id=current_user.id,
     )
     await db.commit()
-    logger.info("Şifre güncellendi: %s", current_user.email)
+    logger.info("Şifre güncellendi: %s", mask_email(current_user.email))
     return {"detail": "Şifre güncellendi"}
 
 
@@ -86,7 +118,7 @@ async def delete_me(request: Request, current_user: CurrentUser, db: DB) -> dict
         resource=f"user:{current_user.id}",
     )
     await db.commit()
-    logger.info("Hesap silindi (soft-delete): %s", current_user.email)
+    logger.info("Hesap silindi (soft-delete): %s", mask_email(current_user.email))
     return {"detail": "Hesap silindi"}
 
 
@@ -134,7 +166,10 @@ async def request_email_change(
         db, request,
         action=AuditAction.EMAIL_CHANGE_REQUEST,
         user_id=current_user.id,
-        extra={"old_email": current_user.email, "new_email": new_email},
+        extra={
+            "old_email": mask_email(current_user.email),
+            "new_email": mask_email(new_email),
+        },
     )
     await db.commit()
 
@@ -142,10 +177,11 @@ async def request_email_change(
     # send_email helper'i Faz 3'te mevcut; iki ayri e-posta servis tarafinda
     # render edilir. Burada sadece audit + token doner; gerçek gonderim
     # async asyncio.to_thread ile yapilabilir.
-    confirm_url = f"{settings.frontend_url.rstrip('/')}/confirm-email-change?token={token}"
+    # NOTE: confirm_url log'a YAZILMAZ (token = phishing risk). Sadece email
+    # icinde gonderilir; logging icin sadece masked email + user-id yeterli.
     logger.info(
-        "E-posta degistirme istegi: user=%s yeni=%s url=%s",
-        current_user.id, new_email, confirm_url,
+        "E-posta degistirme istegi: user=%s yeni=%s",
+        current_user.id, mask_email(new_email),
     )
     return {"detail": "Yeni e-posta adresine onay baglantisi gonderildi"}
 
@@ -190,7 +226,11 @@ async def confirm_email_change(
         db, request,
         action=AuditAction.EMAIL_CHANGE_COMPLETE,
         user_id=user.id,
-        extra={"success": True, "old_email": old_email, "new_email": user.email},
+        extra={
+            "success": True,
+            "old_email": mask_email(old_email),
+            "new_email": mask_email(user.email),
+        },
     )
     try:
         await db.commit()
@@ -200,7 +240,7 @@ async def confirm_email_change(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu e-posta artik kullanilamaz",
         )
-    logger.info("E-posta degisti: %s -> %s", old_email, user.email)
+    logger.info("E-posta degisti: %s -> %s", mask_email(old_email), mask_email(user.email))
     return {"detail": "E-posta basariyla guncellendi"}
 
 
@@ -233,7 +273,11 @@ async def revoke_consent(
         extra={"consent_type": consent_type},
     )
     await db.commit()
-    logger.info("Acik riza geri cekildi: %s consent=%s", current_user.email, consent_type)
+    logger.info(
+        "Acik riza geri cekildi: %s consent=%s",
+        mask_email(current_user.email),
+        consent_type,
+    )
     return {
         "detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."
     }

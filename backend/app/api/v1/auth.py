@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
+from app.core.masking import mask_email
+from app.core.password_policy import check_hibp_pwned, check_password_strength
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -72,12 +74,16 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
     # yeni denemeler yaparak counter'i kabartamaz.
     if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
         retry_seconds = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
-        logger.warning("Kilitli hesap login denedi: %s (kalan=%ssn)", payload.email, retry_seconds)
+        logger.warning(
+            "Kilitli hesap login denedi: %s (kalan=%ssn)",
+            mask_email(payload.email),
+            retry_seconds,
+        )
         await log_audit(
             db, request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id,
-            extra={"email": payload.email, "reason": "locked"},
+            extra={"email": mask_email(payload.email), "reason": "locked"},
         )
         await db.commit()
         raise HTTPException(
@@ -87,14 +93,16 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         )
 
     if not user or not verify_password(payload.password, user.password_hash):
-        logger.warning("Başarısız giriş denemesi: %s", payload.email)
+        logger.warning("Başarısız giriş denemesi: %s", mask_email(payload.email))
         # SEC-002: User varsa counter'i artir; threshold'u asarsa kilitle.
         if user:
             user.failed_login_count = (user.failed_login_count or 0) + 1
             if user.failed_login_count >= _FAILED_LOGIN_THRESHOLD:
                 user.locked_until = datetime.now(timezone.utc) + _LOCK_DURATION
                 logger.warning(
-                    "Account lockout: %s (%s deneme)", payload.email, user.failed_login_count
+                    "Account lockout: %s (%s deneme)",
+                    mask_email(payload.email),
+                    user.failed_login_count,
                 )
         # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
         await log_audit(
@@ -102,7 +110,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id if user else None,
             extra={
-                "email": payload.email,
+                "email": mask_email(payload.email),
                 "failed_count": user.failed_login_count if user else None,
                 "locked": bool(user and user.locked_until),
             },
@@ -110,7 +118,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
     if not user.email_verified:
-        logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", payload.email)
+        logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", mask_email(payload.email))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="E-posta adresiniz henüz doğrulanmadı. Lütfen gelen kutunuzu kontrol edin.",
@@ -121,7 +129,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         user.failed_login_count = 0
         user.locked_until = None
 
-    logger.info("Kullanıcı giriş yaptı: %s", payload.email)
+    logger.info("Kullanıcı giriş yaptı: %s", mask_email(payload.email))
     await log_audit(
         db, request,
         action=AuditAction.LOGIN,
@@ -242,7 +250,7 @@ async def logout(
         # Idempotency: aynI jti tekrar logout edilirse PK cakismasI olur
         await db.rollback()
 
-    logger.info("Kullanıcı çıkış yaptı: %s", current_user.email)
+    logger.info("Kullanıcı çıkış yaptı: %s", mask_email(current_user.email))
     return {"detail": "Çıkış yapıldı"}
 
 
@@ -260,6 +268,34 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta zaten kayıtlı")
+
+    # SEC (audit #5): Sifre politikasi — zxcvbn + HIBP.
+    # User inputs: email (local-part + tam adres). Kullanici "ada@x.com" ile
+    # "ada123" sifresi sektigi zaman zxcvbn score'u kirilir.
+    email_local = payload.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.password,
+        user_inputs=[payload.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.password)
+    if leaked_count >= 1:
+        # PII guvenli: leaked_count log'lanir, sifre DEGIL
+        logger.info(
+            "Sizmis sifre reddedildi (register): email=%s leaked_count=%s",
+            mask_email(payload.email), leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Bu sifre bilinen veri sizintilarinda bulundu. "
+                "Lutfen baska bir sifre secin."
+            ),
+        )
 
     token, expires_at = _new_verify_token()
     # COMP-006 (FAZ H): Acik rizalar timestamp'le kaydedilir (KVKK m.5/1 ispat yuku).
@@ -282,11 +318,11 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         db, request,
         action=AuditAction.REGISTER,
         user_id=user.id,
-        extra={"email": payload.email, "risk_profile": payload.risk_profile},
+        extra={"email": mask_email(payload.email), "risk_profile": payload.risk_profile},
     )
     await db.commit()
     await db.refresh(user)
-    logger.info("Yeni kullanıcı kaydı: %s", payload.email)
+    logger.info("Yeni kullanıcı kaydı: %s", mask_email(payload.email))
 
     sent = await send_verification_email(to=user.email, token=token)
     return RegisterResponse(
@@ -324,7 +360,7 @@ async def verify_email(
     user.verify_token = None
     user.verify_token_expires_at = None
     await db.commit()
-    logger.info("E-posta doğrulandı: %s", user.email)
+    logger.info("E-posta doğrulandı: %s", mask_email(user.email))
     return {"detail": "E-posta başarıyla doğrulandı"}
 
 
@@ -380,7 +416,7 @@ async def forgot_password(
         db, request,
         action=AuditAction.PASSWORD_RESET_REQUEST,
         user_id=user.id if user else None,
-        extra={"email": payload.email, "user_exists": bool(user)},
+        extra={"email": mask_email(payload.email), "user_exists": bool(user)},
     )
 
     # Sadece var olan + dogrulanmis + silinmemis kullanici icin token uret
@@ -429,6 +465,32 @@ async def reset_password(
             detail="Sifirlama bagsantisi gecersiz ya da suresi dolmus.",
         )
 
+    # SEC (audit #5): Reset akisinda da policy uygulanir — eski sifre crackleninse
+    # bile kullanici "password123" gibi zayif sifreye geri donemez.
+    email_local = user.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.new_password,
+        user_inputs=[user.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.new_password)
+    if leaked_count >= 1:
+        logger.info(
+            "Sizmis sifre reddedildi (reset): email=%s leaked_count=%s",
+            mask_email(user.email), leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Bu sifre bilinen veri sizintilarinda bulundu. "
+                "Lutfen baska bir sifre secin."
+            ),
+        )
+
     user.password_hash = hash_password(payload.new_password)
     user.reset_token = None
     user.reset_token_expires_at = None
@@ -440,8 +502,8 @@ async def reset_password(
         db, request,
         action=AuditAction.PASSWORD_RESET_COMPLETE,
         user_id=user.id,
-        extra={"success": True, "email": user.email},
+        extra={"success": True, "email": mask_email(user.email)},
     )
     await db.commit()
-    logger.info("Sifre sifirlandi: %s", user.email)
+    logger.info("Sifre sifirlandi: %s", mask_email(user.email))
     return {"detail": "Sifre basariyla degistirildi. Yeni sifrenizle giris yapabilirsiniz."}

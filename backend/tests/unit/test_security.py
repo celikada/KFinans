@@ -1,16 +1,18 @@
 """
-Security primitives — JWT, bcrypt, Fernet.
+Security primitives — JWT, bcrypt, Fernet (+ MultiFernet rotation).
 DB veya HTTP gerekmez; saf birim testler.
 """
 import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from cryptography.fernet import Fernet
 from jose import jwt as jose_jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
 
 from app.config import settings
 from app.core.security import (
+    _build_fernet,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -159,3 +161,108 @@ class TestFernetEncryption:
         plain = "a" * 10_000
         encrypted = encrypt_secret(plain)
         assert decrypt_secret(encrypted) == plain
+
+
+# ─── MultiFernet — Key Rotation (SEC-012) ────────────────────────────────────
+
+
+class TestMultiFernetKeyRotation:
+    """SEC-012: MultiFernet primary+secondary key rotation pattern.
+
+    `_build_fernet()` settings okur. Test'lerde monkeypatch ile secondary
+    listesini override edip in-process davranisi dogrularis.
+    """
+
+    def test_empty_secondaries_equivalent_to_single_key(self):
+        """Default (bos liste) durumda tek-key Fernet ile ayni davranis."""
+        f = _build_fernet()
+        plain = "test-payload-default"
+        ct = f.encrypt(plain.encode())
+        assert f.decrypt(ct).decode() == plain
+
+    def test_rotation_old_ciphertext_still_decrypts(self, monkeypatch):
+        """Senaryoda: Eski primary ile encrypt edilen veri, rotation sonrasi
+        yeni primary altinda secondary olarak listelenince hala decrypt olur."""
+        old_key = Fernet.generate_key().decode()
+        new_key = Fernet.generate_key().decode()
+
+        # 1) ESKI primary ile cipher uret (sadece bu test icin direkt)
+        old_fernet = Fernet(old_key.encode())
+        ciphertext = old_fernet.encrypt(b"eski-aktif-veri")
+
+        # 2) Rotation: primary=new, secondary=[old]
+        monkeypatch.setattr(settings, "fernet_key", new_key)
+        monkeypatch.setattr(settings, "fernet_keys_secondary", [old_key])
+        rotated = _build_fernet()
+
+        # 3) Eski cipher hala okunabilir (secondary sayesinde)
+        assert rotated.decrypt(ciphertext).decode() == "eski-aktif-veri"
+
+    def test_rotation_new_encryption_uses_primary(self, monkeypatch):
+        """Encrypt SADECE primary ile yapilir — secondary plaintext'i kabul etmez."""
+        old_key = Fernet.generate_key().decode()
+        new_key = Fernet.generate_key().decode()
+
+        monkeypatch.setattr(settings, "fernet_key", new_key)
+        monkeypatch.setattr(settings, "fernet_keys_secondary", [old_key])
+        rotated = _build_fernet()
+
+        ct = rotated.encrypt(b"yeni-veri")
+
+        # Yeni primary ile direkt decrypt olmali
+        new_fernet_only = Fernet(new_key.encode())
+        assert new_fernet_only.decrypt(ct) == b"yeni-veri"
+
+        # Eski key tek basina yeni cipher'i ACAMAZ
+        old_fernet_only = Fernet(old_key.encode())
+        with pytest.raises(Exception):  # InvalidToken
+            old_fernet_only.decrypt(ct)
+
+    def test_multiple_secondaries_all_accepted(self, monkeypatch):
+        """3 eski + 1 yeni primary — her birinden uretilen cipher decrypt olmali."""
+        keys = [Fernet.generate_key().decode() for _ in range(4)]
+        primary, secondaries = keys[0], keys[1:]
+
+        # Her secondary key ile bir cipher uret
+        ciphers = [
+            Fernet(k.encode()).encrypt(f"data-from-key-{i}".encode())
+            for i, k in enumerate(secondaries)
+        ]
+
+        monkeypatch.setattr(settings, "fernet_key", primary)
+        monkeypatch.setattr(settings, "fernet_keys_secondary", secondaries)
+        multi = _build_fernet()
+
+        for i, ct in enumerate(ciphers):
+            assert multi.decrypt(ct).decode() == f"data-from-key-{i}"
+
+    def test_unknown_key_ciphertext_rejected(self, monkeypatch):
+        """Ne primary ne secondary listesinde olan key ile uretilen cipher
+        InvalidToken raise eder — saldirgan rastgele Fernet token uydurursa fail."""
+        from cryptography.fernet import InvalidToken
+
+        primary = Fernet.generate_key().decode()
+        secondary = Fernet.generate_key().decode()
+        rogue_key = Fernet.generate_key().decode()
+
+        monkeypatch.setattr(settings, "fernet_key", primary)
+        monkeypatch.setattr(settings, "fernet_keys_secondary", [secondary])
+        multi = _build_fernet()
+
+        rogue_ct = Fernet(rogue_key.encode()).encrypt(b"saldirgan-cipher")
+        with pytest.raises(InvalidToken):
+            multi.decrypt(rogue_ct)
+
+    def test_empty_string_entries_in_secondary_skipped(self, monkeypatch):
+        """Env'den gelen liste bos string'ler icerebilir (FERNET_KEYS_SECONDARY=
+        '["", "real-key"]'); bunlar atlanmalI — `Fernet('')` patlamamali."""
+        primary = Fernet.generate_key().decode()
+        real_secondary = Fernet.generate_key().decode()
+
+        monkeypatch.setattr(settings, "fernet_key", primary)
+        # Bos string + gercek key karisik
+        monkeypatch.setattr(settings, "fernet_keys_secondary", ["", real_secondary, ""])
+        multi = _build_fernet()  # patlamamali
+
+        ct = Fernet(real_secondary.encode()).encrypt(b"hayatta-kalan-veri")
+        assert multi.decrypt(ct) == b"hayatta-kalan-veri"

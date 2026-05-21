@@ -3,10 +3,31 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 import bcrypt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from app.config import settings
 
-_fernet = Fernet(settings.fernet_key.encode())
+
+def _build_fernet() -> MultiFernet:
+    """SEC-012 (FAZ H): MultiFernet with primary + optional secondaries.
+
+    Encrypt uses ONLY the primary (first) key; decrypt walks the list and
+    accepts ciphertext encrypted with ANY key. This enables zero-downtime key
+    rotation:
+
+      Primary (settings.fernet_key) -> encrypt + decrypt
+      Secondaries (settings.fernet_keys_secondary) -> decrypt only
+
+    When `fernet_keys_secondary` is empty (default), behavior is identical to
+    a single-key Fernet (backward compatible).
+
+    Invalid base64 in any key raises at import time — fail-fast.
+    """
+    primary = Fernet(settings.fernet_key.encode())
+    secondaries = [Fernet(k.encode()) for k in settings.fernet_keys_secondary if k]
+    return MultiFernet([primary, *secondaries])
+
+
+_fernet = _build_fernet()
 
 
 def hash_password(password: str) -> str:

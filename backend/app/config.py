@@ -15,6 +15,17 @@ class Settings(BaseSettings):
 
     # Exchange API key şifreleme
     fernet_key: str
+    # ─── SEC-012 (FAZ H): Fernet key rotation (MultiFernet) ───────────────
+    # Eski (rotated-out) anahtarlar — SADECE decrypt icin kullanilir, encrypt
+    # her zaman primary `fernet_key` ile yapilir. Rotation prosedur'u:
+    #   1. Yeni anahtar uret: `Fernet.generate_key().decode()`
+    #   2. `FERNET_KEYS_SECONDARY=["<eski-primary>"]` env'e ekle, restart
+    #   3. `FERNET_KEY=<yeni>` env'i guncelle, restart -> yeni encrypt yeni key ile
+    #   4. Re-encrypt background job tum row'lari yeni primary'e tasiyana kadar bekle
+    #   5. Tamamlandiginda secondary'leri kaldir
+    # JSON array string olarak parse edilir: `FERNET_KEYS_SECONDARY=["k1","k2"]`
+    # Bos liste (default) = eski tek-key davranisi (backward compat).
+    fernet_keys_secondary: list[str] = []
 
     # Claude API — finansal tavsiye özelliği etkinleştirilene kadar opsiyonel
     anthropic_api_key: str = ""
@@ -75,6 +86,12 @@ class Settings(BaseSettings):
     sentry_profiles_sample_rate: float = 0.0  # CPU profiling — kapali default
     otel_endpoint: str = ""                   # Tempo/Jaeger/Honeycomb OTLP HTTP
     otel_service_name: str = "kfinans-backend"
+
+    # ─── SEC (audit #5): Password policy ─────────────────────────────
+    # zxcvbn (offline strength score) her zaman aktif; HIBP (k-anonymity)
+    # opsiyonel — settings.hibp_check_enabled=False ile devre disi.
+    # HIBP API down/timeout durumunda fail-open (UX vs security trade-off).
+    hibp_check_enabled: bool = True
 
     # ─── SEC-009 (FAZ H): File upload validation ─────────────────────
     # 10 Excel import endpoint'i (BES, expense, income, commodity, manual_crypto,

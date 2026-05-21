@@ -2,12 +2,16 @@
 Auth endpoint integration testleri — gerçek PostgreSQL, mock yok.
 Her testte aynı DB session'ı kullanılır; rollback ile izolasyon sağlanır.
 """
+import hashlib
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
+import respx
 from httpx import AsyncClient
 from sqlalchemy import select, update
 
+from app.core.password_policy import _HIBP_RANGE_URL
 from app.models.user import User
 from tests.conftest import TestSession, verify_user_email
 
@@ -547,3 +551,222 @@ async def test_reset_password_clears_lockout_state(client: AsyncClient):
     user_after = await _get_user(email)
     assert user_after.failed_login_count == 0
     assert user_after.locked_until is None
+
+
+# ─── SEC (audit #5): Password policy (zxcvbn + HIBP) ─────────────────────────
+
+
+def _hibp_body_for(password: str, count: int) -> str:
+    """HIBP response uret — sifrenin suffix'i `count` ile birlikte."""
+    sha1_hex = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+    suffix = sha1_hex[5:]
+    return (
+        "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
+        f"{suffix}:{count}\r\n"
+    )
+
+
+def _hibp_clean_body() -> str:
+    """Suffix eslesmeyen response — pwned olmayan sifreler icin."""
+    return (
+        "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
+        "00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2\r\n"
+    )
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_register_weak_password_returns_422(client: AsyncClient):
+    """Zayif sifre (zxcvbn score < 3) -> 422 + Turkce mesaj."""
+    resp = await client.post("/api/v1/auth/register", json={
+        "email": "weak_pw@example.com",
+        "password": "12345678",  # zxcvbn score 0/1
+        "age_confirmed": True,
+    })
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "zayif" in detail.lower() or "skor" in detail.lower()
+    # Sifrenin kendisi mesajda olmamali
+    assert "12345678" not in detail
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_register_password_containing_email_rejected(client: AsyncClient):
+    """Email/local-part iceren sifre -> 422 (zxcvbn user_inputs)."""
+    resp = await client.post("/api/v1/auth/register", json={
+        "email": "celikada@example.com",
+        "password": "Celikada123!",
+        "age_confirmed": True,
+    })
+    assert resp.status_code == 422
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_register_pwned_password_returns_422(client: AsyncClient):
+    """HIBP'de bulunan sifre -> 422 'veri sizintilarinda bulundu' mesaji."""
+    strong_but_pwned = "very-strong-passphrase-but-leaked-9z"
+    prefix = hashlib.sha1(strong_but_pwned.encode()).hexdigest().upper()[:5]
+
+    with respx.mock(assert_all_called=False):
+        respx.get(_HIBP_RANGE_URL.format(prefix=prefix)).mock(
+            return_value=httpx.Response(200, text=_hibp_body_for(strong_but_pwned, 42)),
+        )
+        # Tum diger HIBP cagrilari (varsa) clean response
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            return_value=httpx.Response(200, text=_hibp_clean_body()),
+        )
+        resp = await client.post("/api/v1/auth/register", json={
+            "email": "pwned_pw@example.com",
+            "password": strong_but_pwned,
+            "age_confirmed": True,
+        })
+
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "sizinti" in detail.lower() or "sızıntı" in detail.lower()
+    # Sifre mesajda olmamali
+    assert strong_but_pwned not in detail
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_register_strong_non_pwned_password_succeeds(client: AsyncClient):
+    """Guclu + HIBP'de olmayan sifre -> 201 basari."""
+    strong = "yagmur-kahve-bulut-meridyen-9421-Q!"
+
+    with respx.mock(assert_all_called=False):
+        # Tum HIBP cagrilari clean (suffix eslesmiyor)
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            return_value=httpx.Response(200, text=_hibp_clean_body()),
+        )
+        resp = await client.post("/api/v1/auth/register", json={
+            "email": "strong_pw@example.com",
+            "password": strong,
+            "age_confirmed": True,
+        })
+
+    assert resp.status_code == 201
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_register_hibp_timeout_fails_open(client: AsyncClient):
+    """HIBP timeout -> registration block edilmez (fail-open)."""
+    strong = "yagmur-kahve-bulut-meridyen-3185-K!"
+
+    with respx.mock(assert_all_called=False):
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            side_effect=httpx.TimeoutException("network timeout"),
+        )
+        resp = await client.post("/api/v1/auth/register", json={
+            "email": "hibp_timeout@example.com",
+            "password": strong,
+            "age_confirmed": True,
+        })
+
+    # zxcvbn gecti, HIBP timeout -> kayit yine de basarili
+    assert resp.status_code == 201
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_change_password_weak_returns_422(client: AsyncClient):
+    """PUT /user/password zayif yeni sifreyi reddeder."""
+    # Once strong sifre ile kayit + login (policy bypass yapilmadan)
+    strong = "ilk-guclu-sifre-meridyen-Q9!-bulut"
+    with respx.mock(assert_all_called=False):
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            return_value=httpx.Response(200, text=_hibp_clean_body()),
+        )
+        await client.post("/api/v1/auth/register", json={
+            "email": "change_weak@example.com",
+            "password": strong,
+            "age_confirmed": True,
+        })
+        await verify_user_email("change_weak@example.com")
+        login = await client.post("/api/v1/auth/login", json={
+            "email": "change_weak@example.com",
+            "password": strong,
+        })
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        # Yeni sifre zayif -> 422
+        resp = await client.put(
+            "/api/v1/user/password",
+            json={"current_password": strong, "new_password": "password123"},
+            headers=headers,
+        )
+    assert resp.status_code == 422
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_change_password_pwned_returns_422(client: AsyncClient):
+    """PUT /user/password HIBP'de olan sifreyi reddeder."""
+    strong = "ilk-guclu-sifre-yagmur-K9!-meridyen"
+    new_pwned = "yepyeni-sifre-yagmur-Q9!-pwned-x42"
+
+    new_pwned_prefix = hashlib.sha1(new_pwned.encode()).hexdigest().upper()[:5]
+
+    with respx.mock(assert_all_called=False):
+        # Default: clean response
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            return_value=httpx.Response(200, text=_hibp_clean_body()),
+        )
+        # Specific: yeni sifre HIBP'de
+        respx.get(_HIBP_RANGE_URL.format(prefix=new_pwned_prefix)).mock(
+            return_value=httpx.Response(200, text=_hibp_body_for(new_pwned, 1337)),
+        )
+
+        await client.post("/api/v1/auth/register", json={
+            "email": "change_pwned@example.com",
+            "password": strong,
+            "age_confirmed": True,
+        })
+        await verify_user_email("change_pwned@example.com")
+        login = await client.post("/api/v1/auth/login", json={
+            "email": "change_pwned@example.com",
+            "password": strong,
+        })
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        resp = await client.put(
+            "/api/v1/user/password",
+            json={"current_password": strong, "new_password": new_pwned},
+            headers=headers,
+        )
+    assert resp.status_code == 422
+    assert "sizinti" in resp.json()["detail"].lower()
+
+
+@pytest.mark.password_policy_enabled
+@pytest.mark.asyncio
+async def test_change_password_strong_succeeds(client: AsyncClient):
+    """PUT /user/password guclu + non-pwned yeni sifreyi kabul eder (200)."""
+    old_strong = "eski-guclu-sifre-yagmur-K9!-meridyen"
+    new_strong = "yepyeni-guclu-sifre-bulut-Q9!-meridyen-7"
+
+    with respx.mock(assert_all_called=False):
+        respx.get(url__regex=r"https://api\.pwnedpasswords\.com/range/.*").mock(
+            return_value=httpx.Response(200, text=_hibp_clean_body()),
+        )
+        await client.post("/api/v1/auth/register", json={
+            "email": "change_ok@example.com",
+            "password": old_strong,
+            "age_confirmed": True,
+        })
+        await verify_user_email("change_ok@example.com")
+        login = await client.post("/api/v1/auth/login", json={
+            "email": "change_ok@example.com",
+            "password": old_strong,
+        })
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        resp = await client.put(
+            "/api/v1/user/password",
+            json={"current_password": old_strong, "new_password": new_strong},
+            headers=headers,
+        )
+    assert resp.status_code == 200

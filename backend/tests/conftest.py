@@ -68,6 +68,42 @@ def _reset_tcmb_cache():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _disable_password_policy_by_default(request, monkeypatch):
+    """SEC (audit #5): zxcvbn + HIBP policy testleri kirmasin diye varsayilan
+    olarak bypass. Mevcut 50+ test "guclu-sifre-123" gibi sifrelerle calisiyor;
+    bunlar zxcvbn'i gecebilir ama HIBP icin network call yapilir.
+
+    Policy'yi test eden testler `password_policy_enabled` marker'i kullanir:
+
+        @pytest.mark.password_policy_enabled
+        async def test_weak_password_rejected(client):
+            ...
+
+    Bypass: register/change-password/reset-password endpoint'lerinin import
+    ettigi sembolleri monkey-patch ediyoruz.
+    """
+    if request.node.get_closest_marker("password_policy_enabled"):
+        # Gercek policy aktif — sadece HIBP'yi disable et (network yok)
+        from app.config import settings as app_settings
+        monkeypatch.setattr(app_settings, "hibp_check_enabled", False, raising=False)
+        yield
+        return
+
+    async def _hibp_noop(*_args, **_kwargs) -> int:
+        return 0
+
+    def _strength_noop(*_args, **_kwargs) -> tuple[bool, str]:
+        return True, ""
+
+    # auth.py ve user.py modullerinin import ettikleri sembolleri patch et
+    monkeypatch.setattr("app.api.v1.auth.check_password_strength", _strength_noop)
+    monkeypatch.setattr("app.api.v1.auth.check_hibp_pwned", _hibp_noop)
+    monkeypatch.setattr("app.api.v1.user.check_password_strength", _strength_noop)
+    monkeypatch.setattr("app.api.v1.user.check_hibp_pwned", _hibp_noop)
+    yield
+
+
 async def verify_user_email(email: str) -> None:
     """Test yardimcisi: kayit sonrasi e-posta dogrulamasini DB uzerinden simule et.
 
