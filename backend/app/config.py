@@ -116,6 +116,19 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800    # 30 dk — stale connection (PG idle_in_transaction_session_timeout)
     db_pool_timeout: int = 30      # pool tukenince istek 30sn bekler, sonra fail
 
+    # ─── Audit 2026-05-21 #3: DB TLS ──────────────────────────────────
+    # Postgres pod cert-manager selfsigned cert ile SSL aktive. Backend
+    # asyncpg pool ssl mode'lari:
+    #   - "disable": SSL kapali (eski davranis, geriye uyumlu)
+    #   - "prefer":  SSL aktive ama cert verify OFF — cluster-ici self-signed
+    #                cert kabul (defence-in-depth; node compromise -> in-flight
+    #                data leak engelli, ama MITM disinda guvenli degil)
+    #   - "require": SSL + cert chain validate — production CA bundle gerekli
+    #                (ayri PR: ca.crt mount + ssl_ca dosyasi configure)
+    # Default "prefer": postgres TLS deploy oncesi geriye uyumlu, sonra prod'da
+    # "require"e gec.
+    database_ssl_mode: str = "prefer"
+
     @property
     def ethereum_rpc_url(self) -> str:
         if self.infura_api_key:

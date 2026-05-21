@@ -6,6 +6,9 @@ resources:
   - configmap.yaml
   # secrets.yaml — gitignore'da; ilk kurulumda kullanilir (sonra sealed-secrets.yaml
   # ile decommissioned). DR'da SealedSecret yetersizse referans icin saklanir.
+  # Audit 2026-05-21 #3: DB TLS — cert-manager selfsigned-issuer + Certificate
+  # postgres-tls Secret olusturur (postgres.yaml mount eder)
+  - postgres-cert.yaml
   - postgres.yaml
   - backend.yaml
   - frontend.yaml

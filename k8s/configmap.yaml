@@ -22,6 +22,10 @@ data:
   CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
   # FAZ C3: TrustedHostMiddleware whitelist
   ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
+  # Audit 2026-05-21 #3: DB TLS — postgres self-signed cert ile SSL aktif.
+  # "prefer": encrypt-in-transit, cluster-ici trust. "require": prod CA bundle
+  # (ayri PR). "disable": rollback.
+  DATABASE_SSL_MODE: "prefer"
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"
