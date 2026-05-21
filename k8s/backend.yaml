@@ -61,13 +61,18 @@ spec:
           # container-level guvenlik ayarlari zorunlu. Pod-level securityContext
           # (runAsNonRoot/User/Group) miras alinir ama allowPrivilegeEscalation
           # ve capabilities her container'da ayri set edilmeli.
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true; alembic
+          # transactional DDL'i memory'de yapar ama python bytecode (.pyc) /
+          # tmpfile yazimlari icin /tmp + /home/kfinans (HOME) emptyDir mount.
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           command: ["alembic", "upgrade", "head"]
           env:
+            - name: HOME
+              value: /home/kfinans
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -83,19 +88,34 @@ spec:
                 secretKeyRef:
                   name: kfinans-secrets
                   key: FERNET_KEY
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-tmp
+              mountPath: /var/tmp
+            - name: home
+              mountPath: /home/kfinans
       containers:
         - name: backend
           image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
           # DEVOPS-002: Container-level security
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true.
+          # uvicorn/FastAPI app runtime'da disk yazimi yapmiyor; ama Python
+          # bytecode (.pyc), httpx temp downloads, openpyxl/reportlab geçici
+          # buffer'lar /tmp arar. /home/kfinans HOME pip cache (~/.cache) icin
+          # ihtiyac olabilir. /var/tmp bazi libs (gettext/locale, gnupg) icin.
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false  # Python pip cache + tmp ihtiyacı
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           ports:
             - containerPort: 8000
               name: http
+          env:
+            - name: HOME
+              value: /home/kfinans
           envFrom:
             - configMapRef:
                 name: kfinans-config
@@ -145,3 +165,24 @@ spec:
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 30  # 150sn'ye kadar startup'a izin ver (cold start)
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true icin writable
+          # path'ler emptyDir uzerinden mount edilir. memory medium yok — node
+          # ephemeral storage (genelde sufficient — pg_dump/reports stream icin
+          # birkac yuz MB max). sizeLimit hot-fix saldirisini onler.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-tmp
+              mountPath: /var/tmp
+            - name: home
+              mountPath: /home/kfinans
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: home
+          emptyDir:
+            sizeLimit: 128Mi

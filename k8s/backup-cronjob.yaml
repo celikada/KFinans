@@ -63,9 +63,13 @@ spec:
             - name: backup
               image: postgres:16-alpine
               imagePullPolicy: IfNotPresent
+              # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true.
+              # pg_dump | gzip stream'i /backups PVC'ye yazar; /tmp ara buffer
+              # icin emptyDir. PGDATA postgres-0 pod'una ait, bu container'da
+              # yok — sadece /tmp emptyDir yeterli.
               securityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false  # /tmp + pg_dump çıktısı için
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop: [ALL]
               env:
@@ -114,7 +118,12 @@ spec:
               volumeMounts:
                 - name: backups
                   mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
           volumes:
             - name: backups
               persistentVolumeClaim:
                 claimName: postgres-backups
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
