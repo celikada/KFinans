@@ -40,6 +40,7 @@
     "verificationFailed": "Hesabın oluşturuldu ancak doğrulama e-postası şu an gönderilemedi. Aşağıdaki butonla tekrar dene.",
     "resending": "Gönderiliyor...",
     "resendVerification": "Doğrulama e-postasını yeniden gönder",
+    "verificationNotReceived": "E-posta adresiniz henüz doğrulanmadı. Gelen kutunuzu (ve spam klasörünüzü) kontrol edin veya bağlantıyı yeniden gönderin.",
     "resendSuccess": "Yeni doğrulama bağlantısı gönderildi.",
     "resendFailed": "Gönderim başarısız",
     "backToLogin": "Giriş sayfasına dön",

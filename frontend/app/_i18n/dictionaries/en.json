@@ -40,6 +40,7 @@
     "verificationFailed": "Your account was created but the verification email could not be sent. Try again below.",
     "resending": "Sending...",
     "resendVerification": "Resend verification email",
+    "verificationNotReceived": "Your email is not verified yet. Check your inbox (and spam folder) or resend the link.",
     "resendSuccess": "New verification link sent.",
     "resendFailed": "Failed to send",
     "backToLogin": "Back to sign in",

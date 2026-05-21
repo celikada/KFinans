@@ -18,6 +18,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Email dogrulanmadi durumu — login 403 sonrasi "yeniden gonder" akisi
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendNotice, setResendNotice] = useState("");
 
   // MFA challenge state
   const [stage, setStage] = useState<Stage>("credentials");
@@ -29,6 +33,8 @@ export default function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
+    setResendNotice("");
     setLoading(true);
     try {
       const data = await api.login(email, password);
@@ -47,9 +53,29 @@ export default function LoginPage() {
       setAuth(data.access_token, data.refresh_token);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("auth.loginFailed"));
+      const message = err instanceof Error ? err.message : t("auth.loginFailed");
+      setError(message);
+      // Backend 403 + "E-posta adresiniz henüz doğrulanmadı" -> resend akisi
+      const lower = message.toLowerCase();
+      if (lower.includes("doğrulan") || lower.includes("dogrulan") || lower.includes("verif")) {
+        setNeedsVerification(true);
+      }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!email) return;
+    setResending(true);
+    setResendNotice("");
+    try {
+      await api.resendVerification(email);
+      setResendNotice(t("auth.resendSuccess"));
+    } catch (err) {
+      setResendNotice(err instanceof Error ? err.message : t("auth.resendFailed"));
+    } finally {
+      setResending(false);
     }
   }
 
@@ -149,6 +175,23 @@ export default function LoginPage() {
 
             {error && (
               <p role="alert" aria-live="assertive" className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+            )}
+
+            {needsVerification && (
+              <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-3 rounded-lg space-y-2">
+                <p>{t("auth.verificationNotReceived")}</p>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resending || !email}
+                  className="text-sm font-medium text-blue-700 hover:text-blue-800 underline disabled:opacity-50 disabled:no-underline"
+                >
+                  {resending ? t("auth.resending") : t("auth.resendVerification")}
+                </button>
+                {resendNotice && (
+                  <p role="status" aria-live="polite" className="text-xs text-gray-700">{resendNotice}</p>
+                )}
+              </div>
             )}
 
             <button
