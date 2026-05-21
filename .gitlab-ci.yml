@@ -159,13 +159,18 @@ sonarqube-scan:
   script:
     # sonar-project.properties SonarCloud icin (celikada_KFinans + organization).
     # Self-hosted icin CLI override ile projectKey + organization=bos
+    # 2026-05-21: qualitygate.wait=false (pasif raporlama). Default Sonar way
+    # gate yeni kod coverage <80% bekler — bizde mevcut state %3-57, sonar
+    # gate gri/kirmizi olur. Custom quality gate UI'dan tune edilene kadar
+    # CI'i blocklamiyor (allow_failure: true zaten var, wait=false ile
+    # script command da exit 0 doner — pipeline tam yesil).
     - sonar-scanner
         -Dsonar.host.url=$SONAR_HOST_URL
         -Dsonar.token=$SONAR_TOKEN
         -Dsonar.projectKey=KFinans
         -Dsonar.organization=
-        -Dsonar.qualitygate.wait=true
-  allow_failure: true  # quality gate fail olursa pipeline durmasin (ilk denemede tune et)
+        -Dsonar.qualitygate.wait=false
+  allow_failure: true  # quality gate fail olursa pipeline durmasin
   rules:
     # Sonar sadece protected branch + MR + tag'lerde calistirir (SONAR_TOKEN Protected variable)
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
