@@ -45,9 +45,7 @@ def _run_alembic(*args: str) -> None:
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"alembic {' '.join(args)} basarisiz:\nstdout={result.stdout}\nstderr={result.stderr}"
-        )
+        raise RuntimeError(f"alembic {' '.join(args)} basarisiz:\nstdout={result.stdout}\nstderr={result.stderr}")
 
 
 @pytest_asyncio.fixture
@@ -77,9 +75,7 @@ async def _table_columns(table: str) -> set[str]:
     """Async ile tablonun kolon isimlerini doner."""
     engine = create_async_engine(_test_db_url())
     async with engine.connect() as conn:
-        cols = await conn.run_sync(
-            lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table)}
-        )
+        cols = await conn.run_sync(lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table)})
     await engine.dispose()
     return cols
 

@@ -22,12 +22,8 @@ def upgrade() -> None:
     )
     op.add_column("users", sa.Column("verify_token", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("deleted_at", sa.TIMESTAMP(timezone=True), nullable=True))
-    op.add_column(
-        "users", sa.Column("credit_balance", sa.Integer(), nullable=False, server_default="0")
-    )
-    op.create_check_constraint(
-        "ck_users_credit_balance_nonnegative", "users", "credit_balance >= 0"
-    )
+    op.add_column("users", sa.Column("credit_balance", sa.Integer(), nullable=False, server_default="0"))
+    op.create_check_constraint("ck_users_credit_balance_nonnegative", "users", "credit_balance >= 0")
 
 
 def downgrade() -> None:

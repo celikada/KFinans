@@ -92,11 +92,7 @@ async def _get_tefas_funds() -> list[dict]:
         logger.warning("TEFAS fon listesi çekilemedi: %s", e)
         return _tefas_cache[1] if _tefas_cache else []
 
-    funds = [
-        {"code": row.get("fonKodu", "").strip(), "name": (row.get("fonUnvan") or "").strip()}
-        for row in data
-        if row.get("fonKodu")
-    ]
+    funds = [{"code": row.get("fonKodu", "").strip(), "name": (row.get("fonUnvan") or "").strip()} for row in data if row.get("fonKodu")]
     _tefas_cache = (now, funds)
     return funds
 
@@ -170,12 +166,8 @@ async def _search_tefas(q: str, remaining: int) -> list[AssetCatalogItem]:
 @router.get("", response_model=list[AssetCatalogItem])
 async def search_catalog(
     _user: Annotated[User, Depends(get_current_user)],
-    q: Annotated[
-        str, Query(max_length=100, description="Arama terimi (boş = popüler ilkler)")
-    ] = "",
-    source: Annotated[
-        str | None, Query(description="Filtre: binance|coingecko|tefas|commodity")
-    ] = None,
+    q: Annotated[str, Query(max_length=100, description="Arama terimi (boş = popüler ilkler)")] = "",
+    source: Annotated[str | None, Query(description="Filtre: binance|coingecko|tefas|commodity")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     """Asset catalog araması. Source filtresi yoksa 4 kaynaktan da çekilir;

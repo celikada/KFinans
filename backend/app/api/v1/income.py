@@ -110,9 +110,7 @@ async def update_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Income).where(Income.id == income_id, Income.user_id == current_user.id)
-    )
+    result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -137,9 +135,7 @@ async def delete_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Income).where(Income.id == income_id, Income.user_id == current_user.id)
-    )
+    result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -170,10 +166,7 @@ async def get_income_summary(
         .group_by(Income.category)
         .order_by(desc(func.sum(Income.amount)))
     )
-    breakdown = [
-        IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt)
-        for cat, amt, cnt in cat_q.all()
-    ]
+    breakdown = [IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
 
     return IncomeSummary(
         year=year,
@@ -360,11 +353,7 @@ async def list_recurring_incomes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome)
-        .where(RecurringIncome.user_id == current_user.id)
-        .order_by(RecurringIncome.start_date.desc())
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id).order_by(RecurringIncome.start_date.desc()))
     return result.scalars().all()
 
 
@@ -404,11 +393,7 @@ async def update_recurring_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -439,11 +424,7 @@ async def delete_recurring_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -490,9 +471,7 @@ async def get_income_dashboard(
     ytd_actual = Decimal(actual_ytd_q.scalar_one())
 
     # Periyodik (yıl içi 12 ay tarama)
-    rec_q = await db.execute(
-        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
-    )
+    rec_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     recurring = rec_q.scalars().all()
 
     this_month_recurring = Decimal(0)
@@ -611,9 +590,7 @@ async def realize_recurring_period(
     )
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
     if not _applies_in_month(ri, payload.year, payload.month):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -649,9 +626,7 @@ async def realize_recurring_past(
     )
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
 
     today = datetime.now(_ISTANBUL).date()
     realized_ids: list[int] = []
@@ -682,9 +657,7 @@ async def realize_all_recurring_past(
 ):
     """Kullanıcının TÜM periyodik kayıtları için bugüne kadar olan tüm
     geçmiş dönemleri income'a aktar."""
-    result = await db.execute(
-        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     all_ri = result.scalars().all()
 
     today = datetime.now(_ISTANBUL).date()

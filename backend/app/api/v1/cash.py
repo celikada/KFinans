@@ -59,17 +59,7 @@ async def list_cash(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    rows = (
-        (
-            await db.execute(
-                select(CashHolding)
-                .where(CashHolding.user_id == current_user.id)
-                .order_by(CashHolding.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    rows = (await db.execute(select(CashHolding).where(CashHolding.user_id == current_user.id).order_by(CashHolding.id))).scalars().all()
 
     out: list[CashOut] = []
     total_tl = Decimal(0)

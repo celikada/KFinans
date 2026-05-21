@@ -48,9 +48,7 @@ async def test_generic_exception_returns_sanitized_500(handler_client: AsyncClie
         assert "ic detay sizmamali" not in body["detail"]
         assert "RuntimeError" not in body["detail"]
     finally:
-        app.router.routes = [
-            r for r in app.router.routes if getattr(r, "path", "") != "/_test_boom"
-        ]
+        app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") != "/_test_boom"]
 
 
 # ─── IntegrityError -> 409 ────────────────────────────────────────────────
@@ -73,9 +71,7 @@ async def test_integrity_error_returns_409(handler_client: AsyncClient):
         # SQL detayi sizmasin
         assert "INSERT" not in body["detail"]
     finally:
-        app.router.routes = [
-            r for r in app.router.routes if getattr(r, "path", "") != "/_test_integrity"
-        ]
+        app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") != "/_test_integrity"]
 
 
 # ─── SQLAlchemy generic -> 500 ────────────────────────────────────────────
@@ -97,9 +93,7 @@ async def test_sqlalchemy_error_returns_500_db_error(handler_client: AsyncClient
         assert "request_id" in body
         assert "connection failed" not in body["detail"]
     finally:
-        app.router.routes = [
-            r for r in app.router.routes if getattr(r, "path", "") != "/_test_dberr"
-        ]
+        app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") != "/_test_dberr"]
 
 
 # ─── HTTPException butun handler tarafindan yutulmaz (FastAPI default) ────
@@ -123,6 +117,4 @@ async def test_http_exception_passes_through(handler_client: AsyncClient):
         assert "code" not in body
         assert "request_id" not in body
     finally:
-        app.router.routes = [
-            r for r in app.router.routes if getattr(r, "path", "") != "/_test_http_exc"
-        ]
+        app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") != "/_test_http_exc"]

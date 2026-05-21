@@ -115,11 +115,7 @@ async def create_snapshot(
     # PortfolioSnapshot doner. dict fallback dual-type response_model'i bypass ediyordu;
     # kaldirildi — `dry_run=True` ayri preview endpoint'inde kullaniliyor.
     # Asset position'lari donulen response icin tekrar yukle
-    result = await db.execute(
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.id == snapshot.id)
-        .options(selectinload(PortfolioSnapshot.asset_positions))
-    )
+    result = await db.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.id == snapshot.id).options(selectinload(PortfolioSnapshot.asset_positions)))
     return result.scalar_one()
 
 
@@ -185,9 +181,7 @@ async def download_snapshot_xlsx(
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.xlsx"
-        },
+        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.xlsx"},
     )
 
 
@@ -205,9 +199,7 @@ async def download_snapshot_pdf(
     return StreamingResponse(
         iter([content]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.pdf"
-        },
+        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.pdf"},
     )
 
 
@@ -225,9 +217,7 @@ async def get_current_portfolio(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
     return snapshot
 
 
@@ -281,16 +271,11 @@ async def get_portfolio_changes(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.user_id == current_user.id)
-        .order_by(desc(PortfolioSnapshot.snapshot_date))
-        .limit(5)
+        select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == current_user.id).order_by(desc(PortfolioSnapshot.snapshot_date)).limit(5)
     )
     snapshots = result.scalars().all()
     if not snapshots:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
 
     from app.services.aggregator import calculate_changes
 
@@ -311,9 +296,7 @@ async def get_portfolio_breakdown(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
 
     from app.services.aggregator import calculate_breakdown
 
@@ -365,9 +348,7 @@ async def get_crypto_positions(
             staked_quantity=a.staked_quantity,
             unit_price_usd=a.unit_price_usd,
             unit_price_tl=(a.unit_price_usd * usd_tl).quantize(Decimal("0.01")),
-            total_value_tl=(
-                (a.liquid_quantity + a.staked_quantity) * a.unit_price_usd * usd_tl
-            ).quantize(Decimal("0.01")),
+            total_value_tl=((a.liquid_quantity + a.staked_quantity) * a.unit_price_usd * usd_tl).quantize(Decimal("0.01")),
         )
         for a in all_assets
     ]
@@ -486,9 +467,7 @@ async def get_staking_positions(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
 
     from app.services.aggregator import extract_staking_positions
 

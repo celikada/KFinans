@@ -48,9 +48,7 @@ class Settings(BaseSettings):
     hsts_max_age: int = 31536000  # 1 yıl
     # Backend JSON-only; Swagger UI kullanımı için override:
     #   "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ..."
-    csp_policy: str = (
-        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
-    )
+    csp_policy: str = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
     # ─── TrustedHost (FAZ C3) ─────────────────────────────────────────
     # Host header injection koruması. Prod'da override edilir; dev'de "*"

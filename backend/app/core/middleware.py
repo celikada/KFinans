@@ -43,9 +43,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # ─── Transport security ──────────────────────────────────────────
         # max-age 1 yıl + alt domain'ler dahil + preload list'e adaylık
-        response.headers["Strict-Transport-Security"] = (
-            f"max-age={settings.hsts_max_age}; includeSubDomains; preload"
-        )
+        response.headers["Strict-Transport-Security"] = f"max-age={settings.hsts_max_age}; includeSubDomains; preload"
 
         # ─── Anti-framing / anti-sniffing ────────────────────────────────
         response.headers["X-Frame-Options"] = "DENY"
@@ -62,9 +60,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # ─── Permissions Policy (eski Feature-Policy) ────────────────────
         # Hassas browser özellikleri default'ta kapalı; ihtiyaca göre aç.
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
-        )
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
 
         # ─── Cross-Origin izolasyon (Spectre koruması) ───────────────────
         # COEP credentialless yerine require-corp daha katı; API için yeterli.

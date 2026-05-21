@@ -62,17 +62,11 @@ def mock_metal_http():
 
     with respx.mock(assert_all_called=False) as mock:
         # TCMB
-        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
-            return_value=Response(200, content=_TCMB_XML)
-        )
+        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(return_value=Response(200, content=_TCMB_XML))
         # XAU=X
-        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(
-            return_value=Response(200, json=_XAU_RESP)
-        )
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(return_value=Response(200, json=_XAU_RESP))
         # XAG=X
-        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*").mock(
-            return_value=Response(200, json=_XAG_RESP)
-        )
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*").mock(return_value=Response(200, json=_XAG_RESP))
         yield mock
 
 
@@ -210,9 +204,7 @@ async def test_create_coin_ata(client: AsyncClient):
 async def test_invalid_biga_code(client: AsyncClient):
     """Geçersiz BiGA kodu → 422."""
     headers = await make_user(client, "com_bad_biga@example.com")
-    resp = await client.post(
-        BASE, json={"unit_type": "biga", "biga_code": "Z99", "quantity": 1.0}, headers=headers
-    )
+    resp = await client.post(BASE, json={"unit_type": "biga", "biga_code": "Z99", "quantity": 1.0}, headers=headers)
     assert resp.status_code == 422
 
 
@@ -220,9 +212,7 @@ async def test_invalid_biga_code(client: AsyncClient):
 async def test_invalid_coin_type(client: AsyncClient):
     """Geçersiz sikke türü → 422."""
     headers = await make_user(client, "com_bad_coin@example.com")
-    resp = await client.post(
-        BASE, json={"unit_type": "coin", "coin_type": "altin", "quantity": 1.0}, headers=headers
-    )
+    resp = await client.post(BASE, json={"unit_type": "coin", "coin_type": "altin", "quantity": 1.0}, headers=headers)
     assert resp.status_code == 422
 
 

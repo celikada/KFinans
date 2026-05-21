@@ -51,9 +51,7 @@ class ICrypexService(BaseIntegration):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if resp.status_code != 200:
-            raise ValueError(
-                f"iCrypex oturum açılamadı (HTTP {resp.status_code}): {resp.text[:200]}"
-            )
+            raise ValueError(f"iCrypex oturum açılamadı (HTTP {resp.status_code}): {resp.text[:200]}")
         return resp.json()["access_token"]
 
     def _parse_spot(self, data) -> dict[str, dict]:
@@ -72,9 +70,7 @@ class ICrypexService(BaseIntegration):
             if item.get("status") not in _EARN_INCLUDE:
                 continue
             symbol = str(item.get("assetSymbol", "")).strip().upper()
-            locked = Decimal(str(item.get("quantity", 0) or 0)) + Decimal(
-                str(item.get("rewardQuantity", 0) or 0)
-            )
+            locked = Decimal(str(item.get("quantity", 0) or 0)) + Decimal(str(item.get("rewardQuantity", 0) or 0))
             if not symbol or locked <= 0:
                 continue
             if symbol in balances:

@@ -33,18 +33,10 @@ class BesHolding(Base):
     )
     plan_name: Mapped[str] = mapped_column(Text, nullable=False)
     contract_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    paid_principal: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2), nullable=False, default=Decimal("0")
-    )
-    paid_returns: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2), nullable=False, default=Decimal("0")
-    )
-    govt_contribution: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2), nullable=False, default=Decimal("0")
-    )
-    govt_returns: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2), nullable=False, default=Decimal("0")
-    )
+    paid_principal: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    paid_returns: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    govt_contribution: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    govt_returns: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
 
     user: Mapped["User"] = relationship(back_populates="bes_holdings")
 

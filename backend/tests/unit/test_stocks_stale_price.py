@@ -73,9 +73,7 @@ async def test_old_market_time_marks_stale():
         return_value=_yf_response(
             {
                 "regularMarketPrice": 50.0,
-                "regularMarketTime": int(time.time())
-                - _STALE_THRESHOLD_SECONDS
-                - 3600,  # 31 saat once
+                "regularMarketTime": int(time.time()) - _STALE_THRESHOLD_SECONDS - 3600,  # 31 saat once
                 "currency": "USD",
                 "marketState": "POSTPOST",
             }

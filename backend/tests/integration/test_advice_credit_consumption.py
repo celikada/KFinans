@@ -123,11 +123,7 @@ async def test_generate_advice_consumes_credit(client: AsyncClient):
 
     # advice.credits_used yazildi
     async with TestSession() as session:
-        advice_db = (
-            await session.execute(
-                select(InvestmentAdvice).where(InvestmentAdvice.user_id == user_before.id)
-            )
-        ).scalar_one()
+        advice_db = (await session.execute(select(InvestmentAdvice).where(InvestmentAdvice.user_id == user_before.id))).scalar_one()
         assert advice_db.credits_used == 1
 
 

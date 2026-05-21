@@ -80,15 +80,11 @@ async def _weekly_snapshot_job() -> None:
     """
     async with AsyncSessionLocal() as lock_session:
         if not await _try_acquire_lock(lock_session, _SCHEDULER_LOCK_KEY):
-            logger.info(
-                "Haftalik snapshot job: pg advisory lock alinamadi, baska pod calisiyor — skip"
-            )
+            logger.info("Haftalik snapshot job: pg advisory lock alinamadi, baska pod calisiyor — skip")
             return
 
         try:
-            logger.info(
-                "Haftalik portfoy snapshot gorevi basladi (paralelizm=%d)", _SNAPSHOT_PARALLELISM
-            )
+            logger.info("Haftalik portfoy snapshot gorevi basladi (paralelizm=%d)", _SNAPSHOT_PARALLELISM)
 
             async with AsyncSessionLocal() as session:
                 result = await session.execute(

@@ -183,9 +183,7 @@ async def test_login_wrong_password_returns_401(client: AsyncClient):
         json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True},
     )
     await verify_user_email(email)
-    resp = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": "yanlis-sifre"}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "yanlis-sifre"})
     assert resp.status_code == 401
 
 

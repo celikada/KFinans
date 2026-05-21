@@ -24,9 +24,7 @@ async def get_tefas_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
     return [
         TefasHolding(
@@ -132,17 +130,13 @@ async def export_tefas_holdings(
 
     from app.services.tefas import TefasService
 
-    result = await db.execute(
-        select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
     prices: dict[str, Decimal] = {}
     if rows:
         try:
-            svc = TefasService(
-                [{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows]
-            )
+            svc = TefasService([{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows])
             assets = await svc.fetch()
             prices = {a.symbol: a.unit_price_tl for a in assets}
         except Exception:
@@ -314,9 +308,7 @@ async def import_tefas_holdings(
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
 
     parsed: list[TefasHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -357,9 +349,7 @@ async def import_tefas_holdings(
         )
 
     if not parsed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
 
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in parsed:

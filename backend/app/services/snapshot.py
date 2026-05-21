@@ -130,9 +130,7 @@ async def _gather_wallet_assets(
                 )
             return assets
         except Exception as e:
-            logger.warning(
-                "Snapshot: cuzdan fetch hatasi [%s:%s]: %s", wallet.chain, wallet.address[:10], e
-            )
+            logger.warning("Snapshot: cuzdan fetch hatasi [%s:%s]: %s", wallet.chain, wallet.address[:10], e)
             issues.append(
                 {
                     "source": "wallet",
@@ -420,24 +418,14 @@ async def _gather_manual_crypto_assets(
             ls = h.linked_source
             lid = h.linked_id or ""
             if ls == "commodity":
-                key = (
-                    "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
-                )
+                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
                 unit_tl = metal_prices.get(key, Decimal(0)) if key else Decimal(0)
             elif ls == "binance":
                 u = lookup_usd_price(lid, binance_prices)
-                unit_tl = (
-                    (u * usd_tl).quantize(Decimal("0.0001"))
-                    if (u > 0 and usd_tl > 0)
-                    else Decimal(0)
-                )
+                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
             elif ls == "coingecko":
                 u = cg_prices.get(lid, Decimal(0))
-                unit_tl = (
-                    (u * usd_tl).quantize(Decimal("0.0001"))
-                    if (u > 0 and usd_tl > 0)
-                    else Decimal(0)
-                )
+                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
             elif ls == "tefas":
                 unit_tl = tefas_prices.get(lid, Decimal(0))
             else:
@@ -649,16 +637,8 @@ async def compute_and_save_snapshot(
     from app.models.commodity import CommodityHolding
 
     intg_q, wallet_q, tefas_q, stock_q, bes_q, commodity_q, cash_q, manual_q = await asyncio.gather(
-        db.execute(
-            select(Integration).where(
-                Integration.user_id == user_id, Integration.is_active.is_(True)
-            )
-        ),
-        db.execute(
-            select(WalletAddress).where(
-                WalletAddress.user_id == user_id, WalletAddress.is_active.is_(True)
-            )
-        ),
+        db.execute(select(Integration).where(Integration.user_id == user_id, Integration.is_active.is_(True))),
+        db.execute(select(WalletAddress).where(WalletAddress.user_id == user_id, WalletAddress.is_active.is_(True))),
         db.execute(select(TefasHolding).where(TefasHolding.user_id == user_id)),
         db.execute(select(StockHolding).where(StockHolding.user_id == user_id)),
         db.execute(select(BesHolding).where(BesHolding.user_id == user_id)),
@@ -693,9 +673,7 @@ async def compute_and_save_snapshot(
         logger.warning("Snapshot: GBP/USD cekilemedi, UK hisseleri 0 deger: %s", gbp_usd)
         gbp_usd = Decimal("0")
     if isinstance(tcmb_rates, BaseException):
-        logger.warning(
-            "Snapshot: TCMB rates cekilemedi, cash USD/TRY ile cevrilecek: %s", tcmb_rates
-        )
+        logger.warning("Snapshot: TCMB rates cekilemedi, cash USD/TRY ile cevrilecek: %s", tcmb_rates)
         tcmb_rates = {}
 
     # Tum kaynaklardan asset'leri topla (paralel)
@@ -759,10 +737,7 @@ async def compute_and_save_snapshot(
                                 "source": a.provider,
                                 "symbol": a.symbol,
                                 "code": "stale_price",
-                                "msg": (
-                                    f"{a.symbol} icin spot fiyat alinamadi, son bilinen "
-                                    f"fiyat ({last_snap_date}) kullanildi"
-                                ),
+                                "msg": (f"{a.symbol} icin spot fiyat alinamadi, son bilinen fiyat ({last_snap_date}) kullanildi"),
                             }
                         )
                     else:

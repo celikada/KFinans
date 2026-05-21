@@ -36,9 +36,7 @@ class PlannedExpenseCreate(BaseModel):
     is_estimated: bool = False
     category: PlannedCategory
     recurrence: PlannedRecurrence
-    months: Optional[list[int]] = Field(
-        default=None, description="custom recurrence icin ay listesi [1-12]"
-    )
+    months: Optional[list[int]] = Field(default=None, description="custom recurrence icin ay listesi [1-12]")
     day_of_month: int = Field(default=1, ge=1, le=28)
     start_date: date_type
     end_date: Optional[date_type] = None

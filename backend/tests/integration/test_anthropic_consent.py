@@ -29,9 +29,7 @@ def _restore_anthropic_key():
 
 async def _set_credit(email: str, balance: int) -> None:
     async with TestSession() as session:
-        await session.execute(
-            update(User).where(User.email == email).values(credit_balance=balance)
-        )
+        await session.execute(update(User).where(User.email == email).values(credit_balance=balance))
         await session.commit()
 
 

@@ -36,9 +36,7 @@ def _ensure_tr_font() -> str:
         return "DejaVu"
     try:
         pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-        pdfmetrics.registerFont(
-            TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
-        )
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
         _TR_FONT_REGISTERED = True
         return "DejaVu"
     except Exception:
@@ -121,9 +119,7 @@ def cash_flow_to_xlsx(year: int, months: list, totals: dict) -> bytes:
     ws.cell(row=last_row, column=5, value=float(totals["total_expense"])).font = Font(bold=True)
     ws.cell(row=last_row, column=7, value=float(totals["total_net"])).font = Font(bold=True)
     for col in range(1, 8):
-        ws.cell(row=last_row, column=col).fill = PatternFill(
-            start_color="E5E7EB", end_color="E5E7EB", fill_type="solid"
-        )
+        ws.cell(row=last_row, column=col).fill = PatternFill(start_color="E5E7EB", end_color="E5E7EB", fill_type="solid")
 
     # Kolon genişlikleri
     ws.column_dimensions["A"].width = 14
@@ -152,9 +148,7 @@ def cash_flow_to_pdf(year: int, months: list, totals: dict) -> bytes:
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("Title", parent=styles["Title"], fontName=bold_font, fontSize=18)
-    subtitle_style = ParagraphStyle(
-        "Sub", parent=styles["Normal"], fontName=font, fontSize=10, textColor=colors.grey
-    )
+    subtitle_style = ParagraphStyle("Sub", parent=styles["Normal"], fontName=font, fontSize=10, textColor=colors.grey)
 
     elements = []
     elements.append(Paragraph(f"Nakit Akışı Raporu — {year}", title_style))
@@ -194,9 +188,7 @@ def cash_flow_to_pdf(year: int, months: list, totals: dict) -> bytes:
     elements.append(Spacer(1, 0.6 * cm))
 
     # Aylık tablo
-    table_data = [
-        ["Ay", "Tip", "Gerçek Gelir", "Tahmini Gelir", "Gerçek Gider", "Tahmini Gider", "Net"]
-    ]
+    table_data = [["Ay", "Tip", "Gerçek Gelir", "Tahmini Gelir", "Gerçek Gider", "Tahmini Gider", "Net"]]
     for m in months:
         table_data.append(
             [
@@ -359,9 +351,7 @@ def snapshot_to_pdf(snapshot, positions: list) -> bytes:
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("Title", parent=styles["Title"], fontName=bold_font, fontSize=18)
-    subtitle_style = ParagraphStyle(
-        "Sub", parent=styles["Normal"], fontName=font, fontSize=10, textColor=colors.grey
-    )
+    subtitle_style = ParagraphStyle("Sub", parent=styles["Normal"], fontName=font, fontSize=10, textColor=colors.grey)
 
     elements = []
     elements.append(Paragraph(f"Portföy Snapshot — {snapshot.snapshot_date}", title_style))

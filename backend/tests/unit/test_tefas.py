@@ -77,9 +77,7 @@ async def test_fetch_code_is_case_insensitive():
 
 @pytest.mark.asyncio
 async def test_fetch_skips_rows_with_zero_pay():
-    rows_with_zero = SAMPLE_ROWS + [
-        {"fonKodu": "BAD", "sonPortfoyDegeri": 1000.0, "sonPayAdedi": 0}
-    ]
+    rows_with_zero = SAMPLE_ROWS + [{"fonKodu": "BAD", "sonPortfoyDegeri": 1000.0, "sonPayAdedi": 0}]
     with respx.mock:
         respx.post(_EXPORT_URL).mock(return_value=Response(200, json=rows_with_zero))
         svc = TefasService([{"code": "YAC", "quantity": 10.0, "name": "Test"}])

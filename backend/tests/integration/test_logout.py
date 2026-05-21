@@ -15,13 +15,9 @@ from tests.conftest import verify_user_email
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
     """User olustur, dogrula, login yap; tum tokenlari ve auth header'i don."""
     pwd = "guclu-sifre-123"
-    await client.post(
-        "/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True}
-    )
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True}
-    )
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
     data = login.json()
     return {
         "access_token": data["access_token"],
@@ -177,15 +173,11 @@ async def test_refresh_rotation_preserves_user_isolation(client: AsyncClient):
     session_b = await _register_and_login(client, "rotate_iso_b@example.com")
 
     # A refresh yapar
-    r = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": session_a["refresh_token"]}
-    )
+    r = await client.post("/api/v1/auth/refresh", json={"refresh_token": session_a["refresh_token"]})
     assert r.status_code == 200
 
     # B'nin refresh'i hala calismali
-    rb = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": session_b["refresh_token"]}
-    )
+    rb = await client.post("/api/v1/auth/refresh", json={"refresh_token": session_b["refresh_token"]})
     assert rb.status_code == 200
 
 

@@ -74,9 +74,7 @@ async def test_fetch_single_address_zero_balance():
 @respx.mock
 async def test_fetch_single_address_500_raises():
     """5xx HTTP yanit raise_for_status ile exception."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(500))
     svc = BitcoinService(VALID_BTC_ADDR)
     with pytest.raises(httpx.HTTPStatusError):
         await svc._fetch_single_balance(VALID_BTC_ADDR)

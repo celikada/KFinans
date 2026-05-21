@@ -116,9 +116,7 @@ class LitecoinService(BaseBlockchainIntegration):
             resp.raise_for_status()
             data = resp.json()
         cs = data.get("chain_stats", {})
-        balance_sat = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(
-            str(cs.get("spent_txo_sum", 0))
-        )
+        balance_sat = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
         return balance_sat / LITOSHI_PER_LTC
 
     async def _fetch_xpub_balance(self, xpub: str) -> Decimal:
@@ -173,9 +171,7 @@ class LitecoinService(BaseBlockchainIntegration):
             else:
                 empty_streak = 0
                 had_any_tx = True
-                bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(
-                    str(cs.get("spent_txo_sum", 0))
-                )
+                bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
                 if bal > 0:
                     chain_sat += bal
             idx += 1

@@ -30,9 +30,7 @@ class Integration(Base):
     encrypted_secret: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_synced_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="integrations")
 
@@ -61,13 +59,9 @@ class WalletAddress(Base):
     address_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     label: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "chain", "address_fingerprint", name="uq_wallet_user_chain_fp"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "chain", "address_fingerprint", name="uq_wallet_user_chain_fp"),)
 
     user: Mapped["User"] = relationship(back_populates="wallet_addresses")
 

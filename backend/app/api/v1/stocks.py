@@ -45,9 +45,7 @@ async def get_stock_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
     return [
         StockHolding(
@@ -150,9 +148,7 @@ async def export_stock_holdings(
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
     quotes: dict = {}
@@ -166,9 +162,7 @@ async def export_stock_holdings(
             )
             for ticker, q in raw_quotes.items():
                 if q:
-                    price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd).quantize(
-                        Decimal("0.01")
-                    )
+                    price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd).quantize(Decimal("0.01"))
                     quotes[ticker] = (price_tl, q.currency)
         except Exception:
             logger.warning("Hisse export: canlı fiyat alınamadı")
@@ -342,9 +336,7 @@ async def import_stock_holdings(
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
 
     parsed: list[StockHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -383,9 +375,7 @@ async def import_stock_holdings(
         )
 
     if not parsed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
 
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in parsed:

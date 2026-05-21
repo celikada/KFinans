@@ -72,9 +72,7 @@ class TestFetchUsdToTl:
     async def test_falls_back_to_exchangerate_api_when_tcmb_fails(self):
         with respx.mock(assert_all_called=False) as rsx:
             rsx.get(TCMB_URL).mock(return_value=Response(503))
-            rsx.get(EXCHANGERATE_API_USD).mock(
-                return_value=Response(200, json={"rates": {"TRY": "31.25"}})
-            )
+            rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(200, json={"rates": {"TRY": "31.25"}}))
             rate = await fetch_usd_to_tl()
         assert rate == Decimal("31.25")
 
@@ -82,9 +80,7 @@ class TestFetchUsdToTl:
     async def test_falls_back_when_tcmb_xml_missing_usd(self):
         with respx.mock(assert_all_called=False) as rsx:
             rsx.get(TCMB_URL).mock(return_value=Response(200, content=_TCMB_XML_NO_USD))
-            rsx.get(EXCHANGERATE_API_USD).mock(
-                return_value=Response(200, json={"rates": {"TRY": "32.10"}})
-            )
+            rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(200, json={"rates": {"TRY": "32.10"}}))
             rate = await fetch_usd_to_tl()
         assert rate == Decimal("32.10")
 
@@ -113,9 +109,7 @@ class TestFetchGbpToUsd:
     async def test_falls_back_when_tcmb_lacks_gbp(self):
         with respx.mock(assert_all_called=False) as rsx:
             rsx.get(TCMB_URL).mock(return_value=Response(200, content=_TCMB_XML_NO_USD))
-            rsx.get(EXCHANGERATE_API_GBP).mock(
-                return_value=Response(200, json={"rates": {"USD": "1.27"}})
-            )
+            rsx.get(EXCHANGERATE_API_GBP).mock(return_value=Response(200, json={"rates": {"USD": "1.27"}}))
             rate = await fetch_gbp_to_usd()
         assert rate == Decimal("1.27")
 
@@ -146,9 +140,7 @@ class TestTcmbCache:
         # Bozuk XML — parse hatasi; cache'e yazilmamali
         with respx.mock(assert_all_called=False) as rsx:
             rsx.get(TCMB_URL).mock(return_value=Response(200, content=b"<not><valid"))
-            rsx.get(EXCHANGERATE_API_USD).mock(
-                return_value=Response(200, json={"rates": {"TRY": "33.00"}})
-            )
+            rsx.get(EXCHANGERATE_API_USD).mock(return_value=Response(200, json={"rates": {"TRY": "33.00"}}))
             rate = await fetch_usd_to_tl()
         assert rate == Decimal("33.00")
         assert aggregator._tcmb_cache is None

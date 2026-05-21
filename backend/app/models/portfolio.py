@@ -28,16 +28,12 @@ class PortfolioSnapshot(Base):
     usd_try_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
     # 0/hata veren kaynaklar listesi: [{"source": "ethereum", "code": "rpc_failed", "msg": "..."}]
     health_issues: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("user_id", "snapshot_date", name="uq_snapshot_user_date"),)
 
     user: Mapped["User"] = relationship(back_populates="portfolio_snapshots")
-    asset_positions: Mapped[list["AssetPosition"]] = relationship(
-        back_populates="snapshot", cascade="all, delete-orphan"
-    )
+    asset_positions: Mapped[list["AssetPosition"]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
     investment_advice: Mapped[list["InvestmentAdvice"]] = relationship(back_populates="snapshot")
 
 

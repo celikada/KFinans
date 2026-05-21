@@ -22,18 +22,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users", sa.Column("overseas_consent_at", sa.TIMESTAMP(timezone=True), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("terms_accepted_at", sa.TIMESTAMP(timezone=True), nullable=True)
-    )
+    op.add_column("users", sa.Column("overseas_consent_at", sa.TIMESTAMP(timezone=True), nullable=True))
+    op.add_column("users", sa.Column("terms_accepted_at", sa.TIMESTAMP(timezone=True), nullable=True))
     op.add_column("users", sa.Column("kvkk_read_at", sa.TIMESTAMP(timezone=True), nullable=True))
     op.add_column("users", sa.Column("email_change_new", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("email_change_token", sa.Text(), nullable=True))
-    op.add_column(
-        "users", sa.Column("email_change_expires_at", sa.TIMESTAMP(timezone=True), nullable=True)
-    )
+    op.add_column("users", sa.Column("email_change_expires_at", sa.TIMESTAMP(timezone=True), nullable=True))
     op.create_index("ix_users_email_change_token", "users", ["email_change_token"], unique=False)
 
 

@@ -74,9 +74,7 @@ class SonicService(BaseBlockchainIntegration):
                 except Exception:
                     return 0, 0
 
-        results = await asyncio.gather(
-            *[query_validator(vid) for vid in range(1, last_validator_id + 1)]
-        )
+        results = await asyncio.gather(*[query_validator(vid) for vid in range(1, last_validator_id + 1)])
 
         total_staked = sum(Decimal(s) for s, _ in results) / WEI
         total_rewards = sum(Decimal(r) for _, r in results) / WEI

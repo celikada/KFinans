@@ -65,9 +65,7 @@ async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: 
 
 
 @router.put("/password", status_code=status.HTTP_200_OK)
-async def change_password(
-    request: Request, payload: PasswordChange, current_user: CurrentUser, db: DB
-) -> dict:
+async def change_password(request: Request, payload: PasswordChange, current_user: CurrentUser, db: DB) -> dict:
     if not verify_password(payload.current_password, current_user.password_hash):
         logger.warning("Yanlış mevcut şifre girişi: %s", mask_email(current_user.email))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre hatalı")
@@ -158,9 +156,7 @@ async def request_email_change(
     token = secrets.token_urlsafe(32)
     current_user.email_change_new = new_email
     current_user.email_change_token = token
-    current_user.email_change_expires_at = datetime.now(timezone.utc) + timedelta(
-        hours=_EMAIL_CHANGE_TTL_HOURS
-    )
+    current_user.email_change_expires_at = datetime.now(timezone.utc) + timedelta(hours=_EMAIL_CHANGE_TTL_HOURS)
 
     await log_audit(
         db,
@@ -200,12 +196,7 @@ async def confirm_email_change(
     /auth/logout cagirmasi onerilir)."""
     result = await db.execute(select(User).where(User.email_change_token == token))
     user = result.scalar_one_or_none()
-    if (
-        not user
-        or not user.email_change_expires_at
-        or user.email_change_expires_at < datetime.now(timezone.utc)
-        or not user.email_change_new
-    ):
+    if not user or not user.email_change_expires_at or user.email_change_expires_at < datetime.now(timezone.utc) or not user.email_change_new:
         await log_audit(
             db,
             request,
@@ -283,9 +274,7 @@ async def revoke_consent(
         mask_email(current_user.email),
         consent_type,
     )
-    return {
-        "detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."
-    }
+    return {"detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."}
 
 
 # ─── COMP-003 (FAZ H): Veri tasinabilirligi — KVKK m.11/d, GDPR Art.20 ──
@@ -344,9 +333,7 @@ async def data_export(
             elif hasattr(val, "isoformat"):  # datetime/date
                 out[col.name] = val.isoformat()
             else:
-                out[col.name] = (
-                    str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
-                )
+                out[col.name] = str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
         return out
 
     uid = current_user.id
@@ -374,9 +361,7 @@ async def data_export(
     intg = await _list(Integration, exclude={"encrypted_key", "encrypted_secret"})
 
     # Snapshot + asset_positions
-    snap_result = await db.execute(
-        select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == uid)
-    )
+    snap_result = await db.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == uid))
     snapshots = []
     for s in snap_result.scalars().all():
         ap_result = await db.execute(select(AssetPosition).where(AssetPosition.snapshot_id == s.id))
@@ -406,15 +391,9 @@ async def data_export(
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
             "credit_balance": current_user.credit_balance,
             "deleted_at": current_user.deleted_at.isoformat() if current_user.deleted_at else None,
-            "overseas_consent_at": current_user.overseas_consent_at.isoformat()
-            if current_user.overseas_consent_at
-            else None,
-            "terms_accepted_at": current_user.terms_accepted_at.isoformat()
-            if current_user.terms_accepted_at
-            else None,
-            "kvkk_read_at": current_user.kvkk_read_at.isoformat()
-            if current_user.kvkk_read_at
-            else None,
+            "overseas_consent_at": current_user.overseas_consent_at.isoformat() if current_user.overseas_consent_at else None,
+            "terms_accepted_at": current_user.terms_accepted_at.isoformat() if current_user.terms_accepted_at else None,
+            "kvkk_read_at": current_user.kvkk_read_at.isoformat() if current_user.kvkk_read_at else None,
         },
         "integrations": intg,
         "wallets": wallets,
@@ -506,6 +485,4 @@ async def revoke_anthropic_consent(
         user_id=current_user.id,
     )
     await db.commit()
-    return {
-        "detail": "Anthropic veri aktarimi rizasi geri cekildi. AI tavsiye ozelligi artik kullanilamaz."
-    }
+    return {"detail": "Anthropic veri aktarimi rizasi geri cekildi. AI tavsiye ozelligi artik kullanilamaz."}

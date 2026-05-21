@@ -48,9 +48,7 @@ class AuditLog(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(String(512))
     # Ek context (parametreler, hata mesajlari, vs.) — JSONB ile esnek
     extra: Mapped[Optional[dict]] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         Index("ix_audit_logs_user_created", "user_id", "created_at"),

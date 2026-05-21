@@ -26,9 +26,7 @@ class MFAEnableIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    totp_code: str = Field(
-        min_length=6, max_length=8, description="Authenticator uygulamasinin 6 hanesi"
-    )
+    totp_code: str = Field(min_length=6, max_length=8, description="Authenticator uygulamasinin 6 hanesi")
 
 
 class MFAEnableOut(BaseModel):

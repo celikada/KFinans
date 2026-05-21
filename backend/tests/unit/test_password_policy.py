@@ -123,12 +123,7 @@ def _hibp_response_with_password(password: str, count: int) -> str:
     sha1_hex = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
     suffix = sha1_hex[5:]
     # Bir kac rastgele hash + bizim aradigimiz suffix
-    return (
-        "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
-        "00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2\r\n"
-        f"{suffix}:{count}\r\n"
-        "1E2DB1E66B348A1B9F77F1A6C6E1F86D7CB:1\r\n"
-    )
+    return f"0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2\r\n{suffix}:{count}\r\n1E2DB1E66B348A1B9F77F1A6C6E1F86D7CB:1\r\n"
 
 
 class TestHibpPwned:
@@ -205,11 +200,7 @@ class TestHibpPwned:
     async def test_malformed_response_line_ignored(self):
         """Bozuk satirlar (": yok, count non-int) sessizce atlanir."""
         prefix = hashlib.sha1(b"any").hexdigest().upper()[:5]
-        body = (
-            "INVALID_LINE_NO_COLON\r\n"
-            "ABCDE:not_a_number\r\n"
-            "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
-        )
+        body = "INVALID_LINE_NO_COLON\r\nABCDE:not_a_number\r\n0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
         with respx.mock:
             respx.get(_HIBP_RANGE_URL.format(prefix=prefix)).mock(
                 return_value=httpx.Response(200, text=body),

@@ -35,9 +35,7 @@ class CreditCardUpdate(BaseModel):
     credit_limit: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
     statement_day: Optional[int] = Field(default=None, ge=1, le=28)
     payment_due_day: Optional[int] = Field(default=None, ge=1, le=28)
-    current_period_debt: Optional[Decimal] = Field(
-        default=None, ge=0, le=Decimal("999999999999.99")
-    )
+    current_period_debt: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
     notes: Optional[str] = Field(default=None, max_length=500)
 
 
@@ -58,9 +56,7 @@ class CreditCardOut(BaseModel):
     # Hesaplanmış (server-side, read-only)
     unpaid_statement_total: Decimal = Decimal(0)  # ödenmemiş ekstrelerin toplamı
     unpaid_statement_count: int = 0  # kaç adet ödenmemiş ekstre (>= 2 ise UI uyarı)
-    future_installment_total: Decimal = Decimal(
-        0
-    )  # gelecek taksitlerin remaining × monthly toplamı
+    future_installment_total: Decimal = Decimal(0)  # gelecek taksitlerin remaining × monthly toplamı
     period_debt: Decimal = Decimal(0)  # = unpaid_statement_total + current_period_debt
     total_debt: Decimal = Decimal(0)  # = period_debt + future_installment_total
 
@@ -71,9 +67,7 @@ class CreditCardSummaryOut(BaseModel):
     """Tüm kartların özet bilgisi (dashboard kartı için)."""
 
     cards: list[CreditCardOut]
-    total_period_debt: (
-        Decimal  # tüm kartların dönem içi borç toplamı (ödenmemiş ekstre + dönem içi)
-    )
+    total_period_debt: Decimal  # tüm kartların dönem içi borç toplamı (ödenmemiş ekstre + dönem içi)
     total_debt: Decimal  # tüm kartların toplam borcu (dönem içi + gelecek taksit)
     # Geriye uyumluluk için eski isim — frontend yeni alanları kullanmalı
     total_current_period_debt: Decimal = Decimal(0)

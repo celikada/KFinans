@@ -35,9 +35,7 @@ async def test_fetch_returns_native_balance_only():
     respx.post(RPC_URL).mock(
         side_effect=[
             # getBalance: 5 SOL
-            httpx.Response(
-                200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 5_000_000_000}}
-            ),
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 5_000_000_000}}),
             # getProgramAccounts (stake offset=12): bos
             httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
             # getProgramAccounts (stake offset=44): bos
@@ -59,9 +57,7 @@ async def test_fetch_with_staked_amount():
     """Stake hesabi varsa staked_quantity dolar."""
     respx.post(RPC_URL).mock(
         side_effect=[
-            httpx.Response(
-                200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 1_000_000_000}}
-            ),
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 1_000_000_000}}),
             # offset=12 (staker): 2 stake account
             httpx.Response(
                 200,

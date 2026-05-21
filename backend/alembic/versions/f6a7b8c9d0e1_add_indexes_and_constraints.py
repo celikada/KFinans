@@ -15,9 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     # integrations: ayni kullanici + saglayici icin tek kayit
-    op.create_unique_constraint(
-        "uq_integrations_user_provider", "integrations", ["user_id", "provider"]
-    )
+    op.create_unique_constraint("uq_integrations_user_provider", "integrations", ["user_id", "provider"])
 
     # user_id filtre indeksleri (FK lookup hizlandirma)
     # ix_tefas_holdings_user_id ve ix_stock_holdings_user_id ilgili tablo migration'larinda

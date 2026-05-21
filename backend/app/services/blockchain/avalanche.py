@@ -115,9 +115,7 @@ class AvalanchePChainService(BaseBlockchainIntegration):
         try:
             return await self._fetch_via_glacier()
         except Exception as exc:
-            logger.warning(
-                "Glacier API basarisiz [%s], JSON-RPC'ye dusuyor: %s", self.address[:16], exc
-            )
+            logger.warning("Glacier API basarisiz [%s], JSON-RPC'ye dusuyor: %s", self.address[:16], exc)
             return await self._fetch_via_rpc()
 
     async def _fetch_via_glacier(self) -> dict:
@@ -174,16 +172,10 @@ class AvalanchePChainService(BaseBlockchainIntegration):
 
         async with httpx.AsyncClient(timeout=20) as client:
             balance_data = await _rpc(client, "platform.getBalance", {"addresses": [p_addr]}, 1)
-            stake_data = await _rpc(
-                client, "platform.getStake", {"addresses": [p_addr], "encoding": "hex"}, 2
-            )
+            stake_data = await _rpc(client, "platform.getStake", {"addresses": [p_addr], "encoding": "hex"}, 2)
 
-        unlocked = self._sum_assets(balance_data.get("unlockeds")) or self._to_decimal_navax(
-            balance_data.get("unlocked")
-        )
-        locked_stakeable = self._sum_assets(
-            balance_data.get("lockedStakeables")
-        ) or self._to_decimal_navax(balance_data.get("lockedStakeable"))
+        unlocked = self._sum_assets(balance_data.get("unlockeds")) or self._to_decimal_navax(balance_data.get("unlocked"))
+        locked_stakeable = self._sum_assets(balance_data.get("lockedStakeables")) or self._to_decimal_navax(balance_data.get("lockedStakeable"))
         staked = self._to_decimal_navax(stake_data.get("staked", 0))
         return {"liquid": unlocked, "staked": staked + locked_stakeable}
 

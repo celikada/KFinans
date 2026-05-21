@@ -121,9 +121,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             },
         )
         await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
     if not user.email_verified:
         logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", mask_email(payload.email))
         raise HTTPException(
@@ -173,9 +171,7 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
     try:
         data = decode_token(payload.refresh_token)
         if data.get("type") != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token türü"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token türü")
         user_id = data.get("sub")
         jti = data.get("jti")
     except JWTError:
@@ -254,11 +250,7 @@ async def logout(
     if payload.refresh_token:
         try:
             refresh_payload = decode_token(payload.refresh_token)
-            if (
-                refresh_payload.get("type") == "refresh"
-                and refresh_payload.get("sub") == str(current_user.id)
-                and refresh_payload.get("jti")
-            ):
+            if refresh_payload.get("type") == "refresh" and refresh_payload.get("sub") == str(current_user.id) and refresh_payload.get("jti"):
                 db.add(
                     RevokedToken(
                         jti=refresh_payload["jti"],
@@ -383,9 +375,7 @@ async def verify_email(
         )
     if user.email_verified:
         return {"detail": "E-posta zaten doğrulanmış"}
-    if not user.verify_token_expires_at or user.verify_token_expires_at < datetime.now(
-        timezone.utc
-    ):
+    if not user.verify_token_expires_at or user.verify_token_expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Doğrulama bağlantısının süresi dolmuş. Lütfen yeniden gönderin.",
@@ -482,11 +472,7 @@ async def reset_password(
     result = await db.execute(select(User).where(User.reset_token == payload.token))
     user = result.scalar_one_or_none()
 
-    if (
-        not user
-        or not user.reset_token_expires_at
-        or user.reset_token_expires_at < datetime.now(timezone.utc)
-    ):
+    if not user or not user.reset_token_expires_at or user.reset_token_expires_at < datetime.now(timezone.utc):
         # Audit anonim — token'i kim denedi izlenir
         await log_audit(
             db,

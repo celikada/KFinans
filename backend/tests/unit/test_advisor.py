@@ -150,18 +150,12 @@ class TestSystemPromptCacheEligibility:
     def test_system_prompt_long_enough_for_cache(self):
         # 4096 chars ≈ 1024 token (4 char/token muhafazakar tahmin)
         # Pratikte Turkce 3 char/token civari -> 6154 char ≈ 1538-2051 token
-        assert len(_SYSTEM_PROMPT) >= 5000, (
-            f"system prompt {len(_SYSTEM_PROMPT)} char < 5000 — "
-            "Anthropic prompt cache 1024 token esigi guvensiz"
-        )
+        assert len(_SYSTEM_PROMPT) >= 5000, f"system prompt {len(_SYSTEM_PROMPT)} char < 5000 — Anthropic prompt cache 1024 token esigi guvensiz"
 
     def test_system_prompt_mentions_spk_compliance(self):
         # AI-008: SPK uyumlulugu prompt'a injekte edilmeli
         assert "SPK" in _SYSTEM_PROMPT
-        assert (
-            "yatırım danışmanı DEĞİLSİN" in _SYSTEM_PROMPT
-            or "danışman değilsin" in _SYSTEM_PROMPT.lower()
-        )
+        assert "yatırım danışmanı DEĞİLSİN" in _SYSTEM_PROMPT or "danışman değilsin" in _SYSTEM_PROMPT.lower()
 
     def test_system_prompt_lists_forbidden_phrases(self):
         # Mutlak ifadelerin yasak oldugu prompt'ta gorunmeli
@@ -204,9 +198,7 @@ class TestEnsureDisclaimer:
         svc = AdvisorService()
 
         # LLM disclaimer'siz cikti dondurdu
-        no_disclaimer_msg = _fake_anthropic_message(
-            text="## Genel Bakış\n\nPortföy dengeli, kripto %30."
-        )
+        no_disclaimer_msg = _fake_anthropic_message(text="## Genel Bakış\n\nPortföy dengeli, kripto %30.")
         mock_create = AsyncMock(return_value=no_disclaimer_msg)
         with patch.object(svc._client.messages, "create", mock_create):
             advice = await svc.generate(

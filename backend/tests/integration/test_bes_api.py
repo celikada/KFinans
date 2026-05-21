@@ -55,9 +55,7 @@ async def test_save_and_retrieve_bes_holdings(client: AsyncClient):
     assert len(data) == 2
     plans = {h["plan_name"]: h for h in data}
     assert float(plans["AvivaSA Atak Hisse"]["paid_principal"]) == pytest.approx(80000)
-    assert float(plans["AvivaSA Atak Hisse"]["govt_returns"]) == pytest.approx(
-        500.50, abs=10000
-    )  # rounded
+    assert float(plans["AvivaSA Atak Hisse"]["govt_returns"]) == pytest.approx(500.50, abs=10000)  # rounded
     assert plans["AvivaSA Atak Hisse"]["contract_number"] == "AVS-12345"
     assert plans["Anadolu Hayat OKS"]["contract_number"] is None
 
@@ -137,9 +135,7 @@ async def test_excel_export(client: AsyncClient):
 
     resp = await client.get("/api/v1/portfolio/bes/export", headers=headers)
     assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    assert resp.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     wb = openpyxl.load_workbook(io.BytesIO(resp.content))
     ws = wb.active

@@ -246,13 +246,7 @@ async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
     if not symbols:
         return {}
     binance = await fetch_spot_prices(symbols)
-    missing = [
-        s
-        for s in symbols
-        if binance.get(s, Decimal(0)) <= 0
-        and s not in USD_STABLE_SYMBOLS
-        and s not in SYMBOL_PRICE_ALIASES
-    ]
+    missing = [s for s in symbols if binance.get(s, Decimal(0)) <= 0 and s not in USD_STABLE_SYMBOLS and s not in SYMBOL_PRICE_ALIASES]
     if not missing:
         return binance
 
@@ -303,9 +297,7 @@ def lookup_usd_price(symbol: str, prices: dict) -> Decimal:
     return Decimal(0)
 
 
-def to_asset_position(
-    asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal
-) -> AssetPosition:
+def to_asset_position(asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal) -> AssetPosition:
     if asset.unit_price_tl > 0:
         price_tl = asset.unit_price_tl
     else:
@@ -342,20 +334,12 @@ def calculate_changes(snapshots: list[PortfolioSnapshot]) -> PortfolioChanges:
     if len(snapshots) >= 2:
         prev_week = snapshots[1]
         wow_change_tl = current.total_value_tl - prev_week.total_value_tl
-        wow_change_pct = (
-            (wow_change_tl / prev_week.total_value_tl * 100)
-            if prev_week.total_value_tl
-            else Decimal(0)
-        )
+        wow_change_pct = (wow_change_tl / prev_week.total_value_tl * 100) if prev_week.total_value_tl else Decimal(0)
 
     if len(snapshots) >= 5:
         prev_month = snapshots[4]
         mom_change_tl = current.total_value_tl - prev_month.total_value_tl
-        mom_change_pct = (
-            (mom_change_tl / prev_month.total_value_tl * 100)
-            if prev_month.total_value_tl
-            else Decimal(0)
-        )
+        mom_change_pct = (mom_change_tl / prev_month.total_value_tl * 100) if prev_month.total_value_tl else Decimal(0)
 
     return PortfolioChanges(
         current_value_tl=current.total_value_tl,

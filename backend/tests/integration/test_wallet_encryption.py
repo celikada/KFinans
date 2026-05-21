@@ -21,9 +21,7 @@ from tests.conftest import TestSession, make_user
 
 VALID_BTC_XPUB = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
 VALID_ETH_LOWER = "0x1234567890123456789012345678901234567890"
-VALID_ETH_CHECKSUM = (
-    "0x1234567890123456789012345678901234567890"  # checksum varies; lowercase normalize ile aynidir
-)
+VALID_ETH_CHECKSUM = "0x1234567890123456789012345678901234567890"  # checksum varies; lowercase normalize ile aynidir
 
 
 @pytest.mark.asyncio
@@ -39,20 +37,14 @@ async def test_db_stores_only_ciphertext_no_plaintext(client: AsyncClient):
 
     # Raw SQL ile DB'yi oku — ORM otomatik decrypt'i bypass ediyoruz.
     async with TestSession() as session:
-        rows = (
-            await session.execute(
-                text("SELECT address_encrypted, address_fingerprint FROM wallet_addresses")
-            )
-        ).fetchall()
+        rows = (await session.execute(text("SELECT address_encrypted, address_fingerprint FROM wallet_addresses"))).fetchall()
 
     assert any(rows), "wallet kaydi olusmali"
     for encrypted, fp in rows:
         # Ciphertext plaintext degildir
         assert encrypted != VALID_BTC_XPUB, "DB'de plaintext xpub bulundu — guvenlik ihlali!"
         # Ciphertext Fernet formatindadir (base64-url-safe, gAAA... ile baslar)
-        assert encrypted.startswith("gAAAAA"), (
-            f"Fernet ciphertext beklendi, geldi: {encrypted[:20]}"
-        )
+        assert encrypted.startswith("gAAAAA"), f"Fernet ciphertext beklendi, geldi: {encrypted[:20]}"
         # Fingerprint hex 64 karakter (SHA-256)
         assert len(fp) == 64
         assert all(c in "0123456789abcdef" for c in fp)
@@ -86,9 +78,7 @@ async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
     from app.models.user import User
 
     async with TestSession() as session:
-        user = (
-            await session.execute(select(User).where(User.email == "wallet_enc_orm@example.com"))
-        ).scalar_one()
+        user = (await session.execute(select(User).where(User.email == "wallet_enc_orm@example.com"))).scalar_one()
         wallet = (
             await session.execute(
                 select(WalletAddress).where(

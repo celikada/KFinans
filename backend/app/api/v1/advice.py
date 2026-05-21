@@ -28,10 +28,7 @@ async def list_advice(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(InvestmentAdvice)
-        .where(InvestmentAdvice.user_id == current_user.id)
-        .order_by(desc(InvestmentAdvice.generated_at))
-        .limit(limit)
+        select(InvestmentAdvice).where(InvestmentAdvice.user_id == current_user.id).order_by(desc(InvestmentAdvice.generated_at)).limit(limit)
     )
     return result.scalars().all()
 
@@ -54,8 +51,7 @@ async def generate_advice(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Anthropic API'ye veri aktarimi icin acik riza gerekli (KVKK m.9). "
-                "Ayarlar > Gizlilik bolumunden 'Anthropic AI tavsiye' onayini etkinlestirin."
+                "Anthropic API'ye veri aktarimi icin acik riza gerekli (KVKK m.9). Ayarlar > Gizlilik bolumunden 'Anthropic AI tavsiye' onayini etkinlestirin."
             ),
         )
 

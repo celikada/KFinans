@@ -52,9 +52,7 @@ _THYAO_RESP = {
 }
 _AAPL_RESP = {
     "chart": {
-        "result": [
-            {"meta": {"regularMarketPrice": 200.0, "currency": "USD", "longName": "Apple Inc."}}
-        ],
+        "result": [{"meta": {"regularMarketPrice": 200.0, "currency": "USD", "longName": "Apple Inc."}}],
         "error": None,
     }
 }
@@ -86,21 +84,13 @@ def mock_http():
 
     with respx.mock(assert_all_called=False) as mock:
         # TCMB
-        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
-            return_value=Response(200, content=_TCMB_XML)
-        )
+        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(return_value=Response(200, content=_TCMB_XML))
         # Yahoo Finance — THYAO.IS
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/THYAO\.IS.*"
-        ).mock(return_value=Response(200, json=_THYAO_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/THYAO\.IS.*").mock(return_value=Response(200, json=_THYAO_RESP))
         # Yahoo Finance — AAPL
-        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/AAPL.*").mock(
-            return_value=Response(200, json=_AAPL_RESP)
-        )
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/AAPL.*").mock(return_value=Response(200, json=_AAPL_RESP))
         # TEFAS export API
-        mock.post("https://www.tefas.gov.tr/api/fund-returns/export").mock(
-            return_value=Response(200, json=_TEFAS_RESP)
-        )
+        mock.post("https://www.tefas.gov.tr/api/fund-returns/export").mock(return_value=Response(200, json=_TEFAS_RESP))
         yield mock
 
 

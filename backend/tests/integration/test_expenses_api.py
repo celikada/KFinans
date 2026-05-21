@@ -140,9 +140,7 @@ async def test_list_filters_by_year_month(client: AsyncClient):
 async def test_list_filters_by_category(client: AsyncClient):
     headers = await make_user(client, "exp_cat_filter@example.com")
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-01"), headers=headers)
-    await client.post(
-        "/api/v1/expenses", json=_exp(100, "transport", "2026-05-02"), headers=headers
-    )
+    await client.post("/api/v1/expenses", json=_exp(100, "transport", "2026-05-02"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(75, "food", "2026-05-03"), headers=headers)
 
     resp = await client.get("/api/v1/expenses?category=food", headers=headers)
@@ -191,9 +189,7 @@ async def test_summary_with_data(client: AsyncClient):
     headers = await make_user(client, "sum_data@example.com")
     await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-05"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-10"), headers=headers)
-    await client.post(
-        "/api/v1/expenses", json=_exp(200, "transport", "2026-05-12"), headers=headers
-    )
+    await client.post("/api/v1/expenses", json=_exp(200, "transport", "2026-05-12"), headers=headers)
     # Farkli ay — summary'ye dahil olmamali
     await client.post("/api/v1/expenses", json=_exp(999, "food", "2026-04-15"), headers=headers)
 

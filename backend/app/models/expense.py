@@ -43,11 +43,7 @@ class Expense(Base):
     )
     # Harcama gerçekleşti mi? (default=true; planlı kayıttan dönüştürülen
     # nadir senaryolarda false olabilir.)
-    is_paid: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="expenses")

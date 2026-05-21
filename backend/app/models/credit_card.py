@@ -27,12 +27,8 @@ class CreditCard(Base):
     bank_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     last_4: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
     credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
-    statement_day: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1, server_default="1"
-    )
-    payment_due_day: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=10, server_default="10"
-    )
+    statement_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    payment_due_day: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default="10")
     # Dönem içi henüz ekstreye düşmemiş tutar (kullanıcı manuel günceller)
     current_period_debt: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
@@ -90,9 +86,7 @@ class CreditCardStatement(Base):
 
     card: Mapped["CreditCard"] = relationship(back_populates="statements")
 
-    __table_args__ = (
-        UniqueConstraint("card_id", "period_year", "period_month", name="uq_statement_card_period"),
-    )
+    __table_args__ = (UniqueConstraint("card_id", "period_year", "period_month", name="uq_statement_card_period"),)
 
 
 class CreditCardInstallment(Base):

@@ -79,9 +79,7 @@ async def test_asset_catalog_commodity_silver_tr_search(client: AsyncClient):
 async def test_asset_catalog_commodity_no_match(client: AsyncClient):
     """source=commodity + q='hiç_eşleşmeyen' → boş liste."""
     headers = await make_user(client, "ac_nomatch@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=zzznonexistentzzz&source=commodity", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=zzznonexistentzzz&source=commodity", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
 

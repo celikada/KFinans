@@ -37,9 +37,7 @@ async def add_integration(
     existing = result.scalar_one_or_none()
     if existing:
         existing.encrypted_key = encrypt_secret(payload.api_key)
-        existing.encrypted_secret = (
-            encrypt_secret(payload.api_secret) if payload.api_secret else None
-        )
+        existing.encrypted_secret = encrypt_secret(payload.api_secret) if payload.api_secret else None
         existing.is_active = True
         await log_audit(
             db,

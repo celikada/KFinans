@@ -164,12 +164,8 @@ async def test_email_change_confirm_swaps_email(client: AsyncClient):
 
     async with TestSession() as session:
         # old_email artik bulunmamali, new_email var
-        old = (
-            await session.execute(select(User).where(User.email == old_email))
-        ).scalar_one_or_none()
-        new = (
-            await session.execute(select(User).where(User.email == new_email))
-        ).scalar_one_or_none()
+        old = (await session.execute(select(User).where(User.email == old_email))).scalar_one_or_none()
+        new = (await session.execute(select(User).where(User.email == new_email))).scalar_one_or_none()
         assert old is None
         assert new is not None
         assert new.email_change_token is None

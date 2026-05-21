@@ -174,9 +174,7 @@ async def delete_credit_card(
 # Yardımcı: kullanıcının sahibi olduğu kartı getir (IDOR koruması)
 # ---------------------------------------------------------------------------
 async def _get_owned_card(card_id: int, user: User, db: AsyncSession) -> CreditCard:
-    result = await db.execute(
-        select(CreditCard).where(CreditCard.id == card_id, CreditCard.user_id == user.id)
-    )
+    result = await db.execute(select(CreditCard).where(CreditCard.id == card_id, CreditCard.user_id == user.id))
     card = result.scalar_one_or_none()
     if not card:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
@@ -223,9 +221,7 @@ async def get_credit_card_detail(
 # ---------------------------------------------------------------------------
 # Ekstre endpoint'leri
 # ---------------------------------------------------------------------------
-@router.post(
-    "/{card_id}/statements", response_model=StatementOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("/{card_id}/statements", response_model=StatementOut, status_code=status.HTTP_201_CREATED)
 async def create_statement(
     card_id: int,
     payload: StatementCreate,
@@ -332,9 +328,7 @@ def _calc_remaining(first_due: date_type, total_count: int) -> int:
     return max(0, total_count - months_passed)
 
 
-@router.post(
-    "/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
 async def create_installment(
     card_id: int,
     payload: InstallmentCreate,

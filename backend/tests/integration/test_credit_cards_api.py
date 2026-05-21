@@ -190,13 +190,9 @@ async def test_create_duplicate_statement_period_409(client: AsyncClient):
         "statement_date": "2026-05-15",
         "due_date": "2026-05-25",
     }
-    first = await client.post(
-        f"/api/v1/credit-cards/{cid}/statements", json=payload, headers=headers
-    )
+    first = await client.post(f"/api/v1/credit-cards/{cid}/statements", json=payload, headers=headers)
     assert first.status_code == 201
-    second = await client.post(
-        f"/api/v1/credit-cards/{cid}/statements", json=payload, headers=headers
-    )
+    second = await client.post(f"/api/v1/credit-cards/{cid}/statements", json=payload, headers=headers)
     # IntegrityError -> 409 (BACK-008 generic handler)
     assert second.status_code in (400, 409, 500)
 
@@ -298,8 +294,7 @@ async def test_double_count_paid_credit_card_expense_excluded(client: AsyncClien
     assert resp.status_code == 200
     s = resp.json()
     assert float(s["total"]) == 500.0, (
-        f"Cift sayim kurali bozuldu! credit_card_id NOT NULL + is_paid=true "
-        f"Expense /summary'den haric tutulmali. Beklenen 500.00, gelen {s['total']}"
+        f"Cift sayim kurali bozuldu! credit_card_id NOT NULL + is_paid=true Expense /summary'den haric tutulmali. Beklenen 500.00, gelen {s['total']}"
     )
 
 
@@ -375,6 +370,4 @@ async def test_double_count_budget_comparison_excludes_paid_card_expense(client:
     groceries = next((r for r in rows if r["category"] == "groceries"), None)
     assert groceries is not None
     # actual_amount sadece 300 (kartsiz) olmali, 800 (paid kart) haric
-    assert float(groceries["actual_amount"]) == 300.0, (
-        f"Budget comparison cift sayim bozuldu! Beklenen 300.00, gelen {groceries['actual_amount']}"
-    )
+    assert float(groceries["actual_amount"]) == 300.0, f"Budget comparison cift sayim bozuldu! Beklenen 300.00, gelen {groceries['actual_amount']}"

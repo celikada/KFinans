@@ -180,9 +180,7 @@ async def get_cash_flow(
 
     # 4) Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için
     inst_q = await db.execute(
-        select(CreditCardInstallment)
-        .join(CreditCard, CreditCardInstallment.card_id == CreditCard.id)
-        .where(CreditCard.user_id == current_user.id)
+        select(CreditCardInstallment).join(CreditCard, CreditCardInstallment.card_id == CreditCard.id).where(CreditCard.user_id == current_user.id)
     )
     installments = inst_q.scalars().all()
     installment_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
@@ -192,9 +190,7 @@ async def get_cash_flow(
                 installment_by_month[m] += Decimal(inst.monthly_amount)
 
     # 5) Periyodik gelirler (recurring_incomes) — gelecek için forecast
-    rec_inc_q = await db.execute(
-        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
-    )
+    rec_inc_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     recurring_incomes = rec_inc_q.scalars().all()
     recurring_income_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
     for ri in recurring_incomes:

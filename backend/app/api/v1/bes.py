@@ -22,9 +22,7 @@ async def get_bes_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
     return [
         BesHolding(
@@ -70,9 +68,7 @@ async def export_bes_holdings(
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
     wb = Workbook()

@@ -46,10 +46,7 @@ def downgrade() -> None:
         "bes_holdings",
         sa.Column("total_value_tl", sa.Numeric(18, 2), nullable=False, server_default="0"),
     )
-    op.execute(
-        "UPDATE bes_holdings SET total_value_tl = "
-        "paid_principal + paid_returns + govt_contribution + govt_returns"
-    )
+    op.execute("UPDATE bes_holdings SET total_value_tl = paid_principal + paid_returns + govt_contribution + govt_returns")
     op.drop_column("bes_holdings", "govt_returns")
     op.drop_column("bes_holdings", "govt_contribution")
     op.drop_column("bes_holdings", "paid_returns")

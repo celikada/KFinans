@@ -57,18 +57,10 @@ def mock_external_http():
     com._price_cache = None
 
     with respx.mock(assert_all_called=False) as mock:
-        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
-            return_value=Response(200, content=_TCMB_XML)
-        )
-        mock.get("https://api.binance.com/api/v3/ticker/price").mock(
-            return_value=Response(200, json=_BINANCE_PRICES)
-        )
-        mock.get("https://api.coingecko.com/api/v3/coins/list").mock(
-            return_value=Response(200, json=_COINGECKO_LIST)
-        )
-        mock.get(url__regex=r"https://api\.coingecko\.com/api/v3/simple/price.*").mock(
-            return_value=Response(200, json=_COINGECKO_PRICES)
-        )
+        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(return_value=Response(200, content=_TCMB_XML))
+        mock.get("https://api.binance.com/api/v3/ticker/price").mock(return_value=Response(200, json=_BINANCE_PRICES))
+        mock.get("https://api.coingecko.com/api/v3/coins/list").mock(return_value=Response(200, json=_COINGECKO_LIST))
+        mock.get(url__regex=r"https://api\.coingecko\.com/api/v3/simple/price.*").mock(return_value=Response(200, json=_COINGECKO_PRICES))
         # Yahoo Finance — altın & gümüş
         mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(
             return_value=Response(
@@ -132,9 +124,7 @@ async def test_create_minimal(client: AsyncClient):
 async def test_symbol_uppercased(client: AsyncClient):
     """Sembol otomatik büyük harfe çevrilmeli."""
     headers = await make_user(client, "mc_upper@example.com")
-    resp = await client.post(
-        BASE, json={"exchange": "icrypex", "symbol": "eth", "quantity": 2}, headers=headers
-    )
+    resp = await client.post(BASE, json={"exchange": "icrypex", "symbol": "eth", "quantity": 2}, headers=headers)
     assert resp.json()["symbol"] == "ETH"
 
 
@@ -160,12 +150,8 @@ async def test_list_with_prices(client: AsyncClient):
     Toplam = 1.440.000 TL
     """
     headers = await make_user(client, "mc_list@example.com")
-    await client.post(
-        BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers
-    )
-    await client.post(
-        BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 2}, headers=headers
-    )
+    await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers)
+    await client.post(BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 2}, headers=headers)
 
     resp = await client.get(BASE, headers=headers)
     assert resp.status_code == 200
@@ -183,9 +169,7 @@ async def test_list_with_prices(client: AsyncClient):
 async def test_unknown_symbol_listed(client: AsyncClient):
     """Binance'te bulunmayan sembol unknown_symbols listesine girer + value 0."""
     headers = await make_user(client, "mc_unknown@example.com")
-    await client.post(
-        BASE, json={"exchange": "other", "symbol": "FAKECOIN", "quantity": 100}, headers=headers
-    )
+    await client.post(BASE, json={"exchange": "other", "symbol": "FAKECOIN", "quantity": 100}, headers=headers)
 
     resp = await client.get(BASE, headers=headers)
     data = resp.json()
@@ -220,9 +204,7 @@ async def test_gain_loss_calculated(client: AsyncClient):
 async def test_update(client: AsyncClient):
     """PUT endpoint quantity değiştirir."""
     headers = await make_user(client, "mc_update@example.com")
-    create = await client.post(
-        BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers
-    )
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
     holding_id = create.json()["id"]
 
     resp = await client.put(f"{BASE}/{holding_id}", json={"quantity": 2.5}, headers=headers)
@@ -234,9 +216,7 @@ async def test_update(client: AsyncClient):
 async def test_delete(client: AsyncClient):
     """DELETE endpoint pozisyonu siler."""
     headers = await make_user(client, "mc_delete@example.com")
-    create = await client.post(
-        BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers
-    )
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
     holding_id = create.json()["id"]
 
     resp = await client.delete(f"{BASE}/{holding_id}", headers=headers)
@@ -252,9 +232,7 @@ async def test_idor_protection(client: AsyncClient):
     """Başkasının kaydını silemez/güncelleyemez."""
     h1 = await make_user(client, "mc_idor1@example.com")
     h2 = await make_user(client, "mc_idor2@example.com")
-    create = await client.post(
-        BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=h1
-    )
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=h1)
     holding_id = create.json()["id"]
 
     resp = await client.delete(f"{BASE}/{holding_id}", headers=h2)
@@ -268,9 +246,7 @@ async def test_idor_protection(client: AsyncClient):
 async def test_export_excel(client: AsyncClient):
     """Excel export başlık + 1 satır içerir."""
     headers = await make_user(client, "mc_export@example.com")
-    await client.post(
-        BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers
-    )
+    await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 0.5}, headers=headers)
 
     resp = await client.get(f"{BASE}/export", headers=headers)
     assert resp.status_code == 200
@@ -410,9 +386,7 @@ async def test_update_price_source_clears_manual(client: AsyncClient):
     holding_id = create.json()["id"]
 
     # Auto'ya geçir
-    update = await client.put(
-        f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers
-    )
+    update = await client.put(f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers)
     assert update.status_code == 200
     assert update.json()["price_source"] == "auto"
     assert update.json()["manual_unit_price_tl"] is None
@@ -435,9 +409,7 @@ async def test_update_price_source_clears_linked(client: AsyncClient):
         headers=headers,
     )
     holding_id = create.json()["id"]
-    update = await client.put(
-        f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers
-    )
+    update = await client.put(f"{BASE}/{holding_id}", json={"price_source": "auto"}, headers=headers)
     assert update.status_code == 200
     assert update.json()["price_source"] == "auto"
     assert update.json()["linked_source"] is None
@@ -471,9 +443,7 @@ async def test_import_replaces_existing(client: AsyncClient):
     """Import replace-all: mevcut silinir, yeniler eklenir."""
     headers = await make_user(client, "mc_import@example.com")
     # Önce 1 mevcut kayıt
-    await client.post(
-        BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 5}, headers=headers
-    )
+    await client.post(BASE, json={"exchange": "icrypex", "symbol": "ETH", "quantity": 5}, headers=headers)
 
     # Excel hazırla — sadece BTC içerir, ETH silinmeli
     wb = openpyxl.Workbook()

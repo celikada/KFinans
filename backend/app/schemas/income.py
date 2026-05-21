@@ -110,9 +110,7 @@ class RecurringIncomeCreate(BaseModel):
     amount: Decimal = Field(..., gt=0, le=99_999_999.99)
     category: RecurringIncomeCategory
     recurrence: RecurringRecurrence
-    months: Optional[list[int]] = Field(
-        default=None, description="custom recurrence için ay listesi [1-12]"
-    )
+    months: Optional[list[int]] = Field(default=None, description="custom recurrence için ay listesi [1-12]")
     day_of_month: int = Field(default=1, ge=1, le=28)
     start_date: date_type
     end_date: Optional[date_type] = None

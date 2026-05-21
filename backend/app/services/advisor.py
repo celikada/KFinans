@@ -179,15 +179,11 @@ class AdvisorService:
             timeout=_CLAUDE_TIMEOUT_SECONDS,
         )
 
-    async def generate(
-        self, user: User, snapshot: PortfolioSnapshot, horizon: str
-    ) -> InvestmentAdvice:
+    async def generate(self, user: User, snapshot: PortfolioSnapshot, horizon: str) -> InvestmentAdvice:
         breakdown = calculate_breakdown(snapshot)
 
         staking_lines = "\n".join(
-            f"  - {pos.provider.upper()}: {pos.staked_quantity} adet stake"
-            for pos in snapshot.asset_positions
-            if pos.staked_quantity > 0
+            f"  - {pos.provider.upper()}: {pos.staked_quantity} adet stake" for pos in snapshot.asset_positions if pos.staked_quantity > 0
         )
 
         prompt = f"""Portföy özeti:
@@ -225,9 +221,7 @@ class AdvisorService:
                 headers={"Retry-After": retry_after},
             ) from exc
         except anthropic.APITimeoutError as exc:
-            logger.warning(
-                "Claude timeout (user=%s, %ss): %s", user.id, _CLAUDE_TIMEOUT_SECONDS, exc
-            )
+            logger.warning("Claude timeout (user=%s, %ss): %s", user.id, _CLAUDE_TIMEOUT_SECONDS, exc)
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Claude API zaman asimina ugradi, tekrar deneyin",
@@ -254,9 +248,7 @@ class AdvisorService:
             ) from exc
         except anthropic.APIStatusError as exc:
             # 5xx genel veya OverloadedError (529)
-            logger.warning(
-                "Claude APIStatusError (status=%s, user=%s): %s", exc.status_code, user.id, exc
-            )
+            logger.warning("Claude APIStatusError (status=%s, user=%s): %s", exc.status_code, user.id, exc)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Claude API gecici olarak ulasilamiyor, tekrar deneyin",

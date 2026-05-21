@@ -17,9 +17,7 @@ class ManualCryptoCreate(BaseModel):
     quantity: Decimal = Field(..., gt=0, le=Decimal("9999999999999999.999999999999"))
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource = "auto"
-    manual_unit_price_tl: Decimal | None = Field(
-        default=None, ge=0, le=Decimal("999999999999.999999")
-    )
+    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     linked_source: LinkedSource | None = None
     linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)
@@ -42,14 +40,10 @@ class ManualCryptoUpdate(BaseModel):
     exchange: str | None = Field(default=None, min_length=1, max_length=40)
     label: str | None = Field(default=None, max_length=100)
     symbol: str | None = Field(default=None, min_length=1, max_length=20)
-    quantity: Decimal | None = Field(
-        default=None, gt=0, le=Decimal("9999999999999999.999999999999")
-    )
+    quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("9999999999999999.999999999999"))
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource | None = None
-    manual_unit_price_tl: Decimal | None = Field(
-        default=None, ge=0, le=Decimal("999999999999.999999")
-    )
+    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     linked_source: LinkedSource | None = None
     linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)

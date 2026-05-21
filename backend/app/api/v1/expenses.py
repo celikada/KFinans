@@ -209,10 +209,7 @@ async def get_expense_summary(
         .group_by(Expense.category)
         .order_by(desc(func.sum(Expense.amount)))
     )
-    breakdown = [
-        CategoryBreakdown(category=cat, total=Decimal(amt), count=cnt)
-        for cat, amt, cnt in cat_q.all()
-    ]
+    breakdown = [CategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
 
     return ExpenseSummary(
         year=year,

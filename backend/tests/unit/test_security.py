@@ -227,10 +227,7 @@ class TestMultiFernetKeyRotation:
         primary, secondaries = keys[0], keys[1:]
 
         # Her secondary key ile bir cipher uret
-        ciphers = [
-            Fernet(k.encode()).encrypt(f"data-from-key-{i}".encode())
-            for i, k in enumerate(secondaries)
-        ]
+        ciphers = [Fernet(k.encode()).encrypt(f"data-from-key-{i}".encode()) for i, k in enumerate(secondaries)]
 
         monkeypatch.setattr(settings, "fernet_key", primary)
         monkeypatch.setattr(settings, "fernet_keys_secondary", secondaries)

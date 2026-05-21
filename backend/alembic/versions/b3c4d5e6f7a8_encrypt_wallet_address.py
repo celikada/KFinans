@@ -57,11 +57,7 @@ def upgrade() -> None:
         ciphertext = encrypt_secret(plaintext)
         fp = address_fingerprint(plaintext)
         bind.execute(
-            sa.text(
-                "UPDATE wallet_addresses "
-                "SET address_encrypted = :enc, address_fingerprint = :fp "
-                "WHERE id = :id"
-            ),
+            sa.text("UPDATE wallet_addresses SET address_encrypted = :enc, address_fingerprint = :fp WHERE id = :id"),
             {"enc": ciphertext, "fp": fp, "id": wallet_id},
         )
 

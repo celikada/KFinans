@@ -54,8 +54,6 @@ def test_build_limiter_uses_redis_when_url_set():
     try:
         lim = limiter_module._build_limiter()
         # storage_uri attribute set olmali
-        assert (
-            lim._storage_uri == "redis://localhost:6379/0" or "redis" in str(lim._storage).lower()
-        )
+        assert lim._storage_uri == "redis://localhost:6379/0" or "redis" in str(lim._storage).lower()
     finally:
         settings.redis_url = original

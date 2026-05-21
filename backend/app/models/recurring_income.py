@@ -40,8 +40,6 @@ class RecurringIncome(Base):
     start_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     end_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="recurring_incomes")

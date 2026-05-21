@@ -45,9 +45,7 @@ async def test_algorand_returns_balance_with_pending_rewards():
 @respx.mock
 async def test_algorand_zero_balance_returns_empty():
     """Hem amount hem rewards 0 -> bos liste."""
-    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(
-        return_value=httpx.Response(200, json={"amount": 0, "rewards": 0})
-    )
+    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(return_value=httpx.Response(200, json={"amount": 0, "rewards": 0}))
     svc = AlgorandService(VALID_ALGO_ADDR)
     assets = await svc.fetch()
     assert assets == []
@@ -57,9 +55,7 @@ async def test_algorand_zero_balance_returns_empty():
 @respx.mock
 async def test_algorand_500_returns_empty_graceful():
     """5xx graceful — snapshot bozulmasin."""
-    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(return_value=httpx.Response(500))
     svc = AlgorandService(VALID_ALGO_ADDR)
     assets = await svc.fetch()
     assert assets == []

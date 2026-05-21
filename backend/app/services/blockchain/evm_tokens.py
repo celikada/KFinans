@@ -125,12 +125,7 @@ async def fetch_token_balances(
                 break
             except Exception as exc:
                 msg = str(exc).lower()
-                if (
-                    "rate" in msg
-                    or "429" in msg
-                    or "header not found" in msg
-                    or "connection" in msg
-                ):
+                if "rate" in msg or "429" in msg or "header not found" in msg or "connection" in msg:
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
                 logger.debug("Token %s balanceOf hata: %s", token.symbol, exc)
@@ -177,7 +172,5 @@ async def fetch_ethereum_tokens_via_ethplorer(address: str) -> list[tuple[TokenD
             continue
         if amount <= Decimal("0.000001"):
             continue
-        out.append(
-            (TokenDef(symbol=symbol, name=name, contract=contract, decimals=decimals), amount)
-        )
+        out.append((TokenDef(symbol=symbol, name=name, contract=contract, decimals=decimals), amount))
     return out

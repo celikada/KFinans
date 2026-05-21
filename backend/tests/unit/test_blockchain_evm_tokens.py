@@ -145,9 +145,7 @@ async def test_ethplorer_returns_filtered_tokens():
 @respx.mock
 async def test_ethplorer_no_tokens_returns_empty():
     addr = "0x0000000000000000000000000000000000000001"
-    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
-        return_value=httpx.Response(200, json={"tokens": []})
-    )
+    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(return_value=httpx.Response(200, json={"tokens": []}))
     tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
     assert tokens == []
 
@@ -157,9 +155,7 @@ async def test_ethplorer_no_tokens_returns_empty():
 async def test_ethplorer_500_returns_empty():
     """Ethplorer 5xx -> graceful empty (snapshot bozulmasin)."""
     addr = "0x0000000000000000000000000000000000000002"
-    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(return_value=httpx.Response(500))
     tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
     assert tokens == []
 

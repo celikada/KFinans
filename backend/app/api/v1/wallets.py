@@ -36,11 +36,7 @@ async def list_wallets(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(WalletAddress).where(
-            WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)
-        )
-    )
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
     return result.scalars().all()
 
 
@@ -133,11 +129,7 @@ async def export_wallets(
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(WalletAddress).where(
-            WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)
-        )
-    )
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
     rows = result.scalars().all()
 
     wb = Workbook()
@@ -212,9 +204,7 @@ async def import_wallets(
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
 
     parsed: list[dict] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -232,14 +222,10 @@ async def import_wallets(
         parsed.append({"chain": chain, "address": address, "label": label})
 
     if not parsed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli cüzdan bulunamadı"
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli cüzdan bulunamadı")
 
     # Mevcut cüzdanları sil, yenilerini ekle
-    existing = await db.execute(
-        select(WalletAddress).where(WalletAddress.user_id == current_user.id)
-    )
+    existing = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id))
     for w in existing.scalars().all():
         await db.delete(w)
 

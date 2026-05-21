@@ -39,13 +39,9 @@ def _clear_tcmb_cache():
 
 async def _register_login(client: AsyncClient, email: str) -> dict:
     pwd = "guclu-sifre-123"
-    await client.post(
-        "/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True}
-    )
+    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
     await verify_user_email(email)
-    login = await client.post(
-        "/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True}
-    )
+    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
@@ -133,9 +129,7 @@ async def test_snapshot_idempotent_same_day(client: AsyncClient):
 
         user_q = await session.execute(select(User).where(User.email == user_email))
         user = user_q.scalar_one()
-        snaps_q = await session.execute(
-            select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == user.id)
-        )
+        snaps_q = await session.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == user.id))
         snapshots = snaps_q.scalars().all()
     assert len(snapshots) == 1
 

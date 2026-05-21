@@ -114,9 +114,7 @@ async def test_sync_time_calculates_offset():
     import time as t
 
     fake_server_ms = int(t.time() * 1000) + 5000  # 5sn ileride
-    respx.get("https://api.binance.com/api/v3/time").mock(
-        return_value=httpx.Response(200, json={"serverTime": fake_server_ms})
-    )
+    respx.get("https://api.binance.com/api/v3/time").mock(return_value=httpx.Response(200, json={"serverTime": fake_server_ms}))
     svc = BinanceService("k", "s")
     async with httpx.AsyncClient() as client:
         await svc._sync_time(client)
@@ -128,9 +126,7 @@ async def test_sync_time_calculates_offset():
 @respx.mock
 async def test_health_check_true_on_200():
     """200 -> health True."""
-    respx.get("https://api.binance.com/api/v3/account").mock(
-        return_value=httpx.Response(200, json={"balances": []})
-    )
+    respx.get("https://api.binance.com/api/v3/account").mock(return_value=httpx.Response(200, json={"balances": []}))
     svc = BinanceService("k", "s")
     assert await svc.health_check() is True
 
@@ -139,9 +135,7 @@ async def test_health_check_true_on_200():
 @respx.mock
 async def test_health_check_false_on_401():
     """Yetkisiz API key -> health False (exception yakalar)."""
-    respx.get("https://api.binance.com/api/v3/account").mock(
-        return_value=httpx.Response(401, json={"code": -2014, "msg": "API-key invalid"})
-    )
+    respx.get("https://api.binance.com/api/v3/account").mock(return_value=httpx.Response(401, json={"code": -2014, "msg": "API-key invalid"}))
     svc = BinanceService("bad_key", "bad_secret")
     assert await svc.health_check() is False
 
@@ -150,8 +144,6 @@ async def test_health_check_false_on_401():
 @respx.mock
 async def test_health_check_false_on_network_error():
     """Network exception graceful -> False."""
-    respx.get("https://api.binance.com/api/v3/account").mock(
-        side_effect=httpx.ConnectError("network down")
-    )
+    respx.get("https://api.binance.com/api/v3/account").mock(side_effect=httpx.ConnectError("network down"))
     svc = BinanceService("k", "s")
     assert await svc.health_check() is False

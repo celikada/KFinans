@@ -22,10 +22,7 @@ TEST_DB_URL = os.getenv(
 # integration/conftest.py icindeki create_tables fixture'i drop_all yapiyor;
 # yanlis bir DATABASE_URL ile testler ana DB'yi siler.
 if TEST_DB_URL.endswith("/kfinans") or TEST_DB_URL.endswith("/kfinans/"):
-    raise RuntimeError(
-        f"Testler 'kfinans' veritabanina baglanamaz — bu DB drop_all ile silinir. "
-        f"Mutlaka 'kfinans_test' kullanin. Mevcut: {TEST_DB_URL}"
-    )
+    raise RuntimeError(f"Testler 'kfinans' veritabanina baglanamaz — bu DB drop_all ile silinir. Mutlaka 'kfinans_test' kullanin. Mevcut: {TEST_DB_URL}")
 
 # Test ortaminda slowapi rate limiter devre disi — testler arasi 429 patlamalarini onler
 limiter.enabled = False

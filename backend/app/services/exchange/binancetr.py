@@ -98,14 +98,10 @@ class BinanceTRService(BaseExchangeIntegration):
             },
         )
         if r.status_code != 200:
-            raise ValueError(
-                f"Binance TR session token geçersiz veya süresi dolmuş (HTTP {r.status_code})"
-            )
+            raise ValueError(f"Binance TR session token geçersiz veya süresi dolmuş (HTTP {r.status_code})")
         data = r.json()
         if data.get("code") not in (None, "000000", 0):
-            raise ValueError(
-                f"Binance TR: {data.get('message', data.get('msg', 'Bilinmeyen hata'))}"
-            )
+            raise ValueError(f"Binance TR: {data.get('message', data.get('msg', 'Bilinmeyen hata'))}")
 
         balances: dict[str, Decimal] = {}
         for item in data.get("data", []):

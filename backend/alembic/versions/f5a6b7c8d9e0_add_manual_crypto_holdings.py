@@ -32,12 +32,8 @@ def upgrade() -> None:
         sa.Column("quantity", sa.Numeric(28, 12), nullable=False),
         sa.Column("avg_cost_tl", sa.Numeric(18, 6), nullable=True),
         sa.Column("notes", sa.Text, nullable=True),
-        sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
     op.create_index(
         "ix_manual_crypto_holdings_user_exchange",

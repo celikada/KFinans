@@ -38,11 +38,7 @@ class InvestmentAdvice(Base):
     cache_read_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     cache_creation_tokens: Mapped[Optional[int]] = mapped_column(Integer)
     credits_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    generated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
-    )
+    generated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="investment_advice")
-    snapshot: Mapped[Optional["PortfolioSnapshot"]] = relationship(
-        back_populates="investment_advice"
-    )
+    snapshot: Mapped[Optional["PortfolioSnapshot"]] = relationship(back_populates="investment_advice")

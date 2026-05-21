@@ -17,13 +17,9 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("users", sa.Column("goal_amount", sa.Numeric(18, 2), nullable=True))
-    op.add_column(
-        "users", sa.Column("goal_currency", sa.String(3), nullable=False, server_default="TRY")
-    )
+    op.add_column("users", sa.Column("goal_currency", sa.String(3), nullable=False, server_default="TRY"))
     # Mevcut TRY degerini yeni alana tasiy
-    op.execute(
-        "UPDATE users SET goal_amount = monthly_expense_goal WHERE monthly_expense_goal IS NOT NULL"
-    )
+    op.execute("UPDATE users SET goal_amount = monthly_expense_goal WHERE monthly_expense_goal IS NOT NULL")
     op.drop_column("users", "monthly_expense_goal")
 
 

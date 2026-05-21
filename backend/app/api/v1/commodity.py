@@ -40,11 +40,7 @@ async def list_commodities(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> CommoditySummaryOut:
     """Kullanıcının tüm kıymetli maden varlıklarını anlık fiyatlarla döndürür."""
-    result = await db.execute(
-        select(CommodityHolding)
-        .where(CommodityHolding.user_id == current_user.id)
-        .order_by(CommodityHolding.created_at)
-    )
+    result = await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == current_user.id).order_by(CommodityHolding.created_at))
     holdings = result.scalars().all()
 
     prices = await fetch_metal_prices()
@@ -185,11 +181,7 @@ async def export_commodities(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
 
-    result = await db.execute(
-        select(CommodityHolding)
-        .where(CommodityHolding.user_id == current_user.id)
-        .order_by(CommodityHolding.created_at)
-    )
+    result = await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == current_user.id).order_by(CommodityHolding.created_at))
     holdings = result.scalars().all()
 
     wb = openpyxl.Workbook()

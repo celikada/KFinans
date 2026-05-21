@@ -79,11 +79,7 @@ async def test_cleanup_deletes_expired_tokens():
 
     # Expired silinmis, valid duruyor olmali
     async with TestSession() as session:
-        remaining = (
-            (await session.execute(select(RevokedToken).where(RevokedToken.user_id == user.id)))
-            .scalars()
-            .all()
-        )
+        remaining = (await session.execute(select(RevokedToken).where(RevokedToken.user_id == user.id))).scalars().all()
         jtis = {r.jti for r in remaining}
         assert expired_jti not in jtis, "Expired token silinmemis"
         assert valid_jti in jtis, "Valid token yanlislikla silinmis"
@@ -111,9 +107,7 @@ async def test_cleanup_preserves_recently_expired_within_seconds():
     await _cleanup_revoked_tokens_job(session_factory=TestSession)
 
     async with TestSession() as session:
-        remaining = (
-            await session.execute(select(RevokedToken).where(RevokedToken.jti == ftk_jti))
-        ).scalar_one_or_none()
+        remaining = (await session.execute(select(RevokedToken).where(RevokedToken.jti == ftk_jti))).scalar_one_or_none()
         assert remaining is not None, "Hala gecerli token silinmemeliydi"
 
 
@@ -128,9 +122,7 @@ async def test_hard_delete_removes_users_after_retention():
     cutoff_past = datetime.now(timezone.utc) - timedelta(days=_HARD_DELETE_RETENTION_DAYS + 5)
 
     async with TestSession() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == user.id).values(deleted_at=cutoff_past)
-        )
+        await session.execute(User.__table__.update().where(User.id == user.id).values(deleted_at=cutoff_past))
         await session.commit()
 
     await _hard_delete_expired_users_job(session_factory=TestSession)
@@ -147,9 +139,7 @@ async def test_hard_delete_keeps_recently_soft_deleted():
     recent_delete = datetime.now(timezone.utc) - timedelta(days=5)
 
     async with TestSession() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == user.id).values(deleted_at=recent_delete)
-        )
+        await session.execute(User.__table__.update().where(User.id == user.id).values(deleted_at=recent_delete))
         await session.commit()
 
     await _hard_delete_expired_users_job(session_factory=TestSession)
@@ -225,11 +215,7 @@ async def test_purge_old_audit_logs_deletes_after_retention():
         session.add(old_log)
         await session.flush()
         # created_at default now() — manuel old'a cek
-        await session.execute(
-            AuditLog.__table__.update()
-            .where(AuditLog.id == old_log.id)
-            .values(created_at=cutoff_past)
-        )
+        await session.execute(AuditLog.__table__.update().where(AuditLog.id == old_log.id).values(created_at=cutoff_past))
         recent_log = AuditLog(
             user_id=user.id,
             action="auth.login",
@@ -237,11 +223,7 @@ async def test_purge_old_audit_logs_deletes_after_retention():
         )
         session.add(recent_log)
         await session.flush()
-        await session.execute(
-            AuditLog.__table__.update()
-            .where(AuditLog.id == recent_log.id)
-            .values(created_at=recent)
-        )
+        await session.execute(AuditLog.__table__.update().where(AuditLog.id == recent_log.id).values(created_at=recent))
         await session.commit()
         old_id = old_log.id
         recent_id = recent_log.id

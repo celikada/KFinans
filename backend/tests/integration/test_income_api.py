@@ -38,18 +38,14 @@ async def test_create_income(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_invalid_category(client: AsyncClient):
     headers = await make_user(client, "inc_badcat@example.com")
-    resp = await client.post(
-        "/api/v1/income", json=_inc(1000, "crypto", "2026-05-01"), headers=headers
-    )
+    resp = await client.post("/api/v1/income", json=_inc(1000, "crypto", "2026-05-01"), headers=headers)
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_create_negative_amount(client: AsyncClient):
     headers = await make_user(client, "inc_neg@example.com")
-    resp = await client.post(
-        "/api/v1/income", json=_inc(-500, "salary", "2026-05-01"), headers=headers
-    )
+    resp = await client.post("/api/v1/income", json=_inc(-500, "salary", "2026-05-01"), headers=headers)
     assert resp.status_code == 422
 
 
@@ -68,9 +64,7 @@ async def test_list_filter_by_month(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_income(client: AsyncClient):
     headers = await make_user(client, "inc_update@example.com")
-    create = await client.post(
-        "/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers
-    )
+    create = await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers)
     inc_id = create.json()["id"]
 
     resp = await client.put(f"/api/v1/income/{inc_id}", json={"amount": 55000.0}, headers=headers)
@@ -81,9 +75,7 @@ async def test_update_income(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_delete_income(client: AsyncClient):
     headers = await make_user(client, "inc_delete@example.com")
-    create = await client.post(
-        "/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers
-    )
+    create = await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers)
     inc_id = create.json()["id"]
 
     resp = await client.delete(f"/api/v1/income/{inc_id}", headers=headers)
@@ -97,9 +89,7 @@ async def test_delete_income(client: AsyncClient):
 async def test_idor_update(client: AsyncClient):
     h1 = await make_user(client, "inc_idor1@example.com")
     h2 = await make_user(client, "inc_idor2@example.com")
-    create = await client.post(
-        "/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=h1
-    )
+    create = await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=h1)
     inc_id = create.json()["id"]
 
     resp = await client.put(f"/api/v1/income/{inc_id}", json={"amount": 1.0}, headers=h2)
@@ -110,9 +100,7 @@ async def test_idor_update(client: AsyncClient):
 async def test_idor_delete(client: AsyncClient):
     h1 = await make_user(client, "inc_idor3@example.com")
     h2 = await make_user(client, "inc_idor4@example.com")
-    create = await client.post(
-        "/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=h1
-    )
+    create = await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=h1)
     inc_id = create.json()["id"]
 
     resp = await client.delete(f"/api/v1/income/{inc_id}", headers=h2)
@@ -140,9 +128,7 @@ async def test_summary_empty(client: AsyncClient):
 async def test_summary_with_data(client: AsyncClient):
     headers = await make_user(client, "inc_sum_data@example.com")
     await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers)
-    await client.post(
-        "/api/v1/income", json=_inc(10000, "freelance", "2026-05-15"), headers=headers
-    )
+    await client.post("/api/v1/income", json=_inc(10000, "freelance", "2026-05-15"), headers=headers)
     await client.post("/api/v1/income", json=_inc(5000, "dividend", "2026-05-20"), headers=headers)
     # Farklı ay — summary'e dahil olmamalı
     await client.post("/api/v1/income", json=_inc(20000, "bonus", "2026-04-01"), headers=headers)
