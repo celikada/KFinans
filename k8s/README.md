@@ -6,13 +6,14 @@ Modüler monolit mimari için minimum production deploy seti.
 
 | Dosya | Amaç |
 |-------|------|
-| `namespace.yaml` | `kfinans` namespace |
-| `configmap.yaml` | Non-secret env (CORS, EMAIL_FROM, RPC URL'leri) |
+| `namespace.yaml` | `kfinans` namespace + PodSecurity restricted label |
+| `configmap.yaml` | Non-secret env (CORS, ALLOWED_HOSTS, EMAIL_FROM, RPC URL'leri, scheduler ayarları) |
 | `secrets.example.yaml` | Secret şablonu — `secrets.yaml` olarak kopyalayıp doldurun (gitignore) |
 | `postgres.yaml` | PostgreSQL 16 StatefulSet + 50Gi PVC + headless Service |
-| `backend.yaml` | FastAPI Deployment (replicas: 2) + initContainer (alembic upgrade) + Service |
+| `backend.yaml` | FastAPI Deployment (replicas: 1) + initContainer (alembic upgrade) + Service |
 | `frontend.yaml` | Next.js Deployment (replicas: 2, standalone build) + Service |
-| `ingress.yaml` | nginx-ingress + cert-manager TLS, `api.kfinans.app` + `app.kfinans.app` |
+| `ingress.yaml` | Traefik Ingress + cert-manager TLS + Middleware'ler (redirect-https + body-size-limit) |
+| `backup-cronjob.yaml` | Günlük 02:00 (Europe/Istanbul) Postgres logical backup |
 | `kustomization.yaml` | Kustomize index — tek komutla deploy |
 
 ---
@@ -21,10 +22,12 @@ Modüler monolit mimari için minimum production deploy seti.
 
 Cluster'da yüklü olmalı:
 - **kubectl** (1.28+) — local'den `kubeconfig` ile erişim
-- **ingress-nginx-controller** — `helm install ingress-nginx ingress-nginx/ingress-nginx`
-- **cert-manager** + bir `ClusterIssuer` (örn. `letsencrypt-prod`) — TLS sertifikası için
-- **DNS:** `api.kfinans.app` ve `app.kfinans.app` ingress-controller LoadBalancer IP'sine yönlendirilmiş olmalı
-- **Container registry** — `kfinans-backend:latest` ve `kfinans-frontend:latest` image'leri pushlanmış olmalı (ya da değiştirin)
+- **Traefik** — K3s default ingress controller (Oracle prod cluster K3s; Traefik CRD'leri Middleware için gerekli)
+- **cert-manager** v1.14+ + `ClusterIssuer` `letsencrypt-prod` (gerçek email ile)
+- **DNS:** `kfinans.app` ve `www.kfinans.app` ingress LoadBalancer IP'sine (Oracle VM public IP) yönlendirilmiş olmalı
+- **Container registry erişimi:** image'ler `docker.io/celikada/kfinans-{backend,frontend}` (Docker Hub) — public pull, secret gerektirmez
+
+> Mimari notu: tek host modeli (`kfinans.app`) + path-based routing (`/api/*` → backend, `/*` → frontend). `.app` TLD HSTS preload listesinde olduğu için tarayıcı HTTPS'i zorlar; ek olarak `redirect-https` Middleware HTTP isteğini 308 ile HTTPS'e yönlendirir.
 
 ---
 
@@ -37,7 +40,7 @@ kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/configmap.yaml
 ```
 
-> ConfigMap'teki `EMAIL_FROM`, `FRONTEND_URL`, `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL` değerlerini kendi domain'inize göre güncellemeyi unutmayın.
+> ConfigMap'teki `ALLOWED_HOSTS`, `CORS_ORIGINS`, `EMAIL_FROM`, `FRONTEND_URL` değerlerini kendi domain'inize göre güncellemeyi unutmayın. `NEXT_PUBLIC_API_URL` boş bırakılır (göreceli `/api/v1` → ingress).
 
 ### 2. Secret'ları oluştur (kubectl ile, YAML dışı — daha güvenli)
 
@@ -49,34 +52,45 @@ kubectl create secret generic kfinans-secrets \
   --from-literal=FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')" \
   --from-literal=RESEND_API_KEY='re_xxx' \
   --from-literal=ANTHROPIC_API_KEY='sk-ant-xxx' \
-  --from-literal=POSTGRES_PASSWORD='<STRONG_PWD>'
+  --from-literal=POSTGRES_PASSWORD='<STRONG_PWD>' \
+  --from-literal=POSTGRES_USER='kfinans' \
+  --from-literal=POSTGRES_DB='kfinans'
 ```
 
 > `DATABASE_URL`'deki `<STRONG_PWD>` ile `POSTGRES_PASSWORD` aynı olmalı.
 
-### 3. Image'leri pushla
+### 3. Image'leri pushla (Docker Hub)
+
+Lokal build + push (manuel; CI/CD bunu otomatik yapar):
 
 ```bash
-# Backend (production target)
-docker build --target production -t <registry>/kfinans-backend:<tag> backend/
-docker push <registry>/kfinans-backend:<tag>
+TAG=v0.1.0-rc3
+docker login -u celikada  # PAT ile
 
-# Frontend (standalone production)
+docker build --target production -t docker.io/celikada/kfinans-backend:$TAG backend/
+docker push docker.io/celikada/kfinans-backend:$TAG
+
 docker build \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.kfinans.app \
-  -t <registry>/kfinans-frontend:<tag> frontend/
-docker push <registry>/kfinans-frontend:<tag>
+  --build-arg NEXT_PUBLIC_API_URL="" \
+  -t docker.io/celikada/kfinans-frontend:$TAG frontend/
+docker push docker.io/celikada/kfinans-frontend:$TAG
 ```
 
-`backend.yaml` ve `frontend.yaml`'da `image:` alanlarını gerçek registry/tag'e güncelleyin.
+> CI/CD: GitLab self-hosted (`gitlab.192.168.3.191.nip.io`) Kaniko ile build edip Docker Hub'a pushlar (`.gitlab-ci.yml::build` job). GitHub Actions `release.yml` paralel olarak GHCR'a push edebilir (atıl durumda — flag #4360519 sonrası deploy yolu GitLab CI üzerinden).
 
-### 4. Postgres + Backend + Frontend + Ingress
+### 4. Manifest tag override + apply
 
 ```bash
-kubectl apply -k k8s/
+# kustomize transformer ile tag set et (manifest'lerdeki :v0.0.0 placeholder)
+cd k8s/
+kustomize edit set image docker.io/celikada/kfinans-backend=docker.io/celikada/kfinans-backend:$TAG
+kustomize edit set image docker.io/celikada/kfinans-frontend=docker.io/celikada/kfinans-frontend:$TAG
+
+# Apply (postgres + backend + frontend + ingress + backup-cronjob)
+kubectl apply -k .
 ```
 
-(Veya manuel: `kubectl apply -f k8s/postgres.yaml -f k8s/backend.yaml -f k8s/frontend.yaml -f k8s/ingress.yaml`)
+(Veya manuel: `kubectl apply -f namespace.yaml -f configmap.yaml -f postgres.yaml -f backend.yaml -f frontend.yaml -f ingress.yaml -f backup-cronjob.yaml`)
 
 ### 5. Doğrulama
 
@@ -84,22 +98,41 @@ kubectl apply -k k8s/
 kubectl get pods -n kfinans
 kubectl logs -n kfinans -l app=backend --tail=50
 kubectl get ingress -n kfinans
-curl -k https://api.kfinans.app/health  # {"status":"ok",...}
+
+# Ingress TLS hazır olunca (Let's Encrypt challenge ~30sn):
+curl -sI https://kfinans.app/health
+# HTTP/2 200
+# content-type: application/json
+curl -s https://kfinans.app/health
+# {"status":"ok","version":"0.1.0"}
 ```
 
 ---
 
 ## Migration (Yeni sürüm deploy)
 
-`backend.yaml` initContainer'ı her pod start'ında `alembic upgrade head` çalıştırır. Yeni image push'ladığınızda:
+`backend.yaml` initContainer'ı her pod start'ında `alembic upgrade head` çalıştırır. Manuel deploy:
 
 ```bash
-kubectl set image deployment/backend backend=<registry>/kfinans-backend:<new-tag> -n kfinans
-kubectl set image deployment/backend alembic-upgrade=<registry>/kfinans-backend:<new-tag> -n kfinans
-kubectl rollout status deployment/backend -n kfinans
+TAG=v0.1.0-rc4
+kubectl -n kfinans set image deployment/backend \
+  backend=docker.io/celikada/kfinans-backend:$TAG \
+  alembic-upgrade=docker.io/celikada/kfinans-backend:$TAG
+kubectl -n kfinans set image deployment/frontend \
+  frontend=docker.io/celikada/kfinans-frontend:$TAG
+kubectl -n kfinans rollout status deployment/backend
+kubectl -n kfinans rollout status deployment/frontend
 ```
 
 Rolling update sırasında zero-downtime hedeflenir; `maxUnavailable: 0`.
+
+GitLab CI `deploy-production` job bunu otomatik yapar (`v*.*.*` semver tag push edildiğinde manuel onayla).
+
+---
+
+## Probe Host Header (TrustedHostMiddleware uyumlu)
+
+`ALLOWED_HOSTS=["kfinans.app","www.kfinans.app"]` (sıkı) olunca kubelet probe'ları default `Host: <pod-ip>` ile vurur ve `TrustedHostMiddleware` 400 döndürür. Çözüm: `livenessProbe`/`readinessProbe`/`startupProbe`'a `httpHeaders.Host: kfinans.app` ekledik (`backend.yaml`). Bu sayede `ALLOWED_HOSTS`'u `["*"]`'tan sıkıya çekebilirsiniz.
 
 ---
 
@@ -110,39 +143,34 @@ kubectl scale deployment backend --replicas=4 -n kfinans
 kubectl scale deployment frontend --replicas=4 -n kfinans
 ```
 
-Daha sonra HPA (HorizontalPodAutoscaler) eklenebilir; bu klasöre `hpa.yaml` ekleyip `kustomization.yaml`'a register edin.
+> Backend için `replicas=1` default (slowapi MemoryStorage; 2+ replica = 2x rate limit kotası). Redis backend eklenince (`REDIS_URL` ConfigMap'e set + slowapi storage_url) `replicas` 2+'a çıkarın.
+
+HPA için bu klasöre `hpa.yaml` ekleyip `kustomization.yaml`'a register edebilirsiniz.
 
 ---
 
 ## Yedekleme
 
-Postgres PVC manuel snapshot için:
+Otomatik: `backup-cronjob.yaml` her gün 02:00 Europe/Istanbul `pg_dump | gzip` → `postgres-backups` PVC (5Gi, 30 gün retention).
+
+Manuel restore:
 
 ```bash
-# Cluster'da volume snapshot driver kuruluysa:
-kubectl apply -f - <<EOF
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshot
-metadata:
-  name: postgres-$(date +%Y%m%d)
-  namespace: kfinans
-spec:
-  source:
-    persistentVolumeClaimName: postgres-data-postgres-0
-EOF
+kubectl exec -n kfinans postgres-0 -- bash -c \
+  "gunzip -c /backups/kfinans-2026-05-20_*.sql.gz | psql -U kfinans kfinans"
 ```
 
-Faz 3'te managed PostgreSQL hizmetlerine (RDS, Cloud SQL) geçiş düşünülebilir.
+> Backup PVC'ye erişmek için bir job kullanın (postgres-backups read-only). Sonraki seviye: Oracle Object Storage (S3-compatible) sync, PITR için pgBackRest.
 
 ---
 
-## Bilinen Eksikler / TODO (Faz 3)
+## Bilinen Eksikler / TODO
 
 - [ ] HPA (HorizontalPodAutoscaler) — CPU/RAM bazlı autoscale
 - [ ] NetworkPolicy — frontend yalnız backend'e, backend yalnız postgres'e
 - [ ] PodDisruptionBudget — node maintenance sırasında min replica koruması
-- [ ] Prometheus + Grafana — metric scraping
+- [ ] Prometheus + Grafana — metric scraping (OBS-001 OTel hazır)
 - [ ] PgBouncer — connection pool
-- [ ] CronJob — `revoked_tokens` cleanup (expires_at < now())
 - [ ] External-secrets / SealedSecrets — secret rotation
-- [ ] Backup CronJob — pg_dump → S3
+- [ ] Backup off-cluster sync (Oracle Object Storage / S3)
+- [ ] ServiceAccount + RBAC (automountServiceAccountToken: false default)
