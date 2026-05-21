@@ -1,0 +1,35 @@
+---
+# Tum pod'lar kube-dns'e cikabilir + fallback: cluster service CIDR'a UDP 53.
+# CoreDNS pod IP'leri service CIDR 10.43.0.0/16 icinde.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: kfinans
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # CoreDNS pod selector (kube-system)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Fallback: cluster service CIDR — herhangi bir DNS svc
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

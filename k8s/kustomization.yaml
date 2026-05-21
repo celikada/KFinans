@@ -22,9 +22,18 @@ resources:
   # eder. Lokal repo'ya commit edilebilir (encryptedData asymmetric encrypted).
   # NOT: etcd at-rest encryption ayri epic (K3s `--secrets-encryption` flag).
   - sealed-secrets.yaml
-  # NetworkPolicy default-deny + allowlist tasarimi 04e2fd0'da denendi;
-  # K3s embedded kube-router enforce'unda DNS lookup + Traefik route flow
-  # kirildi (502 + gaierror). Redesign Faz I'a ertelendi — bkz issue/epic.
+  # Audit 2026-05-21 #1: NetworkPolicy default-deny + allowlist (iterative).
+  # Onceki monolitik dosya (04e2fd0) Traefik+DNS kirdi; iterative redesign
+  # her dosya icin ayri apply + smoke test ile dogrulandi (bkz commit log).
+  # Sira: 02 backend-ing -> 04 front-ing -> 05 pg-ing -> 03 back-eg -> 01 dns
+  # -> 06 backup-eg -> 00 default-deny EN SON.
+  - networkpolicies/02-backend-ingress.yaml
+  - networkpolicies/04-frontend-ingress.yaml
+  - networkpolicies/05-postgres-ingress.yaml
+  - networkpolicies/03-backend-egress.yaml
+  - networkpolicies/01-allow-dns.yaml
+  - networkpolicies/06-backup-egress.yaml
+  - networkpolicies/00-default-deny.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans
