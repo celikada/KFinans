@@ -13,6 +13,8 @@ resources:
   # 2026-05 lokal/Oracle align surecinde kaldirildi.
   - ingress.yaml
   - backup-cronjob.yaml
+  # Audit 2026-05-21 #1: NetworkPolicy default-deny + allowlist
+  - networkpolicies.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans

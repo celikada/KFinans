@@ -44,6 +44,11 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            # NetworkPolicy `postgres-backup-egress` ve `postgres-ingress`
+            # selector'lari icin gerekli (audit 2026-05-21 #1)
+            app: postgres-backup
         spec:
           restartPolicy: OnFailure
           # PSS restricted uyumlu
