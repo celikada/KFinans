@@ -9,9 +9,10 @@ users tablosuna 5 yeni kolon:
   - email_change_token: dogrulama token'i (URL-safe, 1 saat TTL)
   - email_change_expires_at: token TTL
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b9c0d1e2f3a4"
@@ -21,12 +22,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("overseas_consent_at", sa.TIMESTAMP(timezone=True), nullable=True))
-    op.add_column("users", sa.Column("terms_accepted_at", sa.TIMESTAMP(timezone=True), nullable=True))
+    op.add_column(
+        "users", sa.Column("overseas_consent_at", sa.TIMESTAMP(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "users", sa.Column("terms_accepted_at", sa.TIMESTAMP(timezone=True), nullable=True)
+    )
     op.add_column("users", sa.Column("kvkk_read_at", sa.TIMESTAMP(timezone=True), nullable=True))
     op.add_column("users", sa.Column("email_change_new", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("email_change_token", sa.Text(), nullable=True))
-    op.add_column("users", sa.Column("email_change_expires_at", sa.TIMESTAMP(timezone=True), nullable=True))
+    op.add_column(
+        "users", sa.Column("email_change_expires_at", sa.TIMESTAMP(timezone=True), nullable=True)
+    )
     op.create_index("ix_users_email_change_token", "users", ["email_change_token"], unique=False)
 
 

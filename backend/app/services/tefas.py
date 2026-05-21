@@ -1,8 +1,10 @@
 import logging
-import httpx
 from datetime import date, timedelta
 from decimal import Decimal
-from app.services.base import BaseIntegration, AssetData
+
+import httpx
+
+from app.services.base import AssetData, BaseIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ async def fetch_tefas_prices_by_codes(codes: list[str]) -> dict[str, Decimal]:
         logger.warning("TEFAS linked fiyat cekilemedi: %s", e)
         return {}
 
+
 _EXPORT_URL = "https://www.tefas.gov.tr/api/fund-returns/export"
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -54,15 +57,17 @@ class TefasService(BaseIntegration):
             price_tl = prices.get(code)
             if price_tl is None:
                 raise ValueError(f"TEFAS'ta fon bulunamadı: {code}")
-            assets.append(AssetData(
-                symbol=code,
-                name=h.get("name", code),
-                provider="tefas",
-                asset_type="fund",
-                source_type="exchange",
-                liquid_quantity=Decimal(str(h["quantity"])),
-                unit_price_tl=price_tl,
-            ))
+            assets.append(
+                AssetData(
+                    symbol=code,
+                    name=h.get("name", code),
+                    provider="tefas",
+                    asset_type="fund",
+                    source_type="exchange",
+                    liquid_quantity=Decimal(str(h["quantity"])),
+                    unit_price_tl=price_tl,
+                )
+            )
         return assets
 
     async def _fetch_prices(self) -> dict[str, Decimal]:

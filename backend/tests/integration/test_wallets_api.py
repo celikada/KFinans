@@ -1,11 +1,11 @@
 """
 Blockchain wallet CRUD endpoint'leri.
 """
+
 import pytest
 from httpx import AsyncClient
+
 from tests.conftest import make_user
-
-
 
 VALID_ETH = "0x1234567890123456789012345678901234567890"
 

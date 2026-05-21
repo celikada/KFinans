@@ -3,9 +3,10 @@
 OWASP Forgot Password Cheat Sheet — secrets.token_urlsafe(32) token, 1 saat TTL.
 verify_token pattern'i kopyalanir (idempotent rotation, generic response).
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "a8b9c0d1e2f3"

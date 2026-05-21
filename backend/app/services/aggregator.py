@@ -115,6 +115,7 @@ async def fetch_gbp_to_usd() -> Decimal:
 
 _BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
 
+
 async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
     """Binance'ten USDT pariteli spot fiyatları çeker. Bulunamayanlar 0 döner."""
     async with httpx.AsyncClient(timeout=10) as client:
@@ -246,7 +247,8 @@ async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
         return {}
     binance = await fetch_spot_prices(symbols)
     missing = [
-        s for s in symbols
+        s
+        for s in symbols
         if binance.get(s, Decimal(0)) <= 0
         and s not in USD_STABLE_SYMBOLS
         and s not in SYMBOL_PRICE_ALIASES
@@ -263,16 +265,28 @@ async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
 
 # ETH peg'li staking tokenları + WBTC + AVAX peg'li → Binance USDT pariteli base symbol
 SYMBOL_PRICE_ALIASES: dict[str, str] = {
-    "STETH": "ETH", "stETH": "ETH",
-    "psETH": "ETH", "PSETH": "ETH",
-    "lcETH": "ETH", "LCETH": "ETH",
-    "rETH": "ETH", "cbETH": "ETH", "wstETH": "ETH",
+    "STETH": "ETH",
+    "stETH": "ETH",
+    "psETH": "ETH",
+    "PSETH": "ETH",
+    "lcETH": "ETH",
+    "LCETH": "ETH",
+    "rETH": "ETH",
+    "cbETH": "ETH",
+    "wstETH": "ETH",
     "WBTC": "BTC",
-    "sAVAX": "AVAX", "SAVAX": "AVAX",
+    "sAVAX": "AVAX",
+    "SAVAX": "AVAX",
 }
 USD_STABLE_SYMBOLS: set[str] = {
-    "USDT", "USDC", "DAI", "BUSD", "TUSD", "FRAX",
-    "mstkeUSDT", "MSTKEUSDT",
+    "USDT",
+    "USDC",
+    "DAI",
+    "BUSD",
+    "TUSD",
+    "FRAX",
+    "mstkeUSDT",
+    "MSTKEUSDT",
 }
 
 
@@ -289,7 +303,9 @@ def lookup_usd_price(symbol: str, prices: dict) -> Decimal:
     return Decimal(0)
 
 
-def to_asset_position(asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal) -> AssetPosition:
+def to_asset_position(
+    asset: AssetData, snapshot_id, usd_tl_rate: Decimal, total_value_tl: Decimal
+) -> AssetPosition:
     if asset.unit_price_tl > 0:
         price_tl = asset.unit_price_tl
     else:
@@ -326,12 +342,20 @@ def calculate_changes(snapshots: list[PortfolioSnapshot]) -> PortfolioChanges:
     if len(snapshots) >= 2:
         prev_week = snapshots[1]
         wow_change_tl = current.total_value_tl - prev_week.total_value_tl
-        wow_change_pct = (wow_change_tl / prev_week.total_value_tl * 100) if prev_week.total_value_tl else Decimal(0)
+        wow_change_pct = (
+            (wow_change_tl / prev_week.total_value_tl * 100)
+            if prev_week.total_value_tl
+            else Decimal(0)
+        )
 
     if len(snapshots) >= 5:
         prev_month = snapshots[4]
         mom_change_tl = current.total_value_tl - prev_month.total_value_tl
-        mom_change_pct = (mom_change_tl / prev_month.total_value_tl * 100) if prev_month.total_value_tl else Decimal(0)
+        mom_change_pct = (
+            (mom_change_tl / prev_month.total_value_tl * 100)
+            if prev_month.total_value_tl
+            else Decimal(0)
+        )
 
     return PortfolioChanges(
         current_value_tl=current.total_value_tl,
@@ -344,12 +368,20 @@ def calculate_changes(snapshots: list[PortfolioSnapshot]) -> PortfolioChanges:
 
 
 def calculate_breakdown(snapshot: PortfolioSnapshot) -> PortfolioBreakdown:
-    totals = {"crypto": Decimal(0), "staked_crypto": Decimal(0), "fund": Decimal(0), "pension": Decimal(0), "cash": Decimal(0)}
+    totals = {
+        "crypto": Decimal(0),
+        "staked_crypto": Decimal(0),
+        "fund": Decimal(0),
+        "pension": Decimal(0),
+        "cash": Decimal(0),
+    }
     for pos in snapshot.asset_positions:
         totals[pos.asset_type] = totals.get(pos.asset_type, Decimal(0)) + pos.total_value_tl
 
     total = snapshot.total_value_tl or Decimal(1)
-    pct = lambda v: (v / total * 100).quantize(Decimal("0.01"))
+
+    def pct(v: Decimal) -> Decimal:
+        return (v / total * 100).quantize(Decimal("0.01"))
 
     top_assets = sorted(snapshot.asset_positions, key=lambda p: p.total_value_tl, reverse=True)[:5]
 

@@ -27,12 +27,26 @@ router = APIRouter(prefix="/expenses", tags=["expenses"])
 
 # Türkçe label -> İngilizce key haritası (import için)
 LABEL_TO_KEY: dict[str, str] = {
-    "yiyecek": "food", "market": "groceries", "ulaşım": "transport",
-    "faturalar": "bills", "sağlık": "health", "eğlence": "entertainment",
-    "giyim": "clothing", "ev": "home", "vergi": "tax", "diğer": "other",
-    "food": "food", "groceries": "groceries", "transport": "transport",
-    "bills": "bills", "health": "health", "entertainment": "entertainment",
-    "clothing": "clothing", "home": "home", "tax": "tax", "other": "other",
+    "yiyecek": "food",
+    "market": "groceries",
+    "ulaşım": "transport",
+    "faturalar": "bills",
+    "sağlık": "health",
+    "eğlence": "entertainment",
+    "giyim": "clothing",
+    "ev": "home",
+    "vergi": "tax",
+    "diğer": "other",
+    "food": "food",
+    "groceries": "groceries",
+    "transport": "transport",
+    "bills": "bills",
+    "health": "health",
+    "entertainment": "entertainment",
+    "clothing": "clothing",
+    "home": "home",
+    "tax": "tax",
+    "other": "other",
 }
 
 
@@ -170,8 +184,7 @@ async def get_expense_summary(
 
     # Toplam ve adet
     total_q = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0), func.count(Expense.id))
-        .where(
+        select(func.coalesce(func.sum(Expense.amount), 0), func.count(Expense.id)).where(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
             Expense.date <= last_day,
@@ -298,9 +311,7 @@ async def import_expenses(
         if not row or all(v is None for v in row):
             continue
         n = len(row)
-        date_val, cat_val, amount_val, desc_val = (
-            row[i] if i < n else None for i in range(4)
-        )
+        date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
 
         # Tarih parse
         if isinstance(date_val, date_type):
@@ -314,6 +325,7 @@ async def import_expenses(
             # Excel numeric date
             try:
                 from openpyxl.utils.datetime import from_excel
+
                 parsed_date = from_excel(date_val).date() if date_val is not None else None
                 if parsed_date is None:
                     continue

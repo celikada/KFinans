@@ -1,5 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -35,11 +36,16 @@ class Expense(Base):
     # Opsiyonel: harcama bir kredi kartından yapıldıysa kart ID'si.
     # Boş = nakit/banka. Çift sayım kuralı için kullanılır.
     credit_card_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("credit_cards.id", ondelete="SET NULL"), nullable=True, index=True,
+        Integer,
+        ForeignKey("credit_cards.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # Harcama gerçekleşti mi? (default=true; planlı kayıttan dönüştürülen
     # nadir senaryolarda false olabilir.)
-    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_paid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

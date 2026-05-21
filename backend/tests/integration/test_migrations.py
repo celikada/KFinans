@@ -9,6 +9,7 @@ direkt `alembic.command.upgrade` calismaz. Subprocess ile uvicorn'dan ayri
 process'te alembic CLI cagrisi yapiyoruz — production rollback'i de subprocess
 icinde calisiyor (k8s init container).
 """
+
 import os
 import subprocess
 from pathlib import Path
@@ -18,8 +19,8 @@ import pytest_asyncio
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from tests.conftest import engine
 from app.models.base import Base
+from tests.conftest import engine
 
 # Backend root: tests/integration/ -> backend/
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -91,7 +92,8 @@ async def _fk_ondelete(table: str, column: str) -> str | None:
     """
     engine = create_async_engine(_test_db_url())
     async with engine.connect() as conn:
-        row = await conn.execute(text("""
+        row = await conn.execute(
+            text("""
             SELECT confdeltype
             FROM pg_constraint c
             JOIN pg_class t ON t.oid = c.conrelid
@@ -101,7 +103,9 @@ async def _fk_ondelete(table: str, column: str) -> str | None:
               AND c.contype = 'f'
               AND a.attnum = ANY(c.conkey)
             LIMIT 1
-        """), {"table": table, "column": column})
+        """),
+            {"table": table, "column": column},
+        )
         result = row.scalar_one_or_none()
     await engine.dispose()
     if result is None:
@@ -203,8 +207,6 @@ async def test_xpub_encryption_migration_downgrade_safe(fresh_db):
     try:
         _run_alembic("downgrade", "b3c4d5e6f7a8")
     except Exception as e:
-        pytest.fail(
-            f"FAZ C1 (b3c4d5e6f7a8) oncesine downgrade yapilamadi: {e}"
-        )
+        pytest.fail(f"FAZ C1 (b3c4d5e6f7a8) oncesine downgrade yapilamadi: {e}")
     # Tekrar head — round-trip
     _run_alembic("upgrade", "head")

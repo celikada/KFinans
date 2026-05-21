@@ -3,8 +3,8 @@ PII masking helpers — mask_address, mask_email, hash_email.
 
 SEC-010 + BACK-013 + COMP-024. DB veya HTTP gerekmez; saf birim testler.
 """
-from app.core.masking import hash_email, mask_address, mask_email
 
+from app.core.masking import hash_email, mask_address, mask_email
 
 # ─── mask_email (SEC-010) ────────────────────────────────────────────────────
 

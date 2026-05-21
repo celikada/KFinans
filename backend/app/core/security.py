@@ -1,9 +1,11 @@
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+
 import bcrypt
 from cryptography.fernet import Fernet, MultiFernet
+from jose import jwt
+
 from app.config import settings
 
 

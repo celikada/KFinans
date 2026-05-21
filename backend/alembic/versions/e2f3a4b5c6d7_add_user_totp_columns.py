@@ -17,9 +17,10 @@ Index gerekmez: totp_* kolonlari sadece self-user context'inde okunur
 Down: 3 kolonu drop eder. Setup yapmis kullanicilar verilerini kaybeder
 (beklenen davranis — rollback'te zaten MFA flow yok).
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "e2f3a4b5c6d7"

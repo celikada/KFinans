@@ -4,9 +4,8 @@ Hisse senedi para birimi dönüşümü — saf fonksiyon, DB veya HTTP gerekmez.
 Daha önce GBp dönüşümü hatalıydı: GBp ÷ 100 sonucu USD varsayılıyordu.
 Doğrusu: GBp -> GBP -> USD -> TL zincirinde GBP/USD kuru kullanılmalı.
 """
-from decimal import Decimal
 
-import pytest
+from decimal import Decimal
 
 from app.api.v1.stocks import convert_to_tl
 

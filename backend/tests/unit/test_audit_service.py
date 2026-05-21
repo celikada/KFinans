@@ -4,6 +4,7 @@ _client_ip + _user_agent helper'lari + log_audit best-effort davranisi.
 DB integration testleri tests/integration/test_audit_logs.py'de — burada
 saf birim seviyesinde davranis dogrulanir.
 """
+
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -15,7 +16,6 @@ from app.services.audit import (
     _user_agent,
     log_audit,
 )
-
 
 # ─── _client_ip (SEC-004 dogrulama) ─────────────────────────────────────
 
@@ -83,7 +83,8 @@ async def test_log_audit_creates_record_and_flushes():
 
     user_id = uuid4()
     await log_audit(
-        db, req,
+        db,
+        req,
         action=AuditAction.LOGIN,
         user_id=user_id,
         resource="session:abc",

@@ -7,6 +7,7 @@ job fonksiyonunu (cleanup logic) dogrudan cagirip:
   - hala gecerli kayitlarin silinmedigini
   dogrular.
 """
+
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -18,13 +19,13 @@ from sqlalchemy import select
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.scheduler import (
+    _HARD_DELETE_RETENTION_DAYS,
+    _SCHEDULER_LOCK_KEY,
     _cleanup_revoked_tokens_job,
     _hard_delete_expired_users_job,
-    _HARD_DELETE_RETENTION_DAYS,
     _purge_old_audit_logs_job,
-    _SCHEDULER_LOCK_KEY,
-    _try_acquire_lock,
     _release_lock,
+    _try_acquire_lock,
 )
 from tests.conftest import TestSession
 
@@ -78,9 +79,11 @@ async def test_cleanup_deletes_expired_tokens():
 
     # Expired silinmis, valid duruyor olmali
     async with TestSession() as session:
-        remaining = (await session.execute(
-            select(RevokedToken).where(RevokedToken.user_id == user.id)
-        )).scalars().all()
+        remaining = (
+            (await session.execute(select(RevokedToken).where(RevokedToken.user_id == user.id)))
+            .scalars()
+            .all()
+        )
         jtis = {r.jti for r in remaining}
         assert expired_jti not in jtis, "Expired token silinmemis"
         assert valid_jti in jtis, "Valid token yanlislikla silinmis"
@@ -108,9 +111,9 @@ async def test_cleanup_preserves_recently_expired_within_seconds():
     await _cleanup_revoked_tokens_job(session_factory=TestSession)
 
     async with TestSession() as session:
-        remaining = (await session.execute(
-            select(RevokedToken).where(RevokedToken.jti == ftk_jti)
-        )).scalar_one_or_none()
+        remaining = (
+            await session.execute(select(RevokedToken).where(RevokedToken.jti == ftk_jti))
+        ).scalar_one_or_none()
         assert remaining is not None, "Hala gecerli token silinmemeliydi"
 
 
@@ -210,9 +213,7 @@ async def test_purge_old_audit_logs_deletes_after_retention():
     from app.models.audit_log import AuditLog
 
     user = await _make_user_in_db()
-    cutoff_past = datetime.now(timezone.utc) - timedelta(
-        days=settings.audit_log_retention_days + 5
-    )
+    cutoff_past = datetime.now(timezone.utc) - timedelta(days=settings.audit_log_retention_days + 5)
     recent = datetime.now(timezone.utc) - timedelta(days=10)
 
     async with TestSession() as session:
@@ -225,7 +226,9 @@ async def test_purge_old_audit_logs_deletes_after_retention():
         await session.flush()
         # created_at default now() — manuel old'a cek
         await session.execute(
-            AuditLog.__table__.update().where(AuditLog.id == old_log.id).values(created_at=cutoff_past)
+            AuditLog.__table__.update()
+            .where(AuditLog.id == old_log.id)
+            .values(created_at=cutoff_past)
         )
         recent_log = AuditLog(
             user_id=user.id,
@@ -235,7 +238,9 @@ async def test_purge_old_audit_logs_deletes_after_retention():
         session.add(recent_log)
         await session.flush()
         await session.execute(
-            AuditLog.__table__.update().where(AuditLog.id == recent_log.id).values(created_at=recent)
+            AuditLog.__table__.update()
+            .where(AuditLog.id == recent_log.id)
+            .values(created_at=recent)
         )
         await session.commit()
         old_id = old_log.id
@@ -266,7 +271,5 @@ async def test_purge_audit_logs_no_old_records_no_op():
 
     # Hepsi duruyor olmali
     async with TestSession() as session:
-        result = await session.execute(
-            select(AuditLog).where(AuditLog.user_id == user.id)
-        )
+        result = await session.execute(select(AuditLog).where(AuditLog.user_id == user.id))
         assert len(result.scalars().all()) == 3

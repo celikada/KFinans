@@ -4,11 +4,10 @@ DB veya HTTP gerekmez; saf hesaplama testleri.
 
 Para hesaplarında hata kabul edilmez — bu modül %100 coverage hedefler.
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-
-import pytest
 
 from app.services.aggregator import (
     calculate_breakdown,
@@ -18,8 +17,8 @@ from app.services.aggregator import (
 )
 from app.services.base import AssetData
 
-
 # ─── Yardımcı Factory'ler ─────────────────────────────────────────────────────
+
 
 def make_position(
     *,
@@ -61,6 +60,7 @@ def make_snapshot(total: str, *positions, snapshot_date_offset: int = 0):
 
 
 # ─── calculate_changes (WoW, MoM) ─────────────────────────────────────────────
+
 
 class TestCalculateChanges:
     def test_no_history_returns_zero_changes(self):
@@ -118,6 +118,7 @@ class TestCalculateChanges:
 
 # ─── calculate_breakdown ──────────────────────────────────────────────────────
 
+
 class TestCalculateBreakdown:
     def test_breakdown_sums_to_100_percent(self):
         snap = make_snapshot(
@@ -130,8 +131,11 @@ class TestCalculateBreakdown:
         )
         result = calculate_breakdown(snap)
         total = (
-            result.crypto_pct + result.staked_crypto_pct + result.fund_pct +
-            result.pension_pct + result.cash_pct
+            result.crypto_pct
+            + result.staked_crypto_pct
+            + result.fund_pct
+            + result.pension_pct
+            + result.cash_pct
         )
         assert total == Decimal("100.00")
 
@@ -169,8 +173,7 @@ class TestCalculateBreakdown:
 
     def test_top_assets_capped_at_5(self):
         positions = [
-            make_position(symbol=f"S{i}", total_value_tl=str(1000 - i * 10))
-            for i in range(10)
+            make_position(symbol=f"S{i}", total_value_tl=str(1000 - i * 10)) for i in range(10)
         ]
         snap = make_snapshot("9550", *positions)
         result = calculate_breakdown(snap)
@@ -191,12 +194,20 @@ class TestCalculateBreakdown:
 
 # ─── extract_staking_positions ────────────────────────────────────────────────
 
+
 class TestExtractStakingPositions:
     def test_only_staked_positions_returned(self):
         snap = make_snapshot(
             "0",
             make_position(symbol="BTC", liquid="1.0", staked="0", rewards="0", total_value_tl="0"),
-            make_position(symbol="S", liquid="0", staked="100.0", rewards="5.0", unit_price_tl="2", total_value_tl="0"),
+            make_position(
+                symbol="S",
+                liquid="0",
+                staked="100.0",
+                rewards="5.0",
+                unit_price_tl="2",
+                total_value_tl="0",
+            ),
         )
         result = extract_staking_positions(snap)
         assert len(result) == 1
@@ -243,6 +254,7 @@ class TestExtractStakingPositions:
 
 # ─── to_asset_position ────────────────────────────────────────────────────────
 
+
 class TestToAssetPosition:
     def _asset(self, **kw):
         defaults = dict(
@@ -263,13 +275,17 @@ class TestToAssetPosition:
 
     def test_uses_unit_price_tl_when_available(self):
         asset = self._asset(unit_price_tl=Decimal("50"), unit_price_usd=Decimal("999"))
-        pos = to_asset_position(asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("1000"))
+        pos = to_asset_position(
+            asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("1000")
+        )
         # unit_price_tl > 0 ise USD * kur'a değil direkt TL'ye düşmeli
         assert pos.unit_price_tl == Decimal("50")
 
     def test_falls_back_to_usd_times_rate(self):
         asset = self._asset(unit_price_tl=Decimal("0"), unit_price_usd=Decimal("100"))
-        pos = to_asset_position(asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("3300"))
+        pos = to_asset_position(
+            asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("3300")
+        )
         assert pos.unit_price_tl == Decimal("3300")
 
     def test_total_value_tl_uses_all_quantities(self):
@@ -279,7 +295,9 @@ class TestToAssetPosition:
             pending_rewards=Decimal("0.5"),
             unit_price_tl=Decimal("100"),
         )
-        pos = to_asset_position(asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("350"))
+        pos = to_asset_position(
+            asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("350")
+        )
         # (1 + 2 + 0.5) * 100 = 350
         assert pos.total_value_tl == Decimal("350")
 
@@ -288,10 +306,14 @@ class TestToAssetPosition:
             liquid_quantity=Decimal("1"),
             unit_price_tl=Decimal("250"),
         )
-        pos = to_asset_position(asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("1000"))
+        pos = to_asset_position(
+            asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("1000")
+        )
         assert pos.weight_pct == Decimal("25.00")
 
     def test_weight_pct_zero_total_does_not_crash(self):
         asset = self._asset(unit_price_tl=Decimal("100"), liquid_quantity=Decimal("1"))
-        pos = to_asset_position(asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("0"))
+        pos = to_asset_position(
+            asset, snapshot_id=None, usd_tl_rate=Decimal("33"), total_value_tl=Decimal("0")
+        )
         assert pos.weight_pct == Decimal("0.00")

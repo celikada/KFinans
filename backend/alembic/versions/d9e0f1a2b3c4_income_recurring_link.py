@@ -12,8 +12,9 @@ Periyodik kayıt silinirse: ON DELETE SET NULL (income kaydı kalır,
 sadece bağlantı kopar).
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "d9e0f1a2b3c4"
 down_revision = "c8d9e0f1a2b3"
@@ -28,8 +29,10 @@ def upgrade() -> None:
     )
     op.create_foreign_key(
         "fk_incomes_recurring_income_id",
-        "incomes", "recurring_incomes",
-        ["recurring_income_id"], ["id"],
+        "incomes",
+        "recurring_incomes",
+        ["recurring_income_id"],
+        ["id"],
         ondelete="SET NULL",
     )
     op.create_index(

@@ -3,6 +3,7 @@
 Sentry + OTel init opt-in olmali — DSN/endpoint bos ise hata atmadan
 no-op donmeli. Aktif iken sentry_sdk.init / TracerProvider mock ile dogrula.
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -94,6 +95,7 @@ def test_release_tag_reads_git_sha_env():
 def test_release_tag_returns_none_when_env_unset():
     """GIT_SHA bos ise None doner."""
     import os
+
     original = os.environ.pop("GIT_SHA", None)
     try:
         assert observability._release_tag() is None

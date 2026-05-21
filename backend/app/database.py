@@ -1,4 +1,5 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.config import settings
 
 # DBA-004 (FAZ H): Default 5+10 pool yetersiz. asyncio.gather snapshot job'da
@@ -23,6 +24,7 @@ elif _ssl_mode == "prefer":
     # production "require" mode'a gecirilmeli (cluster CA bundle mount
     # gerektigi icin ayri PR).
     import ssl as _ssl_mod
+
     _ctx = _ssl_mod.create_default_context()
     _ctx.check_hostname = False  # noqa: S5527 (cluster-internal trust)
     _ctx.verify_mode = _ssl_mod.CERT_NONE  # noqa: S4830 (self-signed)

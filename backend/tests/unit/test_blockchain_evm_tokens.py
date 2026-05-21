@@ -3,6 +3,7 @@
 Network bagimsiz pure Python: spam pattern matching, Unicode spoofing,
 TokenDef constants. Ethplorer HTTP cagirisi mock'lanir (respx).
 """
+
 from decimal import Decimal
 
 import httpx
@@ -15,7 +16,6 @@ from app.services.blockchain.evm_tokens import (
     _looks_like_spam,
     fetch_ethereum_tokens_via_ethplorer,
 )
-
 
 # ─── _looks_like_spam — pure logic ─────────────────────────────────────
 
@@ -107,29 +107,32 @@ async def test_ethplorer_returns_filtered_tokens():
     """Ethplorer yanitinda spam tokenlar filtrelenir, normal'ler doner."""
     addr = "0x1234567890123456789012345678901234567890"
     respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
-        return_value=httpx.Response(200, json={
-            "tokens": [
-                {
-                    "tokenInfo": {
-                        "symbol": "USDC",
-                        "name": "USD Coin",
-                        "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        "decimals": "6",
+        return_value=httpx.Response(
+            200,
+            json={
+                "tokens": [
+                    {
+                        "tokenInfo": {
+                            "symbol": "USDC",
+                            "name": "USD Coin",
+                            "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                            "decimals": "6",
+                        },
+                        "balance": 1000_000_000,  # 1000 USDC
                     },
-                    "balance": 1000_000_000,  # 1000 USDC
-                },
-                {
-                    # Spam: URL pattern in name
-                    "tokenInfo": {
-                        "symbol": "AIR",
-                        "name": "Visit claim.io for airdrop",
-                        "address": "0x1111111111111111111111111111111111111111",
-                        "decimals": "18",
+                    {
+                        # Spam: URL pattern in name
+                        "tokenInfo": {
+                            "symbol": "AIR",
+                            "name": "Visit claim.io for airdrop",
+                            "address": "0x1111111111111111111111111111111111111111",
+                            "decimals": "18",
+                        },
+                        "balance": 1000_000_000_000_000_000_000,
                     },
-                    "balance": 1000_000_000_000_000_000_000,
-                },
-            ],
-        })
+                ],
+            },
+        )
     )
     tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
     # USDC dahil, AIR scam filtrelendi
@@ -167,18 +170,23 @@ async def test_ethplorer_filters_huge_amount_spam():
     """1e12'dan buyuk miktar token = airdrop spam (gercek token bu kadar olmaz)."""
     addr = "0x0000000000000000000000000000000000000003"
     respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
-        return_value=httpx.Response(200, json={
-            "tokens": [{
-                "tokenInfo": {
-                    "symbol": "MASS",
-                    "name": "Mass Spam Token",
-                    "address": "0xaaaa000000000000000000000000000000000001",
-                    "decimals": "18",
-                },
-                # 1e25 token — anormal
-                "balance": 10_000_000_000_000_000_000_000_000_000,
-            }],
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "tokens": [
+                    {
+                        "tokenInfo": {
+                            "symbol": "MASS",
+                            "name": "Mass Spam Token",
+                            "address": "0xaaaa000000000000000000000000000000000001",
+                            "decimals": "18",
+                        },
+                        # 1e25 token — anormal
+                        "balance": 10_000_000_000_000_000_000_000_000_000,
+                    }
+                ],
+            },
+        )
     )
     tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
     # Cok yuksek miktar spam filtre tarafindan elenir (>1e12 raw amount)

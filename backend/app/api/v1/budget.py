@@ -25,9 +25,7 @@ async def list_budgets(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Budget)
-        .where(Budget.user_id == current_user.id)
-        .order_by(Budget.category)
+        select(Budget).where(Budget.user_id == current_user.id).order_by(Budget.category)
     )
     return result.scalars().all()
 
@@ -90,12 +88,8 @@ async def get_comparison(
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
 
-    budgets_q = await db.execute(
-        select(Budget).where(Budget.user_id == current_user.id)
-    )
-    budget_map: dict[str, Decimal] = {
-        b.category: b.amount for b in budgets_q.scalars().all()
-    }
+    budgets_q = await db.execute(select(Budget).where(Budget.user_id == current_user.id))
+    budget_map: dict[str, Decimal] = {b.category: b.amount for b in budgets_q.scalars().all()}
 
     # Cift sayim filtresi: kart + odendi olanlari haric tut (kart borcu sayar)
     not_double_counted = or_(

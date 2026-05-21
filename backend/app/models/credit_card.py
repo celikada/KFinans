@@ -1,6 +1,8 @@
 """Kredi kartı modelleri: tanım + dönem içi borç + aylık ekstreler + taksitler."""
+
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -25,36 +27,53 @@ class CreditCard(Base):
     bank_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     last_4: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
     credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
-    statement_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    payment_due_day: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default="10")
+    statement_day: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    payment_due_day: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=10, server_default="10"
+    )
     # Dönem içi henüz ekstreye düşmemiş tutar (kullanıcı manuel günceller)
     current_period_debt: Mapped[Decimal] = mapped_column(
-        Numeric(18, 2), nullable=False, default=Decimal(0), server_default="0",
+        Numeric(18, 2),
+        nullable=False,
+        default=Decimal(0),
+        server_default="0",
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
     user: Mapped["User"] = relationship(back_populates="credit_cards")
     statements: Mapped[list["CreditCardStatement"]] = relationship(
-        back_populates="card", cascade="all, delete-orphan",
+        back_populates="card",
+        cascade="all, delete-orphan",
     )
     installments: Mapped[list["CreditCardInstallment"]] = relationship(
-        back_populates="card", cascade="all, delete-orphan",
+        back_populates="card",
+        cascade="all, delete-orphan",
     )
 
 
 class CreditCardStatement(Base):
     """Aylık ekstre kaydı (kesim tarihi + tutar + son ödeme tarihi)."""
+
     __tablename__ = "credit_card_statements"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     card_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True,
+        Integer,
+        ForeignKey("credit_cards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     period_year: Mapped[int] = mapped_column(Integer, nullable=False)
     period_month: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -64,7 +83,9 @@ class CreditCardStatement(Base):
     paid_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
     card: Mapped["CreditCard"] = relationship(back_populates="statements")
@@ -81,11 +102,15 @@ class CreditCardInstallment(Base):
     sayılır (ilk taksit `first_due_date`'ten başlar, `installments_remaining`
     kadar ay devam eder).
     """
+
     __tablename__ = "credit_card_installments"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     card_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True,
+        Integer,
+        ForeignKey("credit_cards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     description: Mapped[str] = mapped_column(String(200), nullable=False)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
@@ -95,7 +120,9 @@ class CreditCardInstallment(Base):
     first_due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False,
+        TIMESTAMP(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
     card: Mapped["CreditCard"] = relationship(back_populates="installments")

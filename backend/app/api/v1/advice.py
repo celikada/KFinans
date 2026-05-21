@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.models.advice import InvestmentAdvice
 from app.models.portfolio import PortfolioSnapshot
@@ -44,6 +45,7 @@ async def generate_advice(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy.orm import selectinload
+
     from app.services.advisor import AdvisorService
 
     # AI-005 (FAZ H): Anthropic ozel acik riza kontrolu (KVKK m.9).
@@ -75,7 +77,10 @@ async def generate_advice(
     )
     snapshot = snapshot_result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tavsiye üretmek için önce portföy verisi gerekiyor")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tavsiye üretmek için önce portföy verisi gerekiyor",
+        )
 
     advisor = AdvisorService()
     advice = await advisor.generate(
@@ -93,7 +98,8 @@ async def generate_advice(
     # AI-004 (FAZ H): Audit log — KVKK m.12 uclu taraf veri aktarimi izleme.
     # Anthropic API'ye portfoy ozeti gonderildigi icin her uretim audit'lenmeli.
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ADVICE_GENERATE,
         user_id=current_user.id,
         resource=f"advice:snapshot={snapshot.id}",

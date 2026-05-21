@@ -1,8 +1,10 @@
 import asyncio
 import logging
-import httpx
 from decimal import Decimal
-from app.services.base import BaseIntegration, AssetData
+
+import httpx
+
+from app.services.base import AssetData, BaseIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +15,16 @@ _EARN_URL = f"{_BASE}/v1/user-earn"
 _TICKERS_URL = f"{_BASE}/v1/tickers"
 _CLIENT_ID = "coretech9"
 _SCOPE = "openid profile email offline_access"
-_EARN_INCLUDE = {"Earn", "Redemption"}  # Completed = zaten spot'a aktarılmış, çift sayılmaması için hariç
-_STABLECOIN_USD = {"USDT": Decimal("1"), "USDC": Decimal("1"), "BUSD": Decimal("1"), "DAI": Decimal("1")}
+_EARN_INCLUDE = {
+    "Earn",
+    "Redemption",
+}  # Completed = zaten spot'a aktarılmış, çift sayılmaması için hariç
+_STABLECOIN_USD = {
+    "USDT": Decimal("1"),
+    "USDC": Decimal("1"),
+    "BUSD": Decimal("1"),
+    "DAI": Decimal("1"),
+}
 
 
 class ICrypexService(BaseIntegration):
@@ -41,7 +51,9 @@ class ICrypexService(BaseIntegration):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if resp.status_code != 200:
-            raise ValueError(f"iCrypex oturum açılamadı (HTTP {resp.status_code}): {resp.text[:200]}")
+            raise ValueError(
+                f"iCrypex oturum açılamadı (HTTP {resp.status_code}): {resp.text[:200]}"
+            )
         return resp.json()["access_token"]
 
     def _parse_spot(self, data) -> dict[str, dict]:
@@ -60,7 +72,9 @@ class ICrypexService(BaseIntegration):
             if item.get("status") not in _EARN_INCLUDE:
                 continue
             symbol = str(item.get("assetSymbol", "")).strip().upper()
-            locked = Decimal(str(item.get("quantity", 0) or 0)) + Decimal(str(item.get("rewardQuantity", 0) or 0))
+            locked = Decimal(str(item.get("quantity", 0) or 0)) + Decimal(
+                str(item.get("rewardQuantity", 0) or 0)
+            )
             if not symbol or locked <= 0:
                 continue
             if symbol in balances:
@@ -113,5 +127,3 @@ class ICrypexService(BaseIntegration):
                 return r.status_code == 200
         except Exception:
             return False
-
-

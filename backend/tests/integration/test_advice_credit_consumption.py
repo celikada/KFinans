@@ -5,11 +5,11 @@ Test stratejisi:
 - Snapshot fixture ile DB'de portfoy_snapshot olusturulur.
 - credit_balance manipulasyonlari ile 402, basarili, atomik dusum dogrulanir.
 """
+
+import uuid
 from datetime import date
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-import uuid
 
 import pytest
 from httpx import AsyncClient
@@ -37,9 +37,7 @@ def _fake_advice(user_id, snapshot_id):
 async def _create_snapshot_for(email: str) -> uuid.UUID:
     """Test user'a iliskin snapshot olustur. Returns snapshot_id."""
     async with TestSession() as session:
-        user = (await session.execute(
-            select(User).where(User.email == email)
-        )).scalar_one()
+        user = (await session.execute(select(User).where(User.email == email))).scalar_one()
         snap = PortfolioSnapshot(
             user_id=user.id,
             snapshot_date=date.today(),
@@ -53,9 +51,12 @@ async def _create_snapshot_for(email: str) -> uuid.UUID:
 async def _set_credit_balance(email: str, balance: int) -> None:
     """credit_balance + Anthropic consent set (AI-005 gate gecsin)."""
     from datetime import datetime, timezone
+
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(
+            update(User)
+            .where(User.email == email)
+            .values(
                 credit_balance=balance,
                 anthropic_consent_at=datetime.now(timezone.utc),
                 anthropic_consent_version="1.0",
@@ -66,9 +67,7 @@ async def _set_credit_balance(email: str, balance: int) -> None:
 
 async def _get_user(email: str) -> User:
     async with TestSession() as session:
-        return (await session.execute(
-            select(User).where(User.email == email)
-        )).scalar_one()
+        return (await session.execute(select(User).where(User.email == email))).scalar_one()
 
 
 @pytest.fixture(autouse=True)
@@ -124,9 +123,11 @@ async def test_generate_advice_consumes_credit(client: AsyncClient):
 
     # advice.credits_used yazildi
     async with TestSession() as session:
-        advice_db = (await session.execute(
-            select(InvestmentAdvice).where(InvestmentAdvice.user_id == user_before.id)
-        )).scalar_one()
+        advice_db = (
+            await session.execute(
+                select(InvestmentAdvice).where(InvestmentAdvice.user_id == user_before.id)
+            )
+        ).scalar_one()
         assert advice_db.credits_used == 1
 
 

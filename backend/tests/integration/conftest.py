@@ -1,8 +1,8 @@
 import pytest_asyncio
 from sqlalchemy import text
 
-from tests.conftest import engine
 from app.models.base import Base
+from tests.conftest import engine
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -37,10 +37,7 @@ _TRUNCATE_EXCLUDE = {"alembic_version"}
 @pytest_asyncio.fixture(autouse=True)
 async def _truncate_after_test():
     yield
-    table_names = [
-        t.name for t in Base.metadata.sorted_tables
-        if t.name not in _TRUNCATE_EXCLUDE
-    ]
+    table_names = [t.name for t in Base.metadata.sorted_tables if t.name not in _TRUNCATE_EXCLUDE]
     if not table_names:
         return
     async with engine.begin() as conn:

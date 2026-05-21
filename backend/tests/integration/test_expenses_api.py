@@ -1,9 +1,9 @@
 """Expenses CRUD + summary endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _exp(amount: float, category: str, date: str, description: str | None = None) -> dict:
@@ -11,6 +11,7 @@ def _exp(amount: float, category: str, date: str, description: str | None = None
 
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
@@ -139,7 +140,9 @@ async def test_list_filters_by_year_month(client: AsyncClient):
 async def test_list_filters_by_category(client: AsyncClient):
     headers = await make_user(client, "exp_cat_filter@example.com")
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-01"), headers=headers)
-    await client.post("/api/v1/expenses", json=_exp(100, "transport", "2026-05-02"), headers=headers)
+    await client.post(
+        "/api/v1/expenses", json=_exp(100, "transport", "2026-05-02"), headers=headers
+    )
     await client.post("/api/v1/expenses", json=_exp(75, "food", "2026-05-03"), headers=headers)
 
     resp = await client.get("/api/v1/expenses?category=food", headers=headers)
@@ -169,6 +172,7 @@ async def test_list_sorted_desc_by_date(client: AsyncClient):
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_summary_empty_month(client: AsyncClient):
     headers = await make_user(client, "sum_empty@example.com")
@@ -187,7 +191,9 @@ async def test_summary_with_data(client: AsyncClient):
     headers = await make_user(client, "sum_data@example.com")
     await client.post("/api/v1/expenses", json=_exp(100, "food", "2026-05-05"), headers=headers)
     await client.post("/api/v1/expenses", json=_exp(50, "food", "2026-05-10"), headers=headers)
-    await client.post("/api/v1/expenses", json=_exp(200, "transport", "2026-05-12"), headers=headers)
+    await client.post(
+        "/api/v1/expenses", json=_exp(200, "transport", "2026-05-12"), headers=headers
+    )
     # Farkli ay — summary'ye dahil olmamali
     await client.post("/api/v1/expenses", json=_exp(999, "food", "2026-04-15"), headers=headers)
 
@@ -204,6 +210,7 @@ async def test_summary_with_data(client: AsyncClient):
 
 
 # ─── IDOR ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_user_a_cannot_see_user_b_expenses(client: AsyncClient):
@@ -242,6 +249,7 @@ async def test_user_a_cannot_delete_user_b_expense(client: AsyncClient):
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_unauth_returns_401(client: AsyncClient):

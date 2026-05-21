@@ -5,6 +5,7 @@ Logout sonrasi:
 - Refresh token (body'de gonderildiyse) /auth/refresh'te 401 doner
 - Logout idempotent — ayni token tekrar logout edilirse hata yok
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -14,9 +15,13 @@ from tests.conftest import verify_user_email
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
     """User olustur, dogrula, login yap; tum tokenlari ve auth header'i don."""
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
+    await client.post(
+        "/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     data = login.json()
     return {
         "access_token": data["access_token"],
@@ -155,16 +160,12 @@ async def test_refresh_new_token_works_after_rotation(client: AsyncClient):
     """Rotation sonrasi yeni refresh token bir sonraki refresh icin gecerli olmali."""
     session = await _register_and_login(client, "rotate_chain@example.com")
 
-    r1 = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": session["refresh_token"]}
-    )
+    r1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": session["refresh_token"]})
     assert r1.status_code == 200
     new_refresh = r1.json()["refresh_token"]
 
     # Yeni refresh hemen ikinci kez calisip basarili olmali
-    r2 = await client.post(
-        "/api/v1/auth/refresh", json={"refresh_token": new_refresh}
-    )
+    r2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": new_refresh})
     assert r2.status_code == 200
     assert r2.json()["refresh_token"] != new_refresh  # rotate edildi
 
@@ -186,7 +187,6 @@ async def test_refresh_rotation_preserves_user_isolation(client: AsyncClient):
         "/api/v1/auth/refresh", json={"refresh_token": session_b["refresh_token"]}
     )
     assert rb.status_code == 200
-
 
 
 # ─── TEST-005 (FAZ H): Refresh rotation idempotency (sequential) ──────

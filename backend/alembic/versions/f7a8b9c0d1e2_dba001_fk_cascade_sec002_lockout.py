@@ -15,9 +15,10 @@ diye DB seviyesinde de CASCADE/SET NULL ekledik.
 SEC-002: users.failed_login_count + users.locked_until kolonlari (account
 lockout - OWASP ASVS V2.2.1).
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f7a8b9c0d1e2"
@@ -45,8 +46,11 @@ def upgrade() -> None:
         constraint = f"{table}_{col}_fkey"
         op.drop_constraint(constraint, table, type_="foreignkey")
         op.create_foreign_key(
-            constraint, table, ref_table,
-            [col], ["id"],
+            constraint,
+            table,
+            ref_table,
+            [col],
+            ["id"],
             ondelete=on_delete,
         )
 
@@ -54,14 +58,18 @@ def upgrade() -> None:
     op.add_column(
         "users",
         sa.Column(
-            "failed_login_count", sa.Integer(),
-            nullable=False, server_default="0",
+            "failed_login_count",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
         ),
     )
     op.add_column(
         "users",
         sa.Column(
-            "locked_until", sa.TIMESTAMP(timezone=True), nullable=True,
+            "locked_until",
+            sa.TIMESTAMP(timezone=True),
+            nullable=True,
         ),
     )
 
@@ -76,6 +84,9 @@ def downgrade() -> None:
         constraint = f"{table}_{col}_fkey"
         op.drop_constraint(constraint, table, type_="foreignkey")
         op.create_foreign_key(
-            constraint, table, ref_table,
-            [col], ["id"],
+            constraint,
+            table,
+            ref_table,
+            [col],
+            ["id"],
         )

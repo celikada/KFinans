@@ -14,9 +14,10 @@ Etkilenen kolonlar:
 
 Geri donus (downgrade) kayip yaratir: 4 ondalik altindaki degerler trunc edilir.
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d5e6f7a8b9c0"

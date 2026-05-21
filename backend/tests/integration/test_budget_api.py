@@ -1,9 +1,9 @@
 """Budget CRUD + comparison endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 @pytest.mark.asyncio
@@ -139,11 +139,19 @@ async def test_comparison_expense_without_budget(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_comparison_multiple_categories(client: AsyncClient):
     headers = await make_user(client, "bgt_cmp_multi@example.com")
-    await client.put("/api/v1/budgets/food",      json={"amount": 3000}, headers=headers)
-    await client.put("/api/v1/budgets/transport",  json={"amount": 1000}, headers=headers)
-    await client.put("/api/v1/budgets/bills",      json={"amount": 2000}, headers=headers)
-    await client.post("/api/v1/expenses", json={"amount": 2800, "category": "food",      "date": "2026-05-01"}, headers=headers)
-    await client.post("/api/v1/expenses", json={"amount": 1200, "category": "transport", "date": "2026-05-02"}, headers=headers)
+    await client.put("/api/v1/budgets/food", json={"amount": 3000}, headers=headers)
+    await client.put("/api/v1/budgets/transport", json={"amount": 1000}, headers=headers)
+    await client.put("/api/v1/budgets/bills", json={"amount": 2000}, headers=headers)
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 2800, "category": "food", "date": "2026-05-01"},
+        headers=headers,
+    )
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 1200, "category": "transport", "date": "2026-05-02"},
+        headers=headers,
+    )
 
     resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5", headers=headers)
     data = {r["category"]: r for r in resp.json()}

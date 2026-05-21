@@ -2,11 +2,13 @@ import io
 import logging
 from decimal import Decimal
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_user
+
+from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.upload_validation import validate_excel_upload
 from app.models.tefas import TefasHolding as TefasHoldingModel
@@ -46,14 +48,16 @@ async def save_tefas_holdings(
 ):
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in holdings:
-        db.add(TefasHoldingModel(
-            user_id=current_user.id,
-            code=h.code.upper(),
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-            distributor=h.distributor,
-        ))
+        db.add(
+            TefasHoldingModel(
+                user_id=current_user.id,
+                code=h.code.upper(),
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+                distributor=h.distributor,
+            )
+        )
     await db.commit()
     return holdings
 
@@ -101,18 +105,20 @@ async def tefas_preview(
         avg_cost_dec = Decimal(str(avg_cost_raw)) if avg_cost_raw is not None else None
         cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(total_value_tl, qty, avg_cost_raw)
 
-        out.append(TefasPositionOut(
-            code=a.symbol,
-            name=a.name,
-            quantity=qty,
-            unit_price_tl=a.unit_price_tl,
-            total_value_tl=total_value_tl,
-            avg_cost_tl=avg_cost_dec,
-            cost_basis_tl=cost_basis,
-            gain_loss_tl=gain_loss,
-            gain_loss_pct=gain_loss_pct,
-            distributor=h.distributor,
-        ))
+        out.append(
+            TefasPositionOut(
+                code=a.symbol,
+                name=a.name,
+                quantity=qty,
+                unit_price_tl=a.unit_price_tl,
+                total_value_tl=total_value_tl,
+                avg_cost_tl=avg_cost_dec,
+                cost_basis_tl=cost_basis,
+                gain_loss_tl=gain_loss,
+                gain_loss_pct=gain_loss_pct,
+                distributor=h.distributor,
+            )
+        )
     return out
 
 
@@ -122,7 +128,8 @@ async def export_tefas_holdings(
     db: AsyncSession = Depends(get_db),
 ):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
+
     from app.services.tefas import TefasService
 
     result = await db.execute(
@@ -133,7 +140,9 @@ async def export_tefas_holdings(
     prices: dict[str, Decimal] = {}
     if rows:
         try:
-            svc = TefasService([{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows])
+            svc = TefasService(
+                [{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows]
+            )
             assets = await svc.fetch()
             prices = {a.symbol: a.unit_price_tl for a in assets}
         except Exception:
@@ -142,7 +151,16 @@ async def export_tefas_holdings(
     wb = Workbook()
     ws = wb.active
     ws.title = "TEFAS Holdingleri"
-    headers = ["Fon Kodu", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)", "Kurum"]
+    headers = [
+        "Fon Kodu",
+        "Adet",
+        "İsim",
+        "Birim Fiyat (₺)",
+        "Toplam Değer (₺)",
+        "Ort. Maliyet (₺)",
+        "Kâr/Zarar (₺)",
+        "Kurum",
+    ]
     header_fill = PatternFill("solid", fgColor="1D4ED8")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -241,13 +259,15 @@ async def import_tefas_mkk(
         member = str(sh.cell_value(r, 0)).strip() or None
         if member:
             member = member[:50]
-        parsed.append(TefasHolding(
-            code=code,
-            quantity=qty,
-            name=name,
-            avg_cost_tl=price if price > 0 else None,
-            distributor=member,
-        ))
+        parsed.append(
+            TefasHolding(
+                code=code,
+                quantity=qty,
+                name=name,
+                avg_cost_tl=price if price > 0 else None,
+                distributor=member,
+            )
+        )
 
     if not parsed:
         raise HTTPException(
@@ -257,19 +277,22 @@ async def import_tefas_mkk(
 
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(TefasHoldingModel(
-            user_id=current_user.id,
-            code=h.code,
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-            distributor=h.distributor,
-        ))
+        db.add(
+            TefasHoldingModel(
+                user_id=current_user.id,
+                code=h.code,
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+                distributor=h.distributor,
+            )
+        )
     await db.commit()
 
     # Snapshot tetikle ki Finansal Hedef + History güncel kalsın
     try:
         from app.services.snapshot import compute_and_save_snapshot
+
         await compute_and_save_snapshot(current_user.id, db)
     except Exception as exc:
         logger.warning("MKK TEFAS import sonrası snapshot alınamadı: %s", exc)
@@ -291,7 +314,9 @@ async def import_tefas_holdings(
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
     except Exception:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı"
+        )
 
     parsed: list[TefasHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -321,22 +346,31 @@ async def import_tefas_holdings(
         distributor: str | None = None
         if distributor_raw:
             distributor = str(distributor_raw).strip()[:50] or None
-        parsed.append(TefasHolding(
-            code=code, quantity=qty, name=name,
-            avg_cost_tl=avg_cost_tl, distributor=distributor,
-        ))
+        parsed.append(
+            TefasHolding(
+                code=code,
+                quantity=qty,
+                name=name,
+                avg_cost_tl=avg_cost_tl,
+                distributor=distributor,
+            )
+        )
 
     if not parsed:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı"
+        )
 
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(TefasHoldingModel(
-            user_id=current_user.id,
-            code=h.code,
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-        ))
+        db.add(
+            TefasHoldingModel(
+                user_id=current_user.id,
+                code=h.code,
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+            )
+        )
     await db.commit()
     return parsed

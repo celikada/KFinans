@@ -2,11 +2,13 @@ import asyncio
 import logging
 import time
 from decimal import Decimal
+
 import httpx
 from web3 import AsyncWeb3
-from app.services.base import BaseBlockchainIntegration, AssetData
-from app.services.blockchain.evm_tokens import AVALANCHE_C_TOKENS, fetch_token_balances
+
 from app.config import settings
+from app.services.base import AssetData, BaseBlockchainIntegration
+from app.services.blockchain.evm_tokens import AVALANCHE_C_TOKENS, fetch_token_balances
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +65,18 @@ class AvalanchePChainService(BaseBlockchainIntegration):
 
         assets: list[AssetData] = []
         if liquid > 0 or total_staked > 0:
-            assets.append(AssetData(
-                symbol="AVAX",
-                name="Avalanche",
-                provider="avalanche_p",
-                asset_type="staked_crypto" if total_staked > liquid else "crypto",
-                source_type="blockchain",
-                liquid_quantity=liquid,
-                staked_quantity=total_staked,
-                wallet_address_id=self.wallet_address_id,
-            ))
+            assets.append(
+                AssetData(
+                    symbol="AVAX",
+                    name="Avalanche",
+                    provider="avalanche_p",
+                    asset_type="staked_crypto" if total_staked > liquid else "crypto",
+                    source_type="blockchain",
+                    liquid_quantity=liquid,
+                    staked_quantity=total_staked,
+                    wallet_address_id=self.wallet_address_id,
+                )
+            )
         return assets
 
     async def _cached_fetch(self) -> dict:
@@ -111,7 +115,9 @@ class AvalanchePChainService(BaseBlockchainIntegration):
         try:
             return await self._fetch_via_glacier()
         except Exception as exc:
-            logger.warning("Glacier API basarisiz [%s], JSON-RPC'ye dusuyor: %s", self.address[:16], exc)
+            logger.warning(
+                "Glacier API basarisiz [%s], JSON-RPC'ye dusuyor: %s", self.address[:16], exc
+            )
             return await self._fetch_via_rpc()
 
     async def _fetch_via_glacier(self) -> dict:
@@ -149,11 +155,17 @@ class AvalanchePChainService(BaseBlockchainIntegration):
 
         async def _rpc(client: httpx.AsyncClient, method: str, params: dict, req_id: int) -> dict:
             for attempt in range(3):
-                resp = await client.post(settings.avalanche_p_api_url, json={
-                    "jsonrpc": "2.0", "id": req_id, "method": method, "params": params,
-                })
+                resp = await client.post(
+                    settings.avalanche_p_api_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "method": method,
+                        "params": params,
+                    },
+                )
                 if resp.status_code == 429 and attempt < 2:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 resp.raise_for_status()
                 return resp.json().get("result", {}) or {}
@@ -162,12 +174,16 @@ class AvalanchePChainService(BaseBlockchainIntegration):
 
         async with httpx.AsyncClient(timeout=20) as client:
             balance_data = await _rpc(client, "platform.getBalance", {"addresses": [p_addr]}, 1)
-            stake_data = await _rpc(client, "platform.getStake", {"addresses": [p_addr], "encoding": "hex"}, 2)
+            stake_data = await _rpc(
+                client, "platform.getStake", {"addresses": [p_addr], "encoding": "hex"}, 2
+            )
 
-        unlocked = self._sum_assets(balance_data.get("unlockeds")) \
-            or self._to_decimal_navax(balance_data.get("unlocked"))
-        locked_stakeable = self._sum_assets(balance_data.get("lockedStakeables")) \
-            or self._to_decimal_navax(balance_data.get("lockedStakeable"))
+        unlocked = self._sum_assets(balance_data.get("unlockeds")) or self._to_decimal_navax(
+            balance_data.get("unlocked")
+        )
+        locked_stakeable = self._sum_assets(
+            balance_data.get("lockedStakeables")
+        ) or self._to_decimal_navax(balance_data.get("lockedStakeable"))
         staked = self._to_decimal_navax(stake_data.get("staked", 0))
         return {"liquid": unlocked, "staked": staked + locked_stakeable}
 
@@ -216,26 +232,33 @@ class AvalancheCChainService(BaseBlockchainIntegration):
 
         assets = []
         if liquid > 0:
-            assets.append(AssetData(
-                symbol="AVAX",
-                name="Avalanche",
-                provider="avalanche_c",
-                asset_type="crypto",
-                source_type="blockchain",
-                liquid_quantity=liquid,
-                wallet_address_id=self.wallet_address_id,
-            ))
+            assets.append(
+                AssetData(
+                    symbol="AVAX",
+                    name="Avalanche",
+                    provider="avalanche_c",
+                    asset_type="crypto",
+                    source_type="blockchain",
+                    liquid_quantity=liquid,
+                    wallet_address_id=self.wallet_address_id,
+                )
+            )
 
         # ERC-20 tokens (sAVAX, USDT.e, USDC.e)
         try:
             token_balances = await fetch_token_balances(self._w3, self.address, AVALANCHE_C_TOKENS)
             for token, amount in token_balances:
-                assets.append(AssetData(
-                    symbol=token.symbol, name=token.name,
-                    provider="avalanche_c", asset_type="crypto", source_type="blockchain",
-                    liquid_quantity=amount,
-                    wallet_address_id=self.wallet_address_id,
-                ))
+                assets.append(
+                    AssetData(
+                        symbol=token.symbol,
+                        name=token.name,
+                        provider="avalanche_c",
+                        asset_type="crypto",
+                        source_type="blockchain",
+                        liquid_quantity=amount,
+                        wallet_address_id=self.wallet_address_id,
+                    )
+                )
         except Exception as exc:
             logger.warning("Avalanche C ERC-20 tarama hatası [%s]: %s", self.address[:12], exc)
         return assets

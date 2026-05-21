@@ -83,7 +83,8 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             retry_seconds,
         )
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id,
             extra={"email": mask_email(payload.email), "reason": "locked"},
@@ -109,7 +110,8 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
                 )
         # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id if user else None,
             extra={
@@ -119,7 +121,9 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
             },
         )
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı"
+        )
     if not user.email_verified:
         logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", mask_email(payload.email))
         raise HTTPException(
@@ -137,7 +141,8 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
     if user.totp_enabled:
         logger.info("MFA gerekli — login adim 1: %s", mask_email(payload.email))
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.LOGIN_MFA_REQUIRED,
             user_id=user.id,
         )
@@ -150,7 +155,8 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
 
     logger.info("Kullanıcı giriş yaptı: %s", mask_email(payload.email))
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.LOGIN,
         user_id=user.id,
     )
@@ -167,7 +173,9 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
     try:
         data = decode_token(payload.refresh_token)
         if data.get("type") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token türü")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token türü"
+            )
         user_id = data.get("sub")
         jti = data.get("jti")
     except JWTError:
@@ -192,12 +200,14 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
     # ikinci kez kullanilmasi engellenir. expires_at TTL kontrol icin
     # cleanup cron'da (FAZ C5) silinir.
     if jti and "exp" in data:
-        db.add(RevokedToken(
-            jti=jti,
-            user_id=user.id,
-            token_type="refresh",
-            expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
-        ))
+        db.add(
+            RevokedToken(
+                jti=jti,
+                user_id=user.id,
+                token_type="refresh",
+                expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
+            )
+        )
         try:
             await db.commit()
         except IntegrityError:
@@ -229,12 +239,14 @@ async def logout(
         access_payload = decode_token(access_token)
         access_jti = access_payload.get("jti")
         if access_jti:
-            db.add(RevokedToken(
-                jti=access_jti,
-                user_id=current_user.id,
-                token_type="access",
-                expires_at=datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc),
-            ))
+            db.add(
+                RevokedToken(
+                    jti=access_jti,
+                    user_id=current_user.id,
+                    token_type="access",
+                    expires_at=datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc),
+                )
+            )
     except JWTError:
         pass  # get_current_user gecmisti zaten; ulasilmamali
 
@@ -247,18 +259,21 @@ async def logout(
                 and refresh_payload.get("sub") == str(current_user.id)
                 and refresh_payload.get("jti")
             ):
-                db.add(RevokedToken(
-                    jti=refresh_payload["jti"],
-                    user_id=current_user.id,
-                    token_type="refresh",
-                    expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
-                ))
+                db.add(
+                    RevokedToken(
+                        jti=refresh_payload["jti"],
+                        user_id=current_user.id,
+                        token_type="refresh",
+                        expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
+                    )
+                )
         except JWTError:
             pass  # Gecersiz refresh token; sessizce yutulur
 
     # Audit log (commit oncesi flush'lanir, ana commit ile birlikte gider)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.LOGOUT,
         user_id=current_user.id,
     )
@@ -306,14 +321,12 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         # PII guvenli: leaked_count log'lanir, sifre DEGIL
         logger.info(
             "Sizmis sifre reddedildi (register): email=%s leaked_count=%s",
-            mask_email(payload.email), leaked_count,
+            mask_email(payload.email),
+            leaked_count,
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Bu sifre bilinen veri sizintilarinda bulundu. "
-                "Lutfen baska bir sifre secin."
-            ),
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
         )
 
     token, expires_at = _new_verify_token()
@@ -334,7 +347,8 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     db.add(user)
     await db.flush()  # user.id'yi al
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.REGISTER,
         user_id=user.id,
         extra={"email": mask_email(payload.email), "risk_profile": payload.risk_profile},
@@ -369,7 +383,9 @@ async def verify_email(
         )
     if user.email_verified:
         return {"detail": "E-posta zaten doğrulanmış"}
-    if not user.verify_token_expires_at or user.verify_token_expires_at < datetime.now(timezone.utc):
+    if not user.verify_token_expires_at or user.verify_token_expires_at < datetime.now(
+        timezone.utc
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Doğrulama bağlantısının süresi dolmuş. Lütfen yeniden gönderin.",
@@ -408,7 +424,6 @@ async def resend_verification(
     return generic_response
 
 
-
 # ─── SEC-001 (FAZ H): Password reset (OWASP Forgot Password Cheat Sheet) ───
 
 
@@ -432,7 +447,8 @@ async def forgot_password(
 
     # Audit her durumda yazilir (saldirgan email listesi cikaramaz)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_RESET_REQUEST,
         user_id=user.id if user else None,
         extra={"email": mask_email(payload.email), "user_exists": bool(user)},
@@ -473,7 +489,8 @@ async def reset_password(
     ):
         # Audit anonim — token'i kim denedi izlenir
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.PASSWORD_RESET_COMPLETE,
             user_id=user.id if user else None,
             extra={"success": False, "reason": "invalid_or_expired_token"},
@@ -500,14 +517,12 @@ async def reset_password(
     if leaked_count >= 1:
         logger.info(
             "Sizmis sifre reddedildi (reset): email=%s leaked_count=%s",
-            mask_email(user.email), leaked_count,
+            mask_email(user.email),
+            leaked_count,
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Bu sifre bilinen veri sizintilarinda bulundu. "
-                "Lutfen baska bir sifre secin."
-            ),
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
         )
 
     user.password_hash = hash_password(payload.new_password)
@@ -518,7 +533,8 @@ async def reset_password(
     user.locked_until = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_RESET_COMPLETE,
         user_id=user.id,
         extra={"success": True, "email": mask_email(user.email)},

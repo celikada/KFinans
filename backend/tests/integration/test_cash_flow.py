@@ -9,6 +9,7 @@ Schema (CashFlowMonth):
   - net (income_total - expense_total)
   - is_past
 """
+
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -24,9 +25,13 @@ from tests.conftest import TestSession, verify_user_email
 
 async def _make_user(client: AsyncClient, email: str) -> dict:
     pwd = "guclu-sifre-123"
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
+    await client.post(
+        "/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     return {
         "headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
         "email": email,
@@ -35,6 +40,7 @@ async def _make_user(client: AsyncClient, email: str) -> dict:
 
 async def _get_user_id(email: str):
     from app.models.user import User
+
     async with TestSession() as db:
         u = (await db.execute(select(User).where(User.email == email))).scalar_one()
         return u.id
@@ -93,13 +99,15 @@ async def test_cash_flow_actual_income_appears_in_correct_month(client: AsyncCli
     user_id = await _get_user_id(session["email"])
 
     async with TestSession() as db:
-        db.add(Income(
-            user_id=user_id,
-            amount=Decimal("5000.00"),
-            date=date(2026, 3, 15),
-            category="salary",
-            description="test",
-        ))
+        db.add(
+            Income(
+                user_id=user_id,
+                amount=Decimal("5000.00"),
+                date=date(2026, 3, 15),
+                category="salary",
+                description="test",
+            )
+        )
         await db.commit()
 
     resp = await client.get("/api/v1/cash-flow?year=2026", headers=session["headers"])
@@ -122,16 +130,26 @@ async def test_cash_flow_simple_expense_appears(client: AsyncClient):
     async with TestSession() as db:
         # Her iki expense de credit_card_id=None ve is_paid=False → çift sayım
         # filtresi DAHİL (credit_card_id IS NULL OR is_paid=False)
-        db.add(Expense(
-            user_id=user_id, amount=Decimal("100.00"),
-            date=date(2026, 5, 5), category="other", description="market",
-            is_paid=False,
-        ))
-        db.add(Expense(
-            user_id=user_id, amount=Decimal("250.50"),
-            date=date(2026, 5, 20), category="other", description="benzin",
-            is_paid=False,
-        ))
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("100.00"),
+                date=date(2026, 5, 5),
+                category="other",
+                description="market",
+                is_paid=False,
+            )
+        )
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("250.50"),
+                date=date(2026, 5, 20),
+                category="other",
+                description="benzin",
+                is_paid=False,
+            )
+        )
         await db.commit()
 
     resp = await client.get("/api/v1/cash-flow?year=2026", headers=session["headers"])
@@ -153,10 +171,15 @@ async def test_cash_flow_idor_user_isolation(client: AsyncClient):
     a_id = await _get_user_id(session_a["email"])
 
     async with TestSession() as db:
-        db.add(Income(
-            user_id=a_id, amount=Decimal("99999.00"),
-            date=date(2026, 1, 10), category="salary", description="a",
-        ))
+        db.add(
+            Income(
+                user_id=a_id,
+                amount=Decimal("99999.00"),
+                date=date(2026, 1, 10),
+                category="salary",
+                description="a",
+            )
+        )
         await db.commit()
 
     # B'nin cash-flow'u sıfır olmalı
@@ -177,26 +200,27 @@ async def test_cash_flow_recurring_income_projects_into_future_months(client: As
     today = datetime.now().date()
 
     async with TestSession() as db:
-        db.add(RecurringIncome(
-            user_id=user_id,
-            title="Maaş",
-            amount=Decimal("3000.00"),
-            category="salary",
-            recurrence="monthly",
-            day_of_month=1,
-            start_date=date(today.year - 1, 1, 1),
-        ))
+        db.add(
+            RecurringIncome(
+                user_id=user_id,
+                title="Maaş",
+                amount=Decimal("3000.00"),
+                category="salary",
+                recurrence="monthly",
+                day_of_month=1,
+                start_date=date(today.year - 1, 1, 1),
+            )
+        )
         await db.commit()
 
-    resp = await client.get(
-        f"/api/v1/cash-flow?year={today.year}", headers=session["headers"]
-    )
+    resp = await client.get(f"/api/v1/cash-flow?year={today.year}", headers=session["headers"])
     assert resp.status_code == 200
     months = resp.json()["months"]
 
     # Gelecek aylarda en az bir ay income_forecast == 3000 olmalı
     future_with_projection = [
-        m for m in months
+        m
+        for m in months
         if not m["is_past"] and Decimal(m["income_forecast"]) >= Decimal("3000.00")
     ]
     assert len(future_with_projection) >= 1, (
@@ -214,15 +238,25 @@ async def test_cash_flow_net_equals_income_minus_expense(client: AsyncClient):
     user_id = await _get_user_id(session["email"])
 
     async with TestSession() as db:
-        db.add(Income(
-            user_id=user_id, amount=Decimal("1000"),
-            date=date(2026, 6, 1), category="other", description="x",
-        ))
-        db.add(Expense(
-            user_id=user_id, amount=Decimal("400"),
-            date=date(2026, 6, 1), category="other", description="y",
-            is_paid=False,
-        ))
+        db.add(
+            Income(
+                user_id=user_id,
+                amount=Decimal("1000"),
+                date=date(2026, 6, 1),
+                category="other",
+                description="x",
+            )
+        )
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("400"),
+                date=date(2026, 6, 1),
+                category="other",
+                description="y",
+                is_paid=False,
+            )
+        )
         await db.commit()
 
     resp = await client.get("/api/v1/cash-flow?year=2026", headers=session["headers"])

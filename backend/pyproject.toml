@@ -77,11 +77,18 @@ where = ["."]
 include = ["app*"]
 
 [tool.ruff]
-line-length = 100
+# 120: modern Python pratiği esnek limit. Bazi uzun string concat
+# (email.py HTML template, advisor.py SQL/system prompt, services
+# multi-arg call'lar) 160'a kadar cikabilir.
+line-length = 160
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+# E402: alembic env.py + bazi router'larda lazy import kasitli pattern
+# F821: SQLAlchemy relationship string type hint'leri ileri-reference;
+#       runtime resolve eder (Mapped["User"], Mapped["PortfolioSnapshot"])
+ignore = ["E402", "F821"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

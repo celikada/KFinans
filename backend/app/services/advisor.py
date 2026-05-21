@@ -27,7 +27,8 @@ _REQUIRED_DISCLAIMER = (
     "Geçmiş performans gelecekteki getirinin garantisi değildir."
 )
 
-_SYSTEM_PROMPT = """# Rol ve Konum
+_SYSTEM_PROMPT = (
+    """# Rol ve Konum
 
 Sen KFinans uygulamasının bilgilendirme asistanısın. Türkiye'de yaşayan bireysel yatırımcılara
 **eğitsel** ve **yapılandırılmış** içerik üretiyorsun. Görevin, kullanıcının portföy dağılımı
@@ -50,7 +51,9 @@ uygulanır:
    genel özellikleri şunlardır" şeklinde anlat.
 5. **Disclaimer zorunlu.** Yanıtının en sonuna **bu metni aynen** ekle (kısaltma, değiştirme):
 
-""" + _REQUIRED_DISCLAIMER + """
+"""
+    + _REQUIRED_DISCLAIMER
+    + """
 
 # Çıktı Formatı
 
@@ -145,6 +148,7 @@ Aşağıdaki ifade ve yapıları **asla** üretme:
 3. Spesifik bir kripto/hisse/fon adına "al" tavsiyesi var mı? → Hayır olmalı.
 4. Disclaimer footer'da aynen mevcut mu? → Evet olmalı.
 5. Tüm yanıt Türkçe ve Markdown mı? → Evet olmalı."""
+)
 
 HORIZON_LABELS = {
     "medium": "orta vade (3-12 ay)",
@@ -166,7 +170,6 @@ def _ensure_disclaimer(text: str) -> str:
 
 
 class AdvisorService:
-
     def __init__(self):
         if not settings.anthropic_api_key:
             raise RuntimeError("ANTHROPIC_API_KEY ayarlanmamış")
@@ -176,7 +179,9 @@ class AdvisorService:
             timeout=_CLAUDE_TIMEOUT_SECONDS,
         )
 
-    async def generate(self, user: User, snapshot: PortfolioSnapshot, horizon: str) -> InvestmentAdvice:
+    async def generate(
+        self, user: User, snapshot: PortfolioSnapshot, horizon: str
+    ) -> InvestmentAdvice:
         breakdown = calculate_breakdown(snapshot)
 
         staking_lines = "\n".join(
@@ -220,7 +225,9 @@ class AdvisorService:
                 headers={"Retry-After": retry_after},
             ) from exc
         except anthropic.APITimeoutError as exc:
-            logger.warning("Claude timeout (user=%s, %ss): %s", user.id, _CLAUDE_TIMEOUT_SECONDS, exc)
+            logger.warning(
+                "Claude timeout (user=%s, %ss): %s", user.id, _CLAUDE_TIMEOUT_SECONDS, exc
+            )
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Claude API zaman asimina ugradi, tekrar deneyin",
@@ -247,8 +254,9 @@ class AdvisorService:
             ) from exc
         except anthropic.APIStatusError as exc:
             # 5xx genel veya OverloadedError (529)
-            logger.warning("Claude APIStatusError (status=%s, user=%s): %s",
-                           exc.status_code, user.id, exc)
+            logger.warning(
+                "Claude APIStatusError (status=%s, user=%s): %s", exc.status_code, user.id, exc
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Claude API gecici olarak ulasilamiyor, tekrar deneyin",
@@ -271,8 +279,11 @@ class AdvisorService:
         if cache_read or cache_creation:
             logger.info(
                 "Claude cache metrikleri (user=%s): read=%s creation=%s prompt=%s output=%s",
-                user.id, cache_read, cache_creation,
-                message.usage.input_tokens, message.usage.output_tokens,
+                user.id,
+                cache_read,
+                cache_creation,
+                message.usage.input_tokens,
+                message.usage.output_tokens,
             )
 
         return InvestmentAdvice(

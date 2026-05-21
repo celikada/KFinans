@@ -38,13 +38,13 @@ class GoalIn(BaseModel):
 
 
 class GoalOut(BaseModel):
-    goal_amount: Decimal | None          # orijinal para biriminde
+    goal_amount: Decimal | None  # orijinal para biriminde
     goal_currency: str
-    rate_to_tl: Decimal | None           # 1 birim = X TL
-    monthly_tl: Decimal | None           # TL karsiligi
-    freedom_target_tl: Decimal | None    # monthly_tl × 300
-    portfolio_value: Decimal | None      # son snapshot TL
-    passive_income_tl: Decimal | None    # portfolio / 300
+    rate_to_tl: Decimal | None  # 1 birim = X TL
+    monthly_tl: Decimal | None  # TL karsiligi
+    freedom_target_tl: Decimal | None  # monthly_tl × 300
+    portfolio_value: Decimal | None  # son snapshot TL
+    passive_income_tl: Decimal | None  # portfolio / 300
     passive_income_foreign: Decimal | None  # pasif gelir / kur (hedef para biriminde)
     progress_pct: float | None
     months_covered: float | None
@@ -85,9 +85,13 @@ async def get_goal(
     rate = await _rate_to_tl(currency)
     monthly_tl = (amount * rate).quantize(Decimal("0.01"))
     freedom_target = (monthly_tl * FREEDOM_MULTIPLIER).quantize(Decimal("0.01"))
-    passive_tl = (portfolio_dec / FREEDOM_MULTIPLIER).quantize(Decimal("0.01")) if portfolio_dec else None
+    passive_tl = (
+        (portfolio_dec / FREEDOM_MULTIPLIER).quantize(Decimal("0.01")) if portfolio_dec else None
+    )
     passive_foreign = (passive_tl / rate).quantize(Decimal("0.01")) if passive_tl else None
-    progress_pct = round(float(portfolio_dec) / float(freedom_target) * 100, 2) if portfolio_dec else None
+    progress_pct = (
+        round(float(portfolio_dec) / float(freedom_target) * 100, 2) if portfolio_dec else None
+    )
     months_covered = round(float(portfolio_dec) / float(monthly_tl), 1) if portfolio_dec else None
 
     return GoalOut(

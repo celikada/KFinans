@@ -9,14 +9,14 @@ Endpoint'ler:
 
 USD/EUR/GBP holding'leri için _amount_to_tl TCMB API çağırır → respx ile mock.
 """
+
 from decimal import Decimal
 
 import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _mock_tcmb(usd_to_tl: float = 40.0, eur_to_tl: float = 44.0, gbp_to_tl: float = 50.0):

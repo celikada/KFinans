@@ -49,10 +49,7 @@ class Settings(BaseSettings):
     # Backend JSON-only; Swagger UI kullanımı için override:
     #   "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ..."
     csp_policy: str = (
-        "default-src 'none'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'none'; "
-        "form-action 'none'"
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     )
 
     # ─── TrustedHost (FAZ C3) ─────────────────────────────────────────
@@ -82,9 +79,9 @@ class Settings(BaseSettings):
     # Hepsi opt-in. DSN/endpoint bos ise no-op (dev'de aktif degil).
     sentry_dsn: str = ""
     sentry_env: str = "development"
-    sentry_traces_sample_rate: float = 0.1   # %10 trace ornegi
+    sentry_traces_sample_rate: float = 0.1  # %10 trace ornegi
     sentry_profiles_sample_rate: float = 0.0  # CPU profiling — kapali default
-    otel_endpoint: str = ""                   # Tempo/Jaeger/Honeycomb OTLP HTTP
+    otel_endpoint: str = ""  # Tempo/Jaeger/Honeycomb OTLP HTTP
     otel_service_name: str = "kfinans-backend"
 
     # ─── SEC (audit #5): Password policy ─────────────────────────────
@@ -111,10 +108,10 @@ class Settings(BaseSettings):
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections
     # 100 oldugu dusunulurse 30 backend safe (1 replica). Multi-replica icin
     # her replica `db_pool_size + db_max_overflow <= 30`.
-    db_pool_size: int = 20         # idle pool size
-    db_max_overflow: int = 10      # peak'te ek connection
-    db_pool_recycle: int = 1800    # 30 dk — stale connection (PG idle_in_transaction_session_timeout)
-    db_pool_timeout: int = 30      # pool tukenince istek 30sn bekler, sonra fail
+    db_pool_size: int = 20  # idle pool size
+    db_max_overflow: int = 10  # peak'te ek connection
+    db_pool_recycle: int = 1800  # 30 dk — stale connection (PG idle_in_transaction_session_timeout)
+    db_pool_timeout: int = 30  # pool tukenince istek 30sn bekler, sonra fail
 
     # ─── Audit 2026-05-21 #3: DB TLS ──────────────────────────────────
     # Postgres pod cert-manager selfsigned cert ile SSL aktive. Backend

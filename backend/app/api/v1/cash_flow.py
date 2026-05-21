@@ -8,8 +8,10 @@ Her ay için:
 Bu ay (current month) ve geçmiş için actual; gelecek ay için forecast.
 Net = Gelir - Gider.
 """
+
 import calendar
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from zoneinfo import ZoneInfo
@@ -35,14 +37,14 @@ _ISTANBUL = ZoneInfo("Europe/Istanbul")
 
 class CashFlowMonth(BaseModel):
     month: int
-    income_actual: Decimal      # gerçekleşen gelir (incomes)
-    income_forecast: Decimal    # tahmini gelir (recurring_incomes)
-    expense_actual: Decimal     # gerçekleşen gider (expenses + ekstre)
-    expense_forecast: Decimal   # tahmini gider (planned + installments)
-    income_total: Decimal       # actual + forecast (görüntü için)
-    expense_total: Decimal      # actual + forecast
-    net: Decimal                # income_total - expense_total
-    is_past: bool               # bu ay'dan eski mi (UI'da farklı renk)
+    income_actual: Decimal  # gerçekleşen gelir (incomes)
+    income_forecast: Decimal  # tahmini gelir (recurring_incomes)
+    expense_actual: Decimal  # gerçekleşen gider (expenses + ekstre)
+    expense_forecast: Decimal  # tahmini gider (planned + installments)
+    income_total: Decimal  # actual + forecast (görüntü için)
+    expense_total: Decimal  # actual + forecast
+    net: Decimal  # income_total - expense_total
+    is_past: bool  # bu ay'dan eski mi (UI'da farklı renk)
 
 
 class CashFlowYear(BaseModel):
@@ -201,14 +203,9 @@ async def get_cash_flow(
                 recurring_income_by_month[m] += Decimal(ri.amount)
 
     # 6) Planlı giderler (planned_expenses, çift sayım filtresi)
-    pe_q = await db.execute(
-        select(PlannedExpense).where(PlannedExpense.user_id == current_user.id)
-    )
+    pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == current_user.id))
     all_planned = pe_q.scalars().all()
-    eligible_planned = [
-        pe for pe in all_planned
-        if pe.credit_card_id is None or not pe.is_paid
-    ]
+    eligible_planned = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
     planned_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
     for pe in eligible_planned:
         for m in range(1, 13):
@@ -224,10 +221,7 @@ async def get_cash_flow(
 
         # Actual ölçüler her zaman var (gerçekleşen ne ise)
         income_actual = actual_income_by_month[m]
-        expense_actual = (
-            actual_expense_by_month[m]
-            + statement_by_month[m]
-        )
+        expense_actual = actual_expense_by_month[m] + statement_by_month[m]
 
         # Forecast ölçüler — geçmiş ay için 0 göster (yanıltıcı olmasın)
         if is_past:
@@ -244,17 +238,19 @@ async def get_cash_flow(
         total_income += income_total
         total_expense += expense_total
 
-        months_out.append(CashFlowMonth(
-            month=m,
-            income_actual=income_actual,
-            income_forecast=income_forecast,
-            expense_actual=expense_actual,
-            expense_forecast=expense_forecast,
-            income_total=income_total,
-            expense_total=expense_total,
-            net=net,
-            is_past=is_past,
-        ))
+        months_out.append(
+            CashFlowMonth(
+                month=m,
+                income_actual=income_actual,
+                income_forecast=income_forecast,
+                expense_actual=expense_actual,
+                expense_forecast=expense_forecast,
+                income_total=income_total,
+                expense_total=expense_total,
+                net=net,
+                is_past=is_past,
+            )
+        )
 
     return CashFlowYear(
         year=year,
@@ -299,6 +295,7 @@ async def download_cash_flow_xlsx(
 ):
     """Yıllık nakit akış Excel raporu."""
     from app.services.reports import cash_flow_to_xlsx
+
     months, totals = await _build_cash_flow_data(year, current_user, db)
     content = cash_flow_to_xlsx(year, months, totals)
     return StreamingResponse(
@@ -316,6 +313,7 @@ async def download_cash_flow_pdf(
 ):
     """Yıllık nakit akış PDF raporu."""
     from app.services.reports import cash_flow_to_pdf
+
     months, totals = await _build_cash_flow_data(year, current_user, db)
     content = cash_flow_to_pdf(year, months, totals)
     return StreamingResponse(

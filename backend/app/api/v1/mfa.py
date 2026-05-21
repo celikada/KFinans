@@ -18,6 +18,7 @@ calisir. Akis:
 Saat senkron: `pyotp.TOTP(...).verify(code, valid_window=1)` ±30sn tolerans.
 Recovery code: tek kullanimlik; kullanildigi anda listeden cikarilir (one-time).
 """
+
 import base64
 import io
 import json
@@ -138,7 +139,8 @@ async def mfa_setup(request: Request, current_user: CurrentUser, db: DB):
     current_user.totp_recovery_codes = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.MFA_SETUP,
         user_id=current_user.id,
     )
@@ -182,7 +184,8 @@ async def mfa_enable(
     # valid_window=1 -> ±30sn tolerans (saat senkron sorununa karsi).
     if not pyotp.TOTP(secret_b32).verify(payload.totp_code, valid_window=1):
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.MFA_VERIFY_FAILED,
             user_id=current_user.id,
             extra={"phase": "enable"},
@@ -199,7 +202,8 @@ async def mfa_enable(
     current_user.totp_enabled = True
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.MFA_ENABLED,
         user_id=current_user.id,
     )
@@ -244,7 +248,8 @@ async def mfa_disable(
 
     if not verified:
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.MFA_VERIFY_FAILED,
             user_id=current_user.id,
             extra={"phase": "disable"},
@@ -260,7 +265,8 @@ async def mfa_disable(
     current_user.totp_recovery_codes = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.MFA_DISABLED,
         user_id=current_user.id,
         extra={"via_recovery": via_recovery},
@@ -339,7 +345,8 @@ async def mfa_verify(
 
     if not verified:
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.MFA_VERIFY_FAILED,
             user_id=user.id,
             extra={"phase": "login"},
@@ -351,14 +358,16 @@ async def mfa_verify(
         )
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.MFA_RECOVERY_USED if via_recovery else AuditAction.MFA_VERIFY_SUCCESS,
         user_id=user.id,
     )
     await db.commit()
     logger.info(
         "MFA dogrulama basarili: %s (recovery=%s)",
-        mask_email(user.email), via_recovery,
+        mask_email(user.email),
+        via_recovery,
     )
     return TokenResponse(
         access_token=create_access_token(str(user.id)),

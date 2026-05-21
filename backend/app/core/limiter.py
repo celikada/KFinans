@@ -5,7 +5,9 @@ settings.redis_url set ise Redis backend kullanilir; tum replica'lar ayni
 key uzerinde sayim yapar. Production multi-replica zorunlu — yoksa K8s
 replicas=1 sinirli olarak guvenli.
 """
+
 import logging
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 

@@ -3,6 +3,7 @@
 RFC 6238 standartina uyumlu (Google Authenticator / Authy / 1Password).
 Pydantic v2 modern stil — `model_config = ConfigDict(...)` (DEPS-001).
 """
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -25,7 +26,9 @@ class MFAEnableIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    totp_code: str = Field(min_length=6, max_length=8, description="Authenticator uygulamasinin 6 hanesi")
+    totp_code: str = Field(
+        min_length=6, max_length=8, description="Authenticator uygulamasinin 6 hanesi"
+    )
 
 
 class MFAEnableOut(BaseModel):

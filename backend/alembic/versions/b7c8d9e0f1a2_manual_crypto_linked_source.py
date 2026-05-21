@@ -13,8 +13,9 @@ Mevcut veriler:
 - 'silver_gram' → 'linked' + linked_source='commodity' + linked_id='XAG'
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "b7c8d9e0f1a2"
 down_revision = "a6b7c8d9e0f1"

@@ -7,6 +7,7 @@ Endpoint'ler:
   PUT    /user/password — şifre değiştir
   DELETE /user/me       — soft-delete (deleted_at = now)
 """
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -16,9 +17,13 @@ from tests.conftest import TestSession, verify_user_email
 
 
 async def _make_user(client: AsyncClient, email: str, pwd: str = "guclu-sifre-123") -> dict:
-    await client.post("/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True})
+    await client.post(
+        "/api/v1/auth/register", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     await verify_user_email(email)
-    login = await client.post("/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True})
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": pwd, "age_confirmed": True}
+    )
     return {
         "headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
         "email": email,
@@ -150,9 +155,9 @@ async def test_delete_me_sets_deleted_at(client: AsyncClient):
 
     # DB'de deleted_at set olmuş olmalı
     async with TestSession() as db:
-        u = (await db.execute(
-            select(User).where(User.email == "user_delete@example.com")
-        )).scalar_one()
+        u = (
+            await db.execute(select(User).where(User.email == "user_delete@example.com"))
+        ).scalar_one()
         assert u.deleted_at is not None
 
 
@@ -183,6 +188,9 @@ async def test_user_a_cannot_modify_user_b_profile(client: AsyncClient):
     )
     # B token'ıyla risk hala default olmalı
     me_b = await client.get("/api/v1/user/me", headers=session_b["headers"])
-    assert me_b.json()["risk_profile"] != "aggressive" or me_b.json()["email"] == "user_idor_b@example.com"
+    assert (
+        me_b.json()["risk_profile"] != "aggressive"
+        or me_b.json()["email"] == "user_idor_b@example.com"
+    )
     # daha kesin: B'nin email'i kendi
     assert me_b.json()["email"] == "user_idor_b@example.com"

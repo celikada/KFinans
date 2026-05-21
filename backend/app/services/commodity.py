@@ -1,4 +1,5 @@
 """Kıymetli maden (altın/gümüş) fiyat çekme ve değer hesaplama servisi."""
+
 import asyncio
 import logging
 import time

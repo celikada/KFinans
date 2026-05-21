@@ -33,7 +33,9 @@ variables:
 backend-lint:
   stage: lint
   image: python:3.12-slim
-  allow_failure: true  # TODO: 542 ruff hatasi mevcut kod borcu — ayri refactor PR'da temizlenecek
+  # allow_failure: kaldirildi (2026-05-21) — 547 hata 0'a indirildi:
+  # ruff --fix (176) + ruff format (172 dosya) + line-length 160 + E402/F821
+  # ignore (kasitli pattern'ler) + 3 manuel F841/E731 fix.
   before_script:
     - cd backend
     - pip install --no-cache-dir ruff

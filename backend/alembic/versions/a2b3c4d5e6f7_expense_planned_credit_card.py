@@ -17,8 +17,9 @@ Create Date: 2026-05-06
 - diğer kombinasyonlarda DAHİL EDİLİR.
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "a2b3c4d5e6f7"
 down_revision = "f1a2b3c4d5e6"
@@ -34,8 +35,10 @@ def upgrade() -> None:
     )
     op.create_foreign_key(
         "fk_expenses_credit_card_id",
-        "expenses", "credit_cards",
-        ["credit_card_id"], ["id"],
+        "expenses",
+        "credit_cards",
+        ["credit_card_id"],
+        ["id"],
         ondelete="SET NULL",
     )
     op.create_index("ix_expenses_credit_card_id", "expenses", ["credit_card_id"])
@@ -51,12 +54,16 @@ def upgrade() -> None:
     )
     op.create_foreign_key(
         "fk_planned_expenses_credit_card_id",
-        "planned_expenses", "credit_cards",
-        ["credit_card_id"], ["id"],
+        "planned_expenses",
+        "credit_cards",
+        ["credit_card_id"],
+        ["id"],
         ondelete="SET NULL",
     )
     op.create_index(
-        "ix_planned_expenses_credit_card_id", "planned_expenses", ["credit_card_id"],
+        "ix_planned_expenses_credit_card_id",
+        "planned_expenses",
+        ["credit_card_id"],
     )
     op.add_column(
         "planned_expenses",

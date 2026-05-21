@@ -1,15 +1,17 @@
 import logging
 import uuid
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
 from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
@@ -54,7 +56,9 @@ async def log_validation_errors(request: Request, exc: RequestValidationError):
     errors = jsonable_encoder(exc.errors())
     logger.warning(
         "422 VALIDATION %s %s — errors=%s",
-        request.method, request.url.path, errors,
+        request.method,
+        request.url.path,
+        errors,
     )
     return JSONResponse(status_code=422, content={"detail": errors})
 
@@ -71,7 +75,10 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     rid = uuid.uuid4().hex
     logger.warning(
         "409 INTEGRITY %s %s rid=%s — %s",
-        request.method, request.url.path, rid, exc.orig if exc.orig else exc,
+        request.method,
+        request.url.path,
+        rid,
+        exc.orig if exc.orig else exc,
     )
     return JSONResponse(
         status_code=409,
@@ -90,7 +97,9 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
     rid = uuid.uuid4().hex
     logger.exception(
         "500 DB_ERROR %s %s rid=%s",
-        request.method, request.url.path, rid,
+        request.method,
+        request.url.path,
+        rid,
     )
     return JSONResponse(
         status_code=500,
@@ -110,7 +119,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     rid = uuid.uuid4().hex
     logger.exception(
         "500 UNHANDLED %s %s rid=%s",
-        request.method, request.url.path, rid,
+        request.method,
+        request.url.path,
+        rid,
     )
     return JSONResponse(
         status_code=500,
@@ -120,6 +131,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             "request_id": rid,
         },
     )
+
 
 # Middleware sırası önemli: add_middleware LIFO çalışır
 # (en SON add edilen request'te İLK çalışır).

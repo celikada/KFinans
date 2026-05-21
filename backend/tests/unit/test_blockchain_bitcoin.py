@@ -4,6 +4,7 @@ mempool.space HTTP cagrilari respx ile mock'lanir; gercek aga gidilmez.
 xpub HD derivation, single address balance, cache + single-flight pattern,
 graceful error handling test edilir.
 """
+
 import time
 from decimal import Decimal
 
@@ -12,9 +13,8 @@ import pytest
 import respx
 
 from app.services.blockchain.bitcoin import (
-    SATOSHI_PER_BTC,
-    BitcoinService,
     _BALANCE_CACHE,
+    BitcoinService,
 )
 
 
@@ -37,13 +37,16 @@ VALID_BTC_ADDR = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
 async def test_fetch_single_address_balance():
     """funded_txo_sum - spent_txo_sum = balance (satoshi -> BTC)."""
     respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {
-                "funded_txo_sum": 200_000_000,  # 2 BTC funded
-                "spent_txo_sum": 50_000_000,    # 0.5 BTC spent
-                "tx_count": 5,
-            }
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {
+                    "funded_txo_sum": 200_000_000,  # 2 BTC funded
+                    "spent_txo_sum": 50_000_000,  # 0.5 BTC spent
+                    "tx_count": 5,
+                }
+            },
+        )
     )
     svc = BitcoinService(VALID_BTC_ADDR)
     bal = await svc._fetch_single_balance(VALID_BTC_ADDR)
@@ -55,9 +58,12 @@ async def test_fetch_single_address_balance():
 async def test_fetch_single_address_zero_balance():
     """funded == spent -> 0 BTC."""
     respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {"funded_txo_sum": 100_000, "spent_txo_sum": 100_000},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {"funded_txo_sum": 100_000, "spent_txo_sum": 100_000},
+            },
+        )
     )
     svc = BitcoinService(VALID_BTC_ADDR)
     bal = await svc._fetch_single_balance(VALID_BTC_ADDR)
@@ -84,9 +90,12 @@ async def test_fetch_single_address_500_raises():
 async def test_cache_hit_avoids_second_http_call():
     """Ayni address ikinci kez cagrildiginda cache'ten doner — HTTP cagrisi yok."""
     route = respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {"funded_txo_sum": 100_000_000, "spent_txo_sum": 0},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {"funded_txo_sum": 100_000_000, "spent_txo_sum": 0},
+            },
+        )
     )
     svc = BitcoinService(VALID_BTC_ADDR)
     bal1 = await svc._cached_balance()
@@ -100,9 +109,12 @@ async def test_cache_hit_avoids_second_http_call():
 async def test_cache_expires_after_ttl():
     """Cache TTL gecince yeni HTTP cagrisi yapilir."""
     route = respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {"funded_txo_sum": 100_000_000, "spent_txo_sum": 0},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {"funded_txo_sum": 100_000_000, "spent_txo_sum": 0},
+            },
+        )
     )
     svc = BitcoinService(VALID_BTC_ADDR)
     await svc._cached_balance()
@@ -122,9 +134,12 @@ async def test_cache_expires_after_ttl():
 async def test_fetch_returns_asset_data_with_balance():
     """fetch() AssetData listesi doner; symbol=BTC, liquid_quantity=balance."""
     respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {"funded_txo_sum": 250_000_000, "spent_txo_sum": 50_000_000},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {"funded_txo_sum": 250_000_000, "spent_txo_sum": 50_000_000},
+            },
+        )
     )
     svc = BitcoinService(VALID_BTC_ADDR)
     assets = await svc.fetch()

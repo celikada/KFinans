@@ -1,15 +1,23 @@
 import uuid
 from datetime import datetime
 from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 from app.core.masking import mask_address
 
-
 EXCHANGE_PROVIDERS = {"binance", "binancetr", "icrypex", "tefas", "bes"}
 CHAINS = {
-    "ethereum", "sonic", "avalanche_c", "avalanche_p", "bitcoin",
-    "solana", "cardano", "algorand", "polkadot", "litecoin",
+    "ethereum",
+    "sonic",
+    "avalanche_c",
+    "avalanche_p",
+    "bitcoin",
+    "solana",
+    "cardano",
+    "algorand",
+    "polkadot",
+    "litecoin",
 }
 
 

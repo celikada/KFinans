@@ -19,9 +19,10 @@ Production'da deploy oncesi key'in dogru ayarlandigindan emin olun. Key
 yanlissa upgrade fail eder; downgrade ile geri donulebilir (sifreleme
 oncesi state).
 """
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
+
+from alembic import op
 
 revision = "b3c4d5e6f7a8"
 down_revision = "a2b3c4d5e6f7"
@@ -93,9 +94,7 @@ def downgrade() -> None:
     from app.core.security import decrypt_secret
 
     bind = op.get_bind()
-    rows = bind.execute(
-        sa.text("SELECT id, address_encrypted FROM wallet_addresses")
-    ).fetchall()
+    rows = bind.execute(sa.text("SELECT id, address_encrypted FROM wallet_addresses")).fetchall()
 
     for row in rows:
         wallet_id = row[0]

@@ -4,8 +4,10 @@ PlannedExpense ile aynı yapı. Tek seferlik (gerçekleşen) gelirler `incomes`
 tablosunda kalır; bu tablo sadece "yıl sonuna kadar X kazanmayı bekliyorum"
 hesabı için kullanılır.
 """
+
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 

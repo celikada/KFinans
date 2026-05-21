@@ -2,12 +2,14 @@ import asyncio
 import logging
 from datetime import date
 from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, desc
-from sqlalchemy.orm import selectinload
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_user
+from sqlalchemy.orm import selectinload
+
+from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.security import decrypt_secret
 from app.models.integration import Integration, WalletAddress
@@ -24,20 +26,20 @@ from app.schemas.portfolio import (
     WalletPositionOut,
     WalletResponse,
 )
-from app.services.aggregator import fetch_usd_to_tl, fetch_combined_prices, lookup_usd_price
+from app.services.aggregator import fetch_combined_prices, fetch_usd_to_tl, lookup_usd_price
 from app.services.audit import AuditAction, log_audit
-from app.services.exchange.binance import BinanceService
-from app.services.exchange.binancetr import BinanceTRService
-from app.services.exchange.icrypex import ICrypexService
-from app.services.blockchain.sonic import SonicService
-from app.services.blockchain.avalanche import AvalanchePChainService, AvalancheCChainService
-from app.services.blockchain.ethereum import EthereumService
 from app.services.blockchain.algorand import AlgorandService
+from app.services.blockchain.avalanche import AvalancheCChainService, AvalanchePChainService
 from app.services.blockchain.bitcoin import BitcoinService
 from app.services.blockchain.cardano import CardanoService
+from app.services.blockchain.ethereum import EthereumService
 from app.services.blockchain.litecoin import LitecoinService
 from app.services.blockchain.polkadot import PolkadotService
 from app.services.blockchain.solana import SolanaService
+from app.services.blockchain.sonic import SonicService
+from app.services.exchange.binance import BinanceService
+from app.services.exchange.binancetr import BinanceTRService
+from app.services.exchange.icrypex import ICrypexService
 from app.services.snapshot import compute_and_save_snapshot
 
 logger = logging.getLogger(__name__)
@@ -141,7 +143,8 @@ async def delete_snapshot(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Snapshot bulunamadı")
     await db.delete(snap)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.SNAPSHOT_DELETE,
         user_id=current_user.id,
         resource=f"snapshot:{snapshot_date.isoformat()}",
@@ -176,12 +179,15 @@ async def download_snapshot_xlsx(
 ):
     """Belirli bir tarihteki snapshot için Excel raporu (tüm pozisyonlar)."""
     from app.services.reports import snapshot_to_xlsx
+
     snap = await _load_snapshot_with_positions(snapshot_date, current_user, db)
     content = snapshot_to_xlsx(snap, list(snap.asset_positions))
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.xlsx"},
+        headers={
+            "Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.xlsx"
+        },
     )
 
 
@@ -193,12 +199,15 @@ async def download_snapshot_pdf(
 ):
     """Belirli bir tarihteki snapshot için PDF raporu."""
     from app.services.reports import snapshot_to_pdf
+
     snap = await _load_snapshot_with_positions(snapshot_date, current_user, db)
     content = snapshot_to_pdf(snap, list(snap.asset_positions))
     return StreamingResponse(
         iter([content]),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.pdf"},
+        headers={
+            "Content-Disposition": f"attachment; filename=portfoy-{snapshot_date.isoformat()}.pdf"
+        },
     )
 
 
@@ -216,7 +225,9 @@ async def get_current_portfolio(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
+        )
     return snapshot
 
 
@@ -254,6 +265,7 @@ async def get_portfolio_history_years(
 ):
     """Kullanıcının snapshot'larının olduğu yılların listesi (yeni → eski)."""
     from sqlalchemy import extract
+
     result = await db.execute(
         select(extract("year", PortfolioSnapshot.snapshot_date).label("y"))
         .where(PortfolioSnapshot.user_id == current_user.id)
@@ -276,9 +288,12 @@ async def get_portfolio_changes(
     )
     snapshots = result.scalars().all()
     if not snapshots:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
+        )
 
     from app.services.aggregator import calculate_changes
+
     return calculate_changes(snapshots)
 
 
@@ -296,9 +311,12 @@ async def get_portfolio_breakdown(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
+        )
 
     from app.services.aggregator import calculate_breakdown
+
     return calculate_breakdown(snapshot)
 
 
@@ -373,10 +391,22 @@ async def get_wallet_positions(
 
     usd_tl, prices = await asyncio.gather(
         fetch_usd_to_tl(),
-        fetch_combined_prices([
-            "S", "AVAX", "ETH", "BTC", "SOL", "ADA", "DOT", "ALGO", "LTC",
-            "LINK", "USDT", "USDC",
-        ]),
+        fetch_combined_prices(
+            [
+                "S",
+                "AVAX",
+                "ETH",
+                "BTC",
+                "SOL",
+                "ADA",
+                "DOT",
+                "ALGO",
+                "LTC",
+                "LINK",
+                "USDT",
+                "USDC",
+            ]
+        ),
     )
 
     all_positions: list[WalletPositionOut] = []
@@ -413,19 +443,21 @@ async def get_wallet_positions(
                 usd = lookup_usd_price(a.symbol, prices)
                 # Snapshot ile tutarlı: pending_rewards da toplama dahil
                 total_qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
-                out.append(WalletPositionOut(
-                    wallet_id=wid,
-                    chain=wallet.chain,
-                    address=wallet.address,
-                    label=wallet.label,
-                    symbol=a.symbol,
-                    liquid_quantity=a.liquid_quantity,
-                    staked_quantity=a.staked_quantity,
-                    pending_rewards=a.pending_rewards,
-                    unit_price_usd=usd,
-                    unit_price_tl=(usd * usd_tl).quantize(Decimal("0.01")),
-                    total_value_tl=(total_qty * usd * usd_tl).quantize(Decimal("0.01")),
-                ))
+                out.append(
+                    WalletPositionOut(
+                        wallet_id=wid,
+                        chain=wallet.chain,
+                        address=wallet.address,
+                        label=wallet.label,
+                        symbol=a.symbol,
+                        liquid_quantity=a.liquid_quantity,
+                        staked_quantity=a.staked_quantity,
+                        pending_rewards=a.pending_rewards,
+                        unit_price_usd=usd,
+                        unit_price_tl=(usd * usd_tl).quantize(Decimal("0.01")),
+                        total_value_tl=(total_qty * usd * usd_tl).quantize(Decimal("0.01")),
+                    )
+                )
             return out
         except Exception as e:
             key = f"{wallet.chain}:{wallet.address[:10]}"
@@ -454,7 +486,10 @@ async def get_staking_positions(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok"
+        )
 
     from app.services.aggregator import extract_staking_positions
+
     return extract_staking_positions(snapshot)

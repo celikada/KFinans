@@ -3,14 +3,14 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import update
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from app.main import app
+
 from app.core.deps import get_db
 from app.core.limiter import limiter
-from app.models.base import Base
+from app.main import app
 from app.models.user import User
 
 TEST_DB_URL = os.getenv(
@@ -47,6 +47,7 @@ async def db():
 @pytest_asyncio.fixture
 async def client():
     """Her istek icin ayri session uretir — eszamanli istek cakismasini onler."""
+
     async def _override():
         async with TestSession() as session:
             yield session
@@ -64,6 +65,7 @@ def _reset_tcmb_cache():
     oncesi cache sifirla — testler izole.
     """
     from app.services import aggregator
+
     aggregator._tcmb_cache = None
     yield
 
@@ -86,6 +88,7 @@ def _disable_password_policy_by_default(request, monkeypatch):
     if request.node.get_closest_marker("password_policy_enabled"):
         # Gercek policy aktif — sadece HIBP'yi disable et (network yok)
         from app.config import settings as app_settings
+
         monkeypatch.setattr(app_settings, "hibp_check_enabled", False, raising=False)
         yield
         return
@@ -112,7 +115,9 @@ async def verify_user_email(email: str) -> None:
     """
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(
+            update(User)
+            .where(User.email == email)
+            .values(
                 email_verified=True,
                 verify_token=None,
                 verify_token_expires_at=None,

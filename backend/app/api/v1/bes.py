@@ -47,15 +47,17 @@ async def save_bes_holdings(
 ):
     await db.execute(delete(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     for h in holdings:
-        db.add(BesHoldingModel(
-            user_id=current_user.id,
-            plan_name=h.plan_name.strip(),
-            contract_number=h.contract_number.strip() if h.contract_number else None,
-            paid_principal=h.paid_principal,
-            paid_returns=h.paid_returns,
-            govt_contribution=h.govt_contribution,
-            govt_returns=h.govt_returns,
-        ))
+        db.add(
+            BesHoldingModel(
+                user_id=current_user.id,
+                plan_name=h.plan_name.strip(),
+                contract_number=h.contract_number.strip() if h.contract_number else None,
+                paid_principal=h.paid_principal,
+                paid_returns=h.paid_returns,
+                govt_contribution=h.govt_contribution,
+                govt_returns=h.govt_returns,
+            )
+        )
     await db.commit()
     return holdings
 
@@ -161,14 +163,16 @@ async def import_bes_holdings(
         if paid_principal + paid_returns + govt_contribution + govt_returns <= 0:
             continue
 
-        parsed.append(BesHolding(
-            plan_name=plan_name,
-            contract_number=contract,
-            paid_principal=paid_principal,
-            paid_returns=paid_returns,
-            govt_contribution=govt_contribution,
-            govt_returns=govt_returns,
-        ))
+        parsed.append(
+            BesHolding(
+                plan_name=plan_name,
+                contract_number=contract,
+                paid_principal=paid_principal,
+                paid_returns=paid_returns,
+                govt_contribution=govt_contribution,
+                govt_returns=govt_returns,
+            )
+        )
 
     if not parsed:
         raise HTTPException(
@@ -178,14 +182,16 @@ async def import_bes_holdings(
 
     await db.execute(delete(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(BesHoldingModel(
-            user_id=current_user.id,
-            plan_name=h.plan_name,
-            contract_number=h.contract_number,
-            paid_principal=h.paid_principal,
-            paid_returns=h.paid_returns,
-            govt_contribution=h.govt_contribution,
-            govt_returns=h.govt_returns,
-        ))
+        db.add(
+            BesHoldingModel(
+                user_id=current_user.id,
+                plan_name=h.plan_name,
+                contract_number=h.contract_number,
+                paid_principal=h.paid_principal,
+                paid_returns=h.paid_returns,
+                govt_contribution=h.govt_contribution,
+                govt_returns=h.govt_returns,
+            )
+        )
     await db.commit()
     return parsed

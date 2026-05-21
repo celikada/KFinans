@@ -4,14 +4,14 @@ Hepsi tek HTTP cagrisi pattern'i kullanir; respx ile mock + happy/error
 path. Polkadot substrate-interface kutuphanesine bagimli (TCP) — testte
 network mock gerek; o test dosyasi ayri tutuldu.
 """
+
 from decimal import Decimal
 
 import httpx
 import pytest
 import respx
 
-from app.services.blockchain.algorand import AlgorandService, MICRO_ALGO
-
+from app.services.blockchain.algorand import MICRO_ALGO, AlgorandService
 
 # ─── Algorand ──────────────────────────────────────────────────────────
 
@@ -24,10 +24,13 @@ VALID_ALGO_ADDR = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA34"
 async def test_algorand_returns_balance_with_pending_rewards():
     """amount + rewards birlikte AssetData uretir."""
     respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "amount": 5_000_000,    # 5 ALGO
-            "rewards": 250_000,     # 0.25 ALGO pending
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "amount": 5_000_000,  # 5 ALGO
+                "rewards": 250_000,  # 0.25 ALGO pending
+            },
+        )
     )
     svc = AlgorandService(VALID_ALGO_ADDR)
     assets = await svc.fetch()
@@ -80,12 +83,15 @@ async def test_litecoin_single_address_balance():
     from app.services.blockchain.litecoin import LitecoinService
 
     respx.get(f"https://litecoinspace.org/api/address/{VALID_LTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {
-                "funded_txo_sum": 500_000_000,
-                "spent_txo_sum": 100_000_000,
-            }
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {
+                    "funded_txo_sum": 500_000_000,
+                    "spent_txo_sum": 100_000_000,
+                }
+            },
+        )
     )
     svc = LitecoinService(VALID_LTC_ADDR)
     assets = await svc.fetch()
@@ -97,13 +103,17 @@ async def test_litecoin_single_address_balance():
 @pytest.mark.asyncio
 @respx.mock
 async def test_litecoin_zero_balance_returns_empty():
-    from app.services.blockchain.litecoin import LitecoinService, _BALANCE_CACHE
+    from app.services.blockchain.litecoin import _BALANCE_CACHE, LitecoinService
+
     _BALANCE_CACHE.clear()
 
     respx.get(f"https://litecoinspace.org/api/address/{VALID_LTC_ADDR}").mock(
-        return_value=httpx.Response(200, json={
-            "chain_stats": {"funded_txo_sum": 100, "spent_txo_sum": 100},
-        })
+        return_value=httpx.Response(
+            200,
+            json={
+                "chain_stats": {"funded_txo_sum": 100, "spent_txo_sum": 100},
+            },
+        )
     )
     svc = LitecoinService(VALID_LTC_ADDR)
     assets = await svc.fetch()
@@ -114,7 +124,8 @@ async def test_litecoin_zero_balance_returns_empty():
 @respx.mock
 async def test_litecoin_invalid_xpub_returns_empty():
     """Bozuk Ltub formati graceful empty (snapshot bozulmasin)."""
-    from app.services.blockchain.litecoin import LitecoinService, _BALANCE_CACHE
+    from app.services.blockchain.litecoin import _BALANCE_CACHE, LitecoinService
+
     _BALANCE_CACHE.clear()
 
     svc = LitecoinService("Ltub_invalid_garbage_xxx")
@@ -136,12 +147,17 @@ async def test_cardano_balance_with_rewards():
     from app.services.blockchain.cardano import CardanoService
 
     respx.post("https://api.koios.rest/api/v1/account_info").mock(
-        return_value=httpx.Response(200, json=[{
-            "stake_address": VALID_STAKE_ADDR,
-            "total_balance": "10000000",       # 10 ADA total
-            "rewards_available": "500000",     # 0.5 ADA reward
-            "utxo": "9500000",
-        }])
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "stake_address": VALID_STAKE_ADDR,
+                    "total_balance": "10000000",  # 10 ADA total
+                    "rewards_available": "500000",  # 0.5 ADA reward
+                    "utxo": "9500000",
+                }
+            ],
+        )
     )
     svc = CardanoService(VALID_STAKE_ADDR)
     assets = await svc.fetch()
@@ -157,9 +173,7 @@ async def test_cardano_balance_with_rewards():
 async def test_cardano_500_returns_empty():
     from app.services.blockchain.cardano import CardanoService
 
-    respx.post("https://api.koios.rest/api/v1/account_info").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.post("https://api.koios.rest/api/v1/account_info").mock(return_value=httpx.Response(500))
     svc = CardanoService(VALID_STAKE_ADDR)
     assets = await svc.fetch()
     assert assets == []

@@ -2,8 +2,8 @@ import json
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal
 from io import BytesIO
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.masking import mask_email
@@ -35,6 +34,7 @@ class EmailChangeRequest(BaseModel):
 
 class ConsentType(BaseModel):
     """COMP-006 (FAZ H): Geri cekilebilir riza turleri."""
+
     consent_type: Literal["overseas"] = Field(description="Su an sadece 'overseas' destekleniyor")
 
 
@@ -87,19 +87,18 @@ async def change_password(
     if leaked_count >= 1:
         logger.info(
             "Sizmis sifre reddedildi (change): email=%s leaked_count=%s",
-            mask_email(current_user.email), leaked_count,
+            mask_email(current_user.email),
+            leaked_count,
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Bu sifre bilinen veri sizintilarinda bulundu. "
-                "Lutfen baska bir sifre secin."
-            ),
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
         )
 
     current_user.password_hash = hash_password(payload.new_password)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_CHANGE,
         user_id=current_user.id,
     )
@@ -112,7 +111,8 @@ async def change_password(
 async def delete_me(request: Request, current_user: CurrentUser, db: DB) -> dict:
     current_user.deleted_at = datetime.now(tz=timezone.utc)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ACCOUNT_SOFT_DELETE,
         user_id=current_user.id,
         resource=f"user:{current_user.id}",
@@ -158,12 +158,13 @@ async def request_email_change(
     token = secrets.token_urlsafe(32)
     current_user.email_change_new = new_email
     current_user.email_change_token = token
-    current_user.email_change_expires_at = (
-        datetime.now(timezone.utc) + timedelta(hours=_EMAIL_CHANGE_TTL_HOURS)
+    current_user.email_change_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=_EMAIL_CHANGE_TTL_HOURS
     )
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.EMAIL_CHANGE_REQUEST,
         user_id=current_user.id,
         extra={
@@ -181,7 +182,8 @@ async def request_email_change(
     # icinde gonderilir; logging icin sadece masked email + user-id yeterli.
     logger.info(
         "E-posta degistirme istegi: user=%s yeni=%s",
-        current_user.id, mask_email(new_email),
+        current_user.id,
+        mask_email(new_email),
     )
     return {"detail": "Yeni e-posta adresine onay baglantisi gonderildi"}
 
@@ -205,7 +207,8 @@ async def confirm_email_change(
         or not user.email_change_new
     ):
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.EMAIL_CHANGE_COMPLETE,
             user_id=user.id if user else None,
             extra={"success": False, "reason": "invalid_or_expired"},
@@ -223,7 +226,8 @@ async def confirm_email_change(
     user.email_change_expires_at = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.EMAIL_CHANGE_COMPLETE,
         user_id=user.id,
         extra={
@@ -267,7 +271,8 @@ async def revoke_consent(
 
     current_user.overseas_consent_at = None
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.CONSENT_REVOKE,
         user_id=current_user.id,
         extra={"consent_type": consent_type},
@@ -309,22 +314,22 @@ async def data_export(
       - investment_advice (history)
       - audit_logs (kullanicinin kendi log'lari)
     """
-    from app.models.integration import Integration, WalletAddress
-    from app.models.portfolio import PortfolioSnapshot, AssetPosition
-    from app.models.tefas import TefasHolding
-    from app.models.stock import StockHolding
-    from app.models.bes import BesHolding
-    from app.models.commodity import CommodityHolding
-    from app.models.manual_crypto import ManualCryptoHolding
-    from app.models.cash import CashHolding
-    from app.models.expense import Expense
-    from app.models.planned_expense import PlannedExpense
-    from app.models.income import Income
-    from app.models.recurring_income import RecurringIncome
-    from app.models.budget import Budget
-    from app.models.credit_card import CreditCard
     from app.models.advice import InvestmentAdvice
     from app.models.audit_log import AuditLog
+    from app.models.bes import BesHolding
+    from app.models.budget import Budget
+    from app.models.cash import CashHolding
+    from app.models.commodity import CommodityHolding
+    from app.models.credit_card import CreditCard
+    from app.models.expense import Expense
+    from app.models.income import Income
+    from app.models.integration import Integration, WalletAddress
+    from app.models.manual_crypto import ManualCryptoHolding
+    from app.models.planned_expense import PlannedExpense
+    from app.models.portfolio import AssetPosition, PortfolioSnapshot
+    from app.models.recurring_income import RecurringIncome
+    from app.models.stock import StockHolding
+    from app.models.tefas import TefasHolding
 
     def _serialize(obj, exclude: set[str] | None = None) -> dict:
         """SQLAlchemy ORM nesnesini dict'e cevir; datetime/decimal/uuid ISO/str."""
@@ -339,7 +344,9 @@ async def data_export(
             elif hasattr(val, "isoformat"):  # datetime/date
                 out[col.name] = val.isoformat()
             else:
-                out[col.name] = str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
+                out[col.name] = (
+                    str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
+                )
         return out
 
     uid = current_user.id
@@ -352,27 +359,33 @@ async def data_export(
     wallets_result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == uid))
     wallets = []
     for w in wallets_result.scalars().all():
-        wallets.append({
-            "id": str(w.id),
-            "chain": w.chain,
-            "address": w.address,  # hybrid_property decrypt
-            "label": w.label,
-            "is_active": w.is_active,
-            "created_at": w.created_at.isoformat() if w.created_at else None,
-        })
+        wallets.append(
+            {
+                "id": str(w.id),
+                "chain": w.chain,
+                "address": w.address,  # hybrid_property decrypt
+                "label": w.label,
+                "is_active": w.is_active,
+                "created_at": w.created_at.isoformat() if w.created_at else None,
+            }
+        )
 
     # Integrations: API key plaintext DAHIL DEGIL
     intg = await _list(Integration, exclude={"encrypted_key", "encrypted_secret"})
 
     # Snapshot + asset_positions
-    snap_result = await db.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == uid))
+    snap_result = await db.execute(
+        select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == uid)
+    )
     snapshots = []
     for s in snap_result.scalars().all():
         ap_result = await db.execute(select(AssetPosition).where(AssetPosition.snapshot_id == s.id))
-        snapshots.append({
-            **_serialize(s),
-            "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
-        })
+        snapshots.append(
+            {
+                **_serialize(s),
+                "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
+            }
+        )
 
     # Audit log
     audit_result = await db.execute(select(AuditLog).where(AuditLog.user_id == uid))
@@ -393,9 +406,15 @@ async def data_export(
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
             "credit_balance": current_user.credit_balance,
             "deleted_at": current_user.deleted_at.isoformat() if current_user.deleted_at else None,
-            "overseas_consent_at": current_user.overseas_consent_at.isoformat() if current_user.overseas_consent_at else None,
-            "terms_accepted_at": current_user.terms_accepted_at.isoformat() if current_user.terms_accepted_at else None,
-            "kvkk_read_at": current_user.kvkk_read_at.isoformat() if current_user.kvkk_read_at else None,
+            "overseas_consent_at": current_user.overseas_consent_at.isoformat()
+            if current_user.overseas_consent_at
+            else None,
+            "terms_accepted_at": current_user.terms_accepted_at.isoformat()
+            if current_user.terms_accepted_at
+            else None,
+            "kvkk_read_at": current_user.kvkk_read_at.isoformat()
+            if current_user.kvkk_read_at
+            else None,
         },
         "integrations": intg,
         "wallets": wallets,
@@ -417,7 +436,8 @@ async def data_export(
     }
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.DATA_EXPORT,
         user_id=uid,
         extra={
@@ -452,7 +472,8 @@ async def grant_anthropic_consent(
     current_user.anthropic_consent_at = datetime.now(timezone.utc)
     current_user.anthropic_consent_version = ANTHROPIC_CONSENT_VERSION
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ANTHROPIC_CONSENT_GRANT,
         user_id=current_user.id,
         extra={"version": ANTHROPIC_CONSENT_VERSION},
@@ -479,9 +500,12 @@ async def revoke_anthropic_consent(
     current_user.anthropic_consent_at = None
     current_user.anthropic_consent_version = None
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ANTHROPIC_CONSENT_REVOKE,
         user_id=current_user.id,
     )
     await db.commit()
-    return {"detail": "Anthropic veri aktarimi rizasi geri cekildi. AI tavsiye ozelligi artik kullanilamaz."}
+    return {
+        "detail": "Anthropic veri aktarimi rizasi geri cekildi. AI tavsiye ozelligi artik kullanilamaz."
+    }

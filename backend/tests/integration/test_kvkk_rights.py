@@ -4,6 +4,7 @@
 - COMP-006: DELETE /user/consent/{type} (acik riza geri cekme)
 - COMP-029: POST /user/email/request + GET /user/email/confirm (email change)
 """
+
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -12,8 +13,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, update
 
 from app.models.user import User
-from tests.conftest import TestSession, make_user, verify_user_email
-
+from tests.conftest import TestSession, make_user
 
 # ─── COMP-003: data-export ────────────────────────────────────────────────
 
@@ -42,7 +42,6 @@ async def test_data_export_excludes_api_key_plaintext(client: AsyncClient):
     headers = await make_user(client, "data_export_api@example.com")
     resp = await client.get("/api/v1/user/data-export", headers=headers)
     assert resp.status_code == 200
-    payload = json.loads(resp.content)
     # Mevcut hicbir integration olmasa da, schema icinde encrypted_* alanlari sizmamali
     # Bos liste durumunda da dogru cunku _list exclude'u uygular.
     serialized_str = resp.text
@@ -69,7 +68,9 @@ async def test_revoke_overseas_consent(client: AsyncClient):
     # Manuel olarak overseas_consent_at set et (register'da varsayilan default False)
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(
+            update(User)
+            .where(User.email == email)
+            .values(
                 overseas_consent_at=datetime.now(timezone.utc),
             )
         )
@@ -163,8 +164,12 @@ async def test_email_change_confirm_swaps_email(client: AsyncClient):
 
     async with TestSession() as session:
         # old_email artik bulunmamali, new_email var
-        old = (await session.execute(select(User).where(User.email == old_email))).scalar_one_or_none()
-        new = (await session.execute(select(User).where(User.email == new_email))).scalar_one_or_none()
+        old = (
+            await session.execute(select(User).where(User.email == old_email))
+        ).scalar_one_or_none()
+        new = (
+            await session.execute(select(User).where(User.email == new_email))
+        ).scalar_one_or_none()
         assert old is None
         assert new is not None
         assert new.email_change_token is None
@@ -184,7 +189,9 @@ async def test_email_change_confirm_expired_token_400(client: AsyncClient):
 
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(
+            update(User)
+            .where(User.email == email)
+            .values(
                 email_change_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
             )
         )

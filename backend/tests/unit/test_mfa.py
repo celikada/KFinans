@@ -2,6 +2,7 @@
 
 DB / HTTP yok. Endpoint testleri tests/integration/test_mfa.py'da.
 """
+
 import json
 
 import bcrypt

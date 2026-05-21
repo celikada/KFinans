@@ -6,6 +6,7 @@ token bakiyeleri dinamik çekilir, airdrop spam'ı isim pattern'leriyle filtrele
 Avalanche C: curated TokenDef listesi (Ethplorer ETH-only). En önemli
 sAVAX + popüler stablecoin'ler.
 """
+
 import logging
 import re
 from decimal import Decimal
@@ -79,17 +80,20 @@ def _looks_like_spam(symbol: str, name: str) -> bool:
 # Avalanche C-Chain — curated (Ethplorer kapsamı yok)
 AVALANCHE_C_TOKENS: list[TokenDef] = [
     TokenDef(
-        symbol="sAVAX", name="Benqi Liquid Staked AVAX",
+        symbol="sAVAX",
+        name="Benqi Liquid Staked AVAX",
         contract="0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE",
         decimals=18,
     ),
     TokenDef(
-        symbol="USDT", name="Tether USD (Avalanche)",
+        symbol="USDT",
+        name="Tether USD (Avalanche)",
         contract="0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
         decimals=6,
     ),
     TokenDef(
-        symbol="USDC", name="USD Coin (Avalanche)",
+        symbol="USDC",
+        name="USD Coin (Avalanche)",
         contract="0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
         decimals=6,
     ),
@@ -115,13 +119,18 @@ async def fetch_token_balances(
         for attempt in range(3):
             try:
                 raw = await contract.functions.balanceOf(checksum).call()
-                amount = Decimal(raw) / Decimal(10 ** token.decimals)
+                amount = Decimal(raw) / Decimal(10**token.decimals)
                 if amount > Decimal("0.000001"):
                     out.append((token, amount))
                 break
             except Exception as exc:
                 msg = str(exc).lower()
-                if "rate" in msg or "429" in msg or "header not found" in msg or "connection" in msg:
+                if (
+                    "rate" in msg
+                    or "429" in msg
+                    or "header not found" in msg
+                    or "connection" in msg
+                ):
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
                 logger.debug("Token %s balanceOf hata: %s", token.symbol, exc)
@@ -160,7 +169,7 @@ async def fetch_ethereum_tokens_via_ethplorer(address: str) -> list[tuple[TokenD
         try:
             decimals = int(ti.get("decimals", 18))
             raw_balance = Decimal(str(t.get("balance", 0)))
-            amount = raw_balance / Decimal(10 ** decimals)
+            amount = raw_balance / Decimal(10**decimals)
         except Exception:
             continue
         # Anlamsız büyük miktar (airdrop spam pattern: tüm arz tek kullanıcıda)
@@ -168,5 +177,7 @@ async def fetch_ethereum_tokens_via_ethplorer(address: str) -> list[tuple[TokenD
             continue
         if amount <= Decimal("0.000001"):
             continue
-        out.append((TokenDef(symbol=symbol, name=name, contract=contract, decimals=decimals), amount))
+        out.append(
+            (TokenDef(symbol=symbol, name=name, contract=contract, decimals=decimals), amount)
+        )
     return out

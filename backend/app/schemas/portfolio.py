@@ -1,7 +1,7 @@
 import uuid
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, field_serializer
 
 from app.core.masking import mask_address
@@ -52,6 +52,7 @@ class SnapshotHealthIssue(BaseModel):
 class SnapshotPreflightOut(BaseModel):
     """Snapshot öncesi sağlık kontrolü — herhangi bir kaynak fail olursa
     kullanıcıya uyarı gösterilir."""
+
     issues: list[SnapshotHealthIssue]
     can_proceed: bool  # Her zaman True — kullanıcı yine de devam edebilir
 
@@ -63,7 +64,8 @@ class SnapshotPreviewOut(BaseModel):
     zaman False (dry run'da DB'ye yazilmaz). issues SnapshotHealthIssue
     listesidir; her kaynak fail/info raporlar.
     """
-    total_value_tl: str            # quantize sonrasi string ("123.45")
+
+    total_value_tl: str  # quantize sonrasi string ("123.45")
     asset_count: int
     issues: list[SnapshotHealthIssue]
     usd_try_rate: str | None = None

@@ -16,9 +16,10 @@ Create Date: 2026-05-06
 Her ikisi de credit_cards.id'ye FK CASCADE — kart silinince temizlenir.
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "f1a2b3c4d5e6"
 down_revision = "e0f1a2b3c4d5"
@@ -47,7 +48,9 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["card_id"], ["credit_cards.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("card_id", "period_year", "period_month", name="uq_statement_card_period"),
+        sa.UniqueConstraint(
+            "card_id", "period_year", "period_month", name="uq_statement_card_period"
+        ),
     )
     op.create_index("ix_credit_card_statements_card_id", "credit_card_statements", ["card_id"])
 

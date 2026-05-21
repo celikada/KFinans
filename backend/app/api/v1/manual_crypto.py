@@ -1,4 +1,5 @@
 """API'siz borsa hesapları için manuel kripto holding CRUD + Excel + preview."""
+
 import logging
 from decimal import Decimal
 from io import BytesIO
@@ -63,9 +64,15 @@ async def _enrich_positions(
 
     # Hangi kaynaklara hangi ID'ler için sorgu lazım — bir kerede topla
     auto_symbols = list({h.symbol for h in auto_holdings})
-    binance_linked_symbols = [h.linked_id for h in linked_holdings if h.linked_source == "binance" and h.linked_id]
-    cg_linked_ids = list({h.linked_id for h in linked_holdings if h.linked_source == "coingecko" and h.linked_id})
-    tefas_linked_codes = list({h.linked_id for h in linked_holdings if h.linked_source == "tefas" and h.linked_id})
+    binance_linked_symbols = [
+        h.linked_id for h in linked_holdings if h.linked_source == "binance" and h.linked_id
+    ]
+    cg_linked_ids = list(
+        {h.linked_id for h in linked_holdings if h.linked_source == "coingecko" and h.linked_id}
+    )
+    tefas_linked_codes = list(
+        {h.linked_id for h in linked_holdings if h.linked_source == "tefas" and h.linked_id}
+    )
     needs_commodity = any(h.linked_source == "commodity" for h in linked_holdings)
 
     # USD/TL her durumda lazım
@@ -80,6 +87,7 @@ async def _enrich_positions(
     if needs_commodity:
         try:
             from app.services.commodity import fetch_metal_prices
+
             metal_prices = await fetch_metal_prices()  # {gold, silver} TRY/g
         except Exception:
             metal_prices = {}
@@ -108,7 +116,9 @@ async def _enrich_positions(
             ls = h.linked_source
             lid = h.linked_id or ""
             if ls == "commodity":
-                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
+                key = (
+                    "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
+                )
                 if key:
                     unit_tl = metal_prices.get(key, Decimal(0))
                     if usd_tl > 0 and unit_tl > 0:
@@ -132,28 +142,28 @@ async def _enrich_positions(
         total_tl += value_tl
         if unit_tl <= 0:
             unknown.append(h.symbol)
-        cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(
-            h.quantity, value_tl, h.avg_cost_tl
+        cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(h.quantity, value_tl, h.avg_cost_tl)
+        positions.append(
+            ManualCryptoPositionOut(
+                id=h.id,
+                exchange=h.exchange,
+                label=h.label,
+                symbol=h.symbol,
+                quantity=h.quantity,
+                avg_cost_tl=h.avg_cost_tl,
+                price_source=h.price_source,
+                manual_unit_price_tl=h.manual_unit_price_tl,
+                linked_source=h.linked_source,
+                linked_id=h.linked_id,
+                unit_price_usd=usd,
+                unit_price_tl=unit_tl,
+                total_value_tl=value_tl,
+                cost_basis_tl=cost_basis,
+                gain_loss_tl=gain_loss,
+                gain_loss_pct=gain_loss_pct,
+                notes=h.notes,
+            )
         )
-        positions.append(ManualCryptoPositionOut(
-            id=h.id,
-            exchange=h.exchange,
-            label=h.label,
-            symbol=h.symbol,
-            quantity=h.quantity,
-            avg_cost_tl=h.avg_cost_tl,
-            price_source=h.price_source,
-            manual_unit_price_tl=h.manual_unit_price_tl,
-            linked_source=h.linked_source,
-            linked_id=h.linked_id,
-            unit_price_usd=usd,
-            unit_price_tl=unit_tl,
-            total_value_tl=value_tl,
-            cost_basis_tl=cost_basis,
-            gain_loss_tl=gain_loss,
-            gain_loss_pct=gain_loss_pct,
-            notes=h.notes,
-        ))
     return ManualCryptoSummaryOut(
         positions=positions,
         total_value_tl=total_tl.quantize(Decimal("0.01")),
@@ -191,11 +201,17 @@ async def list_manual_crypto(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Tüm manuel kripto pozisyonları + anlık fiyatla TL değer + kâr/zarar."""
-    rows = (await db.execute(
-        select(ManualCryptoHolding)
-        .where(ManualCryptoHolding.user_id == current_user.id)
-        .order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
-    )).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(ManualCryptoHolding)
+                .where(ManualCryptoHolding.user_id == current_user.id)
+                .order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
+            )
+        )
+        .scalars()
+        .all()
+    )
     return await _enrich_positions(list(rows))
 
 
@@ -213,7 +229,9 @@ async def create_manual_crypto(
         quantity=payload.quantity,
         avg_cost_tl=payload.avg_cost_tl,
         price_source=payload.price_source,
-        manual_unit_price_tl=payload.manual_unit_price_tl if payload.price_source == "manual" else None,
+        manual_unit_price_tl=payload.manual_unit_price_tl
+        if payload.price_source == "manual"
+        else None,
         linked_source=payload.linked_source if payload.price_source == "linked" else None,
         linked_id=payload.linked_id if payload.price_source == "linked" else None,
         notes=payload.notes,
@@ -231,12 +249,14 @@ async def update_manual_crypto(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    holding = (await db.execute(
-        select(ManualCryptoHolding).where(
-            ManualCryptoHolding.id == holding_id,
-            ManualCryptoHolding.user_id == current_user.id,
+    holding = (
+        await db.execute(
+            select(ManualCryptoHolding).where(
+                ManualCryptoHolding.id == holding_id,
+                ManualCryptoHolding.user_id == current_user.id,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not holding:
         raise HTTPException(status_code=404, detail="Manuel kripto kaydı bulunamadı")
     if payload.exchange is not None:
@@ -294,38 +314,56 @@ async def export_manual_crypto(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Excel export — kullanıcı dosyayı düzenleyip import edebilir."""
-    rows = (await db.execute(
-        select(ManualCryptoHolding)
-        .where(ManualCryptoHolding.user_id == current_user.id)
-        .order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
-    )).scalars().all()
+    rows = (
+        (
+            await db.execute(
+                select(ManualCryptoHolding)
+                .where(ManualCryptoHolding.user_id == current_user.id)
+                .order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Manuel Kripto"
     headers = [
-        "Borsa", "Etiket", "Sembol", "Miktar", "Ort. Maliyet (TL)",
-        "Fiyat Kaynagi", "Manuel Fiyat (TL)", "Linked Source", "Linked ID", "Notlar",
+        "Borsa",
+        "Etiket",
+        "Sembol",
+        "Miktar",
+        "Ort. Maliyet (TL)",
+        "Fiyat Kaynagi",
+        "Manuel Fiyat (TL)",
+        "Linked Source",
+        "Linked ID",
+        "Notlar",
     ]
     ws.append(headers)
     # Header stilini biraz belirginleştir
     for cell in ws[1]:
         cell.font = openpyxl.styles.Font(bold=True, color="FFFFFF")
-        cell.fill = openpyxl.styles.PatternFill(start_color="F59E0B", end_color="F59E0B", fill_type="solid")
+        cell.fill = openpyxl.styles.PatternFill(
+            start_color="F59E0B", end_color="F59E0B", fill_type="solid"
+        )
 
     for r in rows:
-        ws.append([
-            r.exchange,
-            r.label or "",
-            r.symbol,
-            float(r.quantity),
-            float(r.avg_cost_tl) if r.avg_cost_tl else "",
-            r.price_source,
-            float(r.manual_unit_price_tl) if r.manual_unit_price_tl else "",
-            r.linked_source or "",
-            r.linked_id or "",
-            r.notes or "",
-        ])
+        ws.append(
+            [
+                r.exchange,
+                r.label or "",
+                r.symbol,
+                float(r.quantity),
+                float(r.avg_cost_tl) if r.avg_cost_tl else "",
+                r.price_source,
+                float(r.manual_unit_price_tl) if r.manual_unit_price_tl else "",
+                r.linked_source or "",
+                r.linked_id or "",
+                r.notes or "",
+            ]
+        )
 
     buf = BytesIO()
     wb.save(buf)
@@ -393,7 +431,9 @@ async def import_manual_crypto(
                 avg_cost = Decimal(str(avg_cost_raw))
                 if avg_cost <= 0:
                     avg_cost = None
-            price_source = price_src_raw if price_src_raw in ("auto", "manual", "linked") else "auto"
+            price_source = (
+                price_src_raw if price_src_raw in ("auto", "manual", "linked") else "auto"
+            )
             manual_price = None
             if price_source == "manual" and manual_price_raw not in (None, ""):
                 try:
@@ -404,22 +444,28 @@ async def import_manual_crypto(
                     manual_price = None
             linked_source = None
             linked_id = None
-            if price_source == "linked" and linked_source_raw in ("binance", "coingecko", "tefas", "commodity") and linked_id_raw:
+            if (
+                price_source == "linked"
+                and linked_source_raw in ("binance", "coingecko", "tefas", "commodity")
+                and linked_id_raw
+            ):
                 linked_source = linked_source_raw
                 linked_id = linked_id_raw[:100]
-            new_rows.append(ManualCryptoHolding(
-                user_id=current_user.id,
-                exchange=exchange[:40],
-                label=label[:100] if label else None,
-                symbol=symbol[:20],
-                quantity=quantity,
-                avg_cost_tl=avg_cost,
-                price_source=price_source,
-                manual_unit_price_tl=manual_price,
-                linked_source=linked_source,
-                linked_id=linked_id,
-                notes=notes[:500] if notes else None,
-            ))
+            new_rows.append(
+                ManualCryptoHolding(
+                    user_id=current_user.id,
+                    exchange=exchange[:40],
+                    label=label[:100] if label else None,
+                    symbol=symbol[:20],
+                    quantity=quantity,
+                    avg_cost_tl=avg_cost,
+                    price_source=price_source,
+                    manual_unit_price_tl=manual_price,
+                    linked_source=linked_source,
+                    linked_id=linked_id,
+                    notes=notes[:500] if notes else None,
+                )
+            )
         except Exception as e:
             errors.append(f"Satır {idx}: {e}")
 

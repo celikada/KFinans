@@ -7,11 +7,12 @@ Beklenen fiyatlar:
   XAU=X → $3000/troy oz → gold = 3000 / 31.1034768 × 40 ≈ 3861.02 TRY/gram
   XAG=X → $35/troy oz  → silver = 35 / 31.1034768 × 40 ≈ 45.02 TRY/gram
 """
+
 import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
+from tests.conftest import make_user
 
 # ---------------------------------------------------------------------------
 # TCMB XML yanıtı — USD/TRY = 40.0
@@ -65,19 +66,20 @@ def mock_metal_http():
             return_value=Response(200, content=_TCMB_XML)
         )
         # XAU=X
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*"
-        ).mock(return_value=Response(200, json=_XAU_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(
+            return_value=Response(200, json=_XAU_RESP)
+        )
         # XAG=X
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*"
-        ).mock(return_value=Response(200, json=_XAG_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*").mock(
+            return_value=Response(200, json=_XAG_RESP)
+        )
         yield mock
 
 
 # ---------------------------------------------------------------------------
 # Yardımcılar
 # ---------------------------------------------------------------------------
+
 
 def _gram(metal: str, qty: float, notes: str | None = None) -> dict:
     return {"unit_type": "gram", "metal": metal, "quantity": qty, "notes": notes}

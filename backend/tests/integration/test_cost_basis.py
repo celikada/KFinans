@@ -10,12 +10,12 @@ Mock değerleri:
   GBP/TRY   → 52.0  (TCMB) → GBP/USD = 52/40 = 1.3
   YAC       → birim_fiyat = 10_000_000 / 1_000_000 = 10.0 TRY
 """
+
 import pytest
 import respx
-from decimal import Decimal
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
+from tests.conftest import make_user
 
 # ---------------------------------------------------------------------------
 # TCMB XML: USD/TRY=40, GBP/TRY=52
@@ -38,13 +38,23 @@ _TCMB_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 # Yahoo Finance yanıtları
 _THYAO_RESP = {
     "chart": {
-        "result": [{"meta": {"regularMarketPrice": 750.0, "currency": "TRY", "longName": "Turk Hava Yollari"}}],
+        "result": [
+            {
+                "meta": {
+                    "regularMarketPrice": 750.0,
+                    "currency": "TRY",
+                    "longName": "Turk Hava Yollari",
+                }
+            }
+        ],
         "error": None,
     }
 }
 _AAPL_RESP = {
     "chart": {
-        "result": [{"meta": {"regularMarketPrice": 200.0, "currency": "USD", "longName": "Apple Inc."}}],
+        "result": [
+            {"meta": {"regularMarketPrice": 200.0, "currency": "USD", "longName": "Apple Inc."}}
+        ],
         "error": None,
     }
 }
@@ -62,6 +72,7 @@ _TEFAS_RESP = [
 # ---------------------------------------------------------------------------
 # Fixtures: HTTP mock'ları her test için aktif
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def mock_http():
@@ -83,9 +94,9 @@ def mock_http():
             url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/THYAO\.IS.*"
         ).mock(return_value=Response(200, json=_THYAO_RESP))
         # Yahoo Finance — AAPL
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/AAPL.*"
-        ).mock(return_value=Response(200, json=_AAPL_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/AAPL.*").mock(
+            return_value=Response(200, json=_AAPL_RESP)
+        )
         # TEFAS export API
         mock.post("https://www.tefas.gov.tr/api/fund-returns/export").mock(
             return_value=Response(200, json=_TEFAS_RESP)
@@ -99,7 +110,6 @@ def mock_http():
 _PWD = "Guclu-Sifre-2026!"
 _STOCKS_BASE = "/api/v1/portfolio/stocks"
 _TEFAS_BASE = "/api/v1/portfolio/tefas"
-
 
 
 # ---------------------------------------------------------------------------

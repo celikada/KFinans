@@ -6,13 +6,13 @@ sizdirmamali. Full trace ops log'a; client'a generic kullanici dostu mesaj.
 Pattern: try/except + raise HTTPException(detail=f"...{e}") -> ham exception
 class adi veya stack trace ipucu mesaja dahil olursa SEC-007 regression.
 """
+
 from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import make_user
-
 
 # ─── manual_crypto._fetch_prices_safe ─────────────────────────────────────
 
@@ -63,12 +63,15 @@ async def test_manual_crypto_usd_tl_failure_sanitized(client: AsyncClient):
     await client.post("/api/v1/manual-crypto", json=payload, headers=headers)
 
     # fetch_combined_prices ok, ama fetch_usd_to_tl fail
-    with patch(
-        "app.api.v1.manual_crypto.fetch_combined_prices",
-        return_value={"BTC": 100000},
-    ), patch(
-        "app.api.v1.manual_crypto.fetch_usd_to_tl",
-        side_effect=ConnectionError("TCMB internal endpoint xyz unreachable"),
+    with (
+        patch(
+            "app.api.v1.manual_crypto.fetch_combined_prices",
+            return_value={"BTC": 100000},
+        ),
+        patch(
+            "app.api.v1.manual_crypto.fetch_usd_to_tl",
+            side_effect=ConnectionError("TCMB internal endpoint xyz unreachable"),
+        ),
     ):
         resp = await client.get("/api/v1/manual-crypto", headers=headers)
 
@@ -114,9 +117,7 @@ async def test_snapshot_preview_runtime_error_sanitized(client: AsyncClient):
         "app.api.v1.portfolio.compute_and_save_snapshot",
         side_effect=RuntimeError("Anthropic API key sk-ant-INTERNAL leaked"),
     ):
-        resp = await client.post(
-            "/api/v1/portfolio/snapshot/preview", headers=headers
-        )
+        resp = await client.post("/api/v1/portfolio/snapshot/preview", headers=headers)
 
     assert resp.status_code == 503
     body = resp.json()

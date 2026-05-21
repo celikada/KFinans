@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 from pydantic import BaseModel, field_validator
 
 
@@ -7,7 +8,7 @@ class StockHolding(BaseModel):
     quantity: float
     name: str = ""
     avg_cost_tl: float | None = None  # TRY/adet
-    distributor: str | None = None     # Örn: "İş Yatırım", "Garanti BBVA Yatırım"
+    distributor: str | None = None  # Örn: "İş Yatırım", "Garanti BBVA Yatırım"
 
     @field_validator("avg_cost_tl")
     @classmethod

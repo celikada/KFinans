@@ -2,6 +2,7 @@
 Security primitives — JWT, bcrypt, Fernet (+ MultiFernet rotation).
 DB veya HTTP gerekmez; saf birim testler.
 """
+
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -22,8 +23,8 @@ from app.core.security import (
     verify_password,
 )
 
-
 # ─── Password Hashing ─────────────────────────────────────────────────────────
+
 
 class TestPasswordHashing:
     def test_hash_is_different_from_plaintext(self):
@@ -57,6 +58,7 @@ class TestPasswordHashing:
 
 
 # ─── JWT Tokens ───────────────────────────────────────────────────────────────
+
 
 class TestJwtTokens:
     USER_ID = "11111111-2222-3333-4444-555555555555"
@@ -120,6 +122,7 @@ class TestJwtTokens:
 
 
 # ─── Fernet Encryption (Exchange API Keys) ────────────────────────────────────
+
 
 class TestFernetEncryption:
     def test_encrypt_produces_different_output_than_plaintext(self):

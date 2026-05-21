@@ -5,9 +5,9 @@ Bu testler tarayici tabanli koruma katmanlarinin (HSTS, X-Frame, CSP, Referrer
 Policy, Permissions Policy) her response'a eklendigini ve TrustedHostMiddleware'in
 beklenmeyen Host header'larini reddettigini dogrular.
 """
+
 import pytest
 from httpx import AsyncClient
-
 
 # ─── SecurityHeaders ────────────────────────────────────────────────────────
 
@@ -112,7 +112,8 @@ async def test_trusted_host_rejects_when_strict():
     # Settings'i gecici override edip yeni bir app instance test et
     from fastapi import FastAPI
     from fastapi.middleware.trustedhost import TrustedHostMiddleware
-    from httpx import ASGITransport, AsyncClient as ACli
+    from httpx import ASGITransport
+    from httpx import AsyncClient as ACli
 
     test_app = FastAPI()
 
@@ -120,9 +121,7 @@ async def test_trusted_host_rejects_when_strict():
     async def _ping():
         return {"ok": True}
 
-    test_app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["kfinans.app"]
-    )
+    test_app.add_middleware(TrustedHostMiddleware, allowed_hosts=["kfinans.app"])
 
     async with ACli(transport=ASGITransport(app=test_app), base_url="http://test") as c:
         # Yanlis host

@@ -4,6 +4,7 @@ Doviz kuru fetch fonksiyonlari — TCMB primary, exchangerate-api fallback.
 respx ile dis HTTP cagrilari mock'lanir; gercek aga gidilmez.
 Cache'in testler arasi sizmasini onlemek icin her test once cache'i temizler.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -18,7 +19,6 @@ from app.services.aggregator import (
     fetch_gbp_to_usd,
     fetch_usd_to_tl,
 )
-
 
 _TCMB_XML_FULL = """<?xml version="1.0" encoding="utf-8"?>
 <Tarih_Date Tarih="01.05.2026" Date="05/01/2026">
@@ -59,6 +59,7 @@ def _clear_tcmb_cache():
 
 # ─── fetch_usd_to_tl ──────────────────────────────────────────────────────────
 
+
 class TestFetchUsdToTl:
     @pytest.mark.asyncio
     async def test_uses_tcmb_when_available(self):
@@ -98,6 +99,7 @@ class TestFetchUsdToTl:
 
 # ─── fetch_gbp_to_usd ─────────────────────────────────────────────────────────
 
+
 class TestFetchGbpToUsd:
     @pytest.mark.asyncio
     async def test_derives_from_tcmb_gbp_and_usd(self):
@@ -127,6 +129,7 @@ class TestFetchGbpToUsd:
 
 
 # ─── TCMB cache ───────────────────────────────────────────────────────────────
+
 
 class TestTcmbCache:
     @pytest.mark.asyncio

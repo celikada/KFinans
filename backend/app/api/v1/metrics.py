@@ -7,6 +7,7 @@ varligi sizdirilmaz — saldirgan tarama yapamaz).
 Frontend dashboard cizmek istemeyiz; ops scrape (curl + jq) icin tasarlandi.
 Sentry/OTel (OBS-001) eklenince bu endpoint deprecate edilebilir.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -30,9 +31,7 @@ async def performance_snapshot(
     """
     expected = settings.metrics_token
     # Bos token = endpoint kapali. compare_digest constant-time.
-    if not expected or not x_metrics_token or not secrets.compare_digest(
-        x_metrics_token, expected
-    ):
+    if not expected or not x_metrics_token or not secrets.compare_digest(x_metrics_token, expected):
         raise HTTPException(status_code=404, detail="Not Found")
 
     return await perf_metrics.snapshot()

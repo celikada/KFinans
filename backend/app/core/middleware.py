@@ -1,4 +1,5 @@
 """Custom ASGI/Starlette middleware'leri."""
+
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -108,7 +109,9 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
             if slow:
                 logger.warning(
                     "SLOW_REQUEST(error) %s %s duration_ms=%.1f",
-                    request.method, route_key, duration_ms,
+                    request.method,
+                    route_key,
+                    duration_ms,
                 )
             raise
 
@@ -120,7 +123,10 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
         if slow:
             logger.warning(
                 "SLOW_REQUEST %s %s duration_ms=%.1f status=%s",
-                request.method, route_key, duration_ms, response.status_code,
+                request.method,
+                route_key,
+                duration_ms,
+                response.status_code,
             )
         return response
 

@@ -120,8 +120,17 @@ async def update_planned_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
 
     for field in (
-        "title", "amount", "is_estimated", "category", "recurrence",
-        "months", "day_of_month", "start_date", "end_date", "remaining_count", "notes",
+        "title",
+        "amount",
+        "is_estimated",
+        "category",
+        "recurrence",
+        "months",
+        "day_of_month",
+        "start_date",
+        "end_date",
+        "remaining_count",
+        "notes",
         "is_paid",
     ):
         val = getattr(payload, field)
@@ -172,10 +181,7 @@ async def get_forecast(
     )
     all_planned = result.scalars().all()
     # Filtre: kart + odendi olanlari at
-    eligible = [
-        pe for pe in all_planned
-        if pe.credit_card_id is None or not pe.is_paid
-    ]
+    eligible = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
 
     months_out: list[ForecastMonth] = []
     year_total = Decimal("0")

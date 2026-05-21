@@ -3,6 +3,7 @@
 JSON-RPC mock'lanir (respx). getBalance + getProgramAccounts (stake)
 + rate limit 429 retry.
 """
+
 from decimal import Decimal
 
 import httpx
@@ -10,9 +11,9 @@ import pytest
 import respx
 
 from app.services.blockchain.solana import (
+    _BALANCE_CACHE,
     LAMPORTS_PER_SOL,
     SolanaService,
-    _BALANCE_CACHE,
 )
 
 
@@ -31,14 +32,18 @@ RPC_URL = "https://api.mainnet-beta.solana.com"
 @respx.mock
 async def test_fetch_returns_native_balance_only():
     """Stake yok ise sadece liquid SOL doner."""
-    respx.post(RPC_URL).mock(side_effect=[
-        # getBalance: 5 SOL
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 5_000_000_000}}),
-        # getProgramAccounts (stake offset=12): bos
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
-        # getProgramAccounts (stake offset=44): bos
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
-    ])
+    respx.post(RPC_URL).mock(
+        side_effect=[
+            # getBalance: 5 SOL
+            httpx.Response(
+                200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 5_000_000_000}}
+            ),
+            # getProgramAccounts (stake offset=12): bos
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
+            # getProgramAccounts (stake offset=44): bos
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
+        ]
+    )
     svc = SolanaService(VALID_SOL_ADDR)
     assets = await svc.fetch()
     assert len(assets) == 1
@@ -52,18 +57,36 @@ async def test_fetch_returns_native_balance_only():
 @respx.mock
 async def test_fetch_with_staked_amount():
     """Stake hesabi varsa staked_quantity dolar."""
-    respx.post(RPC_URL).mock(side_effect=[
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 1_000_000_000}}),
-        # offset=12 (staker): 2 stake account
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": [
-            {"pubkey": "stake1", "account": {"lamports": 3_000_000_000}},
-            {"pubkey": "stake2", "account": {"lamports": 2_000_000_000}},
-        ]}),
-        # offset=44 (withdrawer): zaten ayni hesaplar (dedup test)
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": [
-            {"pubkey": "stake1", "account": {"lamports": 3_000_000_000}},
-        ]}),
-    ])
+    respx.post(RPC_URL).mock(
+        side_effect=[
+            httpx.Response(
+                200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 1_000_000_000}}
+            ),
+            # offset=12 (staker): 2 stake account
+            httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": [
+                        {"pubkey": "stake1", "account": {"lamports": 3_000_000_000}},
+                        {"pubkey": "stake2", "account": {"lamports": 2_000_000_000}},
+                    ],
+                },
+            ),
+            # offset=44 (withdrawer): zaten ayni hesaplar (dedup test)
+            httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": [
+                        {"pubkey": "stake1", "account": {"lamports": 3_000_000_000}},
+                    ],
+                },
+            ),
+        ]
+    )
     svc = SolanaService(VALID_SOL_ADDR)
     bal_lamports, staked_lamports = await svc._cached_balance()
     # _cached_balance raw lamports doner (LAMPORTS_PER_SOL conversion fetch() icinde).
@@ -76,10 +99,16 @@ async def test_fetch_with_staked_amount():
 @respx.mock
 async def test_rpc_error_raises_runtime():
     """RPC 'error' alani RuntimeError uretir."""
-    respx.post(RPC_URL).mock(return_value=httpx.Response(200, json={
-        "jsonrpc": "2.0", "id": 1,
-        "error": {"code": -32602, "message": "Invalid params"},
-    }))
+    respx.post(RPC_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {"code": -32602, "message": "Invalid params"},
+            },
+        )
+    )
     svc = SolanaService(VALID_SOL_ADDR)
     with pytest.raises(RuntimeError, match="Solana RPC error"):
         async with httpx.AsyncClient() as client:
@@ -93,6 +122,7 @@ async def test_rate_limit_429_retries(monkeypatch):
 
     asyncio.sleep mock'lanir test gerçek bekleme yapmasin."""
     import asyncio
+
     sleep_calls = []
 
     async def _fake_sleep(s: float) -> None:
@@ -100,11 +130,13 @@ async def test_rate_limit_429_retries(monkeypatch):
 
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
-    respx.post(RPC_URL).mock(side_effect=[
-        httpx.Response(429),
-        httpx.Response(429),
-        httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 100}}),
-    ])
+    respx.post(RPC_URL).mock(
+        side_effect=[
+            httpx.Response(429),
+            httpx.Response(429),
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 100}}),
+        ]
+    )
     svc = SolanaService(VALID_SOL_ADDR)
     async with httpx.AsyncClient() as client:
         data = await svc._rpc_call(client, "getBalance", [VALID_SOL_ADDR])

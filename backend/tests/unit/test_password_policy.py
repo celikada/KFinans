@@ -14,6 +14,7 @@ Test edilen invariant'lar:
   - HIBP non-200 response -> fail-open (0)
   - settings.hibp_check_enabled=False -> network cagrisi yok, 0 doner
 """
+
 import hashlib
 
 import httpx
@@ -26,7 +27,6 @@ from app.core.password_policy import (
     check_hibp_pwned,
     check_password_strength,
 )
-
 
 # ─── check_password_strength ────────────────────────────────────────────────
 
@@ -146,10 +146,7 @@ class TestHibpPwned:
         """Suffix response'da yoksa leaked_count=0."""
         prefix = hashlib.sha1(b"unique-random-password-987654").hexdigest().upper()[:5]
         # Response'da hicbir suffix bizim sifremize uymuyor
-        body = (
-            "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n"
-            "00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2\r\n"
-        )
+        body = "0018A45C4D1DEF81644B54AB7F969B88D65:5\r\n00D4F6E8FA6EECAD2A3AA415EEC418D38EC:2\r\n"
         with respx.mock:
             respx.get(_HIBP_RANGE_URL.format(prefix=prefix)).mock(
                 return_value=httpx.Response(200, text=body),

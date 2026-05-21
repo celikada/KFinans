@@ -1,4 +1,5 @@
 """Kıymetli maden (altın/gümüş) CRUD endpoint'leri."""
+
 import io
 import logging
 from decimal import Decimal, InvalidOperation

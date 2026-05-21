@@ -2,10 +2,11 @@
 
 POST/DELETE /user/anthropic-consent + /advice/generate gate.
 """
+
+import uuid
 from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
-import uuid
 
 import pytest
 from httpx import AsyncClient
@@ -137,7 +138,8 @@ async def test_advice_generate_works_with_consent(client: AsyncClient):
         snapshot_id=snap_id,
         horizon="medium",
         content="Test",
-        prompt_tokens=10, completion_tokens=10,
+        prompt_tokens=10,
+        completion_tokens=10,
     )
 
     with patch("app.services.advisor.AdvisorService.generate", AsyncMock(return_value=fake)):

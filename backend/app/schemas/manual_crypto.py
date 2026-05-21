@@ -1,4 +1,5 @@
 """API'siz borsa hesapları için manuel kripto pozisyon şemaları."""
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -16,7 +17,9 @@ class ManualCryptoCreate(BaseModel):
     quantity: Decimal = Field(..., gt=0, le=Decimal("9999999999999999.999999999999"))
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource = "auto"
-    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    manual_unit_price_tl: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("999999999999.999999")
+    )
     linked_source: LinkedSource | None = None
     linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)
@@ -39,10 +42,14 @@ class ManualCryptoUpdate(BaseModel):
     exchange: str | None = Field(default=None, min_length=1, max_length=40)
     label: str | None = Field(default=None, max_length=100)
     symbol: str | None = Field(default=None, min_length=1, max_length=20)
-    quantity: Decimal | None = Field(default=None, gt=0, le=Decimal("9999999999999999.999999999999"))
+    quantity: Decimal | None = Field(
+        default=None, gt=0, le=Decimal("9999999999999999.999999999999")
+    )
     avg_cost_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
     price_source: PriceSource | None = None
-    manual_unit_price_tl: Decimal | None = Field(default=None, ge=0, le=Decimal("999999999999.999999"))
+    manual_unit_price_tl: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("999999999999.999999")
+    )
     linked_source: LinkedSource | None = None
     linked_id: str | None = Field(default=None, max_length=100)
     notes: str | None = Field(default=None, max_length=500)
@@ -80,6 +87,7 @@ class ManualCryptoOut(BaseModel):
 
 class ManualCryptoPositionOut(BaseModel):
     """Anlık fiyatla zenginleştirilmiş pozisyon. Frontend listesi bunu kullanır."""
+
     id: int
     exchange: str
     label: str | None
@@ -101,8 +109,9 @@ class ManualCryptoPositionOut(BaseModel):
 
 class AssetCatalogItem(BaseModel):
     """Asset catalog endpoint sonucu — fiyat kaynaklarına bağlanabilir bir varlık."""
+
     source: LinkedSource
-    id: str         # binance: 'BTC' (USDT pair base), coingecko: 'bitcoin', tefas: 'AFA', commodity: 'XAU'
+    id: str  # binance: 'BTC' (USDT pair base), coingecko: 'bitcoin', tefas: 'AFA', commodity: 'XAU'
     symbol: str | None = None
     name: str
 

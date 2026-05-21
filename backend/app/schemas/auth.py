@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, EmailStr, Field, field_serializer
 
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 
 RiskProfile = Literal["conservative", "balanced", "aggressive"]
 
@@ -65,6 +65,7 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     """Refresh token opsiyonel: yoksa sadece header'daki access blacklist'e alinir."""
+
     refresh_token: str | None = None
 
 

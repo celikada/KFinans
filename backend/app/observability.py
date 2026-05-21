@@ -18,6 +18,7 @@ Production icin:
 PERF-004 dependency-free in-memory tracker hala calisir; OTel ileride o'nun
 yerini alabilir (deprecate notu /metrics/performance comment'inde).
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,7 +61,8 @@ def init_sentry() -> bool:
     )
     logger.info(
         "Sentry initialized — env=%s sample_rate=%.2f",
-        settings.sentry_env, settings.sentry_traces_sample_rate,
+        settings.sentry_env,
+        settings.sentry_traces_sample_rate,
     )
     return True
 
@@ -92,11 +94,13 @@ def init_otel(app: FastAPI) -> bool:
         )
         return False
 
-    resource = Resource.create({
-        "service.name": settings.otel_service_name,
-        "service.version": "0.1.0",
-        "deployment.environment": settings.sentry_env,
-    })
+    resource = Resource.create(
+        {
+            "service.name": settings.otel_service_name,
+            "service.version": "0.1.0",
+            "deployment.environment": settings.sentry_env,
+        }
+    )
     provider = TracerProvider(resource=resource)
     exporter = OTLPSpanExporter(endpoint=settings.otel_endpoint)
     provider.add_span_processor(BatchSpanProcessor(exporter))
@@ -109,7 +113,8 @@ def init_otel(app: FastAPI) -> bool:
 
     logger.info(
         "OpenTelemetry initialized — endpoint=%s service=%s",
-        settings.otel_endpoint, settings.otel_service_name,
+        settings.otel_endpoint,
+        settings.otel_service_name,
     )
     return True
 
@@ -117,4 +122,5 @@ def init_otel(app: FastAPI) -> bool:
 def _release_tag() -> str | None:
     """K8s deploy SHA tagini env'den oku (release.yml CMD'a injekte eder)."""
     import os
+
     return os.environ.get("GIT_SHA") or None

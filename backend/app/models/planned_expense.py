@@ -1,5 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -36,11 +37,16 @@ class PlannedExpense(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Opsiyonel kredi kartı bağlantısı (çift sayım kuralı için)
     credit_card_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("credit_cards.id", ondelete="SET NULL"), nullable=True, index=True,
+        Integer,
+        ForeignKey("credit_cards.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # Planlı harcama gerçekleşti mi? (default=false; "yapıldı" olarak işaretlenince
     # cash flow forecast'tan çıkar — kart ile ödendiyse zaten kart borcu sayar.)
-    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    is_paid: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

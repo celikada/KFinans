@@ -80,11 +80,15 @@ async def _weekly_snapshot_job() -> None:
     """
     async with AsyncSessionLocal() as lock_session:
         if not await _try_acquire_lock(lock_session, _SCHEDULER_LOCK_KEY):
-            logger.info("Haftalik snapshot job: pg advisory lock alinamadi, baska pod calisiyor — skip")
+            logger.info(
+                "Haftalik snapshot job: pg advisory lock alinamadi, baska pod calisiyor — skip"
+            )
             return
 
         try:
-            logger.info("Haftalik portfoy snapshot gorevi basladi (paralelizm=%d)", _SNAPSHOT_PARALLELISM)
+            logger.info(
+                "Haftalik portfoy snapshot gorevi basladi (paralelizm=%d)", _SNAPSHOT_PARALLELISM
+            )
 
             async with AsyncSessionLocal() as session:
                 result = await session.execute(
@@ -106,7 +110,9 @@ async def _weekly_snapshot_job() -> None:
 
             logger.info(
                 "Haftalik portfoy snapshot tamamlandi: %d basarili, %d hatali, toplam %d kullanici",
-                success, failed, len(user_ids),
+                success,
+                failed,
+                len(user_ids),
             )
         finally:
             await _release_lock(lock_session, _SCHEDULER_LOCK_KEY)
@@ -126,9 +132,7 @@ async def _cleanup_revoked_tokens_job(session_factory=None) -> None:
     sf = session_factory or AsyncSessionLocal
     now = datetime.now(timezone.utc)
     async with sf() as session:
-        result = await session.execute(
-            delete(RevokedToken).where(RevokedToken.expires_at < now)
-        )
+        result = await session.execute(delete(RevokedToken).where(RevokedToken.expires_at < now))
         await session.commit()
         deleted = result.rowcount or 0
     logger.info("revoked_tokens cleanup: %d expired kayit silindi", deleted)
@@ -146,15 +150,14 @@ async def _purge_old_audit_logs_job(session_factory=None) -> None:
     sf = session_factory or AsyncSessionLocal
     cutoff = datetime.now(timezone.utc) - timedelta(days=settings.audit_log_retention_days)
     async with sf() as session:
-        result = await session.execute(
-            delete(AuditLog).where(AuditLog.created_at < cutoff)
-        )
+        result = await session.execute(delete(AuditLog).where(AuditLog.created_at < cutoff))
         await session.commit()
         deleted = result.rowcount or 0
     if deleted:
         logger.info(
             "COMP-022 audit retention: %d eski kayit silindi (>%d gun)",
-            deleted, settings.audit_log_retention_days,
+            deleted,
+            settings.audit_log_retention_days,
         )
     else:
         logger.debug("COMP-022 audit retention: silinecek kayit yok")
@@ -187,7 +190,8 @@ async def _hard_delete_expired_users_job(session_factory=None) -> None:
     if deleted:
         logger.info(
             "COMP-004 hard-delete: %d kullanici fiziksel silindi (%d gun retention sonu)",
-            deleted, _HARD_DELETE_RETENTION_DAYS,
+            deleted,
+            _HARD_DELETE_RETENTION_DAYS,
         )
     else:
         logger.debug("COMP-004 hard-delete: silinecek kayit yok")

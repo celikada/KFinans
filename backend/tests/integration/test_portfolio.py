@@ -2,17 +2,22 @@
 Portfolio/TEFAS holdings endpoint integration testleri.
 Her test kendi kullanıcısını register edip token alır; böylece izolasyon sağlanır.
 """
+
 import io
+
 import pytest
 import respx
-from decimal import Decimal
 from httpx import AsyncClient, Response
+
 from app.services.tefas import _EXPORT_URL
 
 
 async def _register_and_login(client: AsyncClient, email: str, password: str = "test1234") -> str:
     from tests.conftest import verify_user_email
-    await client.post("/api/v1/auth/register", json={"email": email, "password": password, "age_confirmed": True})
+
+    await client.post(
+        "/api/v1/auth/register", json={"email": email, "password": password, "age_confirmed": True}
+    )
     await verify_user_email(email)
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
     return resp.json()["access_token"]
@@ -58,13 +63,21 @@ async def test_save_and_retrieve_holdings(client: AsyncClient):
 async def test_put_replaces_existing_holdings(client: AsyncClient):
     token = await _register_and_login(client, "holdings_replace@test.com")
 
-    await client.put("/api/v1/portfolio/tefas/holdings", json=[
-        {"code": "YAC", "quantity": 100.0, "name": "Fon A"},
-    ], headers=_auth(token))
+    await client.put(
+        "/api/v1/portfolio/tefas/holdings",
+        json=[
+            {"code": "YAC", "quantity": 100.0, "name": "Fon A"},
+        ],
+        headers=_auth(token),
+    )
 
-    await client.put("/api/v1/portfolio/tefas/holdings", json=[
-        {"code": "TTE", "quantity": 50.0, "name": "Fon B"},
-    ], headers=_auth(token))
+    await client.put(
+        "/api/v1/portfolio/tefas/holdings",
+        json=[
+            {"code": "TTE", "quantity": 50.0, "name": "Fon B"},
+        ],
+        headers=_auth(token),
+    )
 
     resp = await client.get("/api/v1/portfolio/tefas/holdings", headers=_auth(token))
     saved = resp.json()
@@ -76,9 +89,13 @@ async def test_put_replaces_existing_holdings(client: AsyncClient):
 async def test_put_empty_list_clears_holdings(client: AsyncClient):
     token = await _register_and_login(client, "holdings_clear@test.com")
 
-    await client.put("/api/v1/portfolio/tefas/holdings", json=[
-        {"code": "YAC", "quantity": 100.0, "name": "Fon A"},
-    ], headers=_auth(token))
+    await client.put(
+        "/api/v1/portfolio/tefas/holdings",
+        json=[
+            {"code": "YAC", "quantity": 100.0, "name": "Fon A"},
+        ],
+        headers=_auth(token),
+    )
 
     await client.put("/api/v1/portfolio/tefas/holdings", json=[], headers=_auth(token))
 
@@ -91,9 +108,13 @@ async def test_holdings_isolated_between_users(client: AsyncClient):
     token_a = await _register_and_login(client, "user_a@test.com")
     token_b = await _register_and_login(client, "user_b@test.com")
 
-    await client.put("/api/v1/portfolio/tefas/holdings", json=[
-        {"code": "YAC", "quantity": 999.0, "name": "Sadece A'nın fonu"},
-    ], headers=_auth(token_a))
+    await client.put(
+        "/api/v1/portfolio/tefas/holdings",
+        json=[
+            {"code": "YAC", "quantity": 999.0, "name": "Sadece A'nın fonu"},
+        ],
+        headers=_auth(token_a),
+    )
 
     resp_b = await client.get("/api/v1/portfolio/tefas/holdings", headers=_auth(token_b))
     assert resp_b.json() == []
@@ -103,9 +124,13 @@ async def test_holdings_isolated_between_users(client: AsyncClient):
 async def test_export_xlsx_returns_file(client: AsyncClient):
     token = await _register_and_login(client, "holdings_export@test.com")
 
-    await client.put("/api/v1/portfolio/tefas/holdings", json=[
-        {"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi Fon"},
-    ], headers=_auth(token))
+    await client.put(
+        "/api/v1/portfolio/tefas/holdings",
+        json=[
+            {"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi Fon"},
+        ],
+        headers=_auth(token),
+    )
 
     with respx.mock:
         respx.post(_EXPORT_URL).mock(return_value=Response(200, json=TEFAS_ROWS))
@@ -134,7 +159,13 @@ async def test_import_xlsx_saves_holdings(client: AsyncClient):
 
     resp = await client.post(
         "/api/v1/portfolio/tefas/import",
-        files={"file": ("holdings.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={
+            "file": (
+                "holdings.xlsx",
+                buf,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
         headers=_auth(token),
     )
     assert resp.status_code == 200

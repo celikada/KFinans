@@ -17,6 +17,7 @@ Performans: log yazma fail ederse ana endpoint patlamamali — try/except ile
 sarilip warning log yazilir, kullanici islemi devam eder. Audit log eksik
 olur ama veri tutarliligi korunur.
 """
+
 import logging
 from enum import Enum
 from typing import Any, Optional
@@ -142,5 +143,8 @@ async def log_audit(
         # Audit fail ana endpoint'i bozmamali
         logger.warning(
             "audit log yazilamadi: action=%s user=%s resource=%s err=%s",
-            action, user_id, resource, exc,
+            action,
+            user_id,
+            resource,
+            exc,
         )

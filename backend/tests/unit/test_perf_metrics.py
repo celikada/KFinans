@@ -3,6 +3,7 @@
 Ring buffer + percentile hesaplama dogrulanir; middleware integration
 testleri tests/integration/test_perf_metrics_endpoint.py'da.
 """
+
 import pytest
 
 from app.core import perf_metrics

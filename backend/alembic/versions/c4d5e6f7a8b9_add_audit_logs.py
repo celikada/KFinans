@@ -17,9 +17,11 @@ Index'ler:
   - (user_id, created_at DESC) — user kendi log'larini hizli gorur
   - (action, created_at DESC) — admin/security tipe gore arama
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "c4d5e6f7a8b9"
 down_revision = "b3c4d5e6f7a8"
@@ -30,7 +32,9 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "audit_logs",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id", UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")
+        ),
         sa.Column(
             "user_id",
             UUID(as_uuid=True),

@@ -1,10 +1,11 @@
 """Kredi kartı CRUD endpoint'leri: tanım + dönem içi borç + ekstre + taksit."""
+
 from datetime import date as date_type
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -35,7 +36,7 @@ def _enrich_card(card: CreditCard) -> CreditCardOut:
     unpaid_count = len(unpaid)
 
     future_total = Decimal(0)
-    for inst in (card.installments or []):
+    for inst in card.installments or []:
         if inst.installments_remaining > 0:
             future_total += Decimal(inst.monthly_amount) * Decimal(inst.installments_remaining)
 
@@ -123,15 +124,24 @@ async def update_credit_card(
 ):
     result = await db.execute(
         select(CreditCard).where(
-            CreditCard.id == card_id, CreditCard.user_id == current_user.id,
+            CreditCard.id == card_id,
+            CreditCard.user_id == current_user.id,
         )
     )
     card = result.scalar_one_or_none()
     if not card:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
 
-    for attr in ("name", "bank_name", "last_4", "credit_limit",
-                 "statement_day", "payment_due_day", "current_period_debt", "notes"):
+    for attr in (
+        "name",
+        "bank_name",
+        "last_4",
+        "credit_limit",
+        "statement_day",
+        "payment_due_day",
+        "current_period_debt",
+        "notes",
+    ):
         v = getattr(payload, attr)
         if v is not None:
             setattr(card, attr, v)
@@ -149,7 +159,8 @@ async def delete_credit_card(
 ):
     result = await db.execute(
         select(CreditCard).where(
-            CreditCard.id == card_id, CreditCard.user_id == current_user.id,
+            CreditCard.id == card_id,
+            CreditCard.user_id == current_user.id,
         )
     )
     card = result.scalar_one_or_none()
@@ -212,7 +223,9 @@ async def get_credit_card_detail(
 # ---------------------------------------------------------------------------
 # Ekstre endpoint'leri
 # ---------------------------------------------------------------------------
-@router.post("/{card_id}/statements", response_model=StatementOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{card_id}/statements", response_model=StatementOut, status_code=status.HTTP_201_CREATED
+)
 async def create_statement(
     card_id: int,
     payload: StatementCreate,
@@ -260,7 +273,8 @@ async def update_statement(
     await _get_owned_card(card_id, current_user, db)
     result = await db.execute(
         select(CreditCardStatement).where(
-            CreditCardStatement.id == statement_id, CreditCardStatement.card_id == card_id,
+            CreditCardStatement.id == statement_id,
+            CreditCardStatement.card_id == card_id,
         )
     )
     stmt = result.scalar_one_or_none()
@@ -285,7 +299,8 @@ async def delete_statement(
     await _get_owned_card(card_id, current_user, db)
     result = await db.execute(
         select(CreditCardStatement).where(
-            CreditCardStatement.id == statement_id, CreditCardStatement.card_id == card_id,
+            CreditCardStatement.id == statement_id,
+            CreditCardStatement.card_id == card_id,
         )
     )
     stmt = result.scalar_one_or_none()
@@ -306,8 +321,10 @@ def _calc_total(monthly: Decimal, count: int) -> Decimal:
 def _calc_remaining(first_due: date_type, total_count: int) -> int:
     """first_due'dan bugüne kaç taksit geçti, kalan = total - geçen.
     Bugün < first_due ise hepsi kalan; geçmiş > total ise 0."""
-    from app.api.v1.income import _ISTANBUL  # Istanbul tz reuse
     from datetime import datetime as _dt
+
+    from app.api.v1.income import _ISTANBUL  # Istanbul tz reuse
+
     today = _dt.now(_ISTANBUL).date()
     if today < first_due:
         return total_count
@@ -315,7 +332,9 @@ def _calc_remaining(first_due: date_type, total_count: int) -> int:
     return max(0, total_count - months_passed)
 
 
-@router.post("/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED
+)
 async def create_installment(
     card_id: int,
     payload: InstallmentCreate,

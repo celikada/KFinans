@@ -12,6 +12,7 @@ zxcvbn katmani offline ve hep aktif — birinci savunma.
 Logger PII guvenli: sifre kendisi log'a YAZILMAZ; sadece score, leaked_count,
 warning/suggestion metinleri log'lanir.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -72,7 +73,9 @@ def check_password_strength(
     # PII guvenli log — sifre yok, sadece score + feedback metinleri
     logger.info(
         "Zayif sifre reddedildi: score=%s warning=%r suggestions=%s",
-        score, warning, suggestions,
+        score,
+        warning,
+        suggestions,
     )
 
     msg = (
