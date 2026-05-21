@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     slow_request_threshold_ms: int = 500
     metrics_token: str = ""
 
+    # ─── Audit 2026-05-22 P0 #7: Swagger UI + OpenAPI exposure ────────
+    # Default KAPALI — prod'da /docs, /redoc, /openapi.json 404 doner.
+    # Saldirgan endpoint enumeration vektoru. Dev'de EXPOSE_SWAGGER=true
+    # env ile aktif. Prod'da gerekirse ingress basic auth + IP whitelist
+    # arkasina al.
+    expose_swagger: bool = False
+
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections
@@ -123,6 +130,11 @@ class Settings(BaseSettings):
     # Default "prefer": postgres TLS deploy oncesi geriye uyumlu, sonra prod'da
     # "require"e gec.
     database_ssl_mode: str = "prefer"
+    # require mode'da CA bundle path. cert-manager `postgres-tls` Secret
+    # backend pod'a /etc/postgres-ca/ca.crt olarak mount edilir (k8s manifest).
+    # Bos ise asyncpg default ssl_ctx (sistem PKI'sina guvenir — selfsigned
+    # cert chain dogrulayamaz). Audit 2026-05-22 P0 #6 fix.
+    database_ssl_ca_path: str = "/etc/postgres-ca/ca.crt"
 
     @property
     def ethereum_rpc_url(self) -> str:

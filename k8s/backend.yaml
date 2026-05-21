@@ -176,6 +176,12 @@ spec:
               mountPath: /var/tmp
             - name: home
               mountPath: /home/kfinans
+            # Audit 2026-05-22 P0 #6: DB TLS require + CA bundle
+            # cert-manager postgres-tls Secret ca.crt -> /etc/postgres-ca/
+            # asyncpg create_default_context(cafile=...) ile cert chain verify
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
@@ -186,3 +192,10 @@ spec:
         - name: home
           emptyDir:
             sizeLimit: 128Mi
+        - name: postgres-ca
+          secret:
+            secretName: postgres-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
+            defaultMode: 0444

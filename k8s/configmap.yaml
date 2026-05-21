@@ -22,10 +22,12 @@ data:
   CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
   # FAZ C3: TrustedHostMiddleware whitelist
   ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
-  # Audit 2026-05-21 #3: DB TLS — postgres self-signed cert ile SSL aktif.
-  # "prefer": encrypt-in-transit, cluster-ici trust. "require": prod CA bundle
-  # (ayri PR). "disable": rollback.
-  DATABASE_SSL_MODE: "prefer"
+  # Audit 2026-05-22 P0 #6: DB TLS "require" + CA bundle aktive edildi.
+  # cert-manager postgres-tls Secret ca.crt backend pod'a /etc/postgres-ca/
+  # olarak mount edilir (backend.yaml volumeMount). asyncpg
+  # create_default_context(cafile=...) ile cert chain verify + hostname check.
+  # Rollback: "prefer" veya "disable".
+  DATABASE_SSL_MODE: "require"
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"

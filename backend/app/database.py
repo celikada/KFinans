@@ -30,7 +30,21 @@ elif _ssl_mode == "prefer":
     _ctx.verify_mode = _ssl_mod.CERT_NONE  # noqa: S4830 (self-signed)
     _connect_args = {"ssl": _ctx}
 elif _ssl_mode == "require":
-    _connect_args = {"ssl": True}  # asyncpg default ssl_ctx (CERT_REQUIRED)
+    # CA bundle ile cert chain dogrulamasi — cluster-ici production-grade TLS.
+    # cert-manager `postgres-tls` Secret backend pod'a /etc/postgres-ca/ca.crt
+    # olarak mount edilir (k8s/backend.yaml volumeMount). CA bundle yoksa
+    # default ssl_ctx CERT_REQUIRED (PKI'a guvenir) — fallback davranis.
+    import os
+    import ssl as _ssl_mod
+
+    _ca_path = settings.database_ssl_ca_path
+    if _ca_path and os.path.isfile(_ca_path):
+        _ctx = _ssl_mod.create_default_context(cafile=_ca_path)
+        _ctx.check_hostname = True
+        _ctx.verify_mode = _ssl_mod.CERT_REQUIRED
+        _connect_args = {"ssl": _ctx}
+    else:
+        _connect_args = {"ssl": True}  # asyncpg default ssl_ctx
 else:
     _connect_args = {}
 
