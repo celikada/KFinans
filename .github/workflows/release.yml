@@ -4,10 +4,20 @@ name: Release — Build, Push & Deploy to Oracle
 # v1.0.0, v1.2.3 gibi semver tag push'larinda otomatik calisir.
 # main branch uzerinde olusturulan tag'ler kabul edilir.
 # Manuel tetikleme: Actions sekmesinden "Run workflow" + tag.
+#
+# 2026-05: GitHub flag #4360519 (SonarCloud OAuth bloklu) sonrasi GitLab CI
+# self-hosted (`gitlab.192.168.3.191.nip.io`) primary CI/CD yolu oldu. Bu
+# workflow yedek/paralel deploy yolu — GitLab CI duserse veya manuel
+# tetikleme istenirse calisir.
+#
+# Image registry: Docker Hub (`docker.io/celikada/kfinans-*`). GHCR yolu
+# 2026-05 'te GitLab CI ile birlikte tasindi; manifest'ler (k8s/*.yaml) ve
+# GitLab CI ile tutarli.
 on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
@@ -16,12 +26,12 @@ on:
         default: 'v1.0.0'
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/celikada/kfinans
+  REGISTRY: docker.io
+  IMAGE_PREFIX: docker.io/celikada/kfinans
+  DOCKERHUB_USERNAME: celikada
   ORACLE_HOST: 141.144.243.54
   ORACLE_USER: ubuntu
   K8S_NAMESPACE: kfinans
-  REPO_PATH: ~/kfinans  # Oracle VM'de git clone konumu
 
 concurrency:
   group: release-${{ github.ref }}
@@ -32,6 +42,8 @@ jobs:
   # Release'i baslatmadan once kod kalitesinin gecerli oldugunu dogrula.
   # NOT: ENABLE_SONAR=false iken atlanir; build-and-push job'i `needs` ile
   # bagli olsa da bu job skip ederse pipeline devam eder (success: skipped).
+  # GitHub flag #4360519 sonrasi SonarCloud OAuth bloklu; pratikte
+  # ENABLE_SONAR=false default — GitLab self-hosted SonarQube kullaniliyor.
   sonar-quality-gate:
     name: SonarCloud Quality Gate
     runs-on: ubuntu-latest
@@ -110,7 +122,7 @@ jobs:
             -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.qualitygate.wait=true
 
-  # ─── Job 1: Docker Image Build & Push ────────────────────────────────────────
+  # ─── Job 1: Docker Image Build & Push (Docker Hub) ──────────────────────────
   # Sonar job skip ederse (ENABLE_SONAR=false) bu job devam eder.
   # Sonar fail ederse durur — kalite gate'i blocker olur (ENABLE_SONAR=true iken).
   build-and-push:
@@ -122,7 +134,6 @@ jobs:
 
     permissions:
       contents: read
-      packages: write
 
     strategy:
       fail-fast: false
@@ -143,12 +154,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Resolve version tag
         id: version
@@ -184,8 +195,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   # ─── Job 2: Trivy Image Scan (build sonrasi) ─────────────────────────────────
-  # Image'lar GHCR'a push edildikten sonra HIGH/CRITICAL CVE taramasi yapilir.
-  # Fail durumunda deploy durur (deploy job'i bu job'a needs ile bagli).
+  # Image'lar Docker Hub'a push edildikten sonra HIGH/CRITICAL CVE taramasi
+  # yapilir. Fail durumunda deploy durur (deploy job'i bu job'a needs ile bagli).
   trivy-scan:
     name: Trivy Image Scan — ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -209,12 +220,12 @@ jobs:
             echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Log in to GHCR
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@0.28.0
@@ -234,6 +245,9 @@ jobs:
           category: trivy-${{ matrix.service }}
 
   # ─── Job 3: Oracle Cloud K3s Deploy ─────────────────────────────────────────
+  # Strateji: kubectl set image (manifest checkout YOK — Oracle'da git repo
+  # yok). Manifest sync GitLab CI veya manuel scp ile yapilir; bu job sadece
+  # tag bump'i uygular. Rollout fail ederse otomatik `kubectl rollout undo`.
   deploy:
     name: Deploy to Oracle Cloud (kfinans namespace)
     runs-on: ubuntu-latest
@@ -245,8 +259,6 @@ jobs:
       url: https://kfinans.app
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Resolve version tag
         id: version
         run: |
@@ -263,50 +275,27 @@ jobs:
           chmod 600 ~/.ssh/oracle.key
           ssh-keyscan -H ${{ env.ORACLE_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Repo'yu Oracle VM'de guncelle
+      - name: kubectl set image + rollout wait + auto-rollback (DEVOPS-005)
         run: |
-          ssh -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} \
-            "cd ${{ env.REPO_PATH }} && git fetch --all --tags && git checkout ${{ steps.version.outputs.tag }}"
-
-      - name: K8s image tag'lerini set et + atomic apply (DEVOPS-001+004 fix)
-        run: |
-          # FAZ H: kustomize images: transformer ile semver tag set + tek atomic apply
-          # Eski yöntem (kubectl set image race) yerine: edit + apply
+          TAG="${{ steps.version.outputs.tag }}"
           ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
             -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} "
-            cd ${{ env.REPO_PATH }}/k8s
-            TAG=${{ steps.version.outputs.tag }}
+            set -e
+            NS=${{ env.K8S_NAMESPACE }}
+            TAG=$TAG
 
-            # kustomize binary check (k3s ile gelir, yoksa kubectl kustomize var)
-            if command -v kustomize >/dev/null 2>&1; then
-              kustomize edit set image \\
-                ghcr.io/celikada/kfinans-backend=ghcr.io/celikada/kfinans-backend:\$TAG \\
-                ghcr.io/celikada/kfinans-frontend=ghcr.io/celikada/kfinans-frontend:\$TAG
-              cd .. && sudo kubectl apply -k k8s/
-            else
-              # Fallback: kubectl kustomize stdout > file > apply
-              cd ..
-              sudo kubectl apply -k k8s/
-              # Sonra set image (eski yöntem fallback)
-              for svc in backend frontend; do
-                sudo kubectl set image deployment/\$svc \\
-                  \$svc=ghcr.io/celikada/kfinans-\$svc:\$TAG \\
-                  -n ${{ env.K8S_NAMESPACE }} \\
-                  || echo \"WARNING: deployment/\$svc bulunamadi (ilk deploy?)\"
-              done
-            fi
-          "
+            echo '=== Image tag bump ==='
+            sudo kubectl -n \$NS set image deployment/backend \\
+              backend=${{ env.IMAGE_PREFIX }}-backend:\$TAG \\
+              alembic-upgrade=${{ env.IMAGE_PREFIX }}-backend:\$TAG
+            sudo kubectl -n \$NS set image deployment/frontend \\
+              frontend=${{ env.IMAGE_PREFIX }}-frontend:\$TAG
 
-      - name: Rollout durumunu bekle (max 6 dk) + fail durumunda otomatik rollback (DEVOPS-005)
-        run: |
-          ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
-            -i ~/.ssh/oracle.key ${{ env.ORACLE_USER }}@${{ env.ORACLE_HOST }} "
+            echo '=== Rollout wait ==='
             for svc in backend frontend; do
-              echo \"Waiting for \$svc rollout...\"
-              if ! sudo kubectl rollout status deployment/\$svc \\
-                  -n ${{ env.K8S_NAMESPACE }} --timeout=360s; then
-                echo \"::error::\$svc rollout timeout — UNDO çalıştırıyor\"
-                sudo kubectl rollout undo deployment/\$svc -n ${{ env.K8S_NAMESPACE }} || true
+              if ! sudo kubectl -n \$NS rollout status deployment/\$svc --timeout=360s; then
+                echo \"::error::\$svc rollout timeout — UNDO\"
+                sudo kubectl -n \$NS rollout undo deployment/\$svc || true
                 exit 1
               fi
             done
@@ -323,7 +312,7 @@ jobs:
             sudo kubectl get pods -n ${{ env.K8S_NAMESPACE }} \
               -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.containers[0].image}{\"\\n\"}{end}'
             echo ''
-            echo '=== Son Olaylar (failed) ==='
+            echo '=== Son Olaylar (Warning) ==='
             sudo kubectl get events -n ${{ env.K8S_NAMESPACE }} \
               --field-selector type=Warning --sort-by='.lastTimestamp' | tail -10
           "
@@ -391,7 +380,8 @@ jobs:
           fi
 
           echo "=== 4) Security headers smoke ==="
-          headers=$(curl -sI "$BASE")
+          # GET kullan (HEAD 405; /health sadece GET kabul eder)
+          headers=$(curl -sD - "$BASE/" -o /dev/null)
           echo "$headers" | grep -qi "strict-transport-security" || (echo "::error::HSTS header eksik" && exit 1)
           echo "$headers" | grep -qi "x-frame-options" || (echo "::error::X-Frame-Options eksik" && exit 1)
           echo "$headers" | grep -qi "content-security-policy" || (echo "::error::CSP eksik" && exit 1)
@@ -453,15 +443,17 @@ jobs:
           name: KFinans ${{ github.ref_name }}
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
           body: |
             ## 🚀 Production Deploy: ${{ github.ref_name }}
 
             **Canli URL:** https://kfinans.app
-            **SonarCloud:** https://sonarcloud.io/dashboard?id=celikada_KFinans
-            **Container images:**
-            - `ghcr.io/celikada/kfinans-backend:${{ github.ref_name }}`
-            - `ghcr.io/celikada/kfinans-frontend:${{ github.ref_name }}`
+            **Container images (Docker Hub):**
+            - `docker.io/celikada/kfinans-backend:${{ github.ref_name }}`
+            - `docker.io/celikada/kfinans-frontend:${{ github.ref_name }}`
+
+            **CI/CD:** GitHub Actions yedek/paralel deploy yolu — primary GitLab CI
+            (self-hosted, `gitlab.192.168.3.191.nip.io`).
 
             Otomatik changelog assagisi GitHub commit history'den uretilmistir.
         env:
