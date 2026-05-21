@@ -60,6 +60,23 @@ def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
 
 
+# MFA — TOTP (audit #5 MFA).
+# pre_mfa_token: login basarili (email+password) ama TOTP henuz dogrulanmadi.
+# `type=pre_mfa` scope sadece /mfa/verify endpoint'inde gecerli; access token
+# olarak kullanilamaz (get_current_user `type` kontrol etmiyor ama mfa.verify
+# explicit dogrular). 15 dk TTL — kullanici kod girip submit'lemek icin yeterli.
+PRE_MFA_TOKEN_TTL_SECONDS = 15 * 60
+
+
+def create_pre_mfa_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(seconds=PRE_MFA_TOKEN_TTL_SECONDS)
+    return jwt.encode(
+        {"sub": subject, "exp": expire, "type": "pre_mfa", "jti": uuid.uuid4().hex},
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+
+
 def encrypt_secret(value: str) -> str:
     return _fernet.encrypt(value.encode()).decode()
 

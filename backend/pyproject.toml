@@ -57,6 +57,9 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.27",
     # SEC (audit #5): zxcvbn password strength scoring (offline; no network)
     "zxcvbn>=4.4.28",
+    # SEC (audit #5 MFA): TOTP (RFC 6238) + QR PNG (kullaniciya servis)
+    "pyotp>=2.9",
+    "qrcode[pil]>=7.4",
 ]
 
 [project.optional-dependencies]

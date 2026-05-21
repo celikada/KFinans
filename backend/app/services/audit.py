@@ -75,6 +75,15 @@ class AuditAction(str, Enum):
     # AI / Advice (FAZ H — AI-004)
     ADVICE_GENERATE = "advice.generate"
 
+    # MFA — TOTP (audit #5 MFA)
+    MFA_SETUP = "auth.mfa.setup"
+    MFA_ENABLED = "auth.mfa.enabled"
+    MFA_DISABLED = "auth.mfa.disabled"
+    MFA_VERIFY_SUCCESS = "auth.mfa.verify_success"
+    MFA_VERIFY_FAILED = "auth.mfa.verify_failed"
+    MFA_RECOVERY_USED = "auth.mfa.recovery_used"
+    LOGIN_MFA_REQUIRED = "auth.login_mfa_required"
+
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
     """SEC-004 (FAZ H): Sadece `request.client.host` kullan.

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
@@ -247,6 +248,19 @@ export default function SettingsPage() {
           >
             {pwdSaving ? "Güncelleniyor..." : "Şifreyi Güncelle"}
           </button>
+        </section>
+
+        {/* Bölüm 3.5: İki Adımlı Doğrulama (MFA) */}
+        <section className={CARD_CLS}>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">{t("mfa.title")}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t("mfa.shortDesc")}</p>
+          <Link
+            href="/dashboard/settings/security"
+            className="inline-flex items-center justify-center w-full py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-800 hover:bg-gray-50"
+            data-testid="mfa-settings-link"
+          >
+            {t("mfa.openSettings")}
+          </Link>
         </section>
 
         {/* Bölüm 4: Genel Tercihler */}

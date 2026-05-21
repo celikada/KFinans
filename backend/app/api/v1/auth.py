@@ -16,7 +16,9 @@ from app.core.limiter import limiter
 from app.core.masking import mask_email
 from app.core.password_policy import check_hibp_pwned, check_password_strength
 from app.core.security import (
+    PRE_MFA_TOKEN_TTL_SECONDS,
     create_access_token,
+    create_pre_mfa_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -35,6 +37,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
 )
+from app.schemas.mfa import MFALoginRequiredOut
 from app.services.audit import AuditAction, log_audit
 from app.services.email import send_password_reset_email, send_verification_email
 
@@ -63,7 +66,7 @@ def _new_reset_token() -> tuple[str, datetime]:
     return token, expires_at
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse | MFALoginRequiredOut)
 @limiter.limit("10/minute")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
@@ -128,6 +131,22 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
     if user.failed_login_count or user.locked_until:
         user.failed_login_count = 0
         user.locked_until = None
+
+    # MFA — TOTP aktif kullanici icin full token yerine pre_mfa_token doner.
+    # Frontend /mfa/verify endpoint'ine yonlendirir. (audit #5 MFA)
+    if user.totp_enabled:
+        logger.info("MFA gerekli — login adim 1: %s", mask_email(payload.email))
+        await log_audit(
+            db, request,
+            action=AuditAction.LOGIN_MFA_REQUIRED,
+            user_id=user.id,
+        )
+        await db.commit()
+        return MFALoginRequiredOut(
+            mfa_required=True,
+            pre_mfa_token=create_pre_mfa_token(str(user.id)),
+            expires_in_seconds=PRE_MFA_TOKEN_TTL_SECONDS,
+        )
 
     logger.info("Kullanıcı giriş yaptı: %s", mask_email(payload.email))
     await log_audit(

@@ -17,6 +17,7 @@ from app.api.v1 import (
     integrations,
     manual_crypto,
     metrics,
+    mfa,
     planned_expenses,
     portfolio,
     stocks,
@@ -27,6 +28,7 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(mfa.router)
 api_router.include_router(user.router)
 api_router.include_router(integrations.router)
 api_router.include_router(wallets.router)
