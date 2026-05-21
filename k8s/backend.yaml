@@ -95,6 +95,11 @@ spec:
               mountPath: /var/tmp
             - name: home
               mountPath: /home/kfinans
+            # Audit 2026-05-22 P0 #6: alembic-upgrade DB TLS require icin
+            # CA bundle initContainer'da da gerekli (asyncpg ssl_ctx CERT_REQUIRED).
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
       containers:
         - name: backend
           image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
