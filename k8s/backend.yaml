@@ -57,6 +57,15 @@ spec:
           # DEVOPS-001 (FAZ H): kustomize images: transformer ile semver tag set edilir
           image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
+          # PodSecurity "restricted" namespace icin initContainer'da da
+          # container-level guvenlik ayarlari zorunlu. Pod-level securityContext
+          # (runAsNonRoot/User/Group) miras alinir ama allowPrivilegeEscalation
+          # ve capabilities her container'da ayri set edilmeli.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
           command: ["alembic", "upgrade", "head"]
           env:
             - name: DATABASE_URL
