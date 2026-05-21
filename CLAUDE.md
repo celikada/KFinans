@@ -246,3 +246,16 @@ cd frontend && npm install && npm run dev
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
 - **Test sayıları:** 192 unit + 357 integration (FAZ H sonu — PERF-004 + OBS-001 dahil). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
 - **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
+
+## Son Audit — 2026-05-22 (Faz I post-fix)
+
+11 paralel uzman ajan (compliance/security/dba/ai/backend/devops/test/finance/frontend + doc-expert + architect) çalışması sonucu **175+ NOT** üretildi. Master rapor:
+
+- [`docs/audits/2026-05-22-master-audit.md`](docs/audits/2026-05-22-master-audit.md) — executive summary + 8 P0 + cross-domain çelişki notları + reorganize plan + sprint öncelik listesi
+- [`docs/audit-2026-05-22/`](docs/audit-2026-05-22/) — 9 ajan domain-spesifik notları
+- [`docs/SYSTEM-DOC-AUDIT-2026-05-22.md`](docs/SYSTEM-DOC-AUDIT-2026-05-22.md) — doc-expert: dokümantasyon audit + 12 çelişki + 5 yeni doc taslağı
+- [`docs/MIMARI-AUDIT-2026-05-22.md`](docs/MIMARI-AUDIT-2026-05-22.md) — architect: 27 numaralı not + reusability + portability
+
+**Reorganize:** `docs/operations/`, `docs/reference/`, `docs/audits/` yeni klasör yapısı. `infrastructure-runbook.md` + `production-deploy-checklist.md` operations'a; `backlog/` audits'e taşındı; `github-support-followup-2026-05-12.md` silindi.
+
+**8 P0 launch blocker (özet):** KVKK 13 placeholder, KEP, mailbox, off-site backup yok, DR drill yapılmadı, DB TLS `ssl_mode=prefer` cert verify off, Swagger UI CSP çakışma + `/openapi.json` enum vektörü, Decimal `ROUND_HALF_UP` global ayar yok. Detay master rapor §4.
