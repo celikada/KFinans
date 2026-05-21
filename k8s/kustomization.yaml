@@ -13,8 +13,9 @@ resources:
   # 2026-05 lokal/Oracle align surecinde kaldirildi.
   - ingress.yaml
   - backup-cronjob.yaml
-  # Audit 2026-05-21 #1: NetworkPolicy default-deny + allowlist
-  - networkpolicies.yaml
+  # NetworkPolicy default-deny + allowlist tasarimi 04e2fd0'da denendi;
+  # K3s embedded kube-router enforce'unda DNS lookup + Traefik route flow
+  # kirildi (502 + gaierror). Redesign Faz I'a ertelendi — bkz issue/epic.
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans
