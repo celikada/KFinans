@@ -4,7 +4,8 @@ namespace: kfinans
 resources:
   - namespace.yaml
   - configmap.yaml
-  # secrets.yaml — gitignore'da; uygulama oncesi olusturun (bkz. README)
+  # secrets.yaml — gitignore'da; ilk kurulumda kullanilir (sonra sealed-secrets.yaml
+  # ile decommissioned). DR'da SealedSecret yetersizse referans icin saklanir.
   - postgres.yaml
   - backend.yaml
   - frontend.yaml
@@ -13,6 +14,11 @@ resources:
   # 2026-05 lokal/Oracle align surecinde kaldirildi.
   - ingress.yaml
   - backup-cronjob.yaml
+  # Audit 2026-05-21 #2: SealedSecrets (bitnami) — GitOps-safe encrypted secret.
+  # Controller `kube-system/sealed-secrets-controller` private key ile decrypt
+  # eder. Lokal repo'ya commit edilebilir (encryptedData asymmetric encrypted).
+  # NOT: etcd at-rest encryption ayri epic (K3s `--secrets-encryption` flag).
+  - sealed-secrets.yaml
   # NetworkPolicy default-deny + allowlist tasarimi 04e2fd0'da denendi;
   # K3s embedded kube-router enforce'unda DNS lookup + Traefik route flow
   # kirildi (502 + gaierror). Redesign Faz I'a ertelendi — bkz issue/epic.

@@ -42,7 +42,35 @@ kubectl apply -f k8s/configmap.yaml
 
 > ConfigMap'teki `ALLOWED_HOSTS`, `CORS_ORIGINS`, `EMAIL_FROM`, `FRONTEND_URL` değerlerini kendi domain'inize göre güncellemeyi unutmayın. `NEXT_PUBLIC_API_URL` boş bırakılır (göreceli `/api/v1` → ingress).
 
-### 2. Secret'ları oluştur (kubectl ile, YAML dışı — daha güvenli)
+### 2. Secret'ları oluştur
+
+**Yeni kurulum (önerilen — SealedSecrets):**
+
+```bash
+# Önce sealed-secrets controller kur (kube-system'da)
+helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+helm install sealed-secrets sealed-secrets/sealed-secrets \
+  -n kube-system --version 2.17.0 \
+  --set fullnameOverride=sealed-secrets-controller
+kubectl -n kube-system rollout status deployment/sealed-secrets-controller
+
+# k8s/sealed-secrets.yaml repo'dan apply (encryptedData controller private key
+# ile decrypt eder; lokal repo'ya commit edilebilir — encrypted)
+kubectl apply -f k8s/sealed-secrets.yaml
+```
+
+**Master key BACKUP (KRİTİK — kayıp durumunda decrypt yapılamaz):**
+
+```bash
+# K8s cluster yeniden kurulursa veya controller kaybolursa bu key gerekli
+kubectl -n kube-system get secret \
+  -l sealedsecrets.bitnami.com/sealed-secrets-key \
+  -o yaml > /backup/sealed-secrets-master.key
+
+# Bu dosya `.credentials.local.md` §7'de + offline yedek (Bitwarden/USB) saklanmalı
+```
+
+**Manuel Secret (ilk kurulum / DR fallback):**
 
 ```bash
 kubectl create secret generic kfinans-secrets \
@@ -57,7 +85,22 @@ kubectl create secret generic kfinans-secrets \
   --from-literal=POSTGRES_DB='kfinans'
 ```
 
-> `DATABASE_URL`'deki `<STRONG_PWD>` ile `POSTGRES_PASSWORD` aynı olmalı.
+**Mevcut Secret'i SealedSecret'e dönüştürme:**
+
+```bash
+# Public cert çek
+kubeseal --controller-name=sealed-secrets-controller \
+  --controller-namespace=kube-system --fetch-cert > pub-cert.pem
+
+# Mevcut Secret'i seal et
+kubectl -n kfinans get secret kfinans-secrets -o yaml | \
+  grep -v '^\s*creationTimestamp\|^\s*resourceVersion\|^\s*uid' | \
+  kubeseal --cert pub-cert.pem --format yaml > k8s/sealed-secrets.yaml
+```
+
+> **NOT:** SealedSecrets yalnızca GitOps commit'i için secret'ları korur (asymmetric encrypted). etcd at-rest encryption ayrı: K3s start flag `--secrets-encryption=true` veya `EncryptionConfiguration` apply gerekli.
+>
+> **NOT 2:** `DATABASE_URL`'deki `<STRONG_PWD>` ile `POSTGRES_PASSWORD` aynı olmalı.
 
 ### 3. Image'leri pushla (Docker Hub)
 
