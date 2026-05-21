@@ -1,10 +1,8 @@
 import type { NextConfig } from "next";
 
-// CSP — proxy.ts her HTML request icin per-request nonce ile dinamik CSP doner
-// (audit orta priority — 'unsafe-inline'/'unsafe-eval' kaldirildi, 'strict-dynamic'
-// + nonce kullanildi). Bu dosyadaki CSP, proxy matcher'inin disinda kalan static
-// asset route'lari icin defence-in-depth fallback'tir. proxy.ts'nin set ettigi
-// header her zaman ezer.
+// CSP — frontend HTML response'larina uygulanir.
+// Dev modda backend http://localhost:8000'da, prod'da https://kfinans.app'da.
+// Bu yuzden connect-src ve upgrade-insecure-requests ortama gore degisir.
 const isDev = process.env.NODE_ENV !== "production";
 
 const connectSrc = isDev
@@ -12,13 +10,9 @@ const connectSrc = isDev
   ? "connect-src 'self' http://localhost:8000 ws://localhost:* http://localhost:*"
   : "connect-src 'self' https://kfinans.app https://www.kfinans.app https://api.kfinans.app";
 
-// Fallback CSP (proxy.ts ile gelmeyen route'lar icin). Static asset'lerde
-// script-src calismadigi icin daha kisitlayici tutariz; ama Next.js bu config'i
-// proxy nonce'unu uyguladigi rotalarda override eder.
 const cspBase = [
   "default-src 'self'",
-  // Fallback: nonce yoksa hicbir inline script calismaz; sadece self.
-  "script-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // Next.js dev + runtime
   "style-src 'self' 'unsafe-inline'",                  // Tailwind inline + CSS-in-JS
   "img-src 'self' data: blob:",                        // chart canvas, base64
   "font-src 'self' data:",
@@ -42,7 +36,7 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   // Referrer
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // CSP — proxy.ts dinamik per-request nonce ile bunu override eder.
+  // CSP
   { key: "Content-Security-Policy", value: csp },
   // Permissions
   {
