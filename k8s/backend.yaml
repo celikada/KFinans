@@ -55,7 +55,7 @@ spec:
       initContainers:
         - name: alembic-upgrade
           # DEVOPS-001 (FAZ H): kustomize images: transformer ile semver tag set edilir
-          image: ghcr.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
+          image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
           command: ["alembic", "upgrade", "head"]
           env:
@@ -76,7 +76,7 @@ spec:
                   key: FERNET_KEY
       containers:
         - name: backend
-          image: ghcr.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
+          image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
           # DEVOPS-002: Container-level security
           securityContext:
@@ -99,10 +99,18 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # FAZ C3 TrustedHostMiddleware ALLOWED_HOSTS=["kfinans.app","www.kfinans.app"]
+          # ile sikilastirilmis durumda. Kubelet probe'lari default'ta `Host: <pod-ip>`
+          # gonderir; whitelist'te olmadigi icin 400 doner. httpHeaders.Host override
+          # ile probe'lar uretim host'unu taklit eder. Bu Oracle'da ALLOWED_HOSTS=["*"]
+          # workaround'unu kaldirip sikilastirma yapmanin ones-kosulu.
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 20
             periodSeconds: 30
             timeoutSeconds: 5
@@ -111,6 +119,9 @@ spec:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -119,6 +130,9 @@ spec:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 30  # 150sn'ye kadar startup'a izin ver (cold start)
