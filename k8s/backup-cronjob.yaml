@@ -1,17 +1,41 @@
 ---
 # DEVOPS-009 (FAZ H): Günlük Postgres logical backup
+# Audit 2026-05-21 #4: age asymmetric encryption (encryption-at-rest)
 #
 # Strateji:
 # - Her gün 02:00 Europe/Istanbul (Pazar 23:00 snapshot cron'undan sonra)
-# - pg_dump | gzip → PVC üzerinde 30 gün retention (sonra cleanup CronJob)
-# - Sonraki seviye: Oracle Object Storage (S3-compatible) sync, PITR için pgBackRest
+# - pg_dump | gzip | age -r <pub-key> → PVC üzerinde 30 gün retention
+# - age: asymmetric encryption — private key cluster DIŞINDA tutulur,
+#   cluster compromise edilse bile yedeklerden veri okunamaz.
+# - Sonraki seviye: rclone Oracle Object Storage off-site sync (ayrı PR,
+#   bucket bilgisi gerekli)
 #
-# Restore:
-#   kubectl exec -n kfinans postgres-0 -- bash -c "gunzip -c /backups/kfinans-YYYY-MM-DD.sql.gz | psql -U kfinans kfinans"
+# Restore (private key lokal'de age-key.txt'te varsayilir):
+#   kubectl cp postgres-backup-pod:/backups/kfinans-YYYY-MM-DD.sql.gz.age ./local.age
+#   age -d -i /path/to/age-key.txt local.age | gunzip > restore.sql
+#   psql -U kfinans -d kfinans -f restore.sql
 #
-# Test (kuru çalıştırma):
+# Test (manuel job):
 #   kubectl create job --from=cronjob/postgres-backup postgres-backup-manual -n kfinans
-
+#
+# Public key rotation: ConfigMap kfinans-backup-config içindeki AGE_PUBLIC_KEY
+# güncelle. Eski encrypted dump'lar eski key ile decrypt edilir (age multi-key
+# encryption pattern desteklenir — birden fazla -r flag ile encrypt sirasinda
+# rotation desteklenebilir).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kfinans-backup-config
+  namespace: kfinans
+data:
+  # Audit 2026-05-21 #4: age public key — yedek encryption icin.
+  # Private key (AGE-SECRET-KEY-1...) cluster DIŞINDA saklanir:
+  #   Lokal: C:\Users\celik\AppData\Local\Temp\kfinans-backup-age-key.txt
+  #   Backup: .credentials.local.md §9 + Bitwarden/USB (3-2-1 kurali)
+  # Public key dosyada plain — repo'ya commit edilebilir (encrypt only).
+  AGE_PUBLIC_KEY: "age12dk6lheu7wkd4de5wkfpkg9ehrj8zsfql509lx8rgd9qqufqxygq64d5v3"
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -64,9 +88,9 @@ spec:
               image: postgres:16-alpine
               imagePullPolicy: IfNotPresent
               # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true.
-              # pg_dump | gzip stream'i /backups PVC'ye yazar; /tmp ara buffer
-              # icin emptyDir. PGDATA postgres-0 pod'una ait, bu container'da
-              # yok — sadece /tmp emptyDir yeterli.
+              # pg_dump | gzip | age stream'i /backups PVC'ye yazar; /tmp ara
+              # buffer icin emptyDir. age binary apk install gerekiyor —
+              # Alpine ROFS'ta /var/cache/apk emptyDir mount.
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -76,34 +100,50 @@ spec:
                 - name: PGHOST
                   value: postgres
                 - name: PGUSER
-                  valueFrom:
-                    secretKeyRef:
-                      name: kfinans-secrets
-                      key: POSTGRES_USER
+                  value: kfinans
                 - name: PGPASSWORD
                   valueFrom:
                     secretKeyRef:
                       name: kfinans-secrets
                       key: POSTGRES_PASSWORD
                 - name: PGDATABASE
+                  value: kfinans
+                - name: AGE_PUBLIC_KEY
                   valueFrom:
-                    secretKeyRef:
-                      name: kfinans-secrets
-                      key: POSTGRES_DB
+                    configMapKeyRef:
+                      name: kfinans-backup-config
+                      key: AGE_PUBLIC_KEY
               command:
                 - /bin/sh
                 - -c
                 - |
                   set -euo pipefail
-                  TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
-                  BACKUP_FILE="/backups/kfinans-${TIMESTAMP}.sql.gz"
-                  echo "Postgres backup baslıyor: ${BACKUP_FILE}"
-                  pg_dump --format=plain --no-owner --no-acl | gzip -9 > "${BACKUP_FILE}"
-                  ls -lh "${BACKUP_FILE}"
-                  echo "Backup tamamlandi."
 
-                  # 30 gun'den eski yedekleri temizle
+                  # Audit 2026-05-21 #4: age binary GitHub release'den indir (statik Go).
+                  # ROFS=true ile apk install yapamiyoruz (/usr/bin/age yaza-yok),
+                  # binary'i /tmp/age'e cikar.
+                  AGE_VER=v1.2.1
+                  AGE_URL=https://github.com/FiloSottile/age/releases/download/${AGE_VER}/age-${AGE_VER}-linux-amd64.tar.gz
+                  echo "age binary indiriyor: ${AGE_URL}"
+                  wget -qO- "${AGE_URL}" | tar xz -C /tmp
+                  export PATH=/tmp/age:${PATH}
+                  age --version
+
+                  TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
+                  BACKUP_FILE="/backups/kfinans-${TIMESTAMP}.sql.gz.age"
+                  echo "Postgres backup (age encrypted) baslıyor: ${BACKUP_FILE}"
+
+                  # pg_dump -> gzip -> age encrypt (asymmetric, cluster-dis-private-key)
+                  pg_dump --format=plain --no-owner --no-acl \
+                    | gzip -9 \
+                    | /tmp/age/age -r "${AGE_PUBLIC_KEY}" -o "${BACKUP_FILE}"
+
+                  ls -lh "${BACKUP_FILE}"
+                  echo "Backup tamamlandi (age encrypted, sadece private key sahibi decrypt eder)."
+
+                  # 30 gun'den eski yedekleri temizle (eski .sql.gz formati + yeni .age)
                   echo "Eski yedekler temizleniyor (>30 gun):"
+                  find /backups -name "kfinans-*.sql.gz.age" -mtime +30 -print -delete || true
                   find /backups -name "kfinans-*.sql.gz" -mtime +30 -print -delete || true
 
                   echo "Disk kullanimi:"
