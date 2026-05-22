@@ -258,4 +258,6 @@ cd frontend && npm install && npm run dev
 
 **Reorganize:** `docs/operations/`, `docs/reference/`, `docs/audits/` yeni klasör yapısı. `infrastructure-runbook.md` + `production-deploy-checklist.md` operations'a; `backlog/` audits'e taşındı; `github-support-followup-2026-05-12.md` silindi.
 
-**8 P0 launch blocker (özet):** KVKK 13 placeholder, KEP, mailbox, off-site backup yok, DR drill yapılmadı, DB TLS `ssl_mode=prefer` cert verify off, Swagger UI CSP çakışma + `/openapi.json` enum vektörü, Decimal `ROUND_HALF_UP` global ayar yok. Detay master rapor §4.
+**8 P0 launch blocker (özet):** KVKK 13 placeholder, KEP, mailbox, off-site backup yok, DR drill yapılmadı, ~~DB TLS `ssl_mode=prefer` cert verify off~~ ✅ 2026-05-22 (a8496ca: require + CA verify aktif), Swagger UI CSP çakışma + `/openapi.json` enum vektörü, Decimal `ROUND_HALF_UP` global ayar yok. Detay master rapor §4.
+
+**NetworkPolicy + DNS egress fix (2026-05-22, a8496ca):** `allow-dns-egress`'e pod CIDR (10.42.0.0/16) UDP/TCP 53 fallback kuralı eklendi. K3s built-in NetworkPolicy controller'da `namespaceSelector + podSelector` birleşik seçici CoreDNS pod IP'sine effective değil; backend-egress'in `0.0.0.0/0 except 10.42.0.0/16` UNION'da pod CIDR'i blokluyordu. Önceki 3 "DB TLS handshake fail" denemesi aslında DNS resolution hatasıymış (`socket.gaierror Temporary failure in name resolution`). Fix sonrası `DATABASE_SSL_MODE=require` prod'da aktif, smoke testler yeşil. NetworkPolicy launch blocker (P0 #1) + DB TLS launch blocker (P0 #6) birlikte kapandı.
