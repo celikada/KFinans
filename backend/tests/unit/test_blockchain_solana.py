@@ -11,17 +11,17 @@ import pytest
 import respx
 
 from app.services.blockchain.solana import (
-    _BALANCE_CACHE,
     LAMPORTS_PER_SOL,
     SolanaService,
+    _balance_cache,
 )
 
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
     yield
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
 
 
 VALID_SOL_ADDR = "5xrLLzPq3HCoLzWzkZGTzWFA8L8TfFzd9JAa3xYz4Pm"

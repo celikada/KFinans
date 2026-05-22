@@ -13,17 +13,17 @@ import pytest
 import respx
 
 from app.services.blockchain.bitcoin import (
-    _BALANCE_CACHE,
     BitcoinService,
+    _balance_cache,
 )
 
 
 @pytest.fixture(autouse=True)
 def _clear_btc_cache():
     """Module-level cache testler arasi paylasilmasin."""
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
     yield
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
 
 
 VALID_BTC_ADDR = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
@@ -117,8 +117,8 @@ async def test_cache_expires_after_ttl():
     svc = BitcoinService(VALID_BTC_ADDR)
     await svc._cached_balance()
 
-    # Cache'i manuel eski'ye al — TTL gecmis sayilsin
-    _BALANCE_CACHE[VALID_BTC_ADDR] = (time.monotonic() - 999, Decimal("1.0"))
+    # Cache'i manuel eski'ye al — TTL gecmis sayilsin (private _cache dict'i ile)
+    _balance_cache._cache[VALID_BTC_ADDR] = (time.monotonic() - 999, Decimal("1.0"))
 
     await svc._cached_balance()
     assert route.call_count == 2, "TTL gectikten sonra yeni HTTP cagrisi olmali"
