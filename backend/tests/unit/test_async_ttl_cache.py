@@ -97,9 +97,7 @@ async def test_exception_propagates_to_waiters():
         await release.wait()
         raise ValueError("shared failure")
 
-    tasks = [
-        asyncio.create_task(cache.get_or_compute("k", failing_factory)) for _ in range(3)
-    ]
+    tasks = [asyncio.create_task(cache.get_or_compute("k", failing_factory)) for _ in range(3)]
     await factory_started.wait()
     release.set()
     results = await asyncio.gather(*tasks, return_exceptions=True)
