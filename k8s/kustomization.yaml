@@ -22,24 +22,17 @@ resources:
   # eder. Lokal repo'ya commit edilebilir (encryptedData asymmetric encrypted).
   # NOT: etcd at-rest encryption ayri epic (K3s `--secrets-encryption` flag).
   - sealed-secrets.yaml
-  # Audit 2026-05-21 #1 + 2026-05-22 P0: NetworkPolicy iterative apply (b44f7e1)
-  # PRODUCTION'DA TEMPORARY KALDIRILDI (2026-05-22). 2. fail nedeni: kube-router
-  # CNI policy enforcement fresh pod start'ta DNS lookup timing bug — yeni pod
-  # (rc8 deploy) Init:Error "Temporary failure in name resolution" verirken
-  # eski pod (policy aktif olduktan sonra Running) DNS sorunsuz. Eski pod
-  # tarafindan zero-downtime saglandi.
-  # Cluster state: `kubectl -n kfinans delete networkpolicy --all` ile temp temizlendi.
-  # Redesign cozumler (master audit'e ekle):
-  #   1. initContainers'a `wait-for-dns` busybox sidecar (sleep 10s + nslookup)
-  #   2. Cilium veya Calico CNI migration (kube-router timing daha agresif)
-  #   3. Policy preStart hook ile pod create'ten ONCE enforcement aktive
-  # - networkpolicies/02-backend-ingress.yaml
-  # - networkpolicies/04-frontend-ingress.yaml
-  # - networkpolicies/05-postgres-ingress.yaml
-  # - networkpolicies/03-backend-egress.yaml
-  # - networkpolicies/01-allow-dns.yaml
-  # - networkpolicies/06-backup-egress.yaml
-  # - networkpolicies/00-default-deny.yaml
+  # Audit 2026-05-21 #1: NetworkPolicy iterative apply (b44f7e1) — 2. denemede
+  # kube-router DNS timing bug ile kirildi. 2026-05-22 fix: backend.yaml'a
+  # `wait-for-dns` initContainer eklendi (nslookup postgres retry 10*2sn),
+  # NetworkPolicy enforcement aktif olana kadar bekler. Yeniden aktif.
+  - networkpolicies/02-backend-ingress.yaml
+  - networkpolicies/04-frontend-ingress.yaml
+  - networkpolicies/05-postgres-ingress.yaml
+  - networkpolicies/03-backend-egress.yaml
+  - networkpolicies/01-allow-dns.yaml
+  - networkpolicies/06-backup-egress.yaml
+  - networkpolicies/00-default-deny.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans

@@ -22,13 +22,11 @@ data:
   CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
   # FAZ C3: TrustedHostMiddleware whitelist
   ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
-  # Audit 2026-05-22 P0 #6: DB TLS partial — "require" denemesi rc8'de
-  # rollout fail (DNS resolution gaierror init container'da; NetworkPolicy
-  # timing bug suphesi). Geri "prefer" — encrypted-in-transit aktif, cert
-  # verify off. CA bundle mount korundu (zararsiz), "require" ayri debug
-  # session'da yeniden denenecek (initContainer DNS retry + kube-router
-  # policy enforcement timing).
-  DATABASE_SSL_MODE: "prefer"
+  # Audit 2026-05-22 P0 #6: DB TLS "require" + CA bundle. wait-for-dns
+  # initContainer (backend.yaml) DNS hazir olana kadar bekler, sonra
+  # alembic-upgrade asyncpg ssl_ctx CERT_REQUIRED ile baglanir. CA bundle
+  # postgres-tls Secret ca.crt -> /etc/postgres-ca/ mount.
+  DATABASE_SSL_MODE: "require"
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"

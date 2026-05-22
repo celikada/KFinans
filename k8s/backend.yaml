@@ -53,6 +53,32 @@ spec:
       # Replica 2 oldugu icin migration ayni anda iki kez calisabilir; alembic
       # transactional DDL kullaniyor (PostgresqlImpl), idempotent — sorun yok.
       initContainers:
+        # Audit 2026-05-22: kube-router NetworkPolicy enforcement timing bug
+        # fix. Fresh pod start'ta policy index'lenmesi 5-10sn gecikebilir;
+        # alembic init container hemen DB'ye bağlanmaya calismadan DNS hazir
+        # olana kadar bekle. nslookup postgres testi 10 deneme * 2sn = 20sn
+        # toplam timeout.
+        - name: wait-for-dns
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if nslookup postgres >/dev/null 2>&1; then
+                  echo "DNS ready (attempt $i)"
+                  exit 0
+                fi
+                echo "Waiting for DNS... attempt $i/10"
+                sleep 2
+              done
+              echo "DNS timeout — NetworkPolicy enforcement bug suphesi"
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
         - name: alembic-upgrade
           # DEVOPS-001 (FAZ H): kustomize images: transformer ile semver tag set edilir
           image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
