@@ -12,11 +12,11 @@ yenilemeleri RPC'ye yağmasın.
 
 import asyncio
 import logging
-import time
 from decimal import Decimal
 
 import httpx
 
+from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
 
 logger = logging.getLogger(__name__)
@@ -25,11 +25,10 @@ LAMPORTS_PER_SOL = Decimal("1000000000")  # 10^9
 _RPC_URL = "https://api.mainnet-beta.solana.com"
 _STAKE_PROGRAM = "Stake11111111111111111111111111111111111111"
 
-# Cache: address → (timestamp, (liquid_lamports, staked_lamports))
-_BALANCE_CACHE: dict[str, tuple[float, tuple[Decimal, Decimal]]] = {}
-_CACHE_TTL_SEC = 600  # 10 dk
-_cache_lock = asyncio.Lock()
-_INFLIGHT: dict[str, asyncio.Future] = {}
+# Cache: address → (liquid_lamports, staked_lamports). Public RPC rate-limit'i
+# (~10 req/s) için tek paralel tarama; dashboard paralel yenilemeleri sıraya
+# girer.
+_balance_cache: AsyncTTLCache[tuple[Decimal, Decimal]] = AsyncTTLCache(ttl_sec=600)
 
 
 class SolanaService(BaseBlockchainIntegration):
@@ -60,36 +59,13 @@ class SolanaService(BaseBlockchainIntegration):
         ]
 
     async def _cached_balance(self) -> tuple[Decimal, Decimal]:
-        loop = asyncio.get_running_loop()
-        is_owner = False
-        async with _cache_lock:
-            cached = _BALANCE_CACHE.get(self.address)
-            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
-                return cached[1]
-            inflight = _INFLIGHT.get(self.address)
-            if inflight is None:
-                inflight = loop.create_future()
-                _INFLIGHT[self.address] = inflight
-                is_owner = True
-
-        if not is_owner:
-            return await inflight
-
-        try:
+        async def _fetch() -> tuple[Decimal, Decimal]:
             async with httpx.AsyncClient(timeout=20) as client:
                 liquid = await self._get_balance(client, self.address)
                 staked = await self._get_staked_total(client, self.address)
-            result = (liquid, staked)
-            async with _cache_lock:
-                _BALANCE_CACHE[self.address] = (time.monotonic(), result)
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_result(result)
-            return result
-        except Exception as exc:
-            async with _cache_lock:
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_exception(exc)
-            raise
+            return (liquid, staked)
+
+        return await _balance_cache.get_or_compute(self.address, _fetch)
 
     @staticmethod
     async def _rpc_call(client: httpx.AsyncClient, method: str, params: list) -> dict:

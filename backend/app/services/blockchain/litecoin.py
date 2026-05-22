@@ -15,7 +15,6 @@ Cache + single-flight pattern Bitcoin servisinden kopyalandı.
 
 import asyncio
 import logging
-import time
 from decimal import Decimal
 
 import base58
@@ -25,6 +24,7 @@ from bip_utils import (
     P2WPKHAddrEncoder,
 )
 
+from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,7 @@ _LTUB_PREFIX = bytes.fromhex("019da462")
 _XPUB_PREFIX = bytes.fromhex("0488B21E")
 _GAP_LIMIT = 20
 
-_BALANCE_CACHE: dict[str, tuple[float, Decimal]] = {}
-_CACHE_TTL_SEC = 600
-_cache_lock = asyncio.Lock()
-_INFLIGHT: dict[str, asyncio.Future] = {}
+_balance_cache: AsyncTTLCache[Decimal] = AsyncTTLCache(ttl_sec=600)
 
 
 def _looks_like_xpub(addr: str) -> bool:
@@ -79,36 +76,12 @@ class LitecoinService(BaseBlockchainIntegration):
         ]
 
     async def _cached_balance(self) -> Decimal:
-        loop = asyncio.get_running_loop()
-        is_owner = False
-        async with _cache_lock:
-            cached = _BALANCE_CACHE.get(self.address)
-            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
-                return cached[1]
-            inflight = _INFLIGHT.get(self.address)
-            if inflight is None:
-                inflight = loop.create_future()
-                _INFLIGHT[self.address] = inflight
-                is_owner = True
-
-        if not is_owner:
-            return await inflight
-
-        try:
+        async def _fetch() -> Decimal:
             if _looks_like_xpub(self.address):
-                bal = await self._fetch_xpub_balance(self.address)
-            else:
-                bal = await self._fetch_single_balance(self.address)
-            async with _cache_lock:
-                _BALANCE_CACHE[self.address] = (time.monotonic(), bal)
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_result(bal)
-            return bal
-        except Exception as exc:
-            async with _cache_lock:
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_exception(exc)
-            raise
+                return await self._fetch_xpub_balance(self.address)
+            return await self._fetch_single_balance(self.address)
+
+        return await _balance_cache.get_or_compute(self.address, _fetch)
 
     async def _fetch_single_balance(self, addr: str) -> Decimal:
         async with httpx.AsyncClient(timeout=15) as client:
