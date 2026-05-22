@@ -1,12 +1,35 @@
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+
 import bcrypt
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
+from jose import jwt
+
 from app.config import settings
 
-_fernet = Fernet(settings.fernet_key.encode())
+
+def _build_fernet() -> MultiFernet:
+    """SEC-012 (FAZ H): MultiFernet with primary + optional secondaries.
+
+    Encrypt uses ONLY the primary (first) key; decrypt walks the list and
+    accepts ciphertext encrypted with ANY key. This enables zero-downtime key
+    rotation:
+
+      Primary (settings.fernet_key) -> encrypt + decrypt
+      Secondaries (settings.fernet_keys_secondary) -> decrypt only
+
+    When `fernet_keys_secondary` is empty (default), behavior is identical to
+    a single-key Fernet (backward compatible).
+
+    Invalid base64 in any key raises at import time — fail-fast.
+    """
+    primary = Fernet(settings.fernet_key.encode())
+    secondaries = [Fernet(k.encode()) for k in settings.fernet_keys_secondary if k]
+    return MultiFernet([primary, *secondaries])
+
+
+_fernet = _build_fernet()
 
 
 def hash_password(password: str) -> str:
@@ -37,6 +60,23 @@ def create_refresh_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+
+
+# MFA — TOTP (audit #5 MFA).
+# pre_mfa_token: login basarili (email+password) ama TOTP henuz dogrulanmadi.
+# `type=pre_mfa` scope sadece /mfa/verify endpoint'inde gecerli; access token
+# olarak kullanilamaz (get_current_user `type` kontrol etmiyor ama mfa.verify
+# explicit dogrular). 15 dk TTL — kullanici kod girip submit'lemek icin yeterli.
+PRE_MFA_TOKEN_TTL_SECONDS = 15 * 60
+
+
+def create_pre_mfa_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(seconds=PRE_MFA_TOKEN_TTL_SECONDS)
+    return jwt.encode(
+        {"sub": subject, "exp": expire, "type": "pre_mfa", "jti": uuid.uuid4().hex},
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
 
 
 def encrypt_secret(value: str) -> str:

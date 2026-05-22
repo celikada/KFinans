@@ -1,5 +1,7 @@
 """Kredi kartı şemaları (tanım + dönem içi borç + ekstre + taksit)."""
-from datetime import date as date_type, datetime
+
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -52,20 +54,21 @@ class CreditCardOut(BaseModel):
     updated_at: datetime
 
     # Hesaplanmış (server-side, read-only)
-    unpaid_statement_total: Decimal = Decimal(0)   # ödenmemiş ekstrelerin toplamı
-    unpaid_statement_count: int = 0                # kaç adet ödenmemiş ekstre (>= 2 ise UI uyarı)
-    future_installment_total: Decimal = Decimal(0) # gelecek taksitlerin remaining × monthly toplamı
-    period_debt: Decimal = Decimal(0)              # = unpaid_statement_total + current_period_debt
-    total_debt: Decimal = Decimal(0)               # = period_debt + future_installment_total
+    unpaid_statement_total: Decimal = Decimal(0)  # ödenmemiş ekstrelerin toplamı
+    unpaid_statement_count: int = 0  # kaç adet ödenmemiş ekstre (>= 2 ise UI uyarı)
+    future_installment_total: Decimal = Decimal(0)  # gelecek taksitlerin remaining × monthly toplamı
+    period_debt: Decimal = Decimal(0)  # = unpaid_statement_total + current_period_debt
+    total_debt: Decimal = Decimal(0)  # = period_debt + future_installment_total
 
     model_config = {"from_attributes": True}
 
 
 class CreditCardSummaryOut(BaseModel):
     """Tüm kartların özet bilgisi (dashboard kartı için)."""
+
     cards: list[CreditCardOut]
-    total_period_debt: Decimal   # tüm kartların dönem içi borç toplamı (ödenmemiş ekstre + dönem içi)
-    total_debt: Decimal          # tüm kartların toplam borcu (dönem içi + gelecek taksit)
+    total_period_debt: Decimal  # tüm kartların dönem içi borç toplamı (ödenmemiş ekstre + dönem içi)
+    total_debt: Decimal  # tüm kartların toplam borcu (dönem içi + gelecek taksit)
     # Geriye uyumluluk için eski isim — frontend yeni alanları kullanmalı
     total_current_period_debt: Decimal = Decimal(0)
 
@@ -143,6 +146,7 @@ class InstallmentOut(BaseModel):
 
 class CardDetailOut(BaseModel):
     """Bir kartın tüm detayı: kart bilgisi + ekstreler + taksitler."""
+
     card: CreditCardOut
     statements: list[StatementOut]
     installments: list[InstallmentOut]

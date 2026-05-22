@@ -49,11 +49,15 @@ spec:
         - name: frontend
           # frontend/Dockerfile multi-stage build; standalone output kullanilir
           # DEVOPS-001 (FAZ H): kustomize images: transformer override eder
-          image: ghcr.io/celikada/kfinans-frontend:v0.0.0  # placeholder
+          image: docker.io/celikada/kfinans-frontend:v0.0.0  # placeholder
           imagePullPolicy: IfNotPresent
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true.
+          # Next.js standalone runtime (node server.js) /tmp (Node.js temp,
+          # gzip stream) ve /app/.next/cache (fetch/ISR cache) yazar. Diger
+          # path'ler (/app/server.js, public/, .next/static) read-only OK.
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           ports:
@@ -92,3 +96,16 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
+          # SEC HARDENING 2026-05-21: writable paths via emptyDir
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: next-cache
+          emptyDir:
+            sizeLimit: 256Mi

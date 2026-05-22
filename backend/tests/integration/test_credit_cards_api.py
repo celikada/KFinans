@@ -7,11 +7,11 @@ NOT NULL + is_paid=true) zaten kart borcu/ekstresiyle sayildigi icin
 toplamlarindan HARIC TUTULMALI. Bu kural bozulursa kullanici yanlis
 gider raporu gorur (kullanici parasini etkileyen modul).
 """
+
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import make_user
-
 
 # ─── CreditCard CRUD ────────────────────────────────────────────────────
 
@@ -42,12 +42,22 @@ async def test_create_credit_card(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_list_credit_cards_summary(client: AsyncClient):
     headers = await make_user(client, "cc_list@example.com")
-    await client.post("/api/v1/credit-cards", json={
-        "name": "Card A", "current_period_debt": "1000",
-    }, headers=headers)
-    await client.post("/api/v1/credit-cards", json={
-        "name": "Card B", "current_period_debt": "500",
-    }, headers=headers)
+    await client.post(
+        "/api/v1/credit-cards",
+        json={
+            "name": "Card A",
+            "current_period_debt": "1000",
+        },
+        headers=headers,
+    )
+    await client.post(
+        "/api/v1/credit-cards",
+        json={
+            "name": "Card B",
+            "current_period_debt": "500",
+        },
+        headers=headers,
+    )
 
     resp = await client.get("/api/v1/credit-cards", headers=headers)
     assert resp.status_code == 200
@@ -155,9 +165,11 @@ async def test_create_statement_card_404(client: AsyncClient):
     resp = await client.post(
         "/api/v1/credit-cards/999999/statements",
         json={
-            "period_year": 2026, "period_month": 5,
+            "period_year": 2026,
+            "period_month": 5,
             "statement_amount": "100",
-            "statement_date": "2026-05-15", "due_date": "2026-05-25",
+            "statement_date": "2026-05-15",
+            "due_date": "2026-05-25",
         },
         headers=headers,
     )
@@ -172,9 +184,11 @@ async def test_create_duplicate_statement_period_409(client: AsyncClient):
     cid = card.json()["id"]
 
     payload = {
-        "period_year": 2026, "period_month": 5,
+        "period_year": 2026,
+        "period_month": 5,
         "statement_amount": "100",
-        "statement_date": "2026-05-15", "due_date": "2026-05-25",
+        "statement_date": "2026-05-15",
+        "due_date": "2026-05-25",
     }
     first = await client.post(f"/api/v1/credit-cards/{cid}/statements", json=payload, headers=headers)
     assert first.status_code == 201
@@ -280,8 +294,7 @@ async def test_double_count_paid_credit_card_expense_excluded(client: AsyncClien
     assert resp.status_code == 200
     s = resp.json()
     assert float(s["total"]) == 500.0, (
-        f"Cift sayim kurali bozuldu! credit_card_id NOT NULL + is_paid=true "
-        f"Expense /summary'den haric tutulmali. Beklenen 500.00, gelen {s['total']}"
+        f"Cift sayim kurali bozuldu! credit_card_id NOT NULL + is_paid=true Expense /summary'den haric tutulmali. Beklenen 500.00, gelen {s['total']}"
     )
 
 
@@ -328,25 +341,33 @@ async def test_double_count_budget_comparison_excludes_paid_card_expense(client:
     )
 
     # Karttan ödenmis 800 -> filtreden haric (sayilmamali)
-    await client.post("/api/v1/expenses", json={
-        "amount": 800, "category": "groceries", "date": "2026-05-15",
-        "credit_card_id": cid, "is_paid": True,
-    }, headers=headers)
+    await client.post(
+        "/api/v1/expenses",
+        json={
+            "amount": 800,
+            "category": "groceries",
+            "date": "2026-05-15",
+            "credit_card_id": cid,
+            "is_paid": True,
+        },
+        headers=headers,
+    )
 
     # Kartsiz 300 -> sayilmali
-    await client.post("/api/v1/expenses", json={
-        "amount": 300, "category": "groceries", "date": "2026-05-16",
-    }, headers=headers)
-
-    resp = await client.get(
-        "/api/v1/budgets/comparison?year=2026&month=5", headers=headers
+    await client.post(
+        "/api/v1/expenses",
+        json={
+            "amount": 300,
+            "category": "groceries",
+            "date": "2026-05-16",
+        },
+        headers=headers,
     )
+
+    resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5", headers=headers)
     assert resp.status_code == 200
     rows = resp.json()
     groceries = next((r for r in rows if r["category"] == "groceries"), None)
     assert groceries is not None
     # actual_amount sadece 300 (kartsiz) olmali, 800 (paid kart) haric
-    assert float(groceries["actual_amount"]) == 300.0, (
-        f"Budget comparison cift sayim bozuldu! Beklenen 300.00, gelen "
-        f"{groceries['actual_amount']}"
-    )
+    assert float(groceries["actual_amount"]) == 300.0, f"Budget comparison cift sayim bozuldu! Beklenen 300.00, gelen {groceries['actual_amount']}"

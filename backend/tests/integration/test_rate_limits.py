@@ -3,6 +3,7 @@
 Mevcut test ortaminda `limiter.enabled = False` (tests/conftest.py); bu test
 dosyasi limiter'i AKTIF eder ve gercek 429 davranisini dogrular.
 """
+
 import pytest
 from httpx import AsyncClient
 

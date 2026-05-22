@@ -13,8 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
+from app.core.masking import mask_email
+from app.core.password_policy import check_hibp_pwned, check_password_strength
 from app.core.security import (
+    PRE_MFA_TOKEN_TTL_SECONDS,
     create_access_token,
+    create_pre_mfa_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -33,6 +37,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
 )
+from app.schemas.mfa import MFALoginRequiredOut
 from app.services.audit import AuditAction, log_audit
 from app.services.email import send_password_reset_email, send_verification_email
 
@@ -61,7 +66,7 @@ def _new_reset_token() -> tuple[str, datetime]:
     return token, expires_at
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse | MFALoginRequiredOut)
 @limiter.limit("10/minute")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
@@ -72,12 +77,17 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
     # yeni denemeler yaparak counter'i kabartamaz.
     if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
         retry_seconds = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
-        logger.warning("Kilitli hesap login denedi: %s (kalan=%ssn)", payload.email, retry_seconds)
+        logger.warning(
+            "Kilitli hesap login denedi: %s (kalan=%ssn)",
+            mask_email(payload.email),
+            retry_seconds,
+        )
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id,
-            extra={"email": payload.email, "reason": "locked"},
+            extra={"email": mask_email(payload.email), "reason": "locked"},
         )
         await db.commit()
         raise HTTPException(
@@ -87,22 +97,25 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         )
 
     if not user or not verify_password(payload.password, user.password_hash):
-        logger.warning("Başarısız giriş denemesi: %s", payload.email)
+        logger.warning("Başarısız giriş denemesi: %s", mask_email(payload.email))
         # SEC-002: User varsa counter'i artir; threshold'u asarsa kilitle.
         if user:
             user.failed_login_count = (user.failed_login_count or 0) + 1
             if user.failed_login_count >= _FAILED_LOGIN_THRESHOLD:
                 user.locked_until = datetime.now(timezone.utc) + _LOCK_DURATION
                 logger.warning(
-                    "Account lockout: %s (%s deneme)", payload.email, user.failed_login_count
+                    "Account lockout: %s (%s deneme)",
+                    mask_email(payload.email),
+                    user.failed_login_count,
                 )
         # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.LOGIN_FAILED,
             user_id=user.id if user else None,
             extra={
-                "email": payload.email,
+                "email": mask_email(payload.email),
                 "failed_count": user.failed_login_count if user else None,
                 "locked": bool(user and user.locked_until),
             },
@@ -110,7 +123,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
     if not user.email_verified:
-        logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", payload.email)
+        logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", mask_email(payload.email))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="E-posta adresiniz henüz doğrulanmadı. Lütfen gelen kutunuzu kontrol edin.",
@@ -121,9 +134,27 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         user.failed_login_count = 0
         user.locked_until = None
 
-    logger.info("Kullanıcı giriş yaptı: %s", payload.email)
+    # MFA — TOTP aktif kullanici icin full token yerine pre_mfa_token doner.
+    # Frontend /mfa/verify endpoint'ine yonlendirir. (audit #5 MFA)
+    if user.totp_enabled:
+        logger.info("MFA gerekli — login adim 1: %s", mask_email(payload.email))
+        await log_audit(
+            db,
+            request,
+            action=AuditAction.LOGIN_MFA_REQUIRED,
+            user_id=user.id,
+        )
+        await db.commit()
+        return MFALoginRequiredOut(
+            mfa_required=True,
+            pre_mfa_token=create_pre_mfa_token(str(user.id)),
+            expires_in_seconds=PRE_MFA_TOKEN_TTL_SECONDS,
+        )
+
+    logger.info("Kullanıcı giriş yaptı: %s", mask_email(payload.email))
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.LOGIN,
         user_id=user.id,
     )
@@ -165,12 +196,14 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
     # ikinci kez kullanilmasi engellenir. expires_at TTL kontrol icin
     # cleanup cron'da (FAZ C5) silinir.
     if jti and "exp" in data:
-        db.add(RevokedToken(
-            jti=jti,
-            user_id=user.id,
-            token_type="refresh",
-            expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
-        ))
+        db.add(
+            RevokedToken(
+                jti=jti,
+                user_id=user.id,
+                token_type="refresh",
+                expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
+            )
+        )
         try:
             await db.commit()
         except IntegrityError:
@@ -202,12 +235,14 @@ async def logout(
         access_payload = decode_token(access_token)
         access_jti = access_payload.get("jti")
         if access_jti:
-            db.add(RevokedToken(
-                jti=access_jti,
-                user_id=current_user.id,
-                token_type="access",
-                expires_at=datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc),
-            ))
+            db.add(
+                RevokedToken(
+                    jti=access_jti,
+                    user_id=current_user.id,
+                    token_type="access",
+                    expires_at=datetime.fromtimestamp(access_payload["exp"], tz=timezone.utc),
+                )
+            )
     except JWTError:
         pass  # get_current_user gecmisti zaten; ulasilmamali
 
@@ -215,23 +250,22 @@ async def logout(
     if payload.refresh_token:
         try:
             refresh_payload = decode_token(payload.refresh_token)
-            if (
-                refresh_payload.get("type") == "refresh"
-                and refresh_payload.get("sub") == str(current_user.id)
-                and refresh_payload.get("jti")
-            ):
-                db.add(RevokedToken(
-                    jti=refresh_payload["jti"],
-                    user_id=current_user.id,
-                    token_type="refresh",
-                    expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
-                ))
+            if refresh_payload.get("type") == "refresh" and refresh_payload.get("sub") == str(current_user.id) and refresh_payload.get("jti"):
+                db.add(
+                    RevokedToken(
+                        jti=refresh_payload["jti"],
+                        user_id=current_user.id,
+                        token_type="refresh",
+                        expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
+                    )
+                )
         except JWTError:
             pass  # Gecersiz refresh token; sessizce yutulur
 
     # Audit log (commit oncesi flush'lanir, ana commit ile birlikte gider)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.LOGOUT,
         user_id=current_user.id,
     )
@@ -242,7 +276,7 @@ async def logout(
         # Idempotency: aynI jti tekrar logout edilirse PK cakismasI olur
         await db.rollback()
 
-    logger.info("Kullanıcı çıkış yaptı: %s", current_user.email)
+    logger.info("Kullanıcı çıkış yaptı: %s", mask_email(current_user.email))
     return {"detail": "Çıkış yapıldı"}
 
 
@@ -260,6 +294,32 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta zaten kayıtlı")
+
+    # SEC (audit #5): Sifre politikasi — zxcvbn + HIBP.
+    # User inputs: email (local-part + tam adres). Kullanici "ada@x.com" ile
+    # "ada123" sifresi sektigi zaman zxcvbn score'u kirilir.
+    email_local = payload.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.password,
+        user_inputs=[payload.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.password)
+    if leaked_count >= 1:
+        # PII guvenli: leaked_count log'lanir, sifre DEGIL
+        logger.info(
+            "Sizmis sifre reddedildi (register): email=%s leaked_count=%s",
+            mask_email(payload.email),
+            leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
+        )
 
     token, expires_at = _new_verify_token()
     # COMP-006 (FAZ H): Acik rizalar timestamp'le kaydedilir (KVKK m.5/1 ispat yuku).
@@ -279,14 +339,15 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     db.add(user)
     await db.flush()  # user.id'yi al
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.REGISTER,
         user_id=user.id,
-        extra={"email": payload.email, "risk_profile": payload.risk_profile},
+        extra={"email": mask_email(payload.email), "risk_profile": payload.risk_profile},
     )
     await db.commit()
     await db.refresh(user)
-    logger.info("Yeni kullanıcı kaydı: %s", payload.email)
+    logger.info("Yeni kullanıcı kaydı: %s", mask_email(payload.email))
 
     sent = await send_verification_email(to=user.email, token=token)
     return RegisterResponse(
@@ -324,7 +385,7 @@ async def verify_email(
     user.verify_token = None
     user.verify_token_expires_at = None
     await db.commit()
-    logger.info("E-posta doğrulandı: %s", user.email)
+    logger.info("E-posta doğrulandı: %s", mask_email(user.email))
     return {"detail": "E-posta başarıyla doğrulandı"}
 
 
@@ -353,7 +414,6 @@ async def resend_verification(
     return generic_response
 
 
-
 # ─── SEC-001 (FAZ H): Password reset (OWASP Forgot Password Cheat Sheet) ───
 
 
@@ -377,10 +437,11 @@ async def forgot_password(
 
     # Audit her durumda yazilir (saldirgan email listesi cikaramaz)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_RESET_REQUEST,
         user_id=user.id if user else None,
-        extra={"email": payload.email, "user_exists": bool(user)},
+        extra={"email": mask_email(payload.email), "user_exists": bool(user)},
     )
 
     # Sadece var olan + dogrulanmis + silinmemis kullanici icin token uret
@@ -411,14 +472,11 @@ async def reset_password(
     result = await db.execute(select(User).where(User.reset_token == payload.token))
     user = result.scalar_one_or_none()
 
-    if (
-        not user
-        or not user.reset_token_expires_at
-        or user.reset_token_expires_at < datetime.now(timezone.utc)
-    ):
+    if not user or not user.reset_token_expires_at or user.reset_token_expires_at < datetime.now(timezone.utc):
         # Audit anonim — token'i kim denedi izlenir
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.PASSWORD_RESET_COMPLETE,
             user_id=user.id if user else None,
             extra={"success": False, "reason": "invalid_or_expired_token"},
@@ -429,6 +487,30 @@ async def reset_password(
             detail="Sifirlama bagsantisi gecersiz ya da suresi dolmus.",
         )
 
+    # SEC (audit #5): Reset akisinda da policy uygulanir — eski sifre crackleninse
+    # bile kullanici "password123" gibi zayif sifreye geri donemez.
+    email_local = user.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.new_password,
+        user_inputs=[user.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.new_password)
+    if leaked_count >= 1:
+        logger.info(
+            "Sizmis sifre reddedildi (reset): email=%s leaked_count=%s",
+            mask_email(user.email),
+            leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
+        )
+
     user.password_hash = hash_password(payload.new_password)
     user.reset_token = None
     user.reset_token_expires_at = None
@@ -437,11 +519,12 @@ async def reset_password(
     user.locked_until = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_RESET_COMPLETE,
         user_id=user.id,
-        extra={"success": True, "email": user.email},
+        extra={"success": True, "email": mask_email(user.email)},
     )
     await db.commit()
-    logger.info("Sifre sifirlandi: %s", user.email)
+    logger.info("Sifre sifirlandi: %s", mask_email(user.email))
     return {"detail": "Sifre basariyla degistirildi. Yeni sifrenizle giris yapabilirsiniz."}

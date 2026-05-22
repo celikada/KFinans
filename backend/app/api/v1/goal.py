@@ -38,13 +38,13 @@ class GoalIn(BaseModel):
 
 
 class GoalOut(BaseModel):
-    goal_amount: Decimal | None          # orijinal para biriminde
+    goal_amount: Decimal | None  # orijinal para biriminde
     goal_currency: str
-    rate_to_tl: Decimal | None           # 1 birim = X TL
-    monthly_tl: Decimal | None           # TL karsiligi
-    freedom_target_tl: Decimal | None    # monthly_tl × 300
-    portfolio_value: Decimal | None      # son snapshot TL
-    passive_income_tl: Decimal | None    # portfolio / 300
+    rate_to_tl: Decimal | None  # 1 birim = X TL
+    monthly_tl: Decimal | None  # TL karsiligi
+    freedom_target_tl: Decimal | None  # monthly_tl × 300
+    portfolio_value: Decimal | None  # son snapshot TL
+    passive_income_tl: Decimal | None  # portfolio / 300
     passive_income_foreign: Decimal | None  # pasif gelir / kur (hedef para biriminde)
     progress_pct: float | None
     months_covered: float | None
@@ -56,10 +56,7 @@ async def get_goal(
     db: AsyncSession = Depends(get_db),
 ):
     snap_q = await db.execute(
-        select(PortfolioSnapshot.total_value_tl)
-        .where(PortfolioSnapshot.user_id == current_user.id)
-        .order_by(desc(PortfolioSnapshot.snapshot_date))
-        .limit(1)
+        select(PortfolioSnapshot.total_value_tl).where(PortfolioSnapshot.user_id == current_user.id).order_by(desc(PortfolioSnapshot.snapshot_date)).limit(1)
     )
     portfolio = snap_q.scalar_one_or_none()
     portfolio_dec = Decimal(str(portfolio)) if portfolio is not None else None

@@ -17,9 +17,11 @@ Index'ler:
   - (user_id, created_at DESC) — user kendi log'larini hizli gorur
   - (action, created_at DESC) — admin/security tipe gore arama
 """
-from alembic import op
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "c4d5e6f7a8b9"
 down_revision = "b3c4d5e6f7a8"

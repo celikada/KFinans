@@ -14,8 +14,8 @@ composite), audit_logs (user_created composite), tefas/stock_holdings, vs.
 zaten index'li (kendi migration'larinda eklendi). Bu migration sadece
 eksiklikleri kapatir.
 """
-from alembic import op
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "d1e2f3a4b5c6"

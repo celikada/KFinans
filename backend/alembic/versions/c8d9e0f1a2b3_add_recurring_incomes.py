@@ -12,9 +12,10 @@ category: salary | rental | dividend | bonus | freelance | other
 recurrence: one_time | monthly | quarterly | biannual | yearly | custom
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "c8d9e0f1a2b3"
 down_revision = "b7c8d9e0f1a2"

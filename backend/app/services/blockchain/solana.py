@@ -9,6 +9,7 @@ Public RPC: api.mainnet-beta.solana.com (rate limit ~10 req/s).
 Cache + single-flight pattern (Bitcoin servisinden) — dashboard'ın paralel
 yenilemeleri RPC'ye yağmasın.
 """
+
 import asyncio
 import logging
 import time
@@ -94,9 +95,15 @@ class SolanaService(BaseBlockchainIntegration):
     async def _rpc_call(client: httpx.AsyncClient, method: str, params: list) -> dict:
         """Rate limit (429) için 3 retry exponential backoff."""
         for attempt in range(3):
-            resp = await client.post(_RPC_URL, json={
-                "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
-            })
+            resp = await client.post(
+                _RPC_URL,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": method,
+                    "params": params,
+                },
+            )
             if resp.status_code == 429:
                 await asyncio.sleep(1.0 * (attempt + 1))
                 continue
@@ -117,13 +124,17 @@ class SolanaService(BaseBlockchainIntegration):
         accounts: dict[str, Decimal] = {}
         for offset in (12, 44):
             try:
-                data = await cls._rpc_call(client, "getProgramAccounts", [
-                    _STAKE_PROGRAM,
-                    {
-                        "encoding": "jsonParsed",
-                        "filters": [{"memcmp": {"offset": offset, "bytes": address}}],
-                    },
-                ])
+                data = await cls._rpc_call(
+                    client,
+                    "getProgramAccounts",
+                    [
+                        _STAKE_PROGRAM,
+                        {
+                            "encoding": "jsonParsed",
+                            "filters": [{"memcmp": {"offset": offset, "bytes": address}}],
+                        },
+                    ],
+                )
             except Exception as exc:
                 logger.debug("Solana stake offset %d hata: %s", offset, exc)
                 continue

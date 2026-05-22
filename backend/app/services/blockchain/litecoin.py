@@ -12,6 +12,7 @@ Sonra P2WPKHAddrEncoder ile `hrp='ltc'` kullanılarak Litecoin Native SegWit
 
 Cache + single-flight pattern Bitcoin servisinden kopyalandı.
 """
+
 import asyncio
 import logging
 import time
@@ -139,7 +140,10 @@ class LitecoinService(BaseBlockchainIntegration):
         return P2WPKHAddrEncoder.EncodeKey(pub_bytes, hrp="ltc", net_ver=b"")
 
     async def _scan_chain(
-        self, node: Bip32Secp256k1, change: int, client: httpx.AsyncClient,
+        self,
+        node: Bip32Secp256k1,
+        change: int,
+        client: httpx.AsyncClient,
     ) -> tuple[Decimal, bool]:
         empty_streak = 0
         idx = 0

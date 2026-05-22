@@ -32,9 +32,56 @@ spec:
       labels:
         app: postgres
     spec:
+      # Audit 2026-05-21 #3: DB TLS — cert-manager Secret postgres-tls
+      # initContainer cert'leri emptyDir'a kopyalar + chmod 0600 + chown 70
+      # (postgres user UID Alpine). PostgreSQL daemon `ssl_key_file` 0600
+      # ister (insecure mode reject).
+      initContainers:
+        - name: cert-prep
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              cp /cert-src/tls.crt /cert-dst/server.crt
+              cp /cert-src/tls.key /cert-dst/server.key
+              chmod 0600 /cert-dst/server.key
+              chmod 0644 /cert-dst/server.crt
+              chown -R 70:70 /cert-dst
+              ls -la /cert-dst
+          # PodSecurity baseline yeterli (root entrypoint kabul). chown
+          # icin CAP_CHOWN tutulur (drop ALL'dan istisna); baseline allowed
+          # capabilities listesindedir.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN]
+          volumeMounts:
+            - name: cert-src
+              mountPath: /cert-src
+              readOnly: true
+            - name: cert-dst
+              mountPath: /cert-dst
       containers:
         - name: postgres
           image: postgres:16-alpine
+          # Postgres SSL ssl_cert_file/ssl_key_file args ile aktive edilir.
+          # `hba_file` default kalir — `host` ve `hostssl` her ikisini kabul
+          # eder (geriye uyumlu: mevcut backend ssl=disable connect EDEBILIR
+          # ama yeni baglantilarda ssl=prefer ile encrypted olur).
+          args:
+            - postgres
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/etc/postgres-tls/server.crt
+            - -c
+            - ssl_key_file=/etc/postgres-tls/server.key
+            - -c
+            - ssl_min_protocol_version=TLSv1.2
           ports:
             - containerPort: 5432
               name: postgres
@@ -53,6 +100,9 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: cert-dst
+              mountPath: /etc/postgres-tls
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -72,6 +122,14 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
+      volumes:
+        - name: cert-src
+          secret:
+            secretName: postgres-tls
+            defaultMode: 0444
+        - name: cert-dst
+          emptyDir:
+            sizeLimit: 4Mi
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

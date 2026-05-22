@@ -1,11 +1,13 @@
 import io
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_user
+
+from app.core.deps import get_current_user, get_db
 from app.core.masking import mask_address as _mask_address  # BACK-013: central helper
 from app.core.upload_validation import validate_excel_upload
 from app.models.integration import WalletAddress
@@ -16,8 +18,16 @@ from app.services.audit import AuditAction, log_audit
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
 VALID_CHAINS = {
-    "sonic", "avalanche_c", "avalanche_p", "ethereum", "bitcoin",
-    "solana", "cardano", "algorand", "polkadot", "litecoin",
+    "sonic",
+    "avalanche_c",
+    "avalanche_p",
+    "ethereum",
+    "bitcoin",
+    "solana",
+    "cardano",
+    "algorand",
+    "polkadot",
+    "litecoin",
 }
 
 
@@ -26,9 +36,7 @@ async def list_wallets(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True))
-    )
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
     return result.scalars().all()
 
 
@@ -60,7 +68,8 @@ async def add_wallet(
             detail="Bu cüzdan zaten kayıtlı",
         )
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.WALLET_ADD,
         user_id=current_user.id,
         resource=f"wallet:{wallet.id}",
@@ -90,7 +99,8 @@ async def remove_wallet(
     deleted_chain = wallet.chain
     await db.delete(wallet)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.WALLET_DELETE,
         user_id=current_user.id,
         resource=f"wallet:{wallet_id}",
@@ -117,11 +127,9 @@ async def export_wallets(
     izlenebilir.
     """
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True))
-    )
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
     rows = result.scalars().all()
 
     wb = Workbook()
@@ -160,7 +168,8 @@ async def export_wallets(
 
     # Audit log — tam xpub indirildi mi izle (forensic icin kritik)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.WALLET_EXPORT,
         user_id=current_user.id,
         resource="wallet:export.xlsx",
@@ -216,9 +225,7 @@ async def import_wallets(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli cüzdan bulunamadı")
 
     # Mevcut cüzdanları sil, yenilerini ekle
-    existing = await db.execute(
-        select(WalletAddress).where(WalletAddress.user_id == current_user.id)
-    )
+    existing = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id))
     for w in existing.scalars().all():
         await db.delete(w)
 

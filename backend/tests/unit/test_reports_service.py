@@ -7,11 +7,10 @@ Excel + PDF rapor uretici fonksiyonlarinin temel davranisi:
 - Bos pozisyon listesi crash etmez
 - Turkce karakter destegi DejaVu Sans font
 """
+
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
-
-import pytest
 
 from app.services.reports import (
     _fmt_tl,
@@ -20,7 +19,6 @@ from app.services.reports import (
     snapshot_to_pdf,
     snapshot_to_xlsx,
 )
-
 
 # ─── _fmt_tl helper ─────────────────────────────────────────────────────
 
@@ -45,15 +43,18 @@ def test_fmt_tl_negative():
 
 
 def _make_months(count: int = 12):
-    return [{
-        "month": i,
-        "income_actual": str(1000 * i),
-        "income_forecast": str(500),
-        "expense_actual": str(700 * i),
-        "expense_forecast": str(200),
-        "net": str(300 * i),
-        "is_past": i <= 5,
-    } for i in range(1, count + 1)]
+    return [
+        {
+            "month": i,
+            "income_actual": str(1000 * i),
+            "income_forecast": str(500),
+            "expense_actual": str(700 * i),
+            "expense_forecast": str(200),
+            "net": str(300 * i),
+            "is_past": i <= 5,
+        }
+        for i in range(1, count + 1)
+    ]
 
 
 def _totals():
@@ -74,9 +75,15 @@ def test_cash_flow_xlsx_returns_bytes():
 
 def test_cash_flow_xlsx_with_empty_months():
     """Bos liste exception atmamali — header ve YIL TOPLAMI satiri kalmali."""
-    data = cash_flow_to_xlsx(2026, [], {
-        "total_income": "0", "total_expense": "0", "total_net": "0",
-    })
+    data = cash_flow_to_xlsx(
+        2026,
+        [],
+        {
+            "total_income": "0",
+            "total_expense": "0",
+            "total_net": "0",
+        },
+    )
     assert isinstance(data, bytes)
     assert data[:2] == b"PK"
 
@@ -94,9 +101,15 @@ def test_cash_flow_pdf_returns_bytes():
 
 def test_cash_flow_pdf_with_empty_months():
     """Bos pozisyon listesi crash etmemeli."""
-    data = cash_flow_to_pdf(2026, [], {
-        "total_income": "0", "total_expense": "0", "total_net": "0",
-    })
+    data = cash_flow_to_pdf(
+        2026,
+        [],
+        {
+            "total_income": "0",
+            "total_expense": "0",
+            "total_net": "0",
+        },
+    )
     assert isinstance(data, bytes)
     assert data[:4] == b"%PDF"
 
@@ -114,18 +127,21 @@ def _make_snapshot():
 
 
 def _make_positions(count: int = 5):
-    return [SimpleNamespace(
-        asset_type="crypto" if i % 2 == 0 else "fund",
-        provider="binance" if i % 2 == 0 else "tefas",
-        symbol=f"SYM{i}",
-        name=f"Asset {i}",
-        liquid_quantity=Decimal(str(i * 10)),
-        staked_quantity=Decimal(0),
-        pending_rewards=Decimal(0),
-        unit_price_tl=Decimal(str(100 + i)),
-        total_value_tl=Decimal(str(i * 1000)),
-        weight_pct=Decimal(str(i * 10)),
-    ) for i in range(1, count + 1)]
+    return [
+        SimpleNamespace(
+            asset_type="crypto" if i % 2 == 0 else "fund",
+            provider="binance" if i % 2 == 0 else "tefas",
+            symbol=f"SYM{i}",
+            name=f"Asset {i}",
+            liquid_quantity=Decimal(str(i * 10)),
+            staked_quantity=Decimal(0),
+            pending_rewards=Decimal(0),
+            unit_price_tl=Decimal(str(100 + i)),
+            total_value_tl=Decimal(str(i * 1000)),
+            weight_pct=Decimal(str(i * 10)),
+        )
+        for i in range(1, count + 1)
+    ]
 
 
 def test_snapshot_xlsx_returns_bytes():

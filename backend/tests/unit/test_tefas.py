@@ -1,11 +1,14 @@
 """
 TEFAS servisi unit testleri — httpx çağrısı respx ile mock'lanır, DB gerekmez.
 """
+
+from decimal import Decimal
+
 import pytest
 import respx
-from decimal import Decimal
 from httpx import Response
-from app.services.tefas import TefasService, _EXPORT_URL
+
+from app.services.tefas import _EXPORT_URL, TefasService
 
 
 def _make_row(kod: str, portfoy: float, pay: float) -> dict:
@@ -23,10 +26,12 @@ SAMPLE_ROWS = [
 async def test_fetch_prices_returns_correct_values():
     with respx.mock:
         respx.post(_EXPORT_URL).mock(return_value=Response(200, json=SAMPLE_ROWS))
-        svc = TefasService([
-            {"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi Fon"},
-            {"code": "GO3", "quantity": 50.0, "name": "One Portföy Üçüncü Fon"},
-        ])
+        svc = TefasService(
+            [
+                {"code": "YAC", "quantity": 100.0, "name": "Yapı Kredi Fon"},
+                {"code": "GO3", "quantity": 50.0, "name": "One Portföy Üçüncü Fon"},
+            ]
+        )
         assets = await svc.fetch()
 
     assert len(assets) == 2

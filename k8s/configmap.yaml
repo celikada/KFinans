@@ -22,6 +22,18 @@ data:
   CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
   # FAZ C3: TrustedHostMiddleware whitelist
   ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
+  # Audit 2026-05-22 P0 #6: DB TLS require 4. deneme.
+  # Önceki 3 fail'in iki bağımsız hipotezi:
+  #   1) K3s CNI/CoreDNS fresh pod podCIDR timing — wait-for-dns
+  #      initContainer FQDN nslookup ile geliştirildi (commit a8cc247)
+  #   2) postgres-tls Secret'ta `ca.crt` key yok (cert-manager SelfSigned
+  #      issuer + standalone Certificate pattern bunu garantilemiyor) —
+  #      backend.yaml volume `items.key: tls.crt -> path: ca.crt` fix
+  #      (SelfSigned chain length=1, leaf = root) + optional: true
+  # Hâlâ fail ederse: kubectl logs --previous deploy/backend -c
+  # alembic-upgrade ile gerçek nedeni gör; sonraki epic asyncpg connection
+  # retry wrapper (tenacity 5sn*5).
+  DATABASE_SSL_MODE: "require"
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"

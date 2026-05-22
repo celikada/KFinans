@@ -12,7 +12,7 @@ Anthropic SDK'nin spec'i (advisor.py'de) zaten test edilmis (test_advisor.py
 TestAdvisorExceptionMapping) — burada finansal/blockchain servislerinin
 negative path'i kapsanir.
 """
-import asyncio
+
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +20,6 @@ import httpx
 import pytest
 
 from app.services.stocks import _fetch_one, fetch_stock_quotes
-
 
 # ─── Yahoo Finance (services/stocks.py) ─────────────────────────────────
 
@@ -77,15 +76,22 @@ async def test_yahoo_partial_failure_returns_dict_with_nones():
     """fetch_stock_quotes: bir ticker fail olursa diger ticker basarili.
     Dict birinde None birinde StockQuote olmali."""
     import time
+
     good_response = MagicMock()
     good_response.status_code = 200
     good_response.json = lambda: {
-        "chart": {"result": [{"meta": {
-            "regularMarketPrice": 100.0,
-            "regularMarketTime": int(time.time()) - 600,
-            "currency": "USD",
-            "marketState": "REGULAR",
-        }}]}
+        "chart": {
+            "result": [
+                {
+                    "meta": {
+                        "regularMarketPrice": 100.0,
+                        "regularMarketTime": int(time.time()) - 600,
+                        "currency": "USD",
+                        "marketState": "REGULAR",
+                    }
+                }
+            ]
+        }
     }
 
     bad_response = MagicMock()

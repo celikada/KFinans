@@ -3,11 +3,13 @@ import io
 import logging
 from decimal import Decimal
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_user
+
+from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.upload_validation import validate_excel_upload
 from app.models.stock import StockHolding as StockHoldingModel
@@ -33,6 +35,7 @@ def convert_to_tl(price: Decimal, currency: str, usd_tl: Decimal, gbp_usd: Decim
         return (usd * usd_tl).quantize(Decimal("0.0001"))
     return (price * usd_tl).quantize(Decimal("0.0001"))
 
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/stocks", tags=["stocks"])
 
@@ -42,9 +45,7 @@ async def get_stock_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
     return [
         StockHolding(
@@ -66,14 +67,16 @@ async def save_stock_holdings(
 ):
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in holdings:
-        db.add(StockHoldingModel(
-            user_id=current_user.id,
-            ticker=h.ticker.upper(),
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-            distributor=h.distributor,
-        ))
+        db.add(
+            StockHoldingModel(
+                user_id=current_user.id,
+                ticker=h.ticker.upper(),
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+                distributor=h.distributor,
+            )
+        )
     await db.commit()
     return holdings
 
@@ -115,23 +118,25 @@ async def stock_preview(
             avg_cost = cost_basis = gain_loss = None
             gain_loss_pct = None
 
-        out.append(StockPositionOut(
-            ticker=ticker,
-            name=h.name or q.name,
-            quantity=qty,
-            currency=q.currency,
-            unit_price_original=q.price,
-            unit_price_tl=price_tl,
-            total_value_tl=total_value_tl,
-            avg_cost_tl=avg_cost,
-            cost_basis_tl=cost_basis,
-            gain_loss_tl=gain_loss,
-            gain_loss_pct=gain_loss_pct,
-            distributor=h.distributor,
-            # FIN-004 (FAZ H): stale flag UI rozet icin
-            is_stale=q.is_stale,
-            market_state=q.market_state,
-        ))
+        out.append(
+            StockPositionOut(
+                ticker=ticker,
+                name=h.name or q.name,
+                quantity=qty,
+                currency=q.currency,
+                unit_price_original=q.price,
+                unit_price_tl=price_tl,
+                total_value_tl=total_value_tl,
+                avg_cost_tl=avg_cost,
+                cost_basis_tl=cost_basis,
+                gain_loss_tl=gain_loss,
+                gain_loss_pct=gain_loss_pct,
+                distributor=h.distributor,
+                # FIN-004 (FAZ H): stale flag UI rozet icin
+                is_stale=q.is_stale,
+                market_state=q.market_state,
+            )
+        )
     return out
 
 
@@ -141,11 +146,9 @@ async def export_stock_holdings(
     db: AsyncSession = Depends(get_db),
 ):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
     quotes: dict = {}
@@ -167,7 +170,16 @@ async def export_stock_holdings(
     wb = Workbook()
     ws = wb.active
     ws.title = "Hisse Senedi"
-    headers = ["Ticker", "Adet", "İsim", "Birim Fiyat (₺)", "Toplam Değer (₺)", "Ort. Maliyet (₺)", "Kâr/Zarar (₺)", "Kurum"]
+    headers = [
+        "Ticker",
+        "Adet",
+        "İsim",
+        "Birim Fiyat (₺)",
+        "Toplam Değer (₺)",
+        "Ort. Maliyet (₺)",
+        "Kâr/Zarar (₺)",
+        "Kurum",
+    ]
     header_fill = PatternFill("solid", fgColor="059669")
     header_font = Font(bold=True, color="FFFFFF")
     for col, h in enumerate(headers, 1):
@@ -269,13 +281,15 @@ async def import_stocks_mkk(
         member = str(sh.cell_value(r, 0)).strip() or None
         if member:
             member = member[:50]
-        parsed.append(StockHolding(
-            ticker=ticker,
-            quantity=qty,
-            name=name,
-            avg_cost_tl=price if price > 0 else None,
-            distributor=member,
-        ))
+        parsed.append(
+            StockHolding(
+                ticker=ticker,
+                quantity=qty,
+                name=name,
+                avg_cost_tl=price if price > 0 else None,
+                distributor=member,
+            )
+        )
 
     if not parsed:
         raise HTTPException(
@@ -285,19 +299,22 @@ async def import_stocks_mkk(
 
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(StockHoldingModel(
-            user_id=current_user.id,
-            ticker=h.ticker,
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-            distributor=h.distributor,
-        ))
+        db.add(
+            StockHoldingModel(
+                user_id=current_user.id,
+                ticker=h.ticker,
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+                distributor=h.distributor,
+            )
+        )
     await db.commit()
 
     # Snapshot tetikle ki Finansal Hedef + History güncel kalsın
     try:
         from app.services.snapshot import compute_and_save_snapshot
+
         await compute_and_save_snapshot(current_user.id, db)
     except Exception as exc:
         logger.warning("MKK Stocks import sonrası snapshot alınamadı: %s", exc)
@@ -347,23 +364,30 @@ async def import_stock_holdings(
         distributor: str | None = None
         if distributor_raw:
             distributor = str(distributor_raw).strip()[:50] or None
-        parsed.append(StockHolding(
-            ticker=ticker, quantity=qty, name=name,
-            avg_cost_tl=avg_cost_tl, distributor=distributor,
-        ))
+        parsed.append(
+            StockHolding(
+                ticker=ticker,
+                quantity=qty,
+                name=name,
+                avg_cost_tl=avg_cost_tl,
+                distributor=distributor,
+            )
+        )
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")
 
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(StockHoldingModel(
-            user_id=current_user.id,
-            ticker=h.ticker,
-            quantity=h.quantity,
-            name=h.name,
-            avg_cost_tl=h.avg_cost_tl,
-            distributor=h.distributor,
-        ))
+        db.add(
+            StockHoldingModel(
+                user_id=current_user.id,
+                ticker=h.ticker,
+                quantity=h.quantity,
+                name=h.name,
+                avg_cost_tl=h.avg_cost_tl,
+                distributor=h.distributor,
+            )
+        )
     await db.commit()
     return parsed

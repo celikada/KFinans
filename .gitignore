@@ -16,6 +16,14 @@ frontend/.next/
 frontend/node_modules/
 frontend/.env*.local
 
+# Windows reserved device names — Git Bash > NUL redirect bazen dosya
+# yaratiyor (NUL Windows'ta block edilmesi gereken ad ama Git Bash bypass eder).
+# Ornek vaka: `next build > nul` -> frontend/nul ortaya cikar.
+nul
+NUL
+**/nul
+**/NUL
+
 # Genel
 .DS_Store
 *.log

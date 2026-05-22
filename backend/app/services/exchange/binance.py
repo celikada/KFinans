@@ -8,20 +8,23 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.services.base import BaseExchangeIntegration, AssetData
+from app.services.base import AssetData, BaseExchangeIntegration
 
 logger = logging.getLogger(__name__)
 
 _BASE = "https://api.binance.com"
 _STABLECOIN_USD: dict[str, Decimal] = {
-    "USDT": Decimal("1"), "USDC": Decimal("1"),
-    "BUSD": Decimal("1"), "FDUSD": Decimal("1"), "DAI": Decimal("1"),
-    "TUSD": Decimal("1"), "TRY": Decimal("0"),
+    "USDT": Decimal("1"),
+    "USDC": Decimal("1"),
+    "BUSD": Decimal("1"),
+    "FDUSD": Decimal("1"),
+    "DAI": Decimal("1"),
+    "TUSD": Decimal("1"),
+    "TRY": Decimal("0"),
 }
 
 
 class BinanceService(BaseExchangeIntegration):
-
     def __init__(self, api_key: str, api_secret: str):
         super().__init__(api_key, api_secret)
         self._time_offset_ms: int = 0
@@ -152,16 +155,18 @@ class BinanceService(BaseExchangeIntegration):
             # Fiyatı bilinmeyen token'ları atla (dust veya Binance iç token'ları)
             if unit_price == 0 and symbol not in _STABLECOIN_USD:
                 continue
-            assets.append(AssetData(
-                symbol=symbol,
-                name=symbol,
-                provider="binance",
-                asset_type="crypto",
-                source_type="exchange",
-                liquid_quantity=liquid,
-                staked_quantity=staked,
-                unit_price_usd=unit_price,
-            ))
+            assets.append(
+                AssetData(
+                    symbol=symbol,
+                    name=symbol,
+                    provider="binance",
+                    asset_type="crypto",
+                    source_type="exchange",
+                    liquid_quantity=liquid,
+                    staked_quantity=staked,
+                    unit_price_usd=unit_price,
+                )
+            )
         return assets
 
     async def health_check(self) -> bool:

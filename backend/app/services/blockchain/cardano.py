@@ -11,6 +11,7 @@ Public Koios API anahtar gerektirmez. Endpoint:
 - POST /api/v1/account_info {"_stake_addresses": ["stake1..."]}
   → { total_balance, rewards_available, ... }
 """
+
 import logging
 from decimal import Decimal
 

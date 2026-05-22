@@ -8,13 +8,12 @@ Bu test'ler ağırlıklı olarak commodity (statik data) ve auth/validation
 katmanını doğrular. Dış servis bağımlı kaynaklar (binance/coingecko/tefas)
 mock'lanmıştır.
 """
+
 import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
-
-
+from tests.conftest import make_user
 
 # ─── Auth + validation ─────────────────────────────────────────────────────
 
@@ -52,9 +51,7 @@ async def test_asset_catalog_q_max_length(client: AsyncClient):
 async def test_asset_catalog_commodity_xau_search(client: AsyncClient):
     """source=commodity + q=XAU → altın bulunur."""
     headers = await make_user(client, "ac_xau@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=XAU&source=commodity", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=XAU&source=commodity", headers=headers)
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) >= 1
@@ -70,9 +67,7 @@ async def test_asset_catalog_commodity_xau_search(client: AsyncClient):
 async def test_asset_catalog_commodity_silver_tr_search(client: AsyncClient):
     """Türkçe arama: 'Gümüş' → XAG bulunur (case-insensitive)."""
     headers = await make_user(client, "ac_silver@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=gümüş&source=commodity", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=gümüş&source=commodity", headers=headers)
     assert resp.status_code == 200
     items = resp.json()
     xag = next((it for it in items if it["id"] == "XAG"), None)
@@ -84,9 +79,7 @@ async def test_asset_catalog_commodity_silver_tr_search(client: AsyncClient):
 async def test_asset_catalog_commodity_no_match(client: AsyncClient):
     """source=commodity + q='hiç_eşleşmeyen' → boş liste."""
     headers = await make_user(client, "ac_nomatch@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=zzznonexistentzzz&source=commodity", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=zzznonexistentzzz&source=commodity", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -96,9 +89,7 @@ async def test_asset_catalog_commodity_no_match(client: AsyncClient):
 async def test_asset_catalog_commodity_empty_q_returns_all(client: AsyncClient):
     """source=commodity + q='' → 2 commodity (XAU + XAG)."""
     headers = await make_user(client, "ac_all_commodity@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=&source=commodity", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=&source=commodity", headers=headers)
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) == 2
@@ -114,9 +105,7 @@ async def test_asset_catalog_commodity_empty_q_returns_all(client: AsyncClient):
 async def test_asset_catalog_limit_one(client: AsyncClient):
     """limit=1 → en fazla 1 sonuç."""
     headers = await make_user(client, "ac_limit_1@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?source=commodity&limit=1", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?source=commodity&limit=1", headers=headers)
     assert resp.status_code == 200
     assert len(resp.json()) <= 1
 
@@ -130,17 +119,18 @@ async def test_asset_catalog_binance_filter(client: AsyncClient):
     """source=binance — Binance API mock'lanır, BTCUSDT ve ETHUSDT döner."""
     # Binance ticker/price endpoint'i mock'la
     respx.get("https://api.binance.com/api/v3/ticker/price").mock(
-        return_value=Response(200, json=[
-            {"symbol": "BTCUSDT", "price": "50000"},
-            {"symbol": "ETHUSDT", "price": "3000"},
-            {"symbol": "BNBUSDT", "price": "400"},
-            {"symbol": "BTCBUSD", "price": "50000"},  # USDT pariteli değil
-        ])
+        return_value=Response(
+            200,
+            json=[
+                {"symbol": "BTCUSDT", "price": "50000"},
+                {"symbol": "ETHUSDT", "price": "3000"},
+                {"symbol": "BNBUSDT", "price": "400"},
+                {"symbol": "BTCBUSD", "price": "50000"},  # USDT pariteli değil
+            ],
+        )
     )
     headers = await make_user(client, "ac_binance@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=BTC&source=binance", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=BTC&source=binance", headers=headers)
     assert resp.status_code == 200
     items = resp.json()
     assert len(items) >= 1
@@ -154,9 +144,7 @@ async def test_asset_catalog_binance_filter(client: AsyncClient):
 async def test_asset_catalog_invalid_source_returns_empty(client: AsyncClient):
     """source=geçersiz_değer → boş liste (validation hatası değil, silent)."""
     headers = await make_user(client, "ac_bad_source@example.com")
-    resp = await client.get(
-        "/api/v1/asset-catalog?q=BTC&source=nonexistent", headers=headers
-    )
+    resp = await client.get("/api/v1/asset-catalog?q=BTC&source=nonexistent", headers=headers)
     assert resp.status_code == 200
     # Geçersiz source: hiçbir _search_* çalışmaz, [] döner
     assert resp.json() == []

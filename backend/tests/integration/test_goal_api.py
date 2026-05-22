@@ -1,9 +1,9 @@
 """Finansal hedef GET/PUT endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 @pytest.mark.asyncio

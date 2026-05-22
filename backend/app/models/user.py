@@ -2,9 +2,11 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
+
 from sqlalchemy import Boolean, Integer, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+
 from app.models.base import Base
 
 
@@ -46,6 +48,16 @@ class User(Base):
     # per-account counter aynı email'e farklı IP'lerden gelen brute-force'i durdurur.
     failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     locked_until: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # MFA — TOTP (RFC 6238, audit #5 MFA).
+    # `totp_secret` Fernet ciphertext (encrypt_secret/decrypt_secret); plaintext base32 ~32 char,
+    # Fernet ciphertext ~100+ char — Text alani uygundur (VARCHAR(32) yetersiz olurdu).
+    # `totp_enabled` setup tamamlanmadan True yapilmaz; setup yapilip enable cagrilana
+    # kadar `totp_secret` dolu olabilir ama `totp_enabled=False` (yarim setup state).
+    # `totp_recovery_codes` JSON list[str] olarak bcrypt-hashed 10 kod tutar — kayip
+    # telefon recovery; her kod tek kullanimlik, kullanildigi anda listeden cikarilir.
+    totp_secret: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    totp_recovery_codes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     goal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")

@@ -4,23 +4,49 @@ namespace: kfinans
 resources:
   - namespace.yaml
   - configmap.yaml
-  # secrets.yaml — gitignore'da; uygulama oncesi olusturun (bkz. README)
+  # secrets.yaml — gitignore'da; ilk kurulumda kullanilir (sonra sealed-secrets.yaml
+  # ile decommissioned). DR'da SealedSecret yetersizse referans icin saklanir.
+  # Audit 2026-05-21 #3: DB TLS — cert-manager selfsigned-issuer + Certificate
+  # postgres-tls Secret olusturur (postgres.yaml mount eder)
+  - postgres-cert.yaml
   - postgres.yaml
   - backend.yaml
   - frontend.yaml
-  - middleware-traefik.yaml
+  # Traefik Middleware'ler (redirect-https + body-size-limit) ingress.yaml icinde
+  # tanimli (DEVOPS-018'den itibaren). Ayri middleware-traefik.yaml duplicate idi,
+  # 2026-05 lokal/Oracle align surecinde kaldirildi.
   - ingress.yaml
   - backup-cronjob.yaml
+  # Audit 2026-05-21 #2: SealedSecrets (bitnami) — GitOps-safe encrypted secret.
+  # Controller `kube-system/sealed-secrets-controller` private key ile decrypt
+  # eder. Lokal repo'ya commit edilebilir (encryptedData asymmetric encrypted).
+  # NOT: etcd at-rest encryption ayri epic (K3s `--secrets-encryption` flag).
+  - sealed-secrets.yaml
+  # Audit 2026-05-21 #1: NetworkPolicy iterative apply (b44f7e1) — 2. denemede
+  # kube-router DNS timing bug ile kirildi. 2026-05-22 fix: backend.yaml'a
+  # `wait-for-dns` initContainer eklendi (nslookup postgres retry 10*2sn),
+  # NetworkPolicy enforcement aktif olana kadar bekler. Yeniden aktif.
+  - networkpolicies/02-backend-ingress.yaml
+  - networkpolicies/04-frontend-ingress.yaml
+  - networkpolicies/05-postgres-ingress.yaml
+  - networkpolicies/03-backend-egress.yaml
+  - networkpolicies/01-allow-dns.yaml
+  - networkpolicies/06-backup-egress.yaml
+  - networkpolicies/00-default-deny.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: kfinans
   app.kubernetes.io/managed-by: kustomize
 
 # DEVOPS-001 (FAZ H): Image tag transformer
-# release.yml'da: `kustomize edit set image kfinans-backend=ghcr.io/celikada/kfinans-backend:$TAG`
-# Manifest'lerdeki :v0.0.0 placeholder'lari bu transformer ile prod tag'e cevrilir
+# GitLab CI .gitlab-ci.yml `deploy-production` job runtime'da `kubectl set image`
+# ile tag override eder; bu transformer manuel `kubectl apply -k k8s/` icindir.
+# Manifest'lerdeki :v0.0.0 placeholder'lari prod tag'e cevrilir.
+#
+# 2026-05: GitHub flag #4360519 (SonarCloud OAuth bloklu) nedeniyle GitLab CI
+# primary CI/CD oldu; image registry GHCR -> Docker Hub'a tasindi (celikada/...).
 images:
-  - name: ghcr.io/celikada/kfinans-backend
+  - name: docker.io/celikada/kfinans-backend
     newTag: v0.0.0
-  - name: ghcr.io/celikada/kfinans-frontend
+  - name: docker.io/celikada/kfinans-frontend
     newTag: v0.0.0

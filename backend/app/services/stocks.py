@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import time
-from decimal import Decimal
 from dataclasses import dataclass
+from decimal import Decimal
 
 import httpx
 
@@ -64,7 +64,9 @@ async def _fetch_one(client: httpx.AsyncClient, ticker: str) -> StockQuote | Non
                 is_stale = True
                 logger.info(
                     "Yahoo stale price: ticker=%s, age=%dh, marketState=%s",
-                    ticker, age // 3600, meta.get("marketState"),
+                    ticker,
+                    age // 3600,
+                    meta.get("marketState"),
                 )
 
         return StockQuote(

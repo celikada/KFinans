@@ -11,6 +11,7 @@ state query (System.Account) yapar, anahtar gerektirmez.
 Cache + single-flight (Bitcoin/Solana pattern'i) — substrate WS bağlantıları
 yavaş kurulur, dashboard yenilemeleri tek seferlik çalışsın.
 """
+
 import asyncio
 import logging
 import time

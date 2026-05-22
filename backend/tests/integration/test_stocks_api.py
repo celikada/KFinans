@@ -5,6 +5,7 @@ import disardan dosya gerektirdigi icin (xlrd 1.2.0) bu test dosyasinda
 kapsam disi; respx mock'siz gercek Yahoo cagrisi yapan preview endpoint'i
 de network bagli oldugu icin lite tutuluyor.
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -96,7 +97,12 @@ async def test_put_holdings_with_distributor(client: AsyncClient):
         "/api/v1/portfolio/stocks/holdings",
         json=[
             {"ticker": "AAPL", "quantity": 10, "name": "Apple", "distributor": "Is Yatirim"},
-            {"ticker": "AAPL", "quantity": 5, "name": "Apple", "distributor": "Garanti BBVA Yatirim"},
+            {
+                "ticker": "AAPL",
+                "quantity": 5,
+                "name": "Apple",
+                "distributor": "Garanti BBVA Yatirim",
+            },
         ],
         headers=headers,
     )

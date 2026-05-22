@@ -3,14 +3,14 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import update
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from app.main import app
+
 from app.core.deps import get_db
 from app.core.limiter import limiter
-from app.models.base import Base
+from app.main import app
 from app.models.user import User
 
 TEST_DB_URL = os.getenv(
@@ -22,10 +22,7 @@ TEST_DB_URL = os.getenv(
 # integration/conftest.py icindeki create_tables fixture'i drop_all yapiyor;
 # yanlis bir DATABASE_URL ile testler ana DB'yi siler.
 if TEST_DB_URL.endswith("/kfinans") or TEST_DB_URL.endswith("/kfinans/"):
-    raise RuntimeError(
-        f"Testler 'kfinans' veritabanina baglanamaz — bu DB drop_all ile silinir. "
-        f"Mutlaka 'kfinans_test' kullanin. Mevcut: {TEST_DB_URL}"
-    )
+    raise RuntimeError(f"Testler 'kfinans' veritabanina baglanamaz — bu DB drop_all ile silinir. Mutlaka 'kfinans_test' kullanin. Mevcut: {TEST_DB_URL}")
 
 # Test ortaminda slowapi rate limiter devre disi — testler arasi 429 patlamalarini onler
 limiter.enabled = False
@@ -47,6 +44,7 @@ async def db():
 @pytest_asyncio.fixture
 async def client():
     """Her istek icin ayri session uretir — eszamanli istek cakismasini onler."""
+
     async def _override():
         async with TestSession() as session:
             yield session
@@ -64,7 +62,44 @@ def _reset_tcmb_cache():
     oncesi cache sifirla — testler izole.
     """
     from app.services import aggregator
+
     aggregator._tcmb_cache = None
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _disable_password_policy_by_default(request, monkeypatch):
+    """SEC (audit #5): zxcvbn + HIBP policy testleri kirmasin diye varsayilan
+    olarak bypass. Mevcut 50+ test "guclu-sifre-123" gibi sifrelerle calisiyor;
+    bunlar zxcvbn'i gecebilir ama HIBP icin network call yapilir.
+
+    Policy'yi test eden testler `password_policy_enabled` marker'i kullanir:
+
+        @pytest.mark.password_policy_enabled
+        async def test_weak_password_rejected(client):
+            ...
+
+    Bypass: register/change-password/reset-password endpoint'lerinin import
+    ettigi sembolleri monkey-patch ediyoruz.
+    """
+    if request.node.get_closest_marker("password_policy_enabled"):
+        # Gercek policy aktif — test kendisi respx ile HIBP mock'lar
+        # (hibp_check_enabled'a dokunma; aksi halde endpoint early-return 0
+        # ile mock'lar bypass edilir).
+        yield
+        return
+
+    async def _hibp_noop(*_args, **_kwargs) -> int:
+        return 0
+
+    def _strength_noop(*_args, **_kwargs) -> tuple[bool, str]:
+        return True, ""
+
+    # auth.py ve user.py modullerinin import ettikleri sembolleri patch et
+    monkeypatch.setattr("app.api.v1.auth.check_password_strength", _strength_noop)
+    monkeypatch.setattr("app.api.v1.auth.check_hibp_pwned", _hibp_noop)
+    monkeypatch.setattr("app.api.v1.user.check_password_strength", _strength_noop)
+    monkeypatch.setattr("app.api.v1.user.check_hibp_pwned", _hibp_noop)
     yield
 
 
@@ -76,7 +111,9 @@ async def verify_user_email(email: str) -> None:
     """
     async with TestSession() as session:
         await session.execute(
-            update(User).where(User.email == email).values(
+            update(User)
+            .where(User.email == email)
+            .values(
                 email_verified=True,
                 verify_token=None,
                 verify_token_expires_at=None,

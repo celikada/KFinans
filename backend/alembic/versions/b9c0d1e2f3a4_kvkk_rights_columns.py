@@ -9,9 +9,10 @@ users tablosuna 5 yeni kolon:
   - email_change_token: dogrulama token'i (URL-safe, 1 saat TTL)
   - email_change_expires_at: token TTL
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b9c0d1e2f3a4"

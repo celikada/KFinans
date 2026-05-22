@@ -62,11 +62,7 @@ async def list_planned_expenses(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(PlannedExpense)
-        .where(PlannedExpense.user_id == current_user.id)
-        .order_by(PlannedExpense.start_date)
-    )
+    result = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == current_user.id).order_by(PlannedExpense.start_date))
     return result.scalars().all()
 
 
@@ -120,8 +116,17 @@ async def update_planned_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
 
     for field in (
-        "title", "amount", "is_estimated", "category", "recurrence",
-        "months", "day_of_month", "start_date", "end_date", "remaining_count", "notes",
+        "title",
+        "amount",
+        "is_estimated",
+        "category",
+        "recurrence",
+        "months",
+        "day_of_month",
+        "start_date",
+        "end_date",
+        "remaining_count",
+        "notes",
         "is_paid",
     ):
         val = getattr(payload, field)
@@ -167,15 +172,10 @@ async def get_forecast(
     forecast'a dahil edilmez (kart borcu zaten sayilmis). Henuz odenmemis
     kart planlari (is_paid=false) dahil — gelecek bir nakit cikisi.
     """
-    result = await db.execute(
-        select(PlannedExpense).where(PlannedExpense.user_id == current_user.id)
-    )
+    result = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == current_user.id))
     all_planned = result.scalars().all()
     # Filtre: kart + odendi olanlari at
-    eligible = [
-        pe for pe in all_planned
-        if pe.credit_card_id is None or not pe.is_paid
-    ]
+    eligible = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
 
     months_out: list[ForecastMonth] = []
     year_total = Decimal("0")

@@ -9,9 +9,10 @@ COMP-006'daki overseas_consent_at genel yurt disi aktarima bakar; bu kolonlar
 **Anthropic API**'ye ozel — kullanici diger aktarimlari onayladigi halde
 Anthropic'i reddedebilir.
 """
-from alembic import op
+
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "c0d1e2f3a4b5"

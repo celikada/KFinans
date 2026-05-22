@@ -7,6 +7,7 @@ bu endpoint'i çağırır, autocomplete sonuç döner. Kaynaklar:
 - coingecko: tüm coinler (~17K, 24 saat cache — aggregator zaten tutar)
 - tefas: aktif fonlar (~600, 1 saat cache)
 """
+
 import logging
 import time
 from typing import Annotated
@@ -31,8 +32,8 @@ _TEFAS_HEADERS = {
 }
 
 # Cache (TTL'ler)
-_BINANCE_LIST_TTL_SEC = 300        # 5 dk
-_TEFAS_LIST_TTL_SEC = 3600         # 1 saat
+_BINANCE_LIST_TTL_SEC = 300  # 5 dk
+_TEFAS_LIST_TTL_SEC = 3600  # 1 saat
 _binance_cache: tuple[float, list[str]] | None = None
 _tefas_cache: tuple[float, list[dict]] | None = None
 
@@ -58,11 +59,13 @@ async def _get_binance_symbols() -> list[str]:
         logger.warning("Binance ticker listesi çekilemedi: %s", e)
         return _binance_cache[1] if _binance_cache else []
 
-    bases = sorted({
-        t["symbol"][:-4]  # 'BTCUSDT' -> 'BTC'
-        for t in tickers
-        if t.get("symbol", "").endswith("USDT") and len(t["symbol"]) > 4
-    })
+    bases = sorted(
+        {
+            t["symbol"][:-4]  # 'BTCUSDT' -> 'BTC'
+            for t in tickers
+            if t.get("symbol", "").endswith("USDT") and len(t["symbol"]) > 4
+        }
+    )
     _binance_cache = (now, bases)
     return bases
 
@@ -89,11 +92,7 @@ async def _get_tefas_funds() -> list[dict]:
         logger.warning("TEFAS fon listesi çekilemedi: %s", e)
         return _tefas_cache[1] if _tefas_cache else []
 
-    funds = [
-        {"code": row.get("fonKodu", "").strip(), "name": (row.get("fonUnvan") or "").strip()}
-        for row in data
-        if row.get("fonKodu")
-    ]
+    funds = [{"code": row.get("fonKodu", "").strip(), "name": (row.get("fonUnvan") or "").strip()} for row in data if row.get("fonKodu")]
     _tefas_cache = (now, funds)
     return funds
 
@@ -133,6 +132,7 @@ async def _search_coingecko(q: str, remaining: int) -> list[AssetCatalogItem]:
     if remaining <= 0:
         return []
     from app.services.aggregator import _get_coingecko_id_map
+
     id_map = await _get_coingecko_id_map()
     out: list[AssetCatalogItem] = []
     for sym, cg_id in id_map.items():
@@ -152,12 +152,14 @@ async def _search_tefas(q: str, remaining: int) -> list[AssetCatalogItem]:
         if len(out) >= remaining:
             break
         if _matches(q, f.get("code"), f.get("name")):
-            out.append(AssetCatalogItem(
-                source="tefas",
-                id=f["code"],
-                symbol=f["code"],
-                name=f.get("name") or f["code"],
-            ))
+            out.append(
+                AssetCatalogItem(
+                    source="tefas",
+                    id=f["code"],
+                    symbol=f["code"],
+                    name=f.get("name") or f["code"],
+                )
+            )
     return out
 
 
@@ -175,9 +177,9 @@ async def search_catalog(
 
     handlers = {
         "commodity": _search_commodity,  # sync
-        "binance":   _search_binance,    # async
+        "binance": _search_binance,  # async
         "coingecko": _search_coingecko,  # async
-        "tefas":     _search_tefas,      # async
+        "tefas": _search_tefas,  # async
     }
     for src in sources:
         handler = handlers.get(src)

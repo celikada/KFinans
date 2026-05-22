@@ -7,6 +7,7 @@ Endpoint'ler:
   PUT    /user/password — şifre değiştir
   DELETE /user/me       — soft-delete (deleted_at = now)
 """
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -150,9 +151,7 @@ async def test_delete_me_sets_deleted_at(client: AsyncClient):
 
     # DB'de deleted_at set olmuş olmalı
     async with TestSession() as db:
-        u = (await db.execute(
-            select(User).where(User.email == "user_delete@example.com")
-        )).scalar_one()
+        u = (await db.execute(select(User).where(User.email == "user_delete@example.com"))).scalar_one()
         assert u.deleted_at is not None
 
 

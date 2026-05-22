@@ -1,8 +1,10 @@
 import asyncio
 import logging
-import httpx
 from decimal import Decimal
-from app.services.base import BaseIntegration, AssetData
+
+import httpx
+
+from app.services.base import AssetData, BaseIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +15,16 @@ _EARN_URL = f"{_BASE}/v1/user-earn"
 _TICKERS_URL = f"{_BASE}/v1/tickers"
 _CLIENT_ID = "coretech9"
 _SCOPE = "openid profile email offline_access"
-_EARN_INCLUDE = {"Earn", "Redemption"}  # Completed = zaten spot'a aktarılmış, çift sayılmaması için hariç
-_STABLECOIN_USD = {"USDT": Decimal("1"), "USDC": Decimal("1"), "BUSD": Decimal("1"), "DAI": Decimal("1")}
+_EARN_INCLUDE = {
+    "Earn",
+    "Redemption",
+}  # Completed = zaten spot'a aktarılmış, çift sayılmaması için hariç
+_STABLECOIN_USD = {
+    "USDT": Decimal("1"),
+    "USDC": Decimal("1"),
+    "BUSD": Decimal("1"),
+    "DAI": Decimal("1"),
+}
 
 
 class ICrypexService(BaseIntegration):
@@ -113,5 +123,3 @@ class ICrypexService(BaseIntegration):
                 return r.status_code == 200
         except Exception:
             return False
-
-

@@ -9,14 +9,14 @@ Endpoint'ler:
 
 USD/EUR/GBP holding'leri için _amount_to_tl TCMB API çağırır → respx ile mock.
 """
+
 from decimal import Decimal
 
 import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _mock_tcmb(usd_to_tl: float = 40.0, eur_to_tl: float = 44.0, gbp_to_tl: float = 50.0):
@@ -53,9 +53,7 @@ def _mock_tcmb(usd_to_tl: float = 40.0, eur_to_tl: float = 44.0, gbp_to_tl: floa
     <ForexSelling>{gbp_to_tl + 0.01}</ForexSelling>
   </Currency>
 </Tarih_Date>"""
-    respx.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
-        return_value=Response(200, content=xml, headers={"Content-Type": "application/xml"})
-    )
+    respx.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(return_value=Response(200, content=xml, headers={"Content-Type": "application/xml"}))
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────

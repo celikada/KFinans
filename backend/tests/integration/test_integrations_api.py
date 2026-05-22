@@ -3,10 +3,11 @@ Integration endpoint'leri — exchange API key encrypt/decrypt akışı.
 
 Kritik: API key'ler asla plaintext dönmemeli; DB'de Fernet ile şifreli.
 """
+
 import pytest
 from httpx import AsyncClient
-from tests.conftest import make_user
 
+from tests.conftest import make_user
 
 
 @pytest.mark.asyncio
@@ -35,7 +36,11 @@ async def test_list_integrations_does_not_leak_keys(client: AsyncClient):
     headers = await make_user(client, "intg_list@example.com")
     await client.post(
         "/api/v1/integrations",
-        json={"provider": "binance", "api_key": "LEAK-CHECK-KEY", "api_secret": "LEAK-CHECK-SECRET"},
+        json={
+            "provider": "binance",
+            "api_key": "LEAK-CHECK-KEY",
+            "api_secret": "LEAK-CHECK-SECRET",
+        },
         headers=headers,
     )
     resp = await client.get("/api/v1/integrations", headers=headers)

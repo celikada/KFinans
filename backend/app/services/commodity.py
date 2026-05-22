@@ -1,4 +1,5 @@
 """Kıymetli maden (altın/gümüş) fiyat çekme ve değer hesaplama servisi."""
+
 import asyncio
 import logging
 import time
@@ -44,9 +45,7 @@ BIGA_GRAM_WEIGHTS: dict[str, Decimal] = {
     "G07": Decimal("1000"),
 }
 
-BIGA_METAL: dict[str, str] = {
-    k: "gold" for k in ("A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08")
-}
+BIGA_METAL: dict[str, str] = {k: "gold" for k in ("A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08")}
 BIGA_METAL.update({k: "silver" for k in ("G01", "G02", "G03", "G04", "G05", "G06", "G07")})
 
 # 5 dakika in-memory cache
@@ -82,11 +81,7 @@ async def _fetch_tcmb_usd_try() -> Decimal:
 
 
 _BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/126.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
     "Accept": "application/json,text/plain,*/*",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://finance.yahoo.com/",
@@ -152,16 +147,8 @@ async def fetch_metal_prices() -> dict[str, Decimal]:
             _try_yahoo_symbols(("XAG=X", "SI=F"), "Gümüş"),
         )
 
-        gold_try_per_gram = (
-            (xau_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001"))
-            if xau_usd > 0
-            else Decimal("0")
-        )
-        silver_try_per_gram = (
-            (xag_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001"))
-            if xag_usd > 0
-            else Decimal("0")
-        )
+        gold_try_per_gram = (xau_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001")) if xau_usd > 0 else Decimal("0")
+        silver_try_per_gram = (xag_usd / TROY_OZ_TO_GRAM * usd_try).quantize(Decimal("0.0001")) if xag_usd > 0 else Decimal("0")
 
         prices = {"gold": gold_try_per_gram, "silver": silver_try_per_gram}
         # Yahoo başarısız olduğunda cache TTL'ini kısalt — 30 sn'de bir tekrar dene

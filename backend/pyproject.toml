@@ -14,18 +14,29 @@ dependencies = [
     "asyncpg",
     "pydantic-settings>=2.0",
     "pydantic[email]",
-    "python-jose[cryptography]",
-    "bcrypt",
-    "cryptography",
+    # SEC-011 (FAZ H): python-jose CVE-2024-33663 / CVE-2024-33664 (algorithm
+    # confusion + DoS). 3.3.0+ ile patchlendi; lower-bound zorunlu.
+    "python-jose[cryptography]>=3.3.0",
+    # bcrypt 4.x serisi: modern bytestring API (3.x ile breaking change).
+    # security.py'da hash_password/verify_password 4.x API kullaniyor.
+    "bcrypt>=4.0",
+    # cryptography 43.x LTS: Fernet (MultiFernet) + AES-GCM primitif'leri.
+    # OpenSSL 3.x baglama; eski 41.x altinda CVE-2024-0727 (BIO_new_NDEF).
+    "cryptography>=43.0",
     "ccxt",
     "web3>=6.0",
-    "httpx",
+    # httpx 0.27 — HTTP/2 ConnectError handling + AsyncClient lifecycle bug fix.
+    "httpx>=0.27",
     "beautifulsoup4",
     "apscheduler>=3.10",
     "anthropic>=0.40",
-    "python-multipart",
+    # python-multipart CVE-2024-53981 (DoS — boundary parser): 0.0.18+ patched.
+    "python-multipart>=0.0.18",
     "openpyxl>=3.1",
     "reportlab>=4.0",
+    # NOTE: xlrd 1.2.0 BILEREK pinli. 2.0+ surumler eski .xls (BIFF) binary
+    # destegini kaldirdi; MKK e-Yatirimci .xls export'lari icin alternatif yok.
+    # SEC-009 magic-byte gate (validate_excel_upload) ile saldiri yuzeyi azaltildi.
     "xlrd==1.2.0",
     "bip-utils>=2.9",
     "base58>=2.1",
@@ -44,6 +55,11 @@ dependencies = [
     "opentelemetry-instrumentation-asyncpg>=0.48b0",
     "opentelemetry-instrumentation-httpx>=0.48b0",
     "opentelemetry-exporter-otlp-proto-http>=1.27",
+    # SEC (audit #5): zxcvbn password strength scoring (offline; no network)
+    "zxcvbn>=4.4.28",
+    # SEC (audit #5 MFA): TOTP (RFC 6238) + QR PNG (kullaniciya servis)
+    "pyotp>=2.9",
+    "qrcode[pil]>=7.4",
 ]
 
 [project.optional-dependencies]
@@ -61,11 +77,18 @@ where = ["."]
 include = ["app*"]
 
 [tool.ruff]
-line-length = 100
+# 120: modern Python pratiği esnek limit. Bazi uzun string concat
+# (email.py HTML template, advisor.py SQL/system prompt, services
+# multi-arg call'lar) 160'a kadar cikabilir.
+line-length = 160
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+# E402: alembic env.py + bazi router'larda lazy import kasitli pattern
+# F821: SQLAlchemy relationship string type hint'leri ileri-reference;
+#       runtime resolve eder (Mapped["User"], Mapped["PortfolioSnapshot"])
+ignore = ["E402", "F821"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -82,6 +105,7 @@ addopts = [
 markers = [
     "slow: yavas testler (selectivelye atlanabilir)",
     "external: gercek dis servis cagrisi yapan testler (CI'da atlanir)",
+    "password_policy_enabled: zxcvbn/HIBP policy bypass'ini devre disi birak (audit #5)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:websockets.*",

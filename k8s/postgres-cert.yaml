@@ -1,0 +1,43 @@
+---
+# Audit 2026-05-21 #3 — Postgres in-cluster TLS
+#
+# cert-manager `selfsigned-issuer` ile postgres servisi icin self-signed
+# cert uretilir. Backend asyncpg pool `ssl=prefer` ile baglanir (postgres
+# pg_hba.conf hem `host` hem `hostssl` izinli — geriye uyumlu).
+#
+# Cluster-ici defence-in-depth: node compromise -> in-flight DB data
+# leak engelli. Let's Encrypt prod issuer harici (kfinans.app), bu issuer
+# sadece cluster-ici internal hizmetler icin.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-cluster-issuer
+spec:
+  selfSigned: {}
+---
+# Postgres servisi icin TLS sertifikasi (90 gun, otomatik yenileme).
+# cert-manager Secret kfinans/postgres-tls'i yaratir: tls.crt + tls.key.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-tls
+  namespace: kfinans
+spec:
+  secretName: postgres-tls
+  duration: 2160h    # 90 gun
+  renewBefore: 360h  # 15 gun kalinca yenile
+  subject:
+    organizations:
+      - KFinans Cluster Internal
+  commonName: postgres.kfinans.svc.cluster.local
+  dnsNames:
+    - postgres
+    - postgres.kfinans
+    - postgres.kfinans.svc
+    - postgres.kfinans.svc.cluster.local
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: selfsigned-cluster-issuer
+    kind: ClusterIssuer

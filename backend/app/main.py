@@ -1,15 +1,25 @@
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from decimal import ROUND_HALF_UP, getcontext
+
 from fastapi import FastAPI, Request
+
+# Audit 2026-05-22 P0 #8 (finance): Decimal rounding mode global olarak
+# ROUND_HALF_UP'e set edilir. Python default ROUND_HALF_EVEN (banker's rounding)
+# muhasebede/vergi raporlamada beklenmeyen sonuclar verir (0.005 -> 0.00 yerine
+# 0.01). Bu set tum Decimal islemlerini etkiler — TL/USD conversion, kar/zarar,
+# bütçe hesabı, snapshot. Import-time yapilir; uvicorn baslamasindan once aktif.
+getcontext().rounding = ROUND_HALF_UP
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
 from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
@@ -37,7 +47,21 @@ async def lifespan(app: FastAPI):
     logger.info("KFinans API durduruluyor")
 
 
-app = FastAPI(title="KFinans API", version="0.1.0", lifespan=lifespan)
+# Audit 2026-05-22 P0 #7 (security): Swagger UI + /openapi.json prod'da
+# DEFAULT KAPALI. Saldirgan enumeration vektorudur — endpoint listesi,
+# request/response schema, auth pattern hepsi public OpenAPI'da gozukur.
+# Dev'de settings.expose_swagger=True ile aktive edilir (env veya .env).
+# Prod'da gerekirse reverse-proxy basic auth + IP whitelist arkasinda
+# expose edilebilir.
+_docs_enabled = settings.expose_swagger
+app = FastAPI(
+    title="KFinans API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -54,7 +78,9 @@ async def log_validation_errors(request: Request, exc: RequestValidationError):
     errors = jsonable_encoder(exc.errors())
     logger.warning(
         "422 VALIDATION %s %s — errors=%s",
-        request.method, request.url.path, errors,
+        request.method,
+        request.url.path,
+        errors,
     )
     return JSONResponse(status_code=422, content={"detail": errors})
 
@@ -71,7 +97,10 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     rid = uuid.uuid4().hex
     logger.warning(
         "409 INTEGRITY %s %s rid=%s — %s",
-        request.method, request.url.path, rid, exc.orig if exc.orig else exc,
+        request.method,
+        request.url.path,
+        rid,
+        exc.orig if exc.orig else exc,
     )
     return JSONResponse(
         status_code=409,
@@ -90,7 +119,9 @@ async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
     rid = uuid.uuid4().hex
     logger.exception(
         "500 DB_ERROR %s %s rid=%s",
-        request.method, request.url.path, rid,
+        request.method,
+        request.url.path,
+        rid,
     )
     return JSONResponse(
         status_code=500,
@@ -110,7 +141,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     rid = uuid.uuid4().hex
     logger.exception(
         "500 UNHANDLED %s %s rid=%s",
-        request.method, request.url.path, rid,
+        request.method,
+        request.url.path,
+        rid,
     )
     return JSONResponse(
         status_code=500,
@@ -120,6 +153,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             "request_id": rid,
         },
     )
+
 
 # Middleware sırası önemli: add_middleware LIFO çalışır
 # (en SON add edilen request'te İLK çalışır).

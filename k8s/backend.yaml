@@ -53,12 +53,55 @@ spec:
       # Replica 2 oldugu icin migration ayni anda iki kez calisabilir; alembic
       # transactional DDL kullaniyor (PostgresqlImpl), idempotent — sorun yok.
       initContainers:
+        # Audit 2026-05-22: kube-router NetworkPolicy enforcement timing bug
+        # fix. Fresh pod start'ta policy index'lenmesi 5-10sn gecikebilir;
+        # alembic init container hemen DB'ye bağlanmaya calismadan DNS hazir
+        # olana kadar bekle. nslookup postgres testi 10 deneme * 2sn = 20sn
+        # toplam timeout.
+        - name: wait-for-dns
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              # FQDN kullan — busybox nslookup ndots:5 + search list traversal
+              # bazi resolv.conf konfiglerinde "postgres" (short name) ile fail.
+              # postgres.kfinans.svc.cluster.local direkt absolute query.
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if nslookup postgres.kfinans.svc.cluster.local >/dev/null 2>&1; then
+                  echo "DNS ready (attempt $i)"
+                  exit 0
+                fi
+                echo "Waiting for DNS... attempt $i/10"
+                sleep 2
+              done
+              echo "DNS timeout"
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
         - name: alembic-upgrade
           # DEVOPS-001 (FAZ H): kustomize images: transformer ile semver tag set edilir
-          image: ghcr.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
+          image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
+          # PodSecurity "restricted" namespace icin initContainer'da da
+          # container-level guvenlik ayarlari zorunlu. Pod-level securityContext
+          # (runAsNonRoot/User/Group) miras alinir ama allowPrivilegeEscalation
+          # ve capabilities her container'da ayri set edilmeli.
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true; alembic
+          # transactional DDL'i memory'de yapar ama python bytecode (.pyc) /
+          # tmpfile yazimlari icin /tmp + /home/kfinans (HOME) emptyDir mount.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           command: ["alembic", "upgrade", "head"]
           env:
+            - name: HOME
+              value: /home/kfinans
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -74,19 +117,39 @@ spec:
                 secretKeyRef:
                   name: kfinans-secrets
                   key: FERNET_KEY
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-tmp
+              mountPath: /var/tmp
+            - name: home
+              mountPath: /home/kfinans
+            # Audit 2026-05-22 P0 #6: alembic-upgrade DB TLS require icin
+            # CA bundle initContainer'da da gerekli (asyncpg ssl_ctx CERT_REQUIRED).
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
       containers:
         - name: backend
-          image: ghcr.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
+          image: docker.io/celikada/kfinans-backend:v0.0.0  # placeholder; kustomize override eder
           imagePullPolicy: IfNotPresent
           # DEVOPS-002: Container-level security
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true.
+          # uvicorn/FastAPI app runtime'da disk yazimi yapmiyor; ama Python
+          # bytecode (.pyc), httpx temp downloads, openpyxl/reportlab geçici
+          # buffer'lar /tmp arar. /home/kfinans HOME pip cache (~/.cache) icin
+          # ihtiyac olabilir. /var/tmp bazi libs (gettext/locale, gnupg) icin.
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false  # Python pip cache + tmp ihtiyacı
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           ports:
             - containerPort: 8000
               name: http
+          env:
+            - name: HOME
+              value: /home/kfinans
           envFrom:
             - configMapRef:
                 name: kfinans-config
@@ -99,10 +162,18 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # FAZ C3 TrustedHostMiddleware ALLOWED_HOSTS=["kfinans.app","www.kfinans.app"]
+          # ile sikilastirilmis durumda. Kubelet probe'lari default'ta `Host: <pod-ip>`
+          # gonderir; whitelist'te olmadigi icin 400 doner. httpHeaders.Host override
+          # ile probe'lar uretim host'unu taklit eder. Bu Oracle'da ALLOWED_HOSTS=["*"]
+          # workaround'unu kaldirip sikilastirma yapmanin ones-kosulu.
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 20
             periodSeconds: 30
             timeoutSeconds: 5
@@ -111,6 +182,9 @@ spec:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -119,6 +193,54 @@ spec:
             httpGet:
               path: /health
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: kfinans.app
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 30  # 150sn'ye kadar startup'a izin ver (cold start)
+          # SEC HARDENING 2026-05-21: readOnlyRootFilesystem=true icin writable
+          # path'ler emptyDir uzerinden mount edilir. memory medium yok — node
+          # ephemeral storage (genelde sufficient — pg_dump/reports stream icin
+          # birkac yuz MB max). sizeLimit hot-fix saldirisini onler.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-tmp
+              mountPath: /var/tmp
+            - name: home
+              mountPath: /home/kfinans
+            # Audit 2026-05-22 P0 #6: DB TLS require + CA bundle
+            # cert-manager postgres-tls Secret ca.crt -> /etc/postgres-ca/
+            # asyncpg create_default_context(cafile=...) ile cert chain verify
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: var-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: home
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: postgres-ca
+          secret:
+            secretName: postgres-tls
+            # cert-manager SelfSigned issuer + standalone Certificate Secret'a
+            # `ca.crt` koymayabilir (cert-manager docs "if the CA is known"
+            # belirsiz). SelfSigned chain length=1 -> leaf cert (tls.crt) kendi
+            # CA'si. asyncpg ssl_ctx `cafile=/etc/postgres-ca/ca.crt` ile
+            # mount path'i `ca.crt` koru ama kaynak `tls.crt`. Cert SAN listesinde
+            # `postgres` var (postgres-cert.yaml dnsNames) -> check_hostname pass.
+            items:
+              - key: tls.crt
+                path: ca.crt
+            # Defensive: Secret rotate / cert-manager geç render durumunda
+            # pod startup CreateContainerConfigError almasın; database.py
+            # require branch dosya yoksa ssl=True fallback -> yine fail eder
+            # ama controlled fail (log'da net görünür).
+            optional: true
+            defaultMode: 0444

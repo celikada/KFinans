@@ -115,6 +115,7 @@ async def fetch_gbp_to_usd() -> Decimal:
 
 _BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
 
+
 async def fetch_spot_prices(symbols: list[str]) -> dict[str, Decimal]:
     """Binance'ten USDT pariteli spot fiyatları çeker. Bulunamayanlar 0 döner."""
     async with httpx.AsyncClient(timeout=10) as client:
@@ -245,12 +246,7 @@ async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
     if not symbols:
         return {}
     binance = await fetch_spot_prices(symbols)
-    missing = [
-        s for s in symbols
-        if binance.get(s, Decimal(0)) <= 0
-        and s not in USD_STABLE_SYMBOLS
-        and s not in SYMBOL_PRICE_ALIASES
-    ]
+    missing = [s for s in symbols if binance.get(s, Decimal(0)) <= 0 and s not in USD_STABLE_SYMBOLS and s not in SYMBOL_PRICE_ALIASES]
     if not missing:
         return binance
 
@@ -263,16 +259,28 @@ async def fetch_combined_prices(symbols: list[str]) -> dict[str, Decimal]:
 
 # ETH peg'li staking tokenları + WBTC + AVAX peg'li → Binance USDT pariteli base symbol
 SYMBOL_PRICE_ALIASES: dict[str, str] = {
-    "STETH": "ETH", "stETH": "ETH",
-    "psETH": "ETH", "PSETH": "ETH",
-    "lcETH": "ETH", "LCETH": "ETH",
-    "rETH": "ETH", "cbETH": "ETH", "wstETH": "ETH",
+    "STETH": "ETH",
+    "stETH": "ETH",
+    "psETH": "ETH",
+    "PSETH": "ETH",
+    "lcETH": "ETH",
+    "LCETH": "ETH",
+    "rETH": "ETH",
+    "cbETH": "ETH",
+    "wstETH": "ETH",
     "WBTC": "BTC",
-    "sAVAX": "AVAX", "SAVAX": "AVAX",
+    "sAVAX": "AVAX",
+    "SAVAX": "AVAX",
 }
 USD_STABLE_SYMBOLS: set[str] = {
-    "USDT", "USDC", "DAI", "BUSD", "TUSD", "FRAX",
-    "mstkeUSDT", "MSTKEUSDT",
+    "USDT",
+    "USDC",
+    "DAI",
+    "BUSD",
+    "TUSD",
+    "FRAX",
+    "mstkeUSDT",
+    "MSTKEUSDT",
 }
 
 
@@ -344,12 +352,20 @@ def calculate_changes(snapshots: list[PortfolioSnapshot]) -> PortfolioChanges:
 
 
 def calculate_breakdown(snapshot: PortfolioSnapshot) -> PortfolioBreakdown:
-    totals = {"crypto": Decimal(0), "staked_crypto": Decimal(0), "fund": Decimal(0), "pension": Decimal(0), "cash": Decimal(0)}
+    totals = {
+        "crypto": Decimal(0),
+        "staked_crypto": Decimal(0),
+        "fund": Decimal(0),
+        "pension": Decimal(0),
+        "cash": Decimal(0),
+    }
     for pos in snapshot.asset_positions:
         totals[pos.asset_type] = totals.get(pos.asset_type, Decimal(0)) + pos.total_value_tl
 
     total = snapshot.total_value_tl or Decimal(1)
-    pct = lambda v: (v / total * 100).quantize(Decimal("0.01"))
+
+    def pct(v: Decimal) -> Decimal:
+        return (v / total * 100).quantize(Decimal("0.01"))
 
     top_assets = sorted(snapshot.asset_positions, key=lambda p: p.total_value_tl, reverse=True)[:5]
 

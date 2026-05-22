@@ -1,9 +1,9 @@
 """Income CRUD + summary endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _inc(amount: float, category: str, date: str, description: str | None = None) -> dict:
@@ -127,9 +127,9 @@ async def test_summary_empty(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_summary_with_data(client: AsyncClient):
     headers = await make_user(client, "inc_sum_data@example.com")
-    await client.post("/api/v1/income", json=_inc(50000, "salary",   "2026-05-01"), headers=headers)
+    await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers)
     await client.post("/api/v1/income", json=_inc(10000, "freelance", "2026-05-15"), headers=headers)
-    await client.post("/api/v1/income", json=_inc(5000,  "dividend",  "2026-05-20"), headers=headers)
+    await client.post("/api/v1/income", json=_inc(5000, "dividend", "2026-05-20"), headers=headers)
     # Farklı ay — summary'e dahil olmamalı
     await client.post("/api/v1/income", json=_inc(20000, "bonus", "2026-04-01"), headers=headers)
 
@@ -146,10 +146,14 @@ async def test_summary_with_data(client: AsyncClient):
 async def test_net_balance_calculation(client: AsyncClient):
     """Gelir ve gider endpoint'leri birlikte çalışıyor mu — net bakiye kontrolü."""
     headers = await make_user(client, "inc_net@example.com")
-    await client.post("/api/v1/income",   json=_inc(50000, "salary", "2026-05-01"),     headers=headers)
-    await client.post("/api/v1/expenses", json={"amount": 20000, "category": "bills", "date": "2026-05-10"}, headers=headers)
+    await client.post("/api/v1/income", json=_inc(50000, "salary", "2026-05-01"), headers=headers)
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 20000, "category": "bills", "date": "2026-05-10"},
+        headers=headers,
+    )
 
-    income_sum  = await client.get("/api/v1/income/summary?year=2026&month=5",   headers=headers)
+    income_sum = await client.get("/api/v1/income/summary?year=2026&month=5", headers=headers)
     expense_sum = await client.get("/api/v1/expenses/summary?year=2026&month=5", headers=headers)
 
     net = float(income_sum.json()["total"]) - float(expense_sum.json()["total"])

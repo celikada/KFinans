@@ -11,6 +11,7 @@ Bu testler kritik bir guvenlik invariantini koruyor:
 Mevcut test_wallets_api.py UI seviyesinde (encrypted oldugunu fark etmeden)
 calisirsa, bu dosya DB seviyesinde gercek sifrelemeyi dogrular.
 """
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -18,13 +19,9 @@ from sqlalchemy import text
 from app.core.security import address_fingerprint, decrypt_secret
 from tests.conftest import TestSession, make_user
 
-
-VALID_BTC_XPUB = (
-    "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
-)
+VALID_BTC_XPUB = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
 VALID_ETH_LOWER = "0x1234567890123456789012345678901234567890"
 VALID_ETH_CHECKSUM = "0x1234567890123456789012345678901234567890"  # checksum varies; lowercase normalize ile aynidir
-
 
 
 @pytest.mark.asyncio
@@ -40,9 +37,7 @@ async def test_db_stores_only_ciphertext_no_plaintext(client: AsyncClient):
 
     # Raw SQL ile DB'yi oku — ORM otomatik decrypt'i bypass ediyoruz.
     async with TestSession() as session:
-        rows = (await session.execute(
-            text("SELECT address_encrypted, address_fingerprint FROM wallet_addresses")
-        )).fetchall()
+        rows = (await session.execute(text("SELECT address_encrypted, address_fingerprint FROM wallet_addresses"))).fetchall()
 
     assert any(rows), "wallet kaydi olusmali"
     for encrypted, fp in rows:
@@ -66,6 +61,7 @@ async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
          kontrolu farkli.
     """
     from sqlalchemy import select
+
     from app.models.integration import WalletAddress
 
     headers = await make_user(client, "wallet_enc_orm@example.com")
@@ -80,16 +76,17 @@ async def test_orm_returns_decrypted_plaintext(client: AsyncClient):
     # NOT: Diger testlerden birikmis ethereum wallet'lari olabilir (test izolasyonu
     # yok — TEST-004 ayri issue). Sadece bu testin user'ina ait wallet'i ara.
     from app.models.user import User
+
     async with TestSession() as session:
-        user = (await session.execute(
-            select(User).where(User.email == "wallet_enc_orm@example.com")
-        )).scalar_one()
-        wallet = (await session.execute(
-            select(WalletAddress).where(
-                WalletAddress.user_id == user.id,
-                WalletAddress.chain == "ethereum",
+        user = (await session.execute(select(User).where(User.email == "wallet_enc_orm@example.com"))).scalar_one()
+        wallet = (
+            await session.execute(
+                select(WalletAddress).where(
+                    WalletAddress.user_id == user.id,
+                    WalletAddress.chain == "ethereum",
+                )
             )
-        )).scalar_one()
+        ).scalar_one()
         assert wallet.address == VALID_ETH_LOWER
 
     # 2) API seviyesi (BACK-013): JSON response'ta address masked
@@ -115,7 +112,7 @@ async def test_fingerprint_round_trip_helper():
 @pytest.mark.asyncio
 async def test_decrypt_round_trip_via_helper():
     """encrypt + decrypt round-trip dogrulamasi."""
-    from app.core.security import decrypt_secret, encrypt_secret
+    from app.core.security import encrypt_secret
 
     plaintext = VALID_BTC_XPUB
     ciphertext = encrypt_secret(plaintext)
@@ -172,6 +169,7 @@ async def test_fernet_key_change_makes_old_ciphertext_unreadable():
     section 5.3).
     """
     from cryptography.fernet import Fernet, InvalidToken
+
     from app.core.security import encrypt_secret
 
     ciphertext = encrypt_secret(VALID_BTC_XPUB)

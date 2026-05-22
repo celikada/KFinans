@@ -1,21 +1,22 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 
 @dataclass
 class AssetData:
     """Herhangi bir kaynaktan normalize edilmiş varlık verisi."""
+
     symbol: str
     name: str
     provider: str
-    asset_type: str                         # crypto | staked_crypto | fund | pension | cash
-    source_type: str                        # exchange | blockchain
+    asset_type: str  # crypto | staked_crypto | fund | pension | cash
+    source_type: str  # exchange | blockchain
     liquid_quantity: Decimal = Decimal(0)
     staked_quantity: Decimal = Decimal(0)
     pending_rewards: Decimal = Decimal(0)
-    unit_price_usd: Decimal = Decimal(0)    # aggregator TL'ye çevirir
-    unit_price_tl: Decimal = Decimal(0)     # doğrudan TL fiyatı varsa (fonlar gibi)
+    unit_price_usd: Decimal = Decimal(0)  # aggregator TL'ye çevirir
+    unit_price_tl: Decimal = Decimal(0)  # doğrudan TL fiyatı varsa (fonlar gibi)
     wallet_address_id: str | None = None
 
 

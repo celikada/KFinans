@@ -127,6 +127,38 @@ export interface UserMeDTO {
   created_at: string;
   email_verified: boolean;
   credit_balance: number;
+  mfa_enabled?: boolean;
+}
+
+// MFA (TOTP) — Audit #5
+export interface MfaSetupResponse {
+  secret_base32: string;
+  otpauth_url: string;
+  qr_png_base64: string;  // "data:image/png;base64,..." veya saf base64
+}
+
+export interface MfaEnableResponse {
+  recovery_codes: string[];
+}
+
+export interface MfaStatusResponse {
+  mfa_enabled: boolean;
+}
+
+// Login response — MFA aktifse pre_mfa_token doner; aktif degilse normal tokenlar.
+export interface LoginResponseDTO {
+  access_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  // MFA challenge
+  mfa_required?: boolean;
+  pre_mfa_token?: string;
+}
+
+export interface MfaVerifyResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
 }
 
 export const RISK_PROFILE_LABELS: Record<"conservative" | "balanced" | "aggressive", string> = {
@@ -137,10 +169,46 @@ export const RISK_PROFILE_LABELS: Record<"conservative" | "balanced" | "aggressi
 
 export const api = {
   login: (email: string, password: string) =>
-    request<{ access_token: string; refresh_token: string; token_type: string }>(
+    request<LoginResponseDTO>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ email, password }) }
     ),
+
+  // MFA (TOTP) — Audit #5
+  mfaStatus: () => request<MfaStatusResponse>("/mfa/status"),
+
+  mfaSetup: () =>
+    request<MfaSetupResponse>("/mfa/setup", { method: "POST" }),
+
+  mfaEnable: (totp_code: string) =>
+    request<MfaEnableResponse>("/mfa/enable", {
+      method: "POST",
+      body: JSON.stringify({ totp_code }),
+    }),
+
+  mfaDisable: (totp_code: string) =>
+    request<{ detail: string }>("/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ totp_code }),
+    }),
+
+  // pre_mfa_token Authorization header'inda yollanir — request() helper'i
+  // localStorage'daki access_token'i kullanacagindan dogrudan fetch ile yapariz.
+  mfaVerify: async (preMfaToken: string, payload: { totp_code?: string; recovery_code?: string }) => {
+    const res = await fetch(`${BASE}/mfa/verify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${preMfaToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(formatErrorDetail(err.detail) || res.statusText);
+    }
+    return (await res.json()) as MfaVerifyResponse;
+  },
 
   logout: (refreshToken?: string) => {
     // Saklı refresh token'ı blacklist'e gönder (FAZ C4 rotation + logout

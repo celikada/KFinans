@@ -3,6 +3,7 @@
 Dis HTTP cagrilari (TCMB, TEFAS, exchange rate API'leri) respx ile mock'lanir;
 test gercek dis servislere gitmez.
 """
+
 import pytest
 import respx
 from httpx import AsyncClient, Response
@@ -13,7 +14,6 @@ from app.services import aggregator
 from app.services.aggregator import EXCHANGERATE_API_GBP, EXCHANGERATE_API_USD, TCMB_URL
 from app.services.tefas import _EXPORT_URL
 from tests.conftest import TestSession, verify_user_email
-
 
 _USD_TL_RESPONSE = {"rates": {"TRY": 35.0}}
 _GBP_USD_RESPONSE = {"rates": {"USD": 1.25}}
@@ -126,11 +126,10 @@ async def test_snapshot_idempotent_same_day(client: AsyncClient):
     user_email = "snap_idem@example.com"
     async with TestSession() as session:
         from app.models.user import User
+
         user_q = await session.execute(select(User).where(User.email == user_email))
         user = user_q.scalar_one()
-        snaps_q = await session.execute(
-            select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == user.id)
-        )
+        snaps_q = await session.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == user.id))
         snapshots = snaps_q.scalars().all()
     assert len(snapshots) == 1
 
@@ -165,10 +164,20 @@ async def test_snapshot_includes_bes_holdings(client: AsyncClient):
     await client.put(
         "/api/v1/portfolio/bes/holdings",
         json=[
-            {"plan_name": "AvivaSA Atak Hisse", "paid_principal": 80000, "paid_returns": 20000,
-             "govt_contribution": 0, "govt_returns": 0},
-            {"plan_name": "Anadolu Hayat OKS", "paid_principal": 40000, "paid_returns": 10000,
-             "govt_contribution": 0, "govt_returns": 0},
+            {
+                "plan_name": "AvivaSA Atak Hisse",
+                "paid_principal": 80000,
+                "paid_returns": 20000,
+                "govt_contribution": 0,
+                "govt_returns": 0,
+            },
+            {
+                "plan_name": "Anadolu Hayat OKS",
+                "paid_principal": 40000,
+                "paid_returns": 10000,
+                "govt_contribution": 0,
+                "govt_returns": 0,
+            },
         ],
         headers=headers,
     )

@@ -1,0 +1,27 @@
+---
+# Frontend pod'a allowed ingress: Traefik + kubelet probe
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-ingress
+  namespace: kfinans
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 3000
+    - from:
+        - ipBlock:
+            cidr: 141.144.243.54/32
+      ports:
+        - protocol: TCP
+          port: 3000

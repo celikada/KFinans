@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Boolean, ForeignKey, UniqueConstraint, func
+
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+
 from app.core.security import address_fingerprint, decrypt_secret, encrypt_secret
 from app.models.base import Base
 
@@ -18,7 +20,9 @@ class Integration(Base):
     # DBA-001 (FAZ H): User silinince integration cascade silinir; pg_dump restore'da
     # FK violation onlenir.
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     # binance | icrypex | tefas | bes
     provider: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -45,7 +49,9 @@ class WalletAddress(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # DBA-001 (FAZ H): User silinince wallet cascade.
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     # ethereum | sonic | avalanche_c | avalanche_p | bitcoin | solana | cardano | algorand | polkadot | litecoin
     chain: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -55,9 +61,7 @@ class WalletAddress(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "chain", "address_fingerprint", name="uq_wallet_user_chain_fp"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "chain", "address_fingerprint", name="uq_wallet_user_chain_fp"),)
 
     user: Mapped["User"] = relationship(back_populates="wallet_addresses")
 

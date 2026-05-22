@@ -1,0 +1,14 @@
+---
+# EN SON apply edilir — tum positive policy'ler hazir olduktan sonra.
+# Bu policy alone deny all olur, diger allow policy'leri UNION mantigi ile
+# ekleme yapar.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: kfinans
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

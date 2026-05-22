@@ -1,4 +1,5 @@
 """API'siz borsa hesapları için manuel kripto pozisyon şemaları."""
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -80,6 +81,7 @@ class ManualCryptoOut(BaseModel):
 
 class ManualCryptoPositionOut(BaseModel):
     """Anlık fiyatla zenginleştirilmiş pozisyon. Frontend listesi bunu kullanır."""
+
     id: int
     exchange: str
     label: str | None
@@ -101,8 +103,9 @@ class ManualCryptoPositionOut(BaseModel):
 
 class AssetCatalogItem(BaseModel):
     """Asset catalog endpoint sonucu — fiyat kaynaklarına bağlanabilir bir varlık."""
+
     source: LinkedSource
-    id: str         # binance: 'BTC' (USDT pair base), coingecko: 'bitcoin', tefas: 'AFA', commodity: 'XAU'
+    id: str  # binance: 'BTC' (USDT pair base), coingecko: 'bitcoin', tefas: 'AFA', commodity: 'XAU'
     symbol: str | None = None
     name: str
 

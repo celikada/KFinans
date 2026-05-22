@@ -1,7 +1,8 @@
 import calendar
 import io
 import logging
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
@@ -39,11 +40,22 @@ router = APIRouter(prefix="/income", tags=["income"])
 
 # Türkçe label -> İngilizce key haritası (import için)
 LABEL_TO_KEY: dict[str, str] = {
-    "maaş": "salary", "serbest meslek": "freelance", "kira geliri": "rental",
-    "temettü / faiz": "dividend", "temettü": "dividend", "ikramiye / prim": "bonus",
-    "ikramiye": "bonus", "varlık satışı": "sale", "diğer": "other",
-    "salary": "salary", "freelance": "freelance", "rental": "rental",
-    "dividend": "dividend", "bonus": "bonus", "sale": "sale", "other": "other",
+    "maaş": "salary",
+    "serbest meslek": "freelance",
+    "kira geliri": "rental",
+    "temettü / faiz": "dividend",
+    "temettü": "dividend",
+    "ikramiye / prim": "bonus",
+    "ikramiye": "bonus",
+    "varlık satışı": "sale",
+    "diğer": "other",
+    "salary": "salary",
+    "freelance": "freelance",
+    "rental": "rental",
+    "dividend": "dividend",
+    "bonus": "bonus",
+    "sale": "sale",
+    "other": "other",
 }
 
 
@@ -98,9 +110,7 @@ async def update_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Income).where(Income.id == income_id, Income.user_id == current_user.id)
-    )
+    result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -125,9 +135,7 @@ async def delete_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Income).where(Income.id == income_id, Income.user_id == current_user.id)
-    )
+    result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -146,8 +154,9 @@ async def get_income_summary(
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
 
     total_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0), func.count(Income.id))
-        .where(Income.user_id == current_user.id, Income.date >= first_day, Income.date <= last_day)
+        select(func.coalesce(func.sum(Income.amount), 0), func.count(Income.id)).where(
+            Income.user_id == current_user.id, Income.date >= first_day, Income.date <= last_day
+        )
     )
     total, count = total_q.one()
 
@@ -157,14 +166,13 @@ async def get_income_summary(
         .group_by(Income.category)
         .order_by(desc(func.sum(Income.amount)))
     )
-    breakdown = [
-        IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt)
-        for cat, amt, cnt in cat_q.all()
-    ]
+    breakdown = [IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
 
     return IncomeSummary(
-        year=year, month=month,
-        total=Decimal(total), count=count,
+        year=year,
+        month=month,
+        total=Decimal(total),
+        count=count,
         by_category=breakdown,
     )
 
@@ -255,9 +263,7 @@ async def import_incomes(
         if not row or all(v is None for v in row):
             continue
         n = len(row)
-        date_val, cat_val, amount_val, desc_val = (
-            row[i] if i < n else None for i in range(4)
-        )
+        date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
 
         # Tarih parse
         if isinstance(date_val, date_type):
@@ -270,6 +276,7 @@ async def import_incomes(
         else:
             try:
                 from openpyxl.utils.datetime import from_excel
+
                 parsed_date = from_excel(date_val).date() if date_val is not None else None
                 if parsed_date is None:
                     continue
@@ -346,11 +353,7 @@ async def list_recurring_incomes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome)
-        .where(RecurringIncome.user_id == current_user.id)
-        .order_by(RecurringIncome.start_date.desc())
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id).order_by(RecurringIncome.start_date.desc()))
     return result.scalars().all()
 
 
@@ -390,17 +393,22 @@ async def update_recurring_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
 
-    for attr in ("title", "amount", "category", "recurrence", "months",
-                 "day_of_month", "start_date", "end_date", "notes"):
+    for attr in (
+        "title",
+        "amount",
+        "category",
+        "recurrence",
+        "months",
+        "day_of_month",
+        "start_date",
+        "end_date",
+        "notes",
+    ):
         v = getattr(payload, attr)
         if v is not None:
             setattr(ri, attr, v)
@@ -416,11 +424,7 @@ async def delete_recurring_income(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
@@ -450,20 +454,24 @@ async def get_income_dashboard(
 
     # Gerçekleşen
     actual_month_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0))
-        .where(Income.user_id == current_user.id, Income.date >= first_day_month, Income.date <= last_day_month)
+        select(func.coalesce(func.sum(Income.amount), 0)).where(
+            Income.user_id == current_user.id,
+            Income.date >= first_day_month,
+            Income.date <= last_day_month,
+        )
     )
     actual_ytd_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0))
-        .where(Income.user_id == current_user.id, Income.date >= first_day_year, Income.date <= last_day_month)
+        select(func.coalesce(func.sum(Income.amount), 0)).where(
+            Income.user_id == current_user.id,
+            Income.date >= first_day_year,
+            Income.date <= last_day_month,
+        )
     )
     this_month_actual = Decimal(actual_month_q.scalar_one())
     ytd_actual = Decimal(actual_ytd_q.scalar_one())
 
     # Periyodik (yıl içi 12 ay tarama)
-    rec_q = await db.execute(
-        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
-    )
+    rec_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     recurring = rec_q.scalars().all()
 
     this_month_recurring = Decimal(0)
@@ -484,7 +492,8 @@ async def get_income_dashboard(
     year_total_estimate = ytd_actual + remaining_year_recurring
 
     return IncomeDashboard(
-        year=year, month=month,
+        year=year,
+        month=month,
         this_month_actual=this_month_actual,
         ytd_actual=ytd_actual,
         this_month_recurring=this_month_recurring,
@@ -499,8 +508,12 @@ async def get_income_dashboard(
 # ---------------------------------------------------------------------------
 # Recurring kategori → income kategorisi (recurring'de "sale" yok, gerisi 1:1)
 _RECURRING_TO_INCOME_CAT: dict[str, str] = {
-    "salary": "salary", "rental": "rental", "dividend": "dividend",
-    "bonus": "bonus", "freelance": "freelance", "other": "other",
+    "salary": "salary",
+    "rental": "rental",
+    "dividend": "dividend",
+    "bonus": "bonus",
+    "freelance": "freelance",
+    "other": "other",
 }
 
 
@@ -513,7 +526,11 @@ def _date_for_period(ri: RecurringIncome, year: int, month: int) -> date_type:
 
 
 async def _realize_one(
-    db: AsyncSession, ri: RecurringIncome, year: int, month: int, user_id,
+    db: AsyncSession,
+    ri: RecurringIncome,
+    year: int,
+    month: int,
+    user_id,
     today: date_type | None = None,
 ) -> int | None:
     """Tek bir periyodik kayıt için verilen ay-yıl income oluşturur.
@@ -567,7 +584,8 @@ async def realize_recurring_period(
     Idempotent: aynı dönem ikinci kez çağrılırsa skip."""
     result = await db.execute(
         select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id,
+            RecurringIncome.id == rid,
+            RecurringIncome.user_id == current_user.id,
         )
     )
     ri = result.scalar_one_or_none()
@@ -602,7 +620,8 @@ async def realize_recurring_past(
     income'a aktar. Mevcut realize'ler skip."""
     result = await db.execute(
         select(RecurringIncome).where(
-            RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id,
+            RecurringIncome.id == rid,
+            RecurringIncome.user_id == current_user.id,
         )
     )
     ri = result.scalar_one_or_none()
@@ -625,7 +644,8 @@ async def realize_recurring_past(
         # Sonraki ay
         m += 1
         if m > 12:
-            m = 1; y += 1
+            m = 1
+            y += 1
     await db.commit()
     return RealizeResult(realized=len(realized_ids), skipped=skipped, income_ids=realized_ids)
 
@@ -637,9 +657,7 @@ async def realize_all_recurring_past(
 ):
     """Kullanıcının TÜM periyodik kayıtları için bugüne kadar olan tüm
     geçmiş dönemleri income'a aktar."""
-    result = await db.execute(
-        select(RecurringIncome).where(RecurringIncome.user_id == current_user.id)
-    )
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     all_ri = result.scalars().all()
 
     today = datetime.now(_ISTANBUL).date()
@@ -656,6 +674,7 @@ async def realize_all_recurring_past(
                 realized_ids.append(new_id)
             m += 1
             if m > 12:
-                m = 1; y += 1
+                m = 1
+                y += 1
     await db.commit()
     return RealizeResult(realized=len(realized_ids), skipped=skipped, income_ids=realized_ids)

@@ -22,9 +22,7 @@ async def get_bes_holdings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
     return [
         BesHolding(
@@ -47,15 +45,17 @@ async def save_bes_holdings(
 ):
     await db.execute(delete(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     for h in holdings:
-        db.add(BesHoldingModel(
-            user_id=current_user.id,
-            plan_name=h.plan_name.strip(),
-            contract_number=h.contract_number.strip() if h.contract_number else None,
-            paid_principal=h.paid_principal,
-            paid_returns=h.paid_returns,
-            govt_contribution=h.govt_contribution,
-            govt_returns=h.govt_returns,
-        ))
+        db.add(
+            BesHoldingModel(
+                user_id=current_user.id,
+                plan_name=h.plan_name.strip(),
+                contract_number=h.contract_number.strip() if h.contract_number else None,
+                paid_principal=h.paid_principal,
+                paid_returns=h.paid_returns,
+                govt_contribution=h.govt_contribution,
+                govt_returns=h.govt_returns,
+            )
+        )
     await db.commit()
     return holdings
 
@@ -68,9 +68,7 @@ async def export_bes_holdings(
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    result = await db.execute(
-        select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id)
-    )
+    result = await db.execute(select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
     wb = Workbook()
@@ -161,14 +159,16 @@ async def import_bes_holdings(
         if paid_principal + paid_returns + govt_contribution + govt_returns <= 0:
             continue
 
-        parsed.append(BesHolding(
-            plan_name=plan_name,
-            contract_number=contract,
-            paid_principal=paid_principal,
-            paid_returns=paid_returns,
-            govt_contribution=govt_contribution,
-            govt_returns=govt_returns,
-        ))
+        parsed.append(
+            BesHolding(
+                plan_name=plan_name,
+                contract_number=contract,
+                paid_principal=paid_principal,
+                paid_returns=paid_returns,
+                govt_contribution=govt_contribution,
+                govt_returns=govt_returns,
+            )
+        )
 
     if not parsed:
         raise HTTPException(
@@ -178,14 +178,16 @@ async def import_bes_holdings(
 
     await db.execute(delete(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     for h in parsed:
-        db.add(BesHoldingModel(
-            user_id=current_user.id,
-            plan_name=h.plan_name,
-            contract_number=h.contract_number,
-            paid_principal=h.paid_principal,
-            paid_returns=h.paid_returns,
-            govt_contribution=h.govt_contribution,
-            govt_returns=h.govt_returns,
-        ))
+        db.add(
+            BesHoldingModel(
+                user_id=current_user.id,
+                plan_name=h.plan_name,
+                contract_number=h.contract_number,
+                paid_principal=h.paid_principal,
+                paid_returns=h.paid_returns,
+                govt_contribution=h.govt_contribution,
+                govt_returns=h.govt_returns,
+            )
+        )
     await db.commit()
     return parsed

@@ -16,9 +16,10 @@ Create Date: 2026-05-06
 Her ikisi de credit_cards.id'ye FK CASCADE — kart silinince temizlenir.
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "f1a2b3c4d5e6"
 down_revision = "e0f1a2b3c4d5"

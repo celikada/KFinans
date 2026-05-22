@@ -8,6 +8,7 @@ Magic-byte + boyut + extension dogrulamasi:
 - bos dosya -> 422
 - max size asildi -> 413
 """
+
 from io import BytesIO
 
 import pytest

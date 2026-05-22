@@ -20,9 +20,10 @@ Alanlar:
 - notes: opsiyonel
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "e0f1a2b3c4d5"
 down_revision = "d9e0f1a2b3c4"

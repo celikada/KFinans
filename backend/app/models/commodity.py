@@ -31,8 +31,6 @@ class CommodityHolding(Base):
     # gram için gram, diğerleri için adet
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="commodity_holdings")  # noqa: F821

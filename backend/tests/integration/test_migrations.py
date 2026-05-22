@@ -9,6 +9,7 @@ direkt `alembic.command.upgrade` calismaz. Subprocess ile uvicorn'dan ayri
 process'te alembic CLI cagrisi yapiyoruz — production rollback'i de subprocess
 icinde calisiyor (k8s init container).
 """
+
 import os
 import subprocess
 from pathlib import Path
@@ -18,8 +19,8 @@ import pytest_asyncio
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from tests.conftest import engine
 from app.models.base import Base
+from tests.conftest import engine
 
 # Backend root: tests/integration/ -> backend/
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -44,9 +45,7 @@ def _run_alembic(*args: str) -> None:
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"alembic {' '.join(args)} basarisiz:\nstdout={result.stdout}\nstderr={result.stderr}"
-        )
+        raise RuntimeError(f"alembic {' '.join(args)} basarisiz:\nstdout={result.stdout}\nstderr={result.stderr}")
 
 
 @pytest_asyncio.fixture
@@ -76,9 +75,7 @@ async def _table_columns(table: str) -> set[str]:
     """Async ile tablonun kolon isimlerini doner."""
     engine = create_async_engine(_test_db_url())
     async with engine.connect() as conn:
-        cols = await conn.run_sync(
-            lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table)}
-        )
+        cols = await conn.run_sync(lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table)})
     await engine.dispose()
     return cols
 
@@ -91,7 +88,8 @@ async def _fk_ondelete(table: str, column: str) -> str | None:
     """
     engine = create_async_engine(_test_db_url())
     async with engine.connect() as conn:
-        row = await conn.execute(text("""
+        row = await conn.execute(
+            text("""
             SELECT confdeltype
             FROM pg_constraint c
             JOIN pg_class t ON t.oid = c.conrelid
@@ -101,7 +99,9 @@ async def _fk_ondelete(table: str, column: str) -> str | None:
               AND c.contype = 'f'
               AND a.attnum = ANY(c.conkey)
             LIMIT 1
-        """), {"table": table, "column": column})
+        """),
+            {"table": table, "column": column},
+        )
         result = row.scalar_one_or_none()
     await engine.dispose()
     if result is None:
@@ -154,7 +154,8 @@ async def test_round_trip_downgrade_then_upgrade(fresh_db):
     """Faz H migration zinciri (c0d1e2f3a4b5 AI-005, b9c0d1e2f3a4 KVKK haklari,
     a8b9c0d1e2f3 SEC-001, f7a8b9c0d1e2 DBA-001+SEC-002) round-trip.
 
-    Down 4 step (AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001):
+    Down 6 step (MFA + PERF-003 + AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001):
+      - users.totp_secret, totp_enabled, totp_recovery_codes silinmis olmali (MFA)
       - users.anthropic_consent_at silinmis olmali
       - users.overseas_consent_at, email_change_token vs. silinmis olmali
       - users.failed_login_count, locked_until silinmis olmali
@@ -164,8 +165,8 @@ async def test_round_trip_downgrade_then_upgrade(fresh_db):
       - Tum kolonlar tekrar mevcut, FK CASCADE
     """
     _run_alembic("upgrade", "head")
-    # PERF-003 + AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
-    _run_alembic("downgrade", "-5")
+    # MFA + PERF-003 + AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
+    _run_alembic("downgrade", "-6")
 
     cols = await _table_columns("users")
     assert "failed_login_count" not in cols
@@ -203,8 +204,6 @@ async def test_xpub_encryption_migration_downgrade_safe(fresh_db):
     try:
         _run_alembic("downgrade", "b3c4d5e6f7a8")
     except Exception as e:
-        pytest.fail(
-            f"FAZ C1 (b3c4d5e6f7a8) oncesine downgrade yapilamadi: {e}"
-        )
+        pytest.fail(f"FAZ C1 (b3c4d5e6f7a8) oncesine downgrade yapilamadi: {e}")
     # Tekrar head — round-trip
     _run_alembic("upgrade", "head")

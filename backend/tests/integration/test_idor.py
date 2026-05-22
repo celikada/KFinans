@@ -7,6 +7,7 @@ erişme denemesi yapılır. Beklenen: 404 veya boş sonuç (erişim yok).
 Bu testler regresyon koruması — herhangi bir endpoint user_id filtresini
 unutursa bu testler patlar.
 """
+
 import pytest
 from httpx import AsyncClient
 
@@ -134,13 +135,15 @@ async def test_user_a_cannot_see_user_b_bes(client: AsyncClient):
     # User B kendi BES birikimlerini ekler
     await client.put(
         "/api/v1/portfolio/bes/holdings",
-        json=[{
-            "plan_name": "B'nin BES Plani",
-            "paid_principal": 40000.0,
-            "paid_returns": 10000.0,
-            "govt_contribution": 0,
-            "govt_returns": 0,
-        }],
+        json=[
+            {
+                "plan_name": "B'nin BES Plani",
+                "paid_principal": 40000.0,
+                "paid_returns": 10000.0,
+                "govt_contribution": 0,
+                "govt_returns": 0,
+            }
+        ],
         headers=user_b,
     )
 

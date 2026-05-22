@@ -6,6 +6,7 @@ olcum tutar; `/metrics/performance` endpoint'i snapshot doner.
 Sentry/OTel (OBS-001) ileride eklenecek — bu modul gecici bir gozlemlenebilirlik
 araci, production icin yeterli (1 replica K8s deploy'a uygun).
 """
+
 from __future__ import annotations
 
 import asyncio

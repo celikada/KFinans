@@ -17,6 +17,7 @@ Performans: log yazma fail ederse ana endpoint patlamamali — try/except ile
 sarilip warning log yazilir, kullanici islemi devam eder. Audit log eksik
 olur ama veri tutarliligi korunur.
 """
+
 import logging
 from enum import Enum
 from typing import Any, Optional
@@ -74,6 +75,15 @@ class AuditAction(str, Enum):
 
     # AI / Advice (FAZ H — AI-004)
     ADVICE_GENERATE = "advice.generate"
+
+    # MFA — TOTP (audit #5 MFA)
+    MFA_SETUP = "auth.mfa.setup"
+    MFA_ENABLED = "auth.mfa.enabled"
+    MFA_DISABLED = "auth.mfa.disabled"
+    MFA_VERIFY_SUCCESS = "auth.mfa.verify_success"
+    MFA_VERIFY_FAILED = "auth.mfa.verify_failed"
+    MFA_RECOVERY_USED = "auth.mfa.recovery_used"
+    LOGIN_MFA_REQUIRED = "auth.login_mfa_required"
 
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
@@ -133,5 +143,8 @@ async def log_audit(
         # Audit fail ana endpoint'i bozmamali
         logger.warning(
             "audit log yazilamadi: action=%s user=%s resource=%s err=%s",
-            action, user_id, resource, exc,
+            action,
+            user_id,
+            resource,
+            exc,
         )

@@ -4,8 +4,6 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.expense import EXPENSE_CATEGORIES, ExpenseCategory
-
 
 class BudgetUpsert(BaseModel):
     amount: Decimal = Field(..., gt=0, le=Decimal("99999999.99"))

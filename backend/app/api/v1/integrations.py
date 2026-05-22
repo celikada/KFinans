@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db, get_current_user
+
+from app.core.deps import get_current_user, get_db
 from app.core.security import encrypt_secret
 from app.models.integration import Integration
 from app.models.user import User
@@ -39,7 +40,8 @@ async def add_integration(
         existing.encrypted_secret = encrypt_secret(payload.api_secret) if payload.api_secret else None
         existing.is_active = True
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.INTEGRATION_ADD,
             user_id=current_user.id,
             resource=f"integration:{payload.provider}",
@@ -57,7 +59,8 @@ async def add_integration(
     )
     db.add(integration)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.INTEGRATION_ADD,
         user_id=current_user.id,
         resource=f"integration:{payload.provider}",
@@ -86,7 +89,8 @@ async def remove_integration(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entegrasyon bulunamadı")
     await db.delete(integration)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.INTEGRATION_DELETE,
         user_id=current_user.id,
         resource=f"integration:{provider}",

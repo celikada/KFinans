@@ -1,9 +1,9 @@
 """PlannedExpense CRUD + forecast endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _loan(
@@ -30,6 +30,7 @@ def _loan(
 
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
@@ -138,6 +139,7 @@ async def test_delete_planned_expense(client: AsyncClient):
 
 # ─── IDOR ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_idor_update_returns_404(client: AsyncClient):
     h1 = await make_user(client, "pe_idor1@example.com")
@@ -166,6 +168,7 @@ async def test_idor_delete_returns_404(client: AsyncClient):
 
 # ─── AUTH ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_unauthenticated_returns_401(client: AsyncClient):
     resp = await client.get("/api/v1/planned-expenses")
@@ -173,6 +176,7 @@ async def test_unauthenticated_returns_401(client: AsyncClient):
 
 
 # ─── FORECAST ─────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_forecast_empty(client: AsyncClient):
@@ -190,7 +194,11 @@ async def test_forecast_empty(client: AsyncClient):
 async def test_forecast_monthly_loan(client: AsyncClient):
     """Aylik kredi 12 ay boyunca her ayda gorünmeli."""
     headers = await make_user(client, "pe_fc_loan@example.com")
-    await client.post("/api/v1/planned-expenses", json=_loan(start_date="2026-01-15", remaining_count=12), headers=headers)
+    await client.post(
+        "/api/v1/planned-expenses",
+        json=_loan(start_date="2026-01-15", remaining_count=12),
+        headers=headers,
+    )
 
     resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
     data = resp.json()

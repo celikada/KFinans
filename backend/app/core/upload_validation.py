@@ -10,6 +10,7 @@ attacker filename'i `.xlsx` yapıp icine sahte payload koyabilir
 Boyut limiti: `settings.max_upload_size_mb` (default 5MB). DoS koruma
 (100MB Excel openpyxl memory blow olmasin).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 # XLSX = ZIP container (PK\x03\x04 local file header signature).
 _XLSX_MAGIC = b"PK\x03\x04"
 # XLS = OLE2/CFB compound file header.
-_XLS_MAGIC = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+_XLS_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 async def validate_excel_upload(
@@ -64,7 +65,9 @@ async def validate_excel_upload(
     if len(content) > max_bytes:
         logger.warning(
             "Upload too large: filename=%s size=%d max=%d",
-            file.filename, len(content), max_bytes,
+            file.filename,
+            len(content),
+            max_bytes,
         )
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,

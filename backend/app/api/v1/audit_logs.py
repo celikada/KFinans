@@ -3,6 +3,7 @@
 Kullanici sadece **kendi** audit log'larini gorebilir (IDOR korumasi).
 Filtre: action prefix (orn. "auth.", "wallet.").
 """
+
 from datetime import datetime
 from typing import Annotated, Optional
 from uuid import UUID
@@ -41,7 +42,8 @@ async def list_audit_logs(
     current_user: CurrentUser,
     db: DB,
     action_prefix: Optional[str] = Query(
-        None, description="Filtrelemek icin action prefix (orn. 'auth.', 'wallet.')",
+        None,
+        description="Filtrelemek icin action prefix (orn. 'auth.', 'wallet.')",
     ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),

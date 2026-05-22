@@ -2,9 +2,11 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
-from sqlalchemy import String, Text, Date, Boolean, ForeignKey, UniqueConstraint, Numeric, func
+
+from sqlalchemy import Date, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP, JSONB
+
 from app.models.base import Base
 
 
@@ -16,7 +18,9 @@ class PortfolioSnapshot(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # DBA-001 (FAZ H): User silinince snapshot cascade.
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)
     total_value_tl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
@@ -41,7 +45,9 @@ class AssetPosition(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # DBA-001 (FAZ H): Snapshot silinince asset_positions cascade.
     snapshot_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("portfolio_snapshots.id", ondelete="CASCADE"), nullable=False,
+        UUID(as_uuid=True),
+        ForeignKey("portfolio_snapshots.id", ondelete="CASCADE"),
+        nullable=False,
     )
 
     # exchange | blockchain
@@ -67,7 +73,8 @@ class AssetPosition(Base):
     # Blockchain pozisyonlar için hangi cüzdandan geldiği.
     # DBA-001 (FAZ H): Wallet silinince asset_position kaybolmasin (history koru); SET NULL.
     wallet_address_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("wallet_addresses.id", ondelete="SET NULL"),
+        UUID(as_uuid=True),
+        ForeignKey("wallet_addresses.id", ondelete="SET NULL"),
     )
 
     snapshot: Mapped["PortfolioSnapshot"] = relationship(back_populates="asset_positions")

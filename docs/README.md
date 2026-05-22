@@ -50,6 +50,24 @@ Proje kökü:
 - [`frontend/README.md`](../frontend/README.md) — Frontend yapısı, bileşenler, stil
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code asistanına proje yönergeleri
 
-Operasyonel belgeler:
-- [`production-deploy-checklist.md`](production-deploy-checklist.md) — İlk production deploy (v0.1.0) checklist
-- [`infrastructure-runbook.md`](infrastructure-runbook.md) — DNS, email (Resend), K3s, cert-manager kurulum kayıtları + periyodik bakım + acil durum komutları
+Operasyonel belgeler (`operations/`):
+- [`operations/production-deploy-checklist.md`](operations/production-deploy-checklist.md) — İlk production deploy (v0.1.0) checklist
+- [`operations/infrastructure-runbook.md`](operations/infrastructure-runbook.md) — DNS, email, K3s, cert-manager kurulum kayıtları + periyodik bakım
+- [`operations/operations-playbook.md`](operations/operations-playbook.md) — Günlük operasyon + alerting + troubleshooting (taslak)
+- [`operations/disaster-recovery.md`](operations/disaster-recovery.md) — DR drill + restore prosedürü + RTO/RPO (taslak)
+
+Referans belgeleri (`reference/`):
+- [`reference/user-guide.md`](reference/user-guide.md) — Son kullanıcı kılavuzu (17 dashboard sayfası feature listesi)
+- [`reference/portability-matrix.md`](reference/portability-matrix.md) — Vendor lock-in + multi-cloud migration plan
+- [`reference/reusability-patterns.md`](reference/reusability-patterns.md) — Kod pattern kataloğu (BaseIntegration, MultiFernet, masking, audit, vs.)
+
+Audit tutanakları (`audits/`):
+- [`audits/2026-05-22-master-audit.md`](audits/2026-05-22-master-audit.md) — **Faz I sonrası master audit (11 paralel uzman ajan)**
+- [`audits/2026-05-08-faz-g-audit.md`](audits/2026-05-08-faz-g-audit.md) — Faz G sistem audit özeti (240 bulgu)
+- [`audits/2026-05-08-sprint-plan.md`](audits/2026-05-08-sprint-plan.md) — Faz G audit sonrası sprint planı
+- [`SYSTEM-DOC-AUDIT-2026-05-22.md`](SYSTEM-DOC-AUDIT-2026-05-22.md) — Dokümantasyon audit + reorganize plan (doc-expert)
+- [`MIMARI-AUDIT-2026-05-22.md`](MIMARI-AUDIT-2026-05-22.md) — Sistem mimarisi audit (architect)
+- [`audit-2026-05-22/`](audit-2026-05-22/) — 9 uzman ajan notu (compliance, security, dba, ai, backend, devops, test, finance, frontend)
+
+Legal:
+- [`legal/incident-response-plan.md`](legal/incident-response-plan.md) — Veri ihlali müdahale planı (ISO 27035 + KVKK m.12/5 + GDPR Art.33)

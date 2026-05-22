@@ -1,0 +1,35 @@
+---
+# Backend pod'a allowed ingress:
+# 1. Traefik (kube-system ns) -> backend:8000
+# 2. Kubelet probe (single-node K3s node IP)
+# 3. svclb-traefik (klipper-lb ServiceLB) — K3s edge case, hostNetwork yok
+#    ama svclb pod IP source olabiliyor; cluster pod CIDR ile genis allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-ingress
+  namespace: kfinans
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Traefik + svclb (kube-system ns'den her pod allow — daha guvenli alternatif:
+    # spesifik pod label, ama K3s svclb-traefik label'i `svccontroller.k3s.cattle.io/...`
+    # versiyon-bagimli. Konservatif: kube-system genel allow).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Kubelet probe (Oracle VM single-node)
+    - from:
+        - ipBlock:
+            cidr: 141.144.243.54/32
+      ports:
+        - protocol: TCP
+          port: 8000

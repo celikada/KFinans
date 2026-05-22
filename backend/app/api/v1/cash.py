@@ -1,10 +1,11 @@
 """Nakit/banka hesabı CRUD endpoint'leri."""
+
 import logging
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
@@ -58,21 +59,24 @@ async def list_cash(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    rows = (await db.execute(
-        select(CashHolding)
-        .where(CashHolding.user_id == current_user.id)
-        .order_by(CashHolding.id)
-    )).scalars().all()
+    rows = (await db.execute(select(CashHolding).where(CashHolding.user_id == current_user.id).order_by(CashHolding.id))).scalars().all()
 
     out: list[CashOut] = []
     total_tl = Decimal(0)
     for r in rows:
         tl = await _amount_to_tl(r.amount, r.currency)
         total_tl += tl
-        out.append(CashOut(
-            id=r.id, label=r.label, amount=r.amount, currency=r.currency,
-            notes=r.notes, updated_at=r.updated_at, amount_tl=tl,
-        ))
+        out.append(
+            CashOut(
+                id=r.id,
+                label=r.label,
+                amount=r.amount,
+                currency=r.currency,
+                notes=r.notes,
+                updated_at=r.updated_at,
+                amount_tl=tl,
+            )
+        )
     return CashSummaryOut(holdings=out, total_tl=total_tl.quantize(Decimal("0.01")))
 
 
@@ -94,9 +98,13 @@ async def create_cash(
     await db.refresh(holding)
     tl = await _amount_to_tl(holding.amount, holding.currency)
     return CashOut(
-        id=holding.id, label=holding.label, amount=holding.amount,
-        currency=holding.currency, notes=holding.notes,
-        updated_at=holding.updated_at, amount_tl=tl,
+        id=holding.id,
+        label=holding.label,
+        amount=holding.amount,
+        currency=holding.currency,
+        notes=holding.notes,
+        updated_at=holding.updated_at,
+        amount_tl=tl,
     )
 
 
@@ -107,11 +115,14 @@ async def update_cash(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    holding = (await db.execute(
-        select(CashHolding).where(
-            CashHolding.id == cash_id, CashHolding.user_id == current_user.id,
+    holding = (
+        await db.execute(
+            select(CashHolding).where(
+                CashHolding.id == cash_id,
+                CashHolding.user_id == current_user.id,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if not holding:
         raise HTTPException(status_code=404, detail="Nakit kaydı bulunamadı")
     if payload.label is not None:
@@ -126,9 +137,13 @@ async def update_cash(
     await db.refresh(holding)
     tl = await _amount_to_tl(holding.amount, holding.currency)
     return CashOut(
-        id=holding.id, label=holding.label, amount=holding.amount,
-        currency=holding.currency, notes=holding.notes,
-        updated_at=holding.updated_at, amount_tl=tl,
+        id=holding.id,
+        label=holding.label,
+        amount=holding.amount,
+        currency=holding.currency,
+        notes=holding.notes,
+        updated_at=holding.updated_at,
+        amount_tl=tl,
     )
 
 
@@ -140,7 +155,8 @@ async def delete_cash(
 ):
     result = await db.execute(
         delete(CashHolding).where(
-            CashHolding.id == cash_id, CashHolding.user_id == current_user.id,
+            CashHolding.id == cash_id,
+            CashHolding.user_id == current_user.id,
         )
     )
     if result.rowcount == 0:

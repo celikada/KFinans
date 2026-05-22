@@ -1,5 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -27,10 +28,10 @@ class Income(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Recurring kayıttan otomatik üretildiyse kaynak ID burada (manuel kayıtlarda NULL)
     recurring_income_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("recurring_incomes.id", ondelete="SET NULL"), nullable=True, index=True,
+        ForeignKey("recurring_incomes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="incomes")

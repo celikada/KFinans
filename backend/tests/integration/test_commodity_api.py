@@ -7,11 +7,12 @@ Beklenen fiyatlar:
   XAU=X → $3000/troy oz → gold = 3000 / 31.1034768 × 40 ≈ 3861.02 TRY/gram
   XAG=X → $35/troy oz  → silver = 35 / 31.1034768 × 40 ≈ 45.02 TRY/gram
 """
+
 import pytest
 import respx
 from httpx import AsyncClient, Response
 
-from tests.conftest import make_user, verify_user_email
+from tests.conftest import make_user
 
 # ---------------------------------------------------------------------------
 # TCMB XML yanıtı — USD/TRY = 40.0
@@ -61,23 +62,18 @@ def mock_metal_http():
 
     with respx.mock(assert_all_called=False) as mock:
         # TCMB
-        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(
-            return_value=Response(200, content=_TCMB_XML)
-        )
+        mock.get("https://www.tcmb.gov.tr/kurlar/today.xml").mock(return_value=Response(200, content=_TCMB_XML))
         # XAU=X
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*"
-        ).mock(return_value=Response(200, json=_XAU_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAU=X.*").mock(return_value=Response(200, json=_XAU_RESP))
         # XAG=X
-        mock.get(
-            url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*"
-        ).mock(return_value=Response(200, json=_XAG_RESP))
+        mock.get(url__regex=r"https://query1\.finance\.yahoo\.com/v8/finance/chart/XAG=X.*").mock(return_value=Response(200, json=_XAG_RESP))
         yield mock
 
 
 # ---------------------------------------------------------------------------
 # Yardımcılar
 # ---------------------------------------------------------------------------
+
 
 def _gram(metal: str, qty: float, notes: str | None = None) -> dict:
     return {"unit_type": "gram", "metal": metal, "quantity": qty, "notes": notes}
@@ -208,9 +204,7 @@ async def test_create_coin_ata(client: AsyncClient):
 async def test_invalid_biga_code(client: AsyncClient):
     """Geçersiz BiGA kodu → 422."""
     headers = await make_user(client, "com_bad_biga@example.com")
-    resp = await client.post(
-        BASE, json={"unit_type": "biga", "biga_code": "Z99", "quantity": 1.0}, headers=headers
-    )
+    resp = await client.post(BASE, json={"unit_type": "biga", "biga_code": "Z99", "quantity": 1.0}, headers=headers)
     assert resp.status_code == 422
 
 
@@ -218,9 +212,7 @@ async def test_invalid_biga_code(client: AsyncClient):
 async def test_invalid_coin_type(client: AsyncClient):
     """Geçersiz sikke türü → 422."""
     headers = await make_user(client, "com_bad_coin@example.com")
-    resp = await client.post(
-        BASE, json={"unit_type": "coin", "coin_type": "altin", "quantity": 1.0}, headers=headers
-    )
+    resp = await client.post(BASE, json={"unit_type": "coin", "coin_type": "altin", "quantity": 1.0}, headers=headers)
     assert resp.status_code == 422
 
 

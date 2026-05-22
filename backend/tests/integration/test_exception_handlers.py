@@ -9,6 +9,7 @@ client raw Python exception'i yakalayip pytest'e firlatir, FastAPI'nin
 exception_handler'lari calismaz. Bu testler icin `raise_app_exceptions=False`
 ile ayri AsyncClient kullaniriz.
 """
+
 import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient

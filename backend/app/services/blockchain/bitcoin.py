@@ -10,6 +10,7 @@ Ledger Live "Bitcoin 1 (Native SegWit)" hesabı için xpub formatında
 export edilmiş anahtar BIP-84 path'inde olur; bu yüzden hem 44 hem 84
 chain'i taranır ve gerçek bakiye veren chain otomatik bulunur.
 """
+
 import asyncio
 import logging
 import time

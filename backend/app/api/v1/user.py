@@ -2,8 +2,8 @@ import json
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal
 from io import BytesIO
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -12,9 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
+from app.core.masking import mask_email
+from app.core.password_policy import check_hibp_pwned, check_password_strength
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.user import PasswordChange, ProfileUpdate, UserMeOut
@@ -33,6 +34,7 @@ class EmailChangeRequest(BaseModel):
 
 class ConsentType(BaseModel):
     """COMP-006 (FAZ H): Geri cekilebilir riza turleri."""
+
     consent_type: Literal["overseas"] = Field(description="Su an sadece 'overseas' destekleniyor")
 
 
@@ -54,25 +56,52 @@ async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: 
     current_user.risk_profile = payload.risk_profile
     await db.commit()
     await db.refresh(current_user)
-    logger.info("Risk profili güncellendi: %s → %s", current_user.email, payload.risk_profile)
+    logger.info(
+        "Risk profili güncellendi: %s → %s",
+        mask_email(current_user.email),
+        payload.risk_profile,
+    )
     return UserMeOut.model_validate(current_user)
 
 
 @router.put("/password", status_code=status.HTTP_200_OK)
-async def change_password(
-    request: Request, payload: PasswordChange, current_user: CurrentUser, db: DB
-) -> dict:
+async def change_password(request: Request, payload: PasswordChange, current_user: CurrentUser, db: DB) -> dict:
     if not verify_password(payload.current_password, current_user.password_hash):
-        logger.warning("Yanlış mevcut şifre girişi: %s", current_user.email)
+        logger.warning("Yanlış mevcut şifre girişi: %s", mask_email(current_user.email))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mevcut şifre hatalı")
+
+    # SEC (audit #5): zxcvbn + HIBP yeni sifrede de uygulanir.
+    email_local = current_user.email.split("@", 1)[0]
+    is_strong, error_msg = check_password_strength(
+        payload.new_password,
+        user_inputs=[current_user.email, email_local],
+    )
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error_msg,
+        )
+    leaked_count = await check_hibp_pwned(payload.new_password)
+    if leaked_count >= 1:
+        logger.info(
+            "Sizmis sifre reddedildi (change): email=%s leaked_count=%s",
+            mask_email(current_user.email),
+            leaked_count,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=("Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin."),
+        )
+
     current_user.password_hash = hash_password(payload.new_password)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.PASSWORD_CHANGE,
         user_id=current_user.id,
     )
     await db.commit()
-    logger.info("Şifre güncellendi: %s", current_user.email)
+    logger.info("Şifre güncellendi: %s", mask_email(current_user.email))
     return {"detail": "Şifre güncellendi"}
 
 
@@ -80,13 +109,14 @@ async def change_password(
 async def delete_me(request: Request, current_user: CurrentUser, db: DB) -> dict:
     current_user.deleted_at = datetime.now(tz=timezone.utc)
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ACCOUNT_SOFT_DELETE,
         user_id=current_user.id,
         resource=f"user:{current_user.id}",
     )
     await db.commit()
-    logger.info("Hesap silindi (soft-delete): %s", current_user.email)
+    logger.info("Hesap silindi (soft-delete): %s", mask_email(current_user.email))
     return {"detail": "Hesap silindi"}
 
 
@@ -126,15 +156,17 @@ async def request_email_change(
     token = secrets.token_urlsafe(32)
     current_user.email_change_new = new_email
     current_user.email_change_token = token
-    current_user.email_change_expires_at = (
-        datetime.now(timezone.utc) + timedelta(hours=_EMAIL_CHANGE_TTL_HOURS)
-    )
+    current_user.email_change_expires_at = datetime.now(timezone.utc) + timedelta(hours=_EMAIL_CHANGE_TTL_HOURS)
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.EMAIL_CHANGE_REQUEST,
         user_id=current_user.id,
-        extra={"old_email": current_user.email, "new_email": new_email},
+        extra={
+            "old_email": mask_email(current_user.email),
+            "new_email": mask_email(new_email),
+        },
     )
     await db.commit()
 
@@ -142,10 +174,12 @@ async def request_email_change(
     # send_email helper'i Faz 3'te mevcut; iki ayri e-posta servis tarafinda
     # render edilir. Burada sadece audit + token doner; gerçek gonderim
     # async asyncio.to_thread ile yapilabilir.
-    confirm_url = f"{settings.frontend_url.rstrip('/')}/confirm-email-change?token={token}"
+    # NOTE: confirm_url log'a YAZILMAZ (token = phishing risk). Sadece email
+    # icinde gonderilir; logging icin sadece masked email + user-id yeterli.
     logger.info(
-        "E-posta degistirme istegi: user=%s yeni=%s url=%s",
-        current_user.id, new_email, confirm_url,
+        "E-posta degistirme istegi: user=%s yeni=%s",
+        current_user.id,
+        mask_email(new_email),
     )
     return {"detail": "Yeni e-posta adresine onay baglantisi gonderildi"}
 
@@ -162,14 +196,10 @@ async def confirm_email_change(
     /auth/logout cagirmasi onerilir)."""
     result = await db.execute(select(User).where(User.email_change_token == token))
     user = result.scalar_one_or_none()
-    if (
-        not user
-        or not user.email_change_expires_at
-        or user.email_change_expires_at < datetime.now(timezone.utc)
-        or not user.email_change_new
-    ):
+    if not user or not user.email_change_expires_at or user.email_change_expires_at < datetime.now(timezone.utc) or not user.email_change_new:
         await log_audit(
-            db, request,
+            db,
+            request,
             action=AuditAction.EMAIL_CHANGE_COMPLETE,
             user_id=user.id if user else None,
             extra={"success": False, "reason": "invalid_or_expired"},
@@ -187,10 +217,15 @@ async def confirm_email_change(
     user.email_change_expires_at = None
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.EMAIL_CHANGE_COMPLETE,
         user_id=user.id,
-        extra={"success": True, "old_email": old_email, "new_email": user.email},
+        extra={
+            "success": True,
+            "old_email": mask_email(old_email),
+            "new_email": mask_email(user.email),
+        },
     )
     try:
         await db.commit()
@@ -200,7 +235,7 @@ async def confirm_email_change(
             status_code=status.HTTP_409_CONFLICT,
             detail="Bu e-posta artik kullanilamaz",
         )
-    logger.info("E-posta degisti: %s -> %s", old_email, user.email)
+    logger.info("E-posta degisti: %s -> %s", mask_email(old_email), mask_email(user.email))
     return {"detail": "E-posta basariyla guncellendi"}
 
 
@@ -227,16 +262,19 @@ async def revoke_consent(
 
     current_user.overseas_consent_at = None
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.CONSENT_REVOKE,
         user_id=current_user.id,
         extra={"consent_type": consent_type},
     )
     await db.commit()
-    logger.info("Acik riza geri cekildi: %s consent=%s", current_user.email, consent_type)
-    return {
-        "detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."
-    }
+    logger.info(
+        "Acik riza geri cekildi: %s consent=%s",
+        mask_email(current_user.email),
+        consent_type,
+    )
+    return {"detail": "Acik riza geri cekildi. AI tavsiye gibi yurt disi veri aktarimi gerektiren ozellikler kullanilamayacak."}
 
 
 # ─── COMP-003 (FAZ H): Veri tasinabilirligi — KVKK m.11/d, GDPR Art.20 ──
@@ -265,22 +303,22 @@ async def data_export(
       - investment_advice (history)
       - audit_logs (kullanicinin kendi log'lari)
     """
-    from app.models.integration import Integration, WalletAddress
-    from app.models.portfolio import PortfolioSnapshot, AssetPosition
-    from app.models.tefas import TefasHolding
-    from app.models.stock import StockHolding
-    from app.models.bes import BesHolding
-    from app.models.commodity import CommodityHolding
-    from app.models.manual_crypto import ManualCryptoHolding
-    from app.models.cash import CashHolding
-    from app.models.expense import Expense
-    from app.models.planned_expense import PlannedExpense
-    from app.models.income import Income
-    from app.models.recurring_income import RecurringIncome
-    from app.models.budget import Budget
-    from app.models.credit_card import CreditCard
     from app.models.advice import InvestmentAdvice
     from app.models.audit_log import AuditLog
+    from app.models.bes import BesHolding
+    from app.models.budget import Budget
+    from app.models.cash import CashHolding
+    from app.models.commodity import CommodityHolding
+    from app.models.credit_card import CreditCard
+    from app.models.expense import Expense
+    from app.models.income import Income
+    from app.models.integration import Integration, WalletAddress
+    from app.models.manual_crypto import ManualCryptoHolding
+    from app.models.planned_expense import PlannedExpense
+    from app.models.portfolio import AssetPosition, PortfolioSnapshot
+    from app.models.recurring_income import RecurringIncome
+    from app.models.stock import StockHolding
+    from app.models.tefas import TefasHolding
 
     def _serialize(obj, exclude: set[str] | None = None) -> dict:
         """SQLAlchemy ORM nesnesini dict'e cevir; datetime/decimal/uuid ISO/str."""
@@ -308,14 +346,16 @@ async def data_export(
     wallets_result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == uid))
     wallets = []
     for w in wallets_result.scalars().all():
-        wallets.append({
-            "id": str(w.id),
-            "chain": w.chain,
-            "address": w.address,  # hybrid_property decrypt
-            "label": w.label,
-            "is_active": w.is_active,
-            "created_at": w.created_at.isoformat() if w.created_at else None,
-        })
+        wallets.append(
+            {
+                "id": str(w.id),
+                "chain": w.chain,
+                "address": w.address,  # hybrid_property decrypt
+                "label": w.label,
+                "is_active": w.is_active,
+                "created_at": w.created_at.isoformat() if w.created_at else None,
+            }
+        )
 
     # Integrations: API key plaintext DAHIL DEGIL
     intg = await _list(Integration, exclude={"encrypted_key", "encrypted_secret"})
@@ -325,10 +365,12 @@ async def data_export(
     snapshots = []
     for s in snap_result.scalars().all():
         ap_result = await db.execute(select(AssetPosition).where(AssetPosition.snapshot_id == s.id))
-        snapshots.append({
-            **_serialize(s),
-            "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
-        })
+        snapshots.append(
+            {
+                **_serialize(s),
+                "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
+            }
+        )
 
     # Audit log
     audit_result = await db.execute(select(AuditLog).where(AuditLog.user_id == uid))
@@ -373,7 +415,8 @@ async def data_export(
     }
 
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.DATA_EXPORT,
         user_id=uid,
         extra={
@@ -408,7 +451,8 @@ async def grant_anthropic_consent(
     current_user.anthropic_consent_at = datetime.now(timezone.utc)
     current_user.anthropic_consent_version = ANTHROPIC_CONSENT_VERSION
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ANTHROPIC_CONSENT_GRANT,
         user_id=current_user.id,
         extra={"version": ANTHROPIC_CONSENT_VERSION},
@@ -435,7 +479,8 @@ async def revoke_anthropic_consent(
     current_user.anthropic_consent_at = None
     current_user.anthropic_consent_version = None
     await log_audit(
-        db, request,
+        db,
+        request,
         action=AuditAction.ANTHROPIC_CONSENT_REVOKE,
         user_id=current_user.id,
     )

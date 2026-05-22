@@ -1,4 +1,5 @@
 """Custom ASGI/Starlette middleware'leri."""
+
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -42,9 +43,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # ─── Transport security ──────────────────────────────────────────
         # max-age 1 yıl + alt domain'ler dahil + preload list'e adaylık
-        response.headers["Strict-Transport-Security"] = (
-            f"max-age={settings.hsts_max_age}; includeSubDomains; preload"
-        )
+        response.headers["Strict-Transport-Security"] = f"max-age={settings.hsts_max_age}; includeSubDomains; preload"
 
         # ─── Anti-framing / anti-sniffing ────────────────────────────────
         response.headers["X-Frame-Options"] = "DENY"
@@ -61,9 +60,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # ─── Permissions Policy (eski Feature-Policy) ────────────────────
         # Hassas browser özellikleri default'ta kapalı; ihtiyaca göre aç.
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
-        )
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
 
         # ─── Cross-Origin izolasyon (Spectre koruması) ───────────────────
         # COEP credentialless yerine require-corp daha katı; API için yeterli.
@@ -108,7 +105,9 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
             if slow:
                 logger.warning(
                     "SLOW_REQUEST(error) %s %s duration_ms=%.1f",
-                    request.method, route_key, duration_ms,
+                    request.method,
+                    route_key,
+                    duration_ms,
                 )
             raise
 
@@ -120,7 +119,10 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
         if slow:
             logger.warning(
                 "SLOW_REQUEST %s %s duration_ms=%.1f status=%s",
-                request.method, route_key, duration_ms, response.status_code,
+                request.method,
+                route_key,
+                duration_ms,
+                response.status_code,
             )
         return response
 

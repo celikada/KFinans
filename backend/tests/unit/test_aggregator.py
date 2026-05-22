@@ -4,11 +4,10 @@ DB veya HTTP gerekmez; saf hesaplama testleri.
 
 Para hesaplarında hata kabul edilmez — bu modül %100 coverage hedefler.
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-
-import pytest
 
 from app.services.aggregator import (
     calculate_breakdown,
@@ -18,8 +17,8 @@ from app.services.aggregator import (
 )
 from app.services.base import AssetData
 
-
 # ─── Yardımcı Factory'ler ─────────────────────────────────────────────────────
+
 
 def make_position(
     *,
@@ -61,6 +60,7 @@ def make_snapshot(total: str, *positions, snapshot_date_offset: int = 0):
 
 
 # ─── calculate_changes (WoW, MoM) ─────────────────────────────────────────────
+
 
 class TestCalculateChanges:
     def test_no_history_returns_zero_changes(self):
@@ -118,6 +118,7 @@ class TestCalculateChanges:
 
 # ─── calculate_breakdown ──────────────────────────────────────────────────────
 
+
 class TestCalculateBreakdown:
     def test_breakdown_sums_to_100_percent(self):
         snap = make_snapshot(
@@ -129,10 +130,7 @@ class TestCalculateBreakdown:
             make_position(asset_type="cash", total_value_tl="5000"),
         )
         result = calculate_breakdown(snap)
-        total = (
-            result.crypto_pct + result.staked_crypto_pct + result.fund_pct +
-            result.pension_pct + result.cash_pct
-        )
+        total = result.crypto_pct + result.staked_crypto_pct + result.fund_pct + result.pension_pct + result.cash_pct
         assert total == Decimal("100.00")
 
     def test_breakdown_individual_percentages(self):
@@ -168,10 +166,7 @@ class TestCalculateBreakdown:
         assert symbols == ["B", "C", "A"]
 
     def test_top_assets_capped_at_5(self):
-        positions = [
-            make_position(symbol=f"S{i}", total_value_tl=str(1000 - i * 10))
-            for i in range(10)
-        ]
+        positions = [make_position(symbol=f"S{i}", total_value_tl=str(1000 - i * 10)) for i in range(10)]
         snap = make_snapshot("9550", *positions)
         result = calculate_breakdown(snap)
         assert len(result.top_assets) == 5
@@ -191,12 +186,20 @@ class TestCalculateBreakdown:
 
 # ─── extract_staking_positions ────────────────────────────────────────────────
 
+
 class TestExtractStakingPositions:
     def test_only_staked_positions_returned(self):
         snap = make_snapshot(
             "0",
             make_position(symbol="BTC", liquid="1.0", staked="0", rewards="0", total_value_tl="0"),
-            make_position(symbol="S", liquid="0", staked="100.0", rewards="5.0", unit_price_tl="2", total_value_tl="0"),
+            make_position(
+                symbol="S",
+                liquid="0",
+                staked="100.0",
+                rewards="5.0",
+                unit_price_tl="2",
+                total_value_tl="0",
+            ),
         )
         result = extract_staking_positions(snap)
         assert len(result) == 1
@@ -242,6 +245,7 @@ class TestExtractStakingPositions:
 
 
 # ─── to_asset_position ────────────────────────────────────────────────────────
+
 
 class TestToAssetPosition:
     def _asset(self, **kw):

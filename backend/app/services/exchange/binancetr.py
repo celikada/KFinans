@@ -8,15 +8,17 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.services.base import BaseExchangeIntegration, AssetData
+from app.services.base import AssetData, BaseExchangeIntegration
 
 logger = logging.getLogger(__name__)
 
 _BASE_TR = "https://www.binance.tr"
 _BASE_GLOBAL = "https://api.binance.com"
 _STABLECOIN_USD: dict[str, Decimal] = {
-    "USDT": Decimal("1"), "USDC": Decimal("1"),
-    "BUSD": Decimal("1"), "FDUSD": Decimal("1"),
+    "USDT": Decimal("1"),
+    "USDC": Decimal("1"),
+    "BUSD": Decimal("1"),
+    "FDUSD": Decimal("1"),
     "TRY": Decimal("0"),
 }
 
@@ -69,7 +71,7 @@ class BinanceTRService(BaseExchangeIntegration):
         assets = inner.get("accountAssets", inner) if isinstance(inner, dict) else inner
 
         balances: dict[str, Decimal] = {}
-        for item in (assets if isinstance(assets, list) else []):
+        for item in assets if isinstance(assets, list) else []:
             asset = item.get("asset", "")
             free = Decimal(str(item.get("free", 0) or 0))
             locked = Decimal(str(item.get("locked", 0) or 0))
@@ -213,16 +215,18 @@ class BinanceTRService(BaseExchangeIntegration):
             unit_price = price_of(symbol)
             if unit_price == 0 and symbol not in _STABLECOIN_USD:
                 continue
-            assets.append(AssetData(
-                symbol=symbol,
-                name=symbol,
-                provider="binancetr",
-                asset_type="crypto",
-                source_type="exchange",
-                liquid_quantity=liquid,
-                staked_quantity=staked,
-                unit_price_usd=unit_price,
-            ))
+            assets.append(
+                AssetData(
+                    symbol=symbol,
+                    name=symbol,
+                    provider="binancetr",
+                    asset_type="crypto",
+                    source_type="exchange",
+                    liquid_quantity=liquid,
+                    staked_quantity=staked,
+                    unit_price_usd=unit_price,
+                )
+            )
         return assets
 
     async def health_check(self) -> bool:

@@ -1,4 +1,5 @@
 """Kıymetli maden (altın/gümüş) Pydantic şemaları."""
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Optional

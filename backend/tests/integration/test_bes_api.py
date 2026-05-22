@@ -3,14 +3,14 @@
 Model: 4 ana metric (yatirilan + getirisi, devlet katkisi + getirisi)
 + opsiyonel sozlesme numarasi. Toplam = sum(4 metric).
 """
+
 import io
 
 import openpyxl
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _holding(plan: str, principal=0, returns=0, govt=0, govt_returns=0, contract=None):
@@ -36,7 +36,14 @@ async def test_empty_user_returns_no_holdings(client: AsyncClient):
 async def test_save_and_retrieve_bes_holdings(client: AsyncClient):
     headers = await make_user(client, "bes_save@example.com")
     holdings = [
-        _holding("AvivaSA Atak Hisse", principal=80000, returns=20000, govt=20000, govt_returns=5000.50, contract="AVS-12345"),
+        _holding(
+            "AvivaSA Atak Hisse",
+            principal=80000,
+            returns=20000,
+            govt=20000,
+            govt_returns=5000.50,
+            contract="AVS-12345",
+        ),
         _holding("Anadolu Hayat OKS", principal=50000, returns=15000, govt=10000, govt_returns=500),
     ]
     put = await client.put("/api/v1/portfolio/bes/holdings", json=holdings, headers=headers)
@@ -113,22 +120,34 @@ async def test_excel_export(client: AsyncClient):
     headers = await make_user(client, "bes_export@example.com")
     await client.put(
         "/api/v1/portfolio/bes/holdings",
-        json=[_holding("Plan X", principal=10000, returns=2000, govt=2500, govt_returns=345.67, contract="X-99")],
+        json=[
+            _holding(
+                "Plan X",
+                principal=10000,
+                returns=2000,
+                govt=2500,
+                govt_returns=345.67,
+                contract="X-99",
+            )
+        ],
         headers=headers,
     )
 
     resp = await client.get("/api/v1/portfolio/bes/export", headers=headers)
     assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith(
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    assert resp.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     wb = openpyxl.load_workbook(io.BytesIO(resp.content))
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     assert rows[0] == (
-        "Plan Adı", "Sözleşme No", "Yatırılan (₺)", "Yatırım Getirisi (₺)",
-        "Devlet Katkısı (₺)", "Devlet Katkı Getirisi (₺)", "Toplam (₺)",
+        "Plan Adı",
+        "Sözleşme No",
+        "Yatırılan (₺)",
+        "Yatırım Getirisi (₺)",
+        "Devlet Katkısı (₺)",
+        "Devlet Katkı Getirisi (₺)",
+        "Toplam (₺)",
     )
     # Plan X satiri
     assert rows[1][0] == "Plan X"
@@ -143,10 +162,17 @@ async def test_excel_import(client: AsyncClient):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append([
-        "Plan Adı", "Sözleşme No", "Yatırılan (₺)", "Yatırım Getirisi (₺)",
-        "Devlet Katkısı (₺)", "Devlet Katkı Getirisi (₺)", "Toplam (₺)",
-    ])
+    ws.append(
+        [
+            "Plan Adı",
+            "Sözleşme No",
+            "Yatırılan (₺)",
+            "Yatırım Getirisi (₺)",
+            "Devlet Katkısı (₺)",
+            "Devlet Katkı Getirisi (₺)",
+            "Toplam (₺)",
+        ]
+    )
     ws.append(["Imported Plan", "IMP-1", 50000, 10000, 12500, 1500, 74000])
     ws.append(["Other Plan", None, 20000, 0, 5000, 0, 25000])
     buf = io.BytesIO()
@@ -155,7 +181,13 @@ async def test_excel_import(client: AsyncClient):
 
     resp = await client.post(
         "/api/v1/portfolio/bes/import",
-        files={"file": ("test.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={
+            "file": (
+                "test.xlsx",
+                buf.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
         headers=headers,
     )
     assert resp.status_code == 200

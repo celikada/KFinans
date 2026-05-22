@@ -1,4 +1,5 @@
 """Algorand cüzdan bakiye servisi (Algonode public API)."""
+
 import logging
 from decimal import Decimal
 

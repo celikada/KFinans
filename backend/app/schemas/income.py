@@ -7,17 +7,23 @@ from pydantic import BaseModel, Field
 IncomeCategory = Literal["salary", "freelance", "rental", "dividend", "bonus", "sale", "other"]
 
 INCOME_CATEGORIES: tuple[str, ...] = (
-    "salary", "freelance", "rental", "dividend", "bonus", "sale", "other"
+    "salary",
+    "freelance",
+    "rental",
+    "dividend",
+    "bonus",
+    "sale",
+    "other",
 )
 
 INCOME_CATEGORY_LABELS: dict[str, str] = {
-    "salary":    "Maaş",
+    "salary": "Maaş",
     "freelance": "Serbest Meslek",
-    "rental":    "Kira Geliri",
-    "dividend":  "Temettü / Faiz",
-    "bonus":     "İkramiye / Prim",
-    "sale":      "Varlık Satışı",
-    "other":     "Diğer",
+    "rental": "Kira Geliri",
+    "dividend": "Temettü / Faiz",
+    "bonus": "İkramiye / Prim",
+    "sale": "Varlık Satışı",
+    "other": "Diğer",
 }
 
 
@@ -52,8 +58,8 @@ class RealizeMonthRequest(BaseModel):
 
 
 class RealizeResult(BaseModel):
-    realized: int          # yeni oluşturulan income kaydı sayısı
-    skipped: int           # zaten realize edilmiş olduğu için atlanan
+    realized: int  # yeni oluşturulan income kaydı sayısı
+    skipped: int  # zaten realize edilmiş olduğu için atlanan
     income_ids: list[int]  # yeni kayıtların ID'leri
 
 
@@ -78,12 +84,12 @@ RecurringRecurrence = Literal["one_time", "monthly", "quarterly", "biannual", "y
 
 RECURRING_INCOME_CATEGORIES = ("salary", "rental", "dividend", "bonus", "freelance", "other")
 RECURRING_INCOME_CATEGORY_LABELS: dict[str, str] = {
-    "salary":    "Maaş",
-    "rental":    "Kira Geliri",
-    "dividend":  "Temettü / Faiz",
-    "bonus":     "İkramiye / Prim",
+    "salary": "Maaş",
+    "rental": "Kira Geliri",
+    "dividend": "Temettü / Faiz",
+    "bonus": "İkramiye / Prim",
     "freelance": "Serbest Meslek",
-    "other":     "Diğer",
+    "other": "Diğer",
 }
 
 RECURRING_RECURRENCE_LABELS: dict[str, str] = {
@@ -140,11 +146,12 @@ class RecurringIncomeOut(BaseModel):
 
 class IncomeDashboard(BaseModel):
     """Gelir sayfası özet panel: gerçekleşen + tahmini metrikleri."""
+
     year: int
     month: int
-    this_month_actual: Decimal       # incomes(bu ay) toplamı
-    ytd_actual: Decimal              # incomes(yıl başı..bugün)
-    this_month_recurring: Decimal    # recurring_incomes(bu ay aktif)
-    ytd_recurring: Decimal           # recurring_incomes(yıl başı..bugün geçen)
+    this_month_actual: Decimal  # incomes(bu ay) toplamı
+    ytd_actual: Decimal  # incomes(yıl başı..bugün)
+    this_month_recurring: Decimal  # recurring_incomes(bu ay aktif)
+    ytd_recurring: Decimal  # recurring_incomes(yıl başı..bugün geçen)
     remaining_year_recurring: Decimal  # recurring_incomes(bugünden..yıl sonu)
-    year_total_estimate: Decimal     # ytd_actual + remaining_year_recurring
+    year_total_estimate: Decimal  # ytd_actual + remaining_year_recurring

@@ -150,6 +150,8 @@ cd frontend && npm install && npm run dev
 
 **JWT Refresh Token Rotation (FAZ C4):** `/auth/refresh` her çağrıda eski refresh token'ın `jti`'sini `revoked_tokens` blacklist'ine atar + yeni refresh üretir. Sızan refresh ikinci kez kullanılamaz (saldırgan ya da gerçek kullanıcı — kim önce kullandıysa o kazanır, diğeri 401 alır). `IntegrityError` paralel istek senaryosunda rollback ile idempotent. Access token TTL prod'da 30 dk (`ACCESS_TOKEN_EXPIRE_MINUTES=30` env), dev'de 480 dk default.
 
+**MFA — TOTP (audit #5 MFA, 2026-05-21):** RFC 6238 standardı (Google Authenticator / Authy / 1Password uyumlu). `pyotp` + `qrcode[pil]` paketleri. User modeline 3 kolon eklendi: `totp_secret` (Fernet ciphertext, plaintext base32), `totp_enabled` (Boolean default False), `totp_recovery_codes` (JSON list[str], bcrypt-hashed). 4 endpoint (`app/api/v1/mfa.py`): `POST /mfa/setup` (secret + otpauth URI + QR PNG dataURL), `POST /mfa/enable` (ilk TOTP kodla doğrulama + 10 recovery code plaintext **tek seferlik** döner), `POST /mfa/verify` (login sonrası `pre_mfa_token` + TOTP/recovery → full access+refresh), `POST /mfa/disable` (TOTP veya recovery ile MFA kapatma). Login flow update: `totp_enabled=True` ise `/auth/login` artık `{mfa_required: true, pre_mfa_token, expires_in_seconds}` döner (response_model `TokenResponse | MFALoginRequiredOut` Union). `pre_mfa_token` JWT `type=pre_mfa` 15 dk TTL; sadece `/mfa/verify`'da geçerli, blacklist'e atılmaz (kısa ömür yeterli). TOTP saat senkron toleransı `valid_window=1` (±30 sn). Recovery code tek kullanımlık — kullanıldığı anda hash listeden çıkar. Rate limit: setup/disable 3/dk, enable/verify 5/dk (brute force koruma). Audit: `auth.mfa.setup`, `auth.mfa.enabled`, `auth.mfa.disabled`, `auth.mfa.verify_success`, `auth.mfa.verify_failed`, `auth.mfa.recovery_used`, `auth.login_mfa_required`. Migration `e2f3a4b5c6d7` (down_revision `d1e2f3a4b5c6`).
+
 **revoked_tokens cleanup cron (FAZ C5):** APScheduler her gün 03:00 Europe/Istanbul `_cleanup_revoked_tokens_job` çağırır — `expires_at < now` kayıtlar silinir. `session_factory` parametresi enjekte edilebilir (test'te `TestSession`, prod'da `AsyncSessionLocal`).
 
 **Audit Log altyapısı (FAZ C6):** `audit_logs` tablosu (id, user_id ON DELETE SET NULL, action VARCHAR(64), resource VARCHAR(128), ip_address, user_agent, extra JSONB, created_at). 8 kritik eyleme hook'lanmış: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.register`, `auth.password_change`, `wallet.add/delete`, `integration.add/delete`, `snapshot.delete`, `account.soft_delete`. `app/services/audit.py::log_audit()` best-effort (try/except yutar — ana endpoint bozulmaz). X-Forwarded-For destekli (proxy/ingress arkası). `GET /api/v1/audit-logs?action_prefix=&limit=` IDOR korumalı (user kendi log'larını görür).
@@ -243,4 +245,19 @@ cd frontend && npm install && npm run dev
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
 - **Test sayıları:** 192 unit + 357 integration (FAZ H sonu — PERF-004 + OBS-001 dahil). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
-- **Migration head:** `c0d1e2f3a4b5` (AI-005 anthropic_consent kolonları, 2026-05-10). Yeni migration `down_revision = "c0d1e2f3a4b5"`.
+- **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
+
+## Son Audit — 2026-05-22 (Faz I post-fix)
+
+11 paralel uzman ajan (compliance/security/dba/ai/backend/devops/test/finance/frontend + doc-expert + architect) çalışması sonucu **175+ NOT** üretildi. Master rapor:
+
+- [`docs/audits/2026-05-22-master-audit.md`](docs/audits/2026-05-22-master-audit.md) — executive summary + 8 P0 + cross-domain çelişki notları + reorganize plan + sprint öncelik listesi
+- [`docs/audit-2026-05-22/`](docs/audit-2026-05-22/) — 9 ajan domain-spesifik notları
+- [`docs/SYSTEM-DOC-AUDIT-2026-05-22.md`](docs/SYSTEM-DOC-AUDIT-2026-05-22.md) — doc-expert: dokümantasyon audit + 12 çelişki + 5 yeni doc taslağı
+- [`docs/MIMARI-AUDIT-2026-05-22.md`](docs/MIMARI-AUDIT-2026-05-22.md) — architect: 27 numaralı not + reusability + portability
+
+**Reorganize:** `docs/operations/`, `docs/reference/`, `docs/audits/` yeni klasör yapısı. `infrastructure-runbook.md` + `production-deploy-checklist.md` operations'a; `backlog/` audits'e taşındı; `github-support-followup-2026-05-12.md` silindi.
+
+**8 P0 launch blocker (özet, 2026-05-22 ara durum):** KVKK 13 placeholder, KEP, mailbox, off-site backup, DR drill yapılmadı (5 kalan); ~~DB TLS~~ ✅ a8496ca, ~~Swagger UI CSP + /openapi.json~~ ✅ a3f0503, ~~Decimal ROUND_HALF_UP global~~ ✅ a3f0503 (3 kapandı). Detay master rapor §4.
+
+**NetworkPolicy + DNS egress fix (2026-05-22, a8496ca):** `allow-dns-egress`'e pod CIDR (10.42.0.0/16) UDP/TCP 53 fallback kuralı eklendi. K3s built-in NetworkPolicy controller'da `namespaceSelector + podSelector` birleşik seçici CoreDNS pod IP'sine effective değil; backend-egress'in `0.0.0.0/0 except 10.42.0.0/16` UNION'da pod CIDR'i blokluyordu. Önceki 3 "DB TLS handshake fail" denemesi aslında DNS resolution hatasıymış (`socket.gaierror Temporary failure in name resolution`). Fix sonrası `DATABASE_SSL_MODE=require` prod'da aktif, smoke testler yeşil. NetworkPolicy launch blocker (P0 #1) + DB TLS launch blocker (P0 #6) birlikte kapandı.

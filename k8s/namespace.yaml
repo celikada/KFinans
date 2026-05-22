@@ -5,8 +5,18 @@ metadata:
   labels:
     name: kfinans
     app.kubernetes.io/part-of: kfinans
-    # DEVOPS-003 (FAZ H): Pod Security Standards — restricted profile
+    # DEVOPS-003 (FAZ H): Pod Security Standards
     # https://kubernetes.io/docs/concepts/security/pod-security-standards/
-    pod-security.kubernetes.io/enforce: restricted
+    #
+    # enforce: baseline — postgres official image entrypoint root'a ihtiyac
+    # duyar (gosu drop oncesi chown), runAsNonRoot=true ile fail eder.
+    # Backend/frontend restricted'i kolayca gecer ama postgres engelli.
+    # CloudNativePG operator migration'a kadar (ayri epic), baseline yeterli
+    # guvenlik saglar (privileged container, hostPath, host namespace yok).
+    #
+    # audit + warn: restricted — uyumsuz pod'lar log'da/event'lerde gorunur
+    # (postgres uyarisi visible) ama yaratim bloklamaz. Migration sirasinda
+    # eksikleri izlemek icin saklanir.
+    pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted

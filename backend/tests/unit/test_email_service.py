@@ -6,6 +6,7 @@ resend.Emails.send mock'lanir; gercek HTTP yapilmaz. 4 senaryo:
 - Resend exception (rate_limit / domain not verified) -> False
 - _password_reset_html / _verify_email_html dogru URL'i icerir
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -96,9 +97,14 @@ async def test_password_reset_email_returns_false_without_api_key():
 @pytest.mark.asyncio
 async def test_password_reset_email_swallows_exception():
     settings.resend_api_key = "re_test_dummy"
-    mock_send = MagicMock(side_effect=resend.exceptions.ResendError(
-        message="rate_limit", code=429, suggested_action="retry", error_type="rate_limit",
-    ))
+    mock_send = MagicMock(
+        side_effect=resend.exceptions.ResendError(
+            message="rate_limit",
+            code=429,
+            suggested_action="retry",
+            error_type="rate_limit",
+        )
+    )
     with patch("resend.Emails.send", mock_send):
         ok = await send_password_reset_email(to="reset@example.com", token="rtok")
     assert ok is False

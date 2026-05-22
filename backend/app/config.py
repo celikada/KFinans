@@ -15,6 +15,17 @@ class Settings(BaseSettings):
 
     # Exchange API key şifreleme
     fernet_key: str
+    # ─── SEC-012 (FAZ H): Fernet key rotation (MultiFernet) ───────────────
+    # Eski (rotated-out) anahtarlar — SADECE decrypt icin kullanilir, encrypt
+    # her zaman primary `fernet_key` ile yapilir. Rotation prosedur'u:
+    #   1. Yeni anahtar uret: `Fernet.generate_key().decode()`
+    #   2. `FERNET_KEYS_SECONDARY=["<eski-primary>"]` env'e ekle, restart
+    #   3. `FERNET_KEY=<yeni>` env'i guncelle, restart -> yeni encrypt yeni key ile
+    #   4. Re-encrypt background job tum row'lari yeni primary'e tasiyana kadar bekle
+    #   5. Tamamlandiginda secondary'leri kaldir
+    # JSON array string olarak parse edilir: `FERNET_KEYS_SECONDARY=["k1","k2"]`
+    # Bos liste (default) = eski tek-key davranisi (backward compat).
+    fernet_keys_secondary: list[str] = []
 
     # Claude API — finansal tavsiye özelliği etkinleştirilene kadar opsiyonel
     anthropic_api_key: str = ""
@@ -37,12 +48,7 @@ class Settings(BaseSettings):
     hsts_max_age: int = 31536000  # 1 yıl
     # Backend JSON-only; Swagger UI kullanımı için override:
     #   "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ..."
-    csp_policy: str = (
-        "default-src 'none'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'none'; "
-        "form-action 'none'"
-    )
+    csp_policy: str = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
     # ─── TrustedHost (FAZ C3) ─────────────────────────────────────────
     # Host header injection koruması. Prod'da override edilir; dev'de "*"
@@ -71,10 +77,16 @@ class Settings(BaseSettings):
     # Hepsi opt-in. DSN/endpoint bos ise no-op (dev'de aktif degil).
     sentry_dsn: str = ""
     sentry_env: str = "development"
-    sentry_traces_sample_rate: float = 0.1   # %10 trace ornegi
+    sentry_traces_sample_rate: float = 0.1  # %10 trace ornegi
     sentry_profiles_sample_rate: float = 0.0  # CPU profiling — kapali default
-    otel_endpoint: str = ""                   # Tempo/Jaeger/Honeycomb OTLP HTTP
+    otel_endpoint: str = ""  # Tempo/Jaeger/Honeycomb OTLP HTTP
     otel_service_name: str = "kfinans-backend"
+
+    # ─── SEC (audit #5): Password policy ─────────────────────────────
+    # zxcvbn (offline strength score) her zaman aktif; HIBP (k-anonymity)
+    # opsiyonel — settings.hibp_check_enabled=False ile devre disi.
+    # HIBP API down/timeout durumunda fail-open (UX vs security trade-off).
+    hibp_check_enabled: bool = True
 
     # ─── SEC-009 (FAZ H): File upload validation ─────────────────────
     # 10 Excel import endpoint'i (BES, expense, income, commodity, manual_crypto,
@@ -89,15 +101,40 @@ class Settings(BaseSettings):
     slow_request_threshold_ms: int = 500
     metrics_token: str = ""
 
+    # ─── Audit 2026-05-22 P0 #7: Swagger UI + OpenAPI exposure ────────
+    # Default KAPALI — prod'da /docs, /redoc, /openapi.json 404 doner.
+    # Saldirgan endpoint enumeration vektoru. Dev'de EXPOSE_SWAGGER=true
+    # env ile aktif. Prod'da gerekirse ingress basic auth + IP whitelist
+    # arkasina al.
+    expose_swagger: bool = False
+
     # ─── DBA-004 (FAZ H): Connection pool ─────────────────────────────
     # FastAPI async + APScheduler haftalik snapshot + asyncio.gather (10+ paralel)
     # default 5+10=15 max conn'i tuketir. Production'da PostgreSQL max_connections
     # 100 oldugu dusunulurse 30 backend safe (1 replica). Multi-replica icin
     # her replica `db_pool_size + db_max_overflow <= 30`.
-    db_pool_size: int = 20         # idle pool size
-    db_max_overflow: int = 10      # peak'te ek connection
-    db_pool_recycle: int = 1800    # 30 dk — stale connection (PG idle_in_transaction_session_timeout)
-    db_pool_timeout: int = 30      # pool tukenince istek 30sn bekler, sonra fail
+    db_pool_size: int = 20  # idle pool size
+    db_max_overflow: int = 10  # peak'te ek connection
+    db_pool_recycle: int = 1800  # 30 dk — stale connection (PG idle_in_transaction_session_timeout)
+    db_pool_timeout: int = 30  # pool tukenince istek 30sn bekler, sonra fail
+
+    # ─── Audit 2026-05-21 #3: DB TLS ──────────────────────────────────
+    # Postgres pod cert-manager selfsigned cert ile SSL aktive. Backend
+    # asyncpg pool ssl mode'lari:
+    #   - "disable": SSL kapali (eski davranis, geriye uyumlu)
+    #   - "prefer":  SSL aktive ama cert verify OFF — cluster-ici self-signed
+    #                cert kabul (defence-in-depth; node compromise -> in-flight
+    #                data leak engelli, ama MITM disinda guvenli degil)
+    #   - "require": SSL + cert chain validate — production CA bundle gerekli
+    #                (ayri PR: ca.crt mount + ssl_ca dosyasi configure)
+    # Default "prefer": postgres TLS deploy oncesi geriye uyumlu, sonra prod'da
+    # "require"e gec.
+    database_ssl_mode: str = "prefer"
+    # require mode'da CA bundle path. cert-manager `postgres-tls` Secret
+    # backend pod'a /etc/postgres-ca/ca.crt olarak mount edilir (k8s manifest).
+    # Bos ise asyncpg default ssl_ctx (sistem PKI'sina guvenir — selfsigned
+    # cert chain dogrulayamaz). Audit 2026-05-22 P0 #6 fix.
+    database_ssl_ca_path: str = "/etc/postgres-ca/ca.crt"
 
     @property
     def ethereum_rpc_url(self) -> str:

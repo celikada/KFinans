@@ -1,9 +1,9 @@
 """Expenses CRUD + summary endpoint testleri."""
+
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import make_user, verify_user_email
-
+from tests.conftest import make_user
 
 
 def _exp(amount: float, category: str, date: str, description: str | None = None) -> dict:
@@ -11,6 +11,7 @@ def _exp(amount: float, category: str, date: str, description: str | None = None
 
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_empty_list(client: AsyncClient):
@@ -169,6 +170,7 @@ async def test_list_sorted_desc_by_date(client: AsyncClient):
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_summary_empty_month(client: AsyncClient):
     headers = await make_user(client, "sum_empty@example.com")
@@ -204,6 +206,7 @@ async def test_summary_with_data(client: AsyncClient):
 
 
 # ─── IDOR ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_user_a_cannot_see_user_b_expenses(client: AsyncClient):
@@ -242,6 +245,7 @@ async def test_user_a_cannot_delete_user_b_expense(client: AsyncClient):
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_unauth_returns_401(client: AsyncClient):
