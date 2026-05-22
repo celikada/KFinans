@@ -148,9 +148,9 @@ Ancak **3 sınıf engel** kaldı:
 | 3 | Compliance | `privacy@`/`kvkk@`/`security@kfinans.app` mailbox yok | SECURITY.md + gizlilik vaadi karşılanmıyor | Cloudflare/Zoho routing |
 | 4 | Backup | Off-site backup YOK | Node failure = total data loss | rclone + Oracle Object Storage (Always Free 20 GB) |
 | 5 | Backup | DR drill yapılmadı | Restore prosedürü test edilmemiş | Quarterly staging drill protokol |
-| 6 | Security | DB TLS `ssl_mode="prefer"` cert verify OFF | MITM koruması zayıf | `require` + CA bundle mount |
-| 7 | Security | CSP + Swagger UI çakışma + `/openapi.json` enum vektörü | Saldırgan endpoint enumeration | Swagger UI prod'da disable veya auth-gated |
-| 8 | Finance | Decimal rounding mode global ayarsız (HALF_EVEN banker's) | Vergi raporlamaya uygun değil | `main.py` startup: `getcontext().rounding = ROUND_HALF_UP` |
+| 6 | Security | ~~DB TLS `ssl_mode="prefer"` cert verify OFF~~ ✅ **2026-05-22 (a8496ca)** — `require` + CA bundle aktif, NetworkPolicy DNS fix gerekli oldu | MITM koruması güçlü | — |
+| 7 | Security | ~~CSP + Swagger UI çakışma + `/openapi.json` enum vektörü~~ ✅ **2026-05-22 (a3f0503)** — prod'da `EXPOSE_SWAGGER=false` ile docs_url/redoc_url/openapi_url None | Endpoint enumeration kapalı | — |
+| 8 | Finance | ~~Decimal rounding mode global ayarsız (HALF_EVEN banker's)~~ ✅ **2026-05-22 (a3f0503)** — `main.py` import-time `getcontext().rounding = ROUND_HALF_UP` + regression test | Vergi raporlamaya uygun | — |
 
 ---
 
@@ -208,12 +208,13 @@ docs/
 
 ## 6. Sonraki Sprint Önceliklendirme
 
-### Sprint 1 (1 hafta) — P0 Production Launch Blocker
-1. KVKK 13 placeholder doldur + KEP başvuru başlat + mailbox kurulumu (compliance)
-2. Off-site backup PR (rclone + Oracle Object Storage)
-3. DB TLS `require` + CA bundle (security + devops koordinasyon)
-4. Swagger UI prod auth-gated (security)
-5. Decimal `ROUND_HALF_UP` global (finance)
+### Sprint 1 (1 hafta) — P0 Production Launch Blocker (2026-05-22 ara durum)
+1. KVKK 13 placeholder doldur + KEP başvuru başlat + mailbox kurulumu (compliance) — **kullanıcı aksiyonu bekleniyor**
+2. Off-site backup PR (rclone + Oracle Object Storage) — **kalan**
+3. ~~DB TLS `require` + CA bundle~~ ✅ a8496ca (NetworkPolicy DNS root-cause çözüldü + require aktif)
+4. ~~Swagger UI prod auth-gated~~ ✅ a3f0503 (EXPOSE_SWAGGER=false default, docs/openapi None)
+5. ~~Decimal `ROUND_HALF_UP` global~~ ✅ a3f0503 (import-time set + 4 regression test)
+6. DR drill staging cluster — **kalan** (eskiden Sprint 2 #6 idi)
 
 ### Sprint 2 (1 hafta) — P1 Önemli Düzeltmeler
 6. DR drill staging cluster (devops + dba)
