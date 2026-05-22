@@ -1,5 +1,5 @@
 import type { IncomeDTO, IncomeDashboardDTO, IncomeInput, IncomeSummaryDTO, RealizeResultDTO, RecurringIncomeDTO, RecurringIncomeInput } from "./types";
-import { BASE, getAccessToken, request } from "./_client";
+import { downloadBlob, request, uploadForm } from "./_client";
 
 export const incomesApi = {
   // Gelir takibi
@@ -32,37 +32,12 @@ export const incomesApi = {
   realizeAllRecurringPast: () => request<RealizeResultDTO>(`/income/recurring/realize-all-past`, { method: "POST" }),
 
   // Gelir Excel export/import
-  exportIncomes: async (year?: number, month?: number) => {
-    const token = getAccessToken();
+  exportIncomes: (year?: number, month?: number) => {
     const q = new URLSearchParams();
     if (year !== undefined) q.set("year", String(year));
     if (month !== undefined) q.set("month", String(month));
     const qs = q.toString();
-    const res = await fetch(`${BASE}/income/export${qs ? `?${qs}` : ""}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error("Export başarısız");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "gelirler.xlsx";
-    a.click();
-    URL.revokeObjectURL(url);
+    return downloadBlob(`/income/export${qs ? `?${qs}` : ""}`, "gelirler.xlsx");
   },
-  importIncomes: async (file: File): Promise<IncomeDTO[]> => {
-    const token = getAccessToken();
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(`${BASE}/income/import`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: form,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail ?? res.statusText);
-    }
-    return res.json();
-  },
+  importIncomes: (file: File) => uploadForm<IncomeDTO[]>("/income/import", file),
 };
