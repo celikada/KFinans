@@ -22,11 +22,15 @@ data:
   CORS_ORIGINS: '["https://kfinans.app","https://www.kfinans.app"]'
   # FAZ C3: TrustedHostMiddleware whitelist
   ALLOWED_HOSTS: '["kfinans.app","www.kfinans.app"]'
-  # Audit 2026-05-22 P0 #6: DB TLS "require" + CA bundle. wait-for-dns
-  # initContainer (backend.yaml) DNS hazir olana kadar bekler, sonra
-  # alembic-upgrade asyncpg ssl_ctx CERT_REQUIRED ile baglanir. CA bundle
-  # postgres-tls Secret ca.crt -> /etc/postgres-ca/ mount.
-  DATABASE_SSL_MODE: "require"
+  # Audit 2026-05-22 P0 #6: DB TLS partial — "prefer" (TLSv1.3 aktif,
+  # cert verify off). "require" deneme 2026-05-22'de wait-for-dns +
+  # FQDN DATABASE_URL kombinasyonuyla bile fresh pod alembic init'te
+  # DNS gaierror veriyor. Kok sebep K3s embedded CNI/CoreDNS fresh pod
+  # podCIDR timing — eski pod (start sirasinda hazir olan) sorunsuz.
+  # CA bundle mount + database.py require branch KORUNDU (kod hazir);
+  # sonraki epic'te initContainer asyncpg connection retry wrapper
+  # (örn. tenacity 5sn*5 retry) ile yeniden denenecek.
+  DATABASE_SSL_MODE: "prefer"
 
   # E-posta (Resend) — RESEND_API_KEY secret'ta
   EMAIL_FROM: "KFinans <noreply@kfinans.app>"
