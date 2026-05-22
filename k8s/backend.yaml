@@ -64,15 +64,18 @@ spec:
             - sh
             - -c
             - |
+              # FQDN kullan — busybox nslookup ndots:5 + search list traversal
+              # bazi resolv.conf konfiglerinde "postgres" (short name) ile fail.
+              # postgres.kfinans.svc.cluster.local direkt absolute query.
               for i in 1 2 3 4 5 6 7 8 9 10; do
-                if nslookup postgres >/dev/null 2>&1; then
+                if nslookup postgres.kfinans.svc.cluster.local >/dev/null 2>&1; then
                   echo "DNS ready (attempt $i)"
                   exit 0
                 fi
                 echo "Waiting for DNS... attempt $i/10"
                 sleep 2
               done
-              echo "DNS timeout — NetworkPolicy enforcement bug suphesi"
+              echo "DNS timeout"
               exit 1
           securityContext:
             allowPrivilegeEscalation: false
