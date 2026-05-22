@@ -99,9 +99,9 @@ async def test_litecoin_single_address_balance():
 @pytest.mark.asyncio
 @respx.mock
 async def test_litecoin_zero_balance_returns_empty():
-    from app.services.blockchain.litecoin import _BALANCE_CACHE, LitecoinService
+    from app.services.blockchain.litecoin import LitecoinService, _balance_cache
 
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
 
     respx.get(f"https://litecoinspace.org/api/address/{VALID_LTC_ADDR}").mock(
         return_value=httpx.Response(
@@ -120,9 +120,9 @@ async def test_litecoin_zero_balance_returns_empty():
 @respx.mock
 async def test_litecoin_invalid_xpub_returns_empty():
     """Bozuk Ltub formati graceful empty (snapshot bozulmasin)."""
-    from app.services.blockchain.litecoin import _BALANCE_CACHE, LitecoinService
+    from app.services.blockchain.litecoin import LitecoinService, _balance_cache
 
-    _BALANCE_CACHE.clear()
+    _balance_cache.invalidate()
 
     svc = LitecoinService("Ltub_invalid_garbage_xxx")
     assets = await svc.fetch()

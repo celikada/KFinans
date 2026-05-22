@@ -14,11 +14,11 @@ yavaş kurulur, dashboard yenilemeleri tek seferlik çalışsın.
 
 import asyncio
 import logging
-import time
 from decimal import Decimal
 
 from substrateinterface import SubstrateInterface
 
+from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
 
 logger = logging.getLogger(__name__)
@@ -27,11 +27,9 @@ PLANCK_PER_DOT = Decimal("10000000000")  # 10^10
 _RELAY_RPC = "wss://polkadot-rpc.publicnode.com"
 _ASSET_HUB_RPC = "wss://polkadot-asset-hub-rpc.polkadot.io"
 
-# Cache: address → (timestamp, (relay_free, relay_reserved, hub_free))
-_BALANCE_CACHE: dict[str, tuple[float, tuple[Decimal, Decimal, Decimal]]] = {}
-_CACHE_TTL_SEC = 600  # 10 dk
-_cache_lock = asyncio.Lock()
-_INFLIGHT: dict[str, asyncio.Future] = {}
+# Cache: address → (relay_free, relay_reserved, hub_free) Planck Decimal tuple.
+# Substrate WS bağlantıları yavaş; dashboard yenilemeleri tek seferlik çalışsın.
+_balance_cache: AsyncTTLCache[tuple[Decimal, Decimal, Decimal]] = AsyncTTLCache(ttl_sec=600)
 
 
 class PolkadotService(BaseBlockchainIntegration):
@@ -62,36 +60,13 @@ class PolkadotService(BaseBlockchainIntegration):
         ]
 
     async def _cached_balance(self) -> tuple[Decimal, Decimal, Decimal]:
-        loop = asyncio.get_running_loop()
-        is_owner = False
-        async with _cache_lock:
-            cached = _BALANCE_CACHE.get(self.address)
-            if cached and time.monotonic() - cached[0] < _CACHE_TTL_SEC:
-                return cached[1]
-            inflight = _INFLIGHT.get(self.address)
-            if inflight is None:
-                inflight = loop.create_future()
-                _INFLIGHT[self.address] = inflight
-                is_owner = True
-
-        if not is_owner:
-            return await inflight
-
-        try:
+        async def _fetch() -> tuple[Decimal, Decimal, Decimal]:
             # substrate-interface async değil — thread pool'a delege et
             relay = await asyncio.to_thread(self._sync_query, _RELAY_RPC)
             hub = await asyncio.to_thread(self._sync_query, _ASSET_HUB_RPC)
-            result = (relay[0], relay[1], hub[0])  # relay_free, relay_reserved, hub_free
-            async with _cache_lock:
-                _BALANCE_CACHE[self.address] = (time.monotonic(), result)
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_result(result)
-            return result
-        except Exception as exc:
-            async with _cache_lock:
-                _INFLIGHT.pop(self.address, None)
-            inflight.set_exception(exc)
-            raise
+            return (relay[0], relay[1], hub[0])  # relay_free, relay_reserved, hub_free
+
+        return await _balance_cache.get_or_compute(self.address, _fetch)
 
     def _sync_query(self, rpc_url: str) -> tuple[Decimal, Decimal]:
         """Bir Substrate node'dan System.Account.data sorgular.

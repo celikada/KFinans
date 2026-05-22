@@ -1,12 +1,12 @@
 import asyncio
 import logging
-import time
 from decimal import Decimal
 
 import httpx
 from web3 import AsyncWeb3
 
 from app.config import settings
+from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
 from app.services.blockchain.evm_tokens import AVALANCHE_C_TOKENS, fetch_token_balances
 
@@ -17,11 +17,7 @@ WEI = Decimal("1e18")
 
 # Avalanche P-Chain public RPC ucu agresif rate-limit uygular (HTTP 429).
 # Dashboard yenileme ve snapshot paralel cagrilari riski artirir.
-# Cache + single-flight (Bitcoin pattern'i ile ayni) tutuyoruz.
-_PCHAIN_CACHE: dict[str, tuple[float, dict]] = {}
-_PCHAIN_CACHE_TTL_SEC = 600  # 10 dk
-_pchain_cache_lock = asyncio.Lock()
-_pchain_inflight: dict[str, asyncio.Future] = {}
+_pchain_cache: AsyncTTLCache[dict] = AsyncTTLCache(ttl_sec=600)
 
 
 class AvalanchePChainService(BaseBlockchainIntegration):
@@ -80,34 +76,7 @@ class AvalanchePChainService(BaseBlockchainIntegration):
         return assets
 
     async def _cached_fetch(self) -> dict:
-        """Cache + single-flight (Bitcoin pattern). Public RPC 429 rate-limit'ini hafifletir."""
-        loop = asyncio.get_running_loop()
-        is_owner = False
-        async with _pchain_cache_lock:
-            cached = _PCHAIN_CACHE.get(self.address)
-            if cached and time.monotonic() - cached[0] < _PCHAIN_CACHE_TTL_SEC:
-                return cached[1]
-            inflight = _pchain_inflight.get(self.address)
-            if inflight is None:
-                inflight = loop.create_future()
-                _pchain_inflight[self.address] = inflight
-                is_owner = True
-
-        if not is_owner:
-            return await inflight
-
-        try:
-            data = await self._fetch_balances()
-            async with _pchain_cache_lock:
-                _PCHAIN_CACHE[self.address] = (time.monotonic(), data)
-                _pchain_inflight.pop(self.address, None)
-            inflight.set_result(data)
-            return data
-        except Exception as exc:
-            async with _pchain_cache_lock:
-                _pchain_inflight.pop(self.address, None)
-            inflight.set_exception(exc)
-            raise
+        return await _pchain_cache.get_or_compute(self.address, self._fetch_balances)
 
     async def _fetch_balances(self) -> dict:
         """Glacier (Routescan) REST API once denenir — public RPC 429 rate-limit'sizdir.
