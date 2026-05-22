@@ -33,6 +33,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# SEC: PII masking filter (defence-in-depth). Manuel `mask_email` çağrıları
+# korunur; bu filter 3. parti kütüphane (SQLAlchemy/httpx/FastAPI) log'larında
+# sızabilecek PII'leri otomatik mask'ler. Sentry `send_default_pii=False`'a ek.
+from app.core.log_filter import install_pii_filter  # noqa: E402
+
+install_pii_filter()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
