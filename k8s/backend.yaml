@@ -229,7 +229,18 @@ spec:
         - name: postgres-ca
           secret:
             secretName: postgres-tls
+            # cert-manager SelfSigned issuer + standalone Certificate Secret'a
+            # `ca.crt` koymayabilir (cert-manager docs "if the CA is known"
+            # belirsiz). SelfSigned chain length=1 -> leaf cert (tls.crt) kendi
+            # CA'si. asyncpg ssl_ctx `cafile=/etc/postgres-ca/ca.crt` ile
+            # mount path'i `ca.crt` koru ama kaynak `tls.crt`. Cert SAN listesinde
+            # `postgres` var (postgres-cert.yaml dnsNames) -> check_hostname pass.
             items:
-              - key: ca.crt
+              - key: tls.crt
                 path: ca.crt
+            # Defensive: Secret rotate / cert-manager geç render durumunda
+            # pod startup CreateContainerConfigError almasın; database.py
+            # require branch dosya yoksa ssl=True fallback -> yine fail eder
+            # ama controlled fail (log'da net görünür).
+            optional: true
             defaultMode: 0444
