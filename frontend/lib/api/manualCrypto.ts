@@ -1,5 +1,5 @@
 import type { AssetCatalogItem, LinkedSource, ManualCryptoCreateInput, ManualCryptoDTO, ManualCryptoSummaryDTO } from "./types";
-import { BASE, getAccessToken, request } from "./_client";
+import { downloadBlob, request, uploadForm } from "./_client";
 
 export const manualCryptoApi = {
   // Manuel kripto (API'siz borsalar — BinanceTR / iCrypex vs.)
@@ -10,42 +10,15 @@ export const manualCryptoApi = {
     request<ManualCryptoDTO>(`/manual-crypto/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteManualCrypto: (id: number) => request<void>(`/manual-crypto/${id}`, { method: "DELETE" }),
 
-  exportManualCrypto: async () => {
-    const token = getAccessToken();
-    const res = await fetch(`${BASE}/manual-crypto/export`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error("Export başarısız");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "manuel-kripto.xlsx";
-    a.click();
-    URL.revokeObjectURL(url);
-  },
+  exportManualCrypto: () => downloadBlob("/manual-crypto/export", "manuel-kripto.xlsx"),
+  importManualCrypto: (file: File) => uploadForm<{ imported: number; errors: string[] }>("/manual-crypto/import", file),
 
   searchAssetCatalog: (params: { q?: string; source?: LinkedSource; limit?: number } = {}) => {
     const qs = new URLSearchParams();
     if (params.q !== undefined) qs.set("q", params.q);
     if (params.source) qs.set("source", params.source);
     if (params.limit) qs.set("limit", String(params.limit));
-    return request<AssetCatalogItem[]>(`/asset-catalog${qs.toString() ? `?${qs}` : ""}`);
-  },
-
-  importManualCrypto: async (file: File): Promise<{ imported: number; errors: string[] }> => {
-    const token = getAccessToken();
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch(`${BASE}/manual-crypto/import`, {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: form,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(typeof err.detail === "string" ? err.detail : res.statusText);
-    }
-    return res.json();
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return request<AssetCatalogItem[]>(`/asset-catalog${suffix}`);
   },
 };

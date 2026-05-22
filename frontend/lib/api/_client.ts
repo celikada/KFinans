@@ -119,8 +119,8 @@ export async function request<T>(path: string, options: RequestInit = {}, _isRet
 }
 
 /**
- * Dosya indirme helper'ı — auth header'ı ile blob/file download.
- * api object'inde `downloadReport` ve export* method'larında kullanılır.
+ * Auth header'ı ile raw fetch — Content-Type/JSON kararı çağırana ait.
+ * Blob/FormData download/upload için kullanılır.
  */
 export async function authedFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = getAccessToken();
@@ -131,4 +131,36 @@ export async function authedFetch(path: string, options: RequestInit = {}): Prom
       ...options.headers,
     },
   });
+}
+
+/**
+ * Excel/PDF dosyası indir + tarayıcı download'u tetikle.
+ * 13+ export* method'unda kopya-yapıştır pattern'i kapsüller.
+ */
+export async function downloadBlob(path: string, filename: string): Promise<void> {
+  const res = await authedFetch(path);
+  if (!res.ok) throw new Error("İndirme başarısız");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Excel import — multipart/form-data upload.
+ * import* method'larında kopya-yapıştır pattern'i kapsüller.
+ * Hata: server detail dict varsa formatErrorDetail ile insan-okunaklı stringe çevir.
+ */
+export async function uploadForm<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await authedFetch(path, { method: "POST", body: form });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ detail: res.statusText }))) as { detail?: unknown };
+    throw new Error(formatErrorDetail(err.detail) || res.statusText);
+  }
+  return (await res.json()) as T;
 }
