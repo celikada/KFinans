@@ -117,7 +117,65 @@ ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
   "sudo kubectl rollout restart deployment/backend -n kfinans"
 ```
 
-### 2.5 DKIM Key Rotation (önerilen: yıllık)
+### 2.5 Fernet Key Rotation (önerilen: yıllık + kompromize halinde acil)
+
+Fernet `FERNET_KEY` — DB'deki şifrelenmiş kolonları (wallet xpub, integration API key, MFA TOTP secret) korur. `MultiFernet` ile primary + secondary key'ler destekleniyor — rotation downtime'sız yapılabilir. Implementation: [`app/core/security.py::_build_fernet`](../../backend/app/core/security.py). CLI: [`backend/scripts/rotate_fernet.py`](../../backend/scripts/rotate_fernet.py). Test: `tests/unit/test_security.py::TestMultiFernetKeyRotation` (5 case).
+
+**5 aşamalı prosedür:**
+
+1. **Yeni key üret + güvenli yedek:**
+   ```bash
+   py -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   # Çıktı: aBcDeFgHi...= (44 karakter URL-safe base64)
+   ```
+   Yeni key'i `.credentials.local.md` + Bitwarden/USB'ye kaydet (3-2-1 yedekleme).
+
+2. **Secondary key olarak ESKİ primary'yi ekle (read fallback):**
+   ```bash
+   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
+     "sudo kubectl set env deployment/backend -n kfinans \
+       FERNET_KEYS_SECONDARY='[\"<eski-primary-key>\"]'"
+   # Backend pod restart tetiklenir; eski + yeni key birlikte aktif olur (decrypt için).
+   ```
+
+3. **Primary key'i YENİ ile değiştir (write artık yeni key ile):**
+   ```bash
+   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 "
+     sudo kubectl create secret generic kfinans-secrets \
+       --from-literal=FERNET_KEY='<yeni-primary-key>' \
+       --dry-run=client -o yaml | sudo kubectl apply -f -
+     sudo kubectl rollout restart deployment/backend -n kfinans
+   "
+   ```
+   Bu noktada **yeni encrypt'ler yeni key ile, eski encrypt'ler hâlâ eski key ile**. Yeni key olmadan eski veriler okunamaz, eski key olmadan yeni veriler okunamaz — `MultiFernet` her ikisini de saklar.
+
+4. **Re-encrypt CLI ile tüm row'ları yeni key'e taşı:**
+   ```bash
+   # Önce dry-run — decrypt başarısı kontrolü, DB'ye yazma yok:
+   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
+     "sudo kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet --dry-run"
+   # Hata yoksa gerçek rotate:
+   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
+     "sudo kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet"
+   ```
+   Çıktıda `başarı: N, hata: 0` görmen lazım. Hata varsa: 4. adımdaki secondary key listesinde eksik bir eski key var demektir — geri dön + ekle.
+
+5. **Secondary key'i kaldır (eski key kullanımdan çıkar):**
+   ```bash
+   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
+     "sudo kubectl set env deployment/backend -n kfinans FERNET_KEYS_SECONDARY='[]'"
+   ```
+   Eski key artık DB'de hiçbir yerde gerekmiyor — kaldırılabilir. Yedek olarak Bitwarden'da en az 1 yıl daha tut (audit/forensik için).
+
+**Etkilenen kolonlar (CLI bunları gezer):**
+- `wallet_addresses.address_encrypted` — blockchain xpub/adres
+- `integrations.encrypted_key`, `integrations.encrypted_secret` — Binance/iCrypex API key + secret
+- `users.totp_secret` — MFA TOTP base32 secret (sadece MFA aktif kullanıcılar)
+
+**Rollback (4. adım sırasında sorun):**
+Re-encrypt'in tamamı atomik değil — script her batch'te commit yapar. Kısmen rotate edilmiş satırlar yeni key ile encrypt'lenmiştir, geri kalanlar eski. Her iki key de aktif olduğu sürece (secondary ekliyse) sistem çalışmaya devam eder. Sorun çözüldükten sonra script'i yeniden çalıştır — idempotent (rotate edilmiş bir token'ı tekrar rotate etmek sorunsuz, yeni primary ile encrypt'lenmiş ciphertext değişir ama içerik aynı).
+
+### 2.6 DKIM Key Rotation (önerilen: yıllık)
 
 DKIM private key Resend tarafında saklanır, biz sadece public key'i DNS'e yazıyoruz. Rotation Resend dashboard'undan tetiklenir:
 
@@ -127,7 +185,7 @@ DKIM private key Resend tarafında saklanır, biz sadece public key'i DNS'e yaz�
 4. 48 saat sonra eski TXT silinir.
 5. Bu dosyada §1.1 tablosundaki DKIM value güncellenir + commit.
 
-### 2.6 Yaygın Email Hataları
+### 2.7 Yaygın Email Hataları
 
 | Sorun | Tanı | Çözüm |
 |-------|------|-------|
