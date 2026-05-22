@@ -1,6 +1,17 @@
 ---
-# Tum pod'lar kube-dns'e cikabilir + fallback: cluster service CIDR'a UDP 53.
-# CoreDNS pod IP'leri service CIDR 10.43.0.0/16 icinde.
+# Tum pod'lar kube-dns'e cikabilir + fallback: cluster service/pod CIDR'lara 53.
+# CoreDNS pod IP'leri pod CIDR 10.42.0.0/16 icinde, Service IP 10.43.0.0/16'da.
+#
+# Root-cause 2026-05-22 (DB TLS 4. deneme post-mortem):
+# K3s built-in NetworkPolicy controller'da `namespaceSelector + podSelector`
+# birlesik secici CoreDNS pod IP'sine effective egress aksiyonu uretmiyor;
+# `backend-egress`'teki `0.0.0.0/0 except 10.42.0.0/16` UNION'da pod CIDR'i
+# blokluyor (UNION mantigi K3s'te tam pekismemis — bkz audit 2026-05-22
+# master rapor "kube-router enforcement timing").
+#
+# Explicit ipBlock 10.42.0.0/16 UDP/TCP 53 kurali CoreDNS pod'una direkt
+# erisim verir; selector belirsizligi atlanir. Guvenlik etkisi minimal:
+# sadece DNS portu, intra-cluster pod CIDR.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,7 +22,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # CoreDNS pod selector (kube-system)
+    # CoreDNS pod selector (kube-system) — birincil yol
     - to:
         - namespaceSelector:
             matchLabels:
@@ -24,10 +35,20 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Fallback: cluster service CIDR — herhangi bir DNS svc
+    # Fallback 1: cluster service CIDR — kube-dns Service IP (10.43.0.10)
     - to:
         - ipBlock:
             cidr: 10.43.0.0/16
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Fallback 2: cluster pod CIDR — CoreDNS pod IP (10.42.0.x) doğrudan
+    # K3s NetworkPolicy controller selector match bug workaround.
+    - to:
+        - ipBlock:
+            cidr: 10.42.0.0/16
       ports:
         - protocol: UDP
           port: 53
