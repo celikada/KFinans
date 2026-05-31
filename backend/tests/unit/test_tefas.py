@@ -4,11 +4,12 @@ TEFAS servisi unit testleri — httpx çağrısı respx ile mock'lanır, DB gere
 
 from decimal import Decimal
 
+import httpx
 import pytest
 import respx
 from httpx import Response
 
-from app.services.tefas import _EXPORT_URL, TefasService
+from app.services.tefas import _EXPORT_URL, TefasService, fetch_tefas_prices_by_codes
 
 
 def _make_row(kod: str, portfoy: float, pay: float) -> dict:
@@ -93,3 +94,65 @@ async def test_fetch_raises_on_http_error():
         svc = TefasService([{"code": "YAC", "quantity": 10.0, "name": "Test"}])
         with pytest.raises(Exception):
             await svc.fetch()
+
+
+# ─── fetch_tefas_prices_by_codes ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_prices_by_codes_empty_returns_empty():
+    assert await fetch_tefas_prices_by_codes([]) == {}
+
+
+@pytest.mark.asyncio
+async def test_prices_by_codes_returns_price_map():
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(200, json=SAMPLE_ROWS))
+        out = await fetch_tefas_prices_by_codes(["YAC", "TTE"])
+    assert out["YAC"] == Decimal("1.25")
+    assert out["TTE"] == Decimal("2.5")
+
+
+@pytest.mark.asyncio
+async def test_prices_by_codes_swallows_errors():
+    """HTTP/fon-bulunamadi hatasinda bos dict — caller best-effort."""
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(503))
+        out = await fetch_tefas_prices_by_codes(["YAC"])
+    assert out == {}
+
+
+@pytest.mark.asyncio
+async def test_prices_by_codes_missing_code_excluded():
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(200, json=SAMPLE_ROWS))
+        out = await fetch_tefas_prices_by_codes(["YAC", "NOPE"])
+    # NOPE bulunamayinca fetch() ValueError firlatir → tum dict bos doner
+    assert out == {}
+
+
+# ─── health_check ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_health_check_returns_true_on_200():
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(200, json=[]))
+        svc = TefasService([])
+        assert await svc.health_check() is True
+
+
+@pytest.mark.asyncio
+async def test_health_check_returns_false_on_error():
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(500))
+        svc = TefasService([])
+        assert await svc.health_check() is False
+
+
+@pytest.mark.asyncio
+async def test_health_check_false_on_exception():
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(side_effect=httpx.ConnectError("boom"))
+        svc = TefasService([])
+        assert await svc.health_check() is False

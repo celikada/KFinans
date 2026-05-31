@@ -115,6 +115,10 @@ filterwarnings = [
 [tool.coverage.run]
 branch = true
 source = ["app"]
+# Async FastAPI handler gövdeleri SQLAlchemy async (greenlet) bağlamında çalışır;
+# greenlet izlemesi olmadan coverage.py bu satırları "çalışmadı" sayar ve API
+# katmanı yapay olarak düşük görünür (CI coverage.xml → SonarQube new_coverage).
+concurrency = ["greenlet", "thread"]
 omit = [
     "app/main.py",
     "app/scheduler.py",

@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> ## ⚠️ Platform: GitLab-öncelikli + self-hosted SonarQube (HER OTURUMDA GEÇERLİ)
+>
+> Bu proje **GitHub'da değil, self-hosted GitLab'da** çalışır. Hatırlatma beklemeden uygula:
+>
+> - **VCS/CI primary = GitLab** (`http://gitlab.192.168.3.191.nip.io/root/KFinans`). GitHub (`celikada/KFinans`) yalnızca mirror; hesap flagged olduğu için **GitHub Actions çalışmaz**.
+> - **CI/CD pipeline = [`.gitlab-ci.yml`](.gitlab-ci.yml)**. Repo'daki `.github/workflows/*.yml` (ci-backend, ci-frontend, e2e, security, **sonar.yml**, release.yml) **dormant/referans** — pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a bak**, GitHub workflow'larına değil.
+> - **Kod kalitesi = self-hosted SonarQube**, **SonarCloud.io DEĞİL**. Host `http://sonar.192.168.3.191.nip.io`, **projectKey=`KFinans`** (organization yok). `sonar-project.properties`'teki `celikada_KFinans` + `organization=celikada` SonarCloud değerleri kullanılmıyor — GitLab CI bunları CLI ile override eder (`-Dsonar.projectKey=KFinans -Dsonar.organization=`). API erişimi için `.credentials.local.md` içindeki `SONAR_TOKEN` (`curl -u "$TOKEN:" .../api/...`).
+> - **Push:** her iki remote'a (`git push gitlab <branch>` + `git push origin <branch>`); `develop` GitLab'da protected → MR akışı. Detay: memory `[[gitlab-primary]]`.
+
 ## Proje Hakkında
 
 KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve **10 zincir blockchain cüzdanları** (Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.

@@ -14,12 +14,9 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Generic, TypeVar
-
-V = TypeVar("V")
 
 
-class AsyncTTLCache(Generic[V]):
+class AsyncTTLCache[V]:
     """Async TTL cache + single-flight Future dedup.
 
     Kullanım:

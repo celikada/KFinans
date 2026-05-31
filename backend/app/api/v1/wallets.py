@@ -186,7 +186,7 @@ async def export_wallets(
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=blockchain-cüzdanları.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=blockchain-cuzdanlari.xlsx"},
     )
 
 

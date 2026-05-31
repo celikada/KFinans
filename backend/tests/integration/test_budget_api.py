@@ -171,3 +171,63 @@ async def test_idor_budgets(client: AsyncClient):
 
     resp2 = await client.delete("/api/v1/budgets/food", headers=h2)
     assert resp2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_comparison_no_budget_pct_none(client: AsyncClient):
+    """Bütçesi olmayan kategori → budget_amount/pct_used None (sıfıra bölme korumalı).
+
+    Not: amount=0 bütçe API'den kurulamaz (şema gt=0 → 422); pct_used=None dalı
+    yalnızca bütçesi set edilmemiş (budget_amount None) kategoriler için tetiklenir.
+    """
+    headers = await make_user(client, "bgt_zero@example.com")
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 100, "category": "food", "date": "2026-05-10"},
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5", headers=headers)
+    food = next(r for r in resp.json() if r["category"] == "food")
+    assert food["budget_amount"] is None
+    assert food["pct_used"] is None
+    assert food["over_budget"] is False
+    assert float(food["actual_amount"]) == 100.0
+
+
+@pytest.mark.asyncio
+async def test_comparison_excludes_paid_credit_card(client: AsyncClient):
+    """Cift sayim: kart + odendi olan harcama comparison actual'a girmez."""
+    headers = await make_user(client, "bgt_cmp_double@example.com")
+    # Gerçek kart oluştur (credit_card_id FK; olmayan id FK ihlali → harcama oluşmaz,
+    # hariç tutma testi sahte-pozitif olur)
+    card = await client.post("/api/v1/credit-cards", json={"name": "Test Kart"}, headers=headers)
+    cid = card.json()["id"]
+    await client.put("/api/v1/budgets/food", json={"amount": 5000}, headers=headers)
+    # nakit — dahil
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 1000, "category": "food", "date": "2026-05-01"},
+        headers=headers,
+    )
+    # kart + odendi — haric
+    await client.post(
+        "/api/v1/expenses",
+        json={"amount": 3000, "category": "food", "date": "2026-05-02", "credit_card_id": cid, "is_paid": True},
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5", headers=headers)
+    food = next(r for r in resp.json() if r["category"] == "food")
+    assert float(food["actual_amount"]) == 1000.0
+    assert float(food["remaining"]) == 4000.0
+
+
+@pytest.mark.asyncio
+async def test_comparison_unauthenticated(client: AsyncClient):
+    resp = await client.get("/api/v1/budgets/comparison?year=2026&month=5")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_upsert_unauthenticated(client: AsyncClient):
+    resp = await client.put("/api/v1/budgets/food", json={"amount": 1000})
+    assert resp.status_code == 401

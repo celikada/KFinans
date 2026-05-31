@@ -86,6 +86,71 @@ def test_init_otel_returns_false_on_import_error():
     assert result is False
 
 
+def test_init_sentry_send_default_pii_not_enabled():
+    """KVKK: send_default_pii sentry.init kwargs'inda True olmamali (default False)."""
+    settings.sentry_dsn = "https://abc@sentry.io/1"
+    fake_sentry = MagicMock()
+    with patch.dict(
+        "sys.modules",
+        {
+            "sentry_sdk": fake_sentry,
+            "sentry_sdk.integrations.fastapi": MagicMock(FastApiIntegration=MagicMock()),
+            "sentry_sdk.integrations.sqlalchemy": MagicMock(SqlalchemyIntegration=MagicMock()),
+        },
+    ):
+        observability.init_sentry()
+    kwargs = fake_sentry.init.call_args.kwargs
+    # Kod send_default_pii hic gecmiyor -> SDK default False; True olmadigini dogrula
+    assert kwargs.get("send_default_pii", False) is False
+
+
+def test_init_otel_full_initialization():
+    """Endpoint set + tum OTel paketleri yuklu -> provider kurulur, 4 instrument cagrilir."""
+    settings.otel_endpoint = "http://tempo:4318/v1/traces"
+    settings.otel_service_name = "kfinans-backend"
+    settings.sentry_env = "production"
+
+    fake_trace = MagicMock()
+    fake_exporter_cls = MagicMock()
+    fake_resource_cls = MagicMock()
+    fake_provider_cls = MagicMock()
+    fake_batch_cls = MagicMock()
+    fake_fastapi_inst = MagicMock()
+    fake_sqla_inst = MagicMock()
+    fake_asyncpg_inst = MagicMock()
+    fake_httpx_inst = MagicMock()
+
+    modules = {
+        "opentelemetry": MagicMock(trace=fake_trace),
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter": MagicMock(OTLPSpanExporter=fake_exporter_cls),
+        "opentelemetry.instrumentation.asyncpg": MagicMock(AsyncPGInstrumentor=fake_asyncpg_inst),
+        "opentelemetry.instrumentation.fastapi": MagicMock(FastAPIInstrumentor=fake_fastapi_inst),
+        "opentelemetry.instrumentation.httpx": MagicMock(HTTPXClientInstrumentor=fake_httpx_inst),
+        "opentelemetry.instrumentation.sqlalchemy": MagicMock(SQLAlchemyInstrumentor=fake_sqla_inst),
+        "opentelemetry.sdk.resources": MagicMock(Resource=fake_resource_cls),
+        "opentelemetry.sdk.trace": MagicMock(TracerProvider=fake_provider_cls),
+        "opentelemetry.sdk.trace.export": MagicMock(BatchSpanProcessor=fake_batch_cls),
+    }
+
+    fake_app = MagicMock()
+    with patch.dict("sys.modules", modules):
+        result = observability.init_otel(fake_app)
+
+    assert result is True
+    # Exporter endpoint dogru
+    fake_exporter_cls.assert_called_once_with(endpoint="http://tempo:4318/v1/traces")
+    # Resource service.name dogru
+    res_attrs = fake_resource_cls.create.call_args.args[0]
+    assert res_attrs["service.name"] == "kfinans-backend"
+    # set_tracer_provider cagrildi
+    fake_trace.set_tracer_provider.assert_called_once()
+    # 4 instrumentor cagrildi
+    fake_fastapi_inst.instrument_app.assert_called_once_with(fake_app)
+    fake_sqla_inst.return_value.instrument.assert_called_once()
+    fake_asyncpg_inst.return_value.instrument.assert_called_once()
+    fake_httpx_inst.return_value.instrument.assert_called_once()
+
+
 def test_release_tag_reads_git_sha_env():
     """GIT_SHA env set ise release tag olarak doner."""
     with patch.dict("os.environ", {"GIT_SHA": "abc123def"}, clear=False):

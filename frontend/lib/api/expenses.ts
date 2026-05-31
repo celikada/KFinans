@@ -9,7 +9,8 @@ export const expensesApi = {
     if (params.month !== undefined) q.set("month", String(params.month));
     if (params.category) q.set("category", params.category);
     const qs = q.toString();
-    return request<ExpenseDTO[]>(`/expenses${qs ? `?${qs}` : ""}`);
+    const suffix = qs ? `?${qs}` : "";
+    return request<ExpenseDTO[]>(`/expenses${suffix}`);
   },
 
   createExpense: (payload: ExpenseInput) =>
@@ -35,7 +36,8 @@ export const expensesApi = {
     if (year !== undefined) q.set("year", String(year));
     if (month !== undefined) q.set("month", String(month));
     const qs = q.toString();
-    return downloadBlob(`/expenses/export${qs ? `?${qs}` : ""}`, "harcamalar.xlsx");
+    const suffix = qs ? `?${qs}` : "";
+    return downloadBlob(`/expenses/export${suffix}`, "harcamalar.xlsx");
   },
 
   importExpenses: (file: File) => uploadForm<ExpenseDTO[]>("/expenses/import", file),

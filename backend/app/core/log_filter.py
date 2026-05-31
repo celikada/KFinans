@@ -37,8 +37,10 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # JWT — eyJ ile başlayan 3-segmentli base64url string (header.payload.sig)
     # Bearer pattern'den ÖNCE çalışsın diye burada (Bearer'dan önce match yapar)
     (re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), "<jwt>"),
-    # Authorization: Bearer <token> — JWT pattern'ı yakalamayan opaque token'lar için
-    (re.compile(r"Bearer\s+[A-Za-z0-9_.\-]{20,}", re.IGNORECASE), "Bearer <token>"),
+    # Authorization: Bearer <token> — JWT pattern'ı yakalamayan opaque token'lar için.
+    # IGNORECASE aktif olduğu için karakter sınıfı yalnızca A-Z içerir (a-z'yi de
+    # kapsar); A-Za-z yazmak S5869 "duplicate in character class" üretir.
+    (re.compile(r"Bearer\s+[A-Z0-9_.\-]{20,}", re.IGNORECASE), "Bearer <token>"),
     # IPv4 — 4 oktet 0-255 (basit, false positive: tarih gibi `192.168.1.1` yakalamaz)
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "<ip>"),
     # Kredi kartı PAN — 16 digit, opsiyonel boşluk/dash arasında
@@ -54,7 +56,9 @@ class PIIFilter(logging.Filter):
     set edilir; handler bir daha args uygulamaya çalışmasın.
     """
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    # S3516: logging.Filter sözleşmesi bool döndürmeyi gerektirir; kaydı asla
+    # düşürmeyiz (sadece mask'leriz), bu yüzden bilinçli olarak her zaman True.
+    def filter(self, record: logging.LogRecord) -> bool:  # NOSONAR
         try:
             original = record.getMessage()
         except (TypeError, ValueError):
