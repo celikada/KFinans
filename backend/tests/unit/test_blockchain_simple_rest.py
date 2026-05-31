@@ -66,6 +66,24 @@ def test_algorand_micro_constant():
     assert MICRO_ALGO == Decimal("1000000")
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_algorand_health_check_ok():
+    """200 -> health_check True."""
+    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(return_value=httpx.Response(200, json={"amount": 1}))
+    svc = AlgorandService(VALID_ALGO_ADDR)
+    assert await svc.health_check() is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_algorand_health_check_500_false():
+    """5xx -> health_check False."""
+    respx.get(f"https://mainnet-api.algonode.cloud/v2/accounts/{VALID_ALGO_ADDR}").mock(return_value=httpx.Response(500))
+    svc = AlgorandService(VALID_ALGO_ADDR)
+    assert await svc.health_check() is False
+
+
 # ─── Litecoin (single address — xpub HD ayri) ──────────────────────────
 
 

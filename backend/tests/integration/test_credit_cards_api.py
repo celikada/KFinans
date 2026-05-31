@@ -371,3 +371,385 @@ async def test_double_count_budget_comparison_excludes_paid_card_expense(client:
     assert groceries is not None
     # actual_amount sadece 300 (kartsiz) olmali, 800 (paid kart) haric
     assert float(groceries["actual_amount"]) == 300.0, f"Budget comparison cift sayim bozuldu! Beklenen 300.00, gelen {groceries['actual_amount']}"
+
+
+# ─── Update / Delete card edge cases ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_credit_card_404(client: AsyncClient):
+    headers = await make_user(client, "cc_upd_404@example.com")
+    resp = await client.put("/api/v1/credit-cards/999999", json={"name": "X"}, headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_credit_card_404(client: AsyncClient):
+    headers = await make_user(client, "cc_del_404@example.com")
+    resp = await client.delete("/api/v1/credit-cards/999999", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_credit_card_idor_user_b_cannot_update(client: AsyncClient):
+    """B, A'nın kartını güncelleyemez (404)."""
+    headers_a = await make_user(client, "cc_idor_a@example.com")
+    headers_b = await make_user(client, "cc_idor_b@example.com")
+    create = await client.post("/api/v1/credit-cards", json={"name": "A kart"}, headers=headers_a)
+    cid = create.json()["id"]
+
+    resp = await client.put(f"/api/v1/credit-cards/{cid}", json={"name": "B sahte"}, headers=headers_b)
+    assert resp.status_code == 404
+    # A hala gorebilir, B goremez
+    detail_b = await client.get(f"/api/v1/credit-cards/{cid}", headers=headers_b)
+    assert detail_b.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_credit_card_idor_user_b_cannot_delete(client: AsyncClient):
+    headers_a = await make_user(client, "cc_idor_del_a@example.com")
+    headers_b = await make_user(client, "cc_idor_del_b@example.com")
+    create = await client.post("/api/v1/credit-cards", json={"name": "A kart"}, headers=headers_a)
+    cid = create.json()["id"]
+    resp = await client.delete(f"/api/v1/credit-cards/{cid}", headers=headers_b)
+    assert resp.status_code == 404
+
+
+# ─── Card summary enrichment (unpaid + future + total_debt) ─────────────
+
+
+@pytest.mark.asyncio
+async def test_card_summary_enrichment_calculations(client: AsyncClient):
+    """unpaid_statement_total + current_period_debt = period_debt;
+    + future_installment_total = total_debt."""
+    headers = await make_user(client, "cc_enrich@example.com")
+    create = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Enrich", "current_period_debt": "100"},
+        headers=headers,
+    )
+    cid = create.json()["id"]
+
+    # Ödenmemiş ekstre 500 (paid_at yok)
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": 2026,
+            "period_month": 5,
+            "statement_amount": "500",
+            "statement_date": "2026-05-10",
+            "due_date": "2026-05-25",
+        },
+        headers=headers,
+    )
+    # Taksit 12 ay × 200 (gelecek) -> remaining hesaplanir
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/installments",
+        json={
+            "description": "Taksit",
+            "monthly_amount": "200",
+            "installments_total": 12,
+            "first_due_date": "2099-01-01",  # tamamen gelecek -> remaining=12
+        },
+        headers=headers,
+    )
+
+    resp = await client.get("/api/v1/credit-cards", headers=headers)
+    assert resp.status_code == 200
+    card = resp.json()["cards"][0]
+    assert float(card["unpaid_statement_total"]) == 500.0
+    assert float(card["unpaid_statement_count"]) == 1
+    assert float(card["period_debt"]) == 600.0  # 500 + 100
+    # future = 12 × 200 = 2400; total = 600 + 2400
+    assert float(card["future_installment_total"]) == 2400.0
+    assert float(card["total_debt"]) == 3000.0
+
+
+@pytest.mark.asyncio
+async def test_card_summary_paid_statement_not_in_unpaid(client: AsyncClient):
+    """paid_at dolu ekstre unpaid_statement_total'a girmez."""
+    headers = await make_user(client, "cc_paid_stmt@example.com")
+    create = await client.post("/api/v1/credit-cards", json={"name": "PaidStmt"}, headers=headers)
+    cid = create.json()["id"]
+
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": 2026,
+            "period_month": 5,
+            "statement_amount": "999",
+            "statement_date": "2026-05-10",
+            "due_date": "2026-05-25",
+            "paid_at": "2026-05-20T10:00:00Z",
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/credit-cards", headers=headers)
+    card = resp.json()["cards"][0]
+    assert float(card["unpaid_statement_total"]) == 0.0
+    assert card["unpaid_statement_count"] == 0
+
+
+# ─── Detail endpoint (statements + installments sıralı) ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_card_detail_returns_sorted_statements_and_installments(client: AsyncClient):
+    headers = await make_user(client, "cc_detail@example.com")
+    create = await client.post("/api/v1/credit-cards", json={"name": "Detay"}, headers=headers)
+    cid = create.json()["id"]
+
+    # İki ekstre: 2026-04 ve 2026-06 -> en yeni (2026-06) önce
+    for pm in (4, 6):
+        await client.post(
+            f"/api/v1/credit-cards/{cid}/statements",
+            json={
+                "period_year": 2026,
+                "period_month": pm,
+                "statement_amount": "100",
+                "statement_date": f"2026-0{pm}-10",
+                "due_date": f"2026-0{pm}-25",
+            },
+            headers=headers,
+        )
+    # İki taksit, farklı first_due_date -> erken olan önce
+    for due in ("2026-08-01", "2026-03-01"):
+        await client.post(
+            f"/api/v1/credit-cards/{cid}/installments",
+            json={
+                "description": f"T-{due}",
+                "monthly_amount": "100",
+                "installments_total": 3,
+                "first_due_date": due,
+            },
+            headers=headers,
+        )
+
+    resp = await client.get(f"/api/v1/credit-cards/{cid}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["card"]["id"] == cid
+    # Ekstre: en yeni period önce (6 sonra 4)
+    assert data["statements"][0]["period_month"] == 6
+    assert data["statements"][1]["period_month"] == 4
+    # Taksit: erken first_due önce (Mart sonra Agustos)
+    assert data["installments"][0]["first_due_date"] == "2026-03-01"
+    assert data["installments"][1]["first_due_date"] == "2026-08-01"
+
+
+# ─── Statement update / delete ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_statement(client: AsyncClient):
+    headers = await make_user(client, "stmt_upd@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "SU"}, headers=headers)
+    cid = card.json()["id"]
+    s = await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": 2026,
+            "period_month": 5,
+            "statement_amount": "100",
+            "statement_date": "2026-05-10",
+            "due_date": "2026-05-25",
+        },
+        headers=headers,
+    )
+    sid = s.json()["id"]
+
+    resp = await client.put(
+        f"/api/v1/credit-cards/{cid}/statements/{sid}",
+        json={"statement_amount": "777", "paid_at": "2026-05-26T00:00:00Z"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert float(resp.json()["statement_amount"]) == 777.0
+    assert resp.json()["paid_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_update_statement_card_404(client: AsyncClient):
+    headers = await make_user(client, "stmt_upd_404card@example.com")
+    resp = await client.put(
+        "/api/v1/credit-cards/999999/statements/1",
+        json={"statement_amount": "1"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_statement_not_found(client: AsyncClient):
+    headers = await make_user(client, "stmt_upd_404@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "SUNF"}, headers=headers)
+    cid = card.json()["id"]
+    resp = await client.put(
+        f"/api/v1/credit-cards/{cid}/statements/999999",
+        json={"statement_amount": "1"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_statement(client: AsyncClient):
+    headers = await make_user(client, "stmt_del@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "SD"}, headers=headers)
+    cid = card.json()["id"]
+    s = await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": 2026,
+            "period_month": 5,
+            "statement_amount": "100",
+            "statement_date": "2026-05-10",
+            "due_date": "2026-05-25",
+        },
+        headers=headers,
+    )
+    sid = s.json()["id"]
+    resp = await client.delete(f"/api/v1/credit-cards/{cid}/statements/{sid}", headers=headers)
+    assert resp.status_code == 204
+    # Tekrar silme -> 404
+    resp2 = await client.delete(f"/api/v1/credit-cards/{cid}/statements/{sid}", headers=headers)
+    assert resp2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_statement_card_404(client: AsyncClient):
+    headers = await make_user(client, "stmt_del_404card@example.com")
+    resp = await client.delete("/api/v1/credit-cards/999999/statements/1", headers=headers)
+    assert resp.status_code == 404
+
+
+# ─── Installment update / delete ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_installment_recalculates_total(client: AsyncClient):
+    """monthly_amount/installments_total güncellenince total = monthly × count."""
+    headers = await make_user(client, "inst_upd@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "IU"}, headers=headers)
+    cid = card.json()["id"]
+    i = await client.post(
+        f"/api/v1/credit-cards/{cid}/installments",
+        json={
+            "description": "Eski",
+            "monthly_amount": "100",
+            "installments_total": 6,
+            "first_due_date": "2099-01-01",
+        },
+        headers=headers,
+    )
+    iid = i.json()["id"]
+
+    resp = await client.put(
+        f"/api/v1/credit-cards/{cid}/installments/{iid}",
+        json={"monthly_amount": "250", "installments_total": 4, "description": "Yeni"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["description"] == "Yeni"
+    assert float(data["monthly_amount"]) == 250.0
+    assert data["installments_total"] == 4
+    # total = 250 × 4 = 1000
+    assert float(data["total_amount"]) == 1000.0
+
+
+@pytest.mark.asyncio
+async def test_update_installment_card_404(client: AsyncClient):
+    headers = await make_user(client, "inst_upd_404card@example.com")
+    resp = await client.put(
+        "/api/v1/credit-cards/999999/installments/1",
+        json={"description": "X"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_installment_not_found(client: AsyncClient):
+    headers = await make_user(client, "inst_upd_404@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "IUNF"}, headers=headers)
+    cid = card.json()["id"]
+    resp = await client.put(
+        f"/api/v1/credit-cards/{cid}/installments/999999",
+        json={"description": "X"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_installment(client: AsyncClient):
+    headers = await make_user(client, "inst_del@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "ID"}, headers=headers)
+    cid = card.json()["id"]
+    i = await client.post(
+        f"/api/v1/credit-cards/{cid}/installments",
+        json={
+            "description": "Sil",
+            "monthly_amount": "100",
+            "installments_total": 3,
+            "first_due_date": "2099-01-01",
+        },
+        headers=headers,
+    )
+    iid = i.json()["id"]
+    resp = await client.delete(f"/api/v1/credit-cards/{cid}/installments/{iid}", headers=headers)
+    assert resp.status_code == 204
+    resp2 = await client.delete(f"/api/v1/credit-cards/{cid}/installments/{iid}", headers=headers)
+    assert resp2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_installment_card_404(client: AsyncClient):
+    headers = await make_user(client, "inst_del_404card@example.com")
+    resp = await client.delete("/api/v1/credit-cards/999999/installments/1", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_installment_remaining_zero_when_fully_past(client: AsyncClient):
+    """first_due_date çok geçmişte + az taksit -> installments_remaining = 0."""
+    headers = await make_user(client, "inst_past@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "IP"}, headers=headers)
+    cid = card.json()["id"]
+    resp = await client.post(
+        f"/api/v1/credit-cards/{cid}/installments",
+        json={
+            "description": "Bitmis",
+            "monthly_amount": "100",
+            "installments_total": 2,
+            "first_due_date": "2020-01-01",  # cok eski, 2 taksit coktan bitti
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["installments_remaining"] == 0
+
+
+# ─── Statement/installment nested IDOR ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_statement_create_idor_other_user_card(client: AsyncClient):
+    """B, A'nın kartına ekstre ekleyemez (404)."""
+    headers_a = await make_user(client, "stmt_idor_a@example.com")
+    headers_b = await make_user(client, "stmt_idor_b@example.com")
+    card = await client.post("/api/v1/credit-cards", json={"name": "A"}, headers=headers_a)
+    cid = card.json()["id"]
+    resp = await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": 2026,
+            "period_month": 5,
+            "statement_amount": "100",
+            "statement_date": "2026-05-10",
+            "due_date": "2026-05-25",
+        },
+        headers=headers_b,
+    )
+    assert resp.status_code == 404

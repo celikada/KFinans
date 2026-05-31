@@ -144,3 +144,92 @@ async def test_rate_limit_429_retries(monkeypatch):
 def test_lamports_per_sol_constant():
     """1 SOL = 10^9 lamports — finansal sabit."""
     assert LAMPORTS_PER_SOL == Decimal(10) ** 9
+
+
+# ─── fetch error/zero paths ───────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_returns_empty_on_error():
+    """getBalance 500 -> _cached_balance raise -> fetch() bos liste."""
+    respx.post(RPC_URL).mock(return_value=httpx.Response(500))
+    svc = SolanaService(VALID_SOL_ADDR)
+    assert await svc.fetch() == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_zero_balance_returns_empty():
+    """liquid 0 + stake yok -> bos liste."""
+    respx.post(RPC_URL).mock(
+        side_effect=[
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 0}}),
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": []}),
+        ]
+    )
+    svc = SolanaService(VALID_SOL_ADDR)
+    assert await svc.fetch() == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rpc_429_exhausted_raises(monkeypatch):
+    """3 deneme de 429 -> RuntimeError (sleep mock'lu)."""
+    import asyncio
+
+    async def _fake_sleep(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
+
+    respx.post(RPC_URL).mock(return_value=httpx.Response(429))
+    svc = SolanaService(VALID_SOL_ADDR)
+    with pytest.raises(RuntimeError, match="3 deneme sonrasi|3 deneme"):
+        async with httpx.AsyncClient() as client:
+            await svc._rpc_call(client, "getBalance", [VALID_SOL_ADDR])
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_staked_total_offset_error_continues():
+    """Bir offset RPC hatasi -> except dali continue, diger offset sayilir."""
+    respx.post(RPC_URL).mock(
+        side_effect=[
+            # offset=12: RPC error -> except continue
+            httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"message": "boom"}}),
+            # offset=44: 1 stake account
+            httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "result": [{"pubkey": "stakeX", "account": {"lamports": 4_000_000_000}}],
+                },
+            ),
+        ]
+    )
+    svc = SolanaService(VALID_SOL_ADDR)
+    async with httpx.AsyncClient() as client:
+        staked = await svc._get_staked_total(client, VALID_SOL_ADDR)
+    assert staked == Decimal("4000000000")
+
+
+# ─── health_check ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_health_check_ok():
+    respx.post(RPC_URL).mock(return_value=httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"value": 1}}))
+    svc = SolanaService(VALID_SOL_ADDR)
+    assert await svc.health_check() is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_health_check_500_false():
+    respx.post(RPC_URL).mock(return_value=httpx.Response(500))
+    svc = SolanaService(VALID_SOL_ADDR)
+    assert await svc.health_check() is False

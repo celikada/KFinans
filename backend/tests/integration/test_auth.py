@@ -4,20 +4,40 @@ Her testte aynı DB session'ı kullanılır; rollback ile izolasyon sağlanır.
 """
 
 import hashlib
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import pyotp
 import pytest
 import respx
 from httpx import AsyncClient
+from jose import jwt
 from sqlalchemy import select, update
 
+from app.config import settings
 from app.core.password_policy import _HIBP_RANGE_URL
+from app.core.security import create_access_token, create_refresh_token
 from app.models.user import User
-from tests.conftest import TestSession, verify_user_email
+from tests.conftest import TestSession, make_user, verify_user_email
 
 TEST_EMAIL = "test_auth@example.com"
 TEST_PASSWORD = "guclu-sifre-123"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_email(monkeypatch):
+    """.env'de gercek RESEND_API_KEY var; her register ~3sn gercek (basarisiz)
+    network cagrisi yapiyor — testleri yavaslatip flaky yapiyor (register sonrasi
+    db.refresh 'Could not refresh instance' race). No-op patch ile register hizli
+    ve deterministik olur. E-posta gonderimi ayri unit test'te (test_email_service)
+    kapsanir."""
+
+    async def _noop(*_a, **_k) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.auth.send_verification_email", _noop)
+    monkeypatch.setattr("app.api.v1.auth.send_password_reset_email", _noop)
 
 
 async def _get_user(email: str) -> User:
@@ -916,3 +936,134 @@ async def test_change_password_strong_succeeds(client: AsyncClient):
             headers=headers,
         )
     assert resp.status_code == 200
+
+
+# ─── MFA login akisi — auth.py login mfa_required dali ───────────────────────
+
+
+async def _enable_mfa_for(client: AsyncClient, headers: dict) -> str:
+    """Helper: /mfa/setup + /mfa/enable; TOTP secret_base32 doner."""
+    setup = await client.post("/api/v1/mfa/setup", headers=headers)
+    secret = setup.json()["secret_base32"]
+    totp = pyotp.TOTP(secret)
+    enable = await client.post(
+        "/api/v1/mfa/enable",
+        headers=headers,
+        json={"totp_code": totp.now()},
+    )
+    assert enable.status_code == 200, enable.text
+    return secret
+
+
+@pytest.mark.asyncio
+async def test_login_with_mfa_enabled_returns_pre_mfa_token(client: AsyncClient):
+    """totp_enabled=True ise /auth/login full token yerine mfa_required doner."""
+    email = "mfa_login_branch@example.com"
+    headers = await make_user(client, email)
+    await _enable_mfa_for(client, headers)
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "guclu-sifre-123"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["mfa_required"] is True
+    assert "pre_mfa_token" in body
+    assert body["expires_in_seconds"] > 0
+    # Full token DONMEMELI
+    assert "access_token" not in body
+
+
+# ─── get_current_user (deps.py) dal kapsami ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_protected_endpoint_without_token_returns_401(client: AsyncClient):
+    """Authorization header yok -> 401."""
+    resp = await client.get("/api/v1/integrations")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_protected_endpoint_with_garbage_token_returns_401(client: AsyncClient):
+    """Decode edilemeyen token (JWTError) -> 401."""
+    resp = await client.get(
+        "/api/v1/integrations",
+        headers={"Authorization": "Bearer not-a-jwt"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_token_without_sub_returns_401(client: AsyncClient):
+    """sub claim yok -> get_current_user credentials_exception."""
+    token = jwt.encode(
+        {"jti": uuid.uuid4().hex, "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+    resp = await client.get(
+        "/api/v1/integrations",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_token_for_nonexistent_user_returns_401(client: AsyncClient):
+    """Gecerli imzali ama DB'de olmayan user_id -> 401."""
+    token = create_access_token(str(uuid.uuid4()))
+    resp = await client.get(
+        "/api/v1/integrations",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_token_for_soft_deleted_user_returns_401(client: AsyncClient):
+    """deleted_at != None olan kullanicinin token'i reddedilir (deps.py)."""
+    email = "deps_deleted@example.com"
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": TEST_PASSWORD, "age_confirmed": True},
+    )
+    await verify_user_email(email)
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": TEST_PASSWORD},
+    )
+    token = login.json()["access_token"]
+
+    # Kullaniciyi soft-delete et
+    async with TestSession() as session:
+        await session.execute(update(User).where(User.email == email).values(deleted_at=datetime.now(timezone.utc)))
+        await session.commit()
+
+    resp = await client.get(
+        "/api/v1/integrations",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 401
+
+
+# ─── refresh kalan dallar ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_garbage_token_returns_401(client: AsyncClient):
+    """Decode edilemeyen refresh token -> 401 (JWTError dali)."""
+    resp = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "garbage.token.value"},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_for_nonexistent_user_returns_401(client: AsyncClient):
+    """Gecerli imzali refresh ama DB'de olmayan user -> 401."""
+    token = create_refresh_token(str(uuid.uuid4()))
+    resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": token})
+    assert resp.status_code == 401

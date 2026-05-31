@@ -304,3 +304,139 @@ async def test_summary_total_value_positive(client: AsyncClient):
     assert len(data["positions"]) == 2
     for pos in data["positions"]:
         assert float(pos["total_value_tl"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# Ek kapsam: export, import, update notes, fiyat fallback, IDOR update notes
+# ---------------------------------------------------------------------------
+import io
+
+import openpyxl
+
+
+@pytest.mark.asyncio
+async def test_export_xlsx(client: AsyncClient):
+    headers = await make_user(client, "com_export@example.com")
+    await client.post(BASE, json=_gram("gold", 10.0, "Kasada"), headers=headers)
+    await client.post(BASE, json=_coin("ceyrek", 3.0), headers=headers)
+    resp = await client.get(f"{BASE}/export", headers=headers)
+    assert resp.status_code == 200
+    assert "spreadsheetml" in resp.headers["content-type"]
+    wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+    ws = wb.active
+    # Header + 2 satır
+    assert ws.cell(row=1, column=1).value == "Tür"
+    assert ws.max_row == 3
+
+
+@pytest.mark.asyncio
+async def test_export_unauth(client: AsyncClient):
+    resp = await client.get(f"{BASE}/export")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_import_appends_holdings(client: AsyncClient):
+    """Import append eder (mevcut kayıtlar silinmez)."""
+    headers = await make_user(client, "com_import@example.com")
+    # Mevcut bir kayıt
+    await client.post(BASE, json=_gram("gold", 5.0), headers=headers)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    # Tür, Metal, BiGA Kodu, Sikke Türü, Miktar, Not
+    ws.append(["Tür", "Metal", "BiGA Kodu", "Sikke Türü", "Miktar", "Not"])
+    ws.append(["gram", "silver", "", "", 100.0, "Külçe"])
+    ws.append(["biga", "", "A01", "", 2.0, ""])
+    ws.append(["coin", "", "", "ceyrek", 1.0, ""])
+    # Geçersiz unit_type → atlanır
+    ws.append(["zürafa", "gold", "", "", 1.0, ""])
+    # Geçersiz miktar → atlanır
+    ws.append(["gram", "gold", "", "", 0, ""])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        f"{BASE}/import",
+        files={"file": ("c.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    added = resp.json()
+    assert len(added) == 3  # gram + biga + coin
+
+    # Toplam 4 kayıt (1 mevcut + 3 import)
+    summary = await client.get(BASE, headers=headers)
+    assert len(summary.json()["positions"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_import_bad_magic_byte_422(client: AsyncClient):
+    headers = await make_user(client, "com_import_magic@example.com")
+    fake = io.BytesIO(b"%PDF-1.4 not excel")
+    resp = await client.post(
+        f"{BASE}/import",
+        files={"file": ("c.xlsx", fake, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_unauth(client: AsyncClient):
+    resp = await client.post(f"{BASE}/import")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_notes(client: AsyncClient):
+    headers = await make_user(client, "com_update_notes@example.com")
+    create = await client.post(BASE, json=_gram("gold", 10.0, "Eski not"), headers=headers)
+    hid = create.json()["id"]
+    resp = await client.put(f"{BASE}/{hid}", json={"notes": "Yeni not"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == "Yeni not"
+
+
+@pytest.mark.asyncio
+async def test_update_404_missing(client: AsyncClient):
+    headers = await make_user(client, "com_update_404@example.com")
+    resp = await client.put(f"{BASE}/999999", json={"quantity": 1.0}, headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_404_missing(client: AsyncClient):
+    headers = await make_user(client, "com_delete_404@example.com")
+    resp = await client.delete(f"{BASE}/999999", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_price_unavailable_fallback(client: AsyncClient, monkeypatch):
+    """USD/TRY çekilebilir ama Yahoo metal fiyatları fail → metal fiyatı 0,
+    gold_price_available=False, sayfa yine de 200 döner (best-effort).
+
+    Yahoo çağrısı (_fetch_yahoo_price_usd) doğrudan monkeypatch ile fail
+    ettirilir — autouse respx mock'unu güvenilir şekilde geçersiz kılar.
+    """
+    import app.services.commodity as svc
+
+    svc._price_cache = None
+
+    async def _boom(symbol):
+        raise RuntimeError("Yahoo down")
+
+    monkeypatch.setattr(svc, "_fetch_yahoo_price_usd", _boom)
+
+    headers = await make_user(client, "com_noprice@example.com")
+    await client.post(BASE, json=_gram("gold", 10.0), headers=headers)
+
+    resp = await client.get(BASE, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    # Metal fiyatı çekilemedi → 0; sayfa yine de açılır
+    assert float(data["gold_price_tl"]) == 0.0
+    assert data["gold_price_available"] is False
+    assert float(data["silver_price_tl"]) == 0.0

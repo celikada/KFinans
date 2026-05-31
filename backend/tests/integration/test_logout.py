@@ -12,6 +12,17 @@ from httpx import AsyncClient
 from tests.conftest import verify_user_email
 
 
+@pytest.fixture(autouse=True)
+def _no_real_email(monkeypatch):
+    """.env'de gercek RESEND_API_KEY var; register'i hizlandirip flaky'yi azaltir."""
+
+    async def _noop(*_a, **_k) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.auth.send_verification_email", _noop)
+    monkeypatch.setattr("app.api.v1.auth.send_password_reset_email", _noop)
+
+
 async def _register_and_login(client: AsyncClient, email: str) -> dict:
     """User olustur, dogrula, login yap; tum tokenlari ve auth header'i don."""
     pwd = "guclu-sifre-123"

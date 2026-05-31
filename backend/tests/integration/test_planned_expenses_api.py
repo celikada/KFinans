@@ -276,3 +276,210 @@ async def test_forecast_is_estimated_flag(client: AsyncClient):
     resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
     jan = resp.json()["months"][0]
     assert jan["items"][0]["is_estimated"] is True
+
+
+# ─── UPDATE edge cases + 404 ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_returns_404(client: AsyncClient):
+    headers = await make_user(client, "pe_upd_404@example.com")
+    resp = await client.put("/api/v1/planned-expenses/99999", json={"amount": 1.0}, headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_returns_404(client: AsyncClient):
+    headers = await make_user(client, "pe_del_404@example.com")
+    resp = await client.delete("/api/v1/planned-expenses/99999", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_many_fields(client: AsyncClient):
+    headers = await make_user(client, "pe_upd_many@example.com")
+    create = await client.post("/api/v1/planned-expenses", json=_loan(), headers=headers)
+    pe_id = create.json()["id"]
+    resp = await client.put(
+        f"/api/v1/planned-expenses/{pe_id}",
+        json={
+            "title": "Yeni Kredi",
+            "category": "rent",
+            "recurrence": "quarterly",
+            "is_estimated": True,
+            "start_date": "2026-02-01",
+            "day_of_month": 5,
+            "is_paid": True,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Yeni Kredi"
+    assert data["category"] == "rent"
+    assert data["recurrence"] == "quarterly"
+    assert data["is_estimated"] is True
+    assert data["day_of_month"] == 5
+    assert data["is_paid"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_credit_card_unlink(client: AsyncClient):
+    headers = await make_user(client, "pe_cc_unlink@example.com")
+    payload = _loan()
+    payload["credit_card_id"] = None
+    payload["is_paid"] = True
+    create = await client.post("/api/v1/planned-expenses", json=payload, headers=headers)
+    pe_id = create.json()["id"]
+    resp = await client.put(
+        f"/api/v1/planned-expenses/{pe_id}",
+        json={"credit_card_id": None},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["credit_card_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_with_remaining_count_no_end_date_non_monthly(client: AsyncClient):
+    """remaining_count var ama recurrence monthly degil → end_date hesaplanmaz."""
+    headers = await make_user(client, "pe_rc_quarterly@example.com")
+    payload = _loan(recurrence="quarterly", remaining_count=4)
+    resp = await client.post("/api/v1/planned-expenses", json=payload, headers=headers)
+    assert resp.status_code == 201
+    assert resp.json()["end_date"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_quarterly_recurrence(client: AsyncClient):
+    """quarterly _applies_in_month dali — Oca,Nis,Tem,Eki."""
+    headers = await make_user(client, "pe_quarterly@example.com")
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "3 Aylik Aidat",
+            "amount": 1000.0,
+            "category": "subscription",
+            "recurrence": "quarterly",
+            "start_date": "2026-01-01",
+            "day_of_month": 1,
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
+    active = {m["month"] for m in resp.json()["months"] if float(m["total"]) > 0}
+    assert active == {1, 4, 7, 10}
+
+
+@pytest.mark.asyncio
+async def test_create_biannual_recurrence(client: AsyncClient):
+    headers = await make_user(client, "pe_biannual@example.com")
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "6 Aylik",
+            "amount": 2000.0,
+            "category": "insurance",
+            "recurrence": "biannual",
+            "start_date": "2026-02-01",
+            "day_of_month": 1,
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
+    active = {m["month"] for m in resp.json()["months"] if float(m["total"]) > 0}
+    assert active == {2, 8}
+
+
+@pytest.mark.asyncio
+async def test_create_one_time_recurrence(client: AsyncClient):
+    headers = await make_user(client, "pe_onetime@example.com")
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "Tek Seferlik",
+            "amount": 9999.0,
+            "category": "other",
+            "recurrence": "one_time",
+            "start_date": "2026-06-15",
+            "day_of_month": 15,
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
+    active = {m["month"] for m in resp.json()["months"] if float(m["total"]) > 0}
+    assert active == {6}
+
+
+@pytest.mark.asyncio
+async def test_create_with_end_date_limits_forecast(client: AsyncClient):
+    """end_date'ten sonraki aylar forecast'ta gorunmemeli."""
+    headers = await make_user(client, "pe_enddate@example.com")
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "Kisa Kredi",
+            "amount": 1000.0,
+            "category": "loan",
+            "recurrence": "monthly",
+            "start_date": "2026-01-01",
+            "end_date": "2026-03-31",
+            "day_of_month": 1,
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
+    active = {m["month"] for m in resp.json()["months"] if float(m["total"]) > 0}
+    assert active == {1, 2, 3}
+
+
+# ─── Çift sayım kuralı (forecast) ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_forecast_excludes_paid_credit_card(client: AsyncClient):
+    """credit_card_id + is_paid=true → forecast'a dahil edilmez."""
+    headers = await make_user(client, "pe_fc_double@example.com")
+    # Gerçek kart oluştur (credit_card_id FK; olmayan id FK ihlali → plan oluşmaz)
+    card = await client.post("/api/v1/credit-cards", json={"name": "Test Kart"}, headers=headers)
+    cid = card.json()["id"]
+    # Kart + odendi → HARIC
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "Odenmis Kart Plani",
+            "amount": 5000.0,
+            "category": "loan",
+            "recurrence": "monthly",
+            "start_date": "2026-01-01",
+            "day_of_month": 1,
+            "credit_card_id": cid,
+            "is_paid": True,
+        },
+        headers=headers,
+    )
+    # Kart ama odenmemis → DAHIL
+    await client.post(
+        "/api/v1/planned-expenses",
+        json={
+            "title": "Odenmemis Kart Plani",
+            "amount": 1000.0,
+            "category": "loan",
+            "recurrence": "monthly",
+            "start_date": "2026-01-01",
+            "day_of_month": 1,
+            "credit_card_id": cid,
+            "is_paid": False,
+        },
+        headers=headers,
+    )
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026", headers=headers)
+    data = resp.json()
+    # Sadece odenmemis (1000 * 12)
+    assert float(data["year_total"]) == 12000.0
+
+
+@pytest.mark.asyncio
+async def test_forecast_unauthenticated(client: AsyncClient):
+    resp = await client.get("/api/v1/planned-expenses/forecast?year=2026")
+    assert resp.status_code == 401

@@ -13,6 +13,18 @@ from httpx import AsyncClient
 from tests.conftest import make_user
 
 
+@pytest.fixture(autouse=True)
+def _no_real_email(monkeypatch):
+    """.env'de gercek RESEND_API_KEY var; her register ~3sn gercek (basarisiz)
+    network cagrisi yapiyor — testleri yavaslatip flaky yapiyor. No-op patch."""
+
+    async def _noop(*_a, **_k) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.auth.send_verification_email", _noop)
+    monkeypatch.setattr("app.api.v1.auth.send_password_reset_email", _noop)
+
+
 def _holding(plan: str, principal=0, returns=0, govt=0, govt_returns=0, contract=None):
     return {
         "plan_name": plan,
@@ -200,3 +212,115 @@ async def test_excel_import(client: AsyncClient):
     assert float(holdings["Imported Plan"]["govt_contribution"]) == pytest.approx(12500)
     assert holdings["Imported Plan"]["contract_number"] == "IMP-1"
     assert holdings["Other Plan"]["contract_number"] is None
+
+
+# ─── Ek kapsam: auth, import edge case, export bos ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_holdings_without_auth_returns_401(client: AsyncClient):
+    resp = await client.get("/api/v1/portfolio/bes/holdings")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_put_holdings_without_auth_returns_401(client: AsyncClient):
+    resp = await client.put("/api/v1/portfolio/bes/holdings", json=[])
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_export_empty_holdings_returns_header_only(client: AsyncClient):
+    """Hic kayit yokken export sadece header satiri doner."""
+    headers = await make_user(client, "bes_export_empty@example.com")
+    resp = await client.get("/api/v1/portfolio/bes/export", headers=headers)
+    assert resp.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+    rows = list(wb.active.iter_rows(values_only=True))
+    assert len(rows) == 1  # sadece basliklar
+
+
+@pytest.mark.asyncio
+async def test_import_skips_empty_and_zero_rows(client: AsyncClient):
+    """Bos plan adi + tum-sifir satirlar atlanir; gecerli olan kaydedilir."""
+    headers = await make_user(client, "bes_import_skip@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Plan", "No", "Yatirilan", "Getiri", "Devlet", "DevletGetiri", "Toplam"])
+    ws.append([None, None, 0, 0, 0, 0, 0])  # bos plan -> atla
+    ws.append(["Sifir Plan", None, 0, 0, 0, 0, 0])  # tum sifir -> atla
+    ws.append(["Gecerli Plan", "C-1", 1000, 200, 100, 50, 1350])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        "/api/v1/portfolio/bes/import",
+        files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["plan_name"] == "Gecerli Plan"
+
+
+@pytest.mark.asyncio
+async def test_import_no_valid_rows_returns_422(client: AsyncClient):
+    """Sadece bos/sifir satirlar -> 422 'Gecerli BES kaydi bulunamadi'."""
+    headers = await make_user(client, "bes_import_invalid@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Plan", "No", "Yatirilan", "Getiri", "Devlet", "DevletGetiri", "Toplam"])
+    ws.append(["Bos Plan", None, 0, 0, 0, 0, 0])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        "/api/v1/portfolio/bes/import",
+        files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_corrupt_file_returns_422(client: AsyncClient):
+    """Gecerli .xlsx magic byte ama bozuk zip icerik -> openpyxl load fail -> 422."""
+    headers = await make_user(client, "bes_import_corrupt@example.com")
+    # PK\x03\x04 magic ile basla ama gecersiz zip govde
+    corrupt = b"PK\x03\x04" + b"\x00" * 100
+    resp = await client.post(
+        "/api/v1/portfolio/bes/import",
+        files={"file": ("t.xlsx", corrupt, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_handles_invalid_decimal_as_zero(client: AsyncClient):
+    """Sayisal alanda metin (parse edilemez) -> _parse_decimal 0 doner; diger
+    alan pozitifse satir kabul edilir."""
+    headers = await make_user(client, "bes_import_baddec@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Plan", "No", "Yatirilan", "Getiri", "Devlet", "DevletGetiri", "Toplam"])
+    ws.append(["Plan Z", "none", "abc", 500, "xyz", 0, 0])  # yatirilan/devlet parse fail -> 0
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        "/api/v1/portfolio/bes/import",
+        files={"file": ("t.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert float(data[0]["paid_principal"]) == 0
+    assert float(data[0]["paid_returns"]) == 500
+    # contract "none" -> None
+    assert data[0]["contract_number"] is None

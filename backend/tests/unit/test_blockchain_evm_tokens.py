@@ -17,6 +17,23 @@ from app.services.blockchain.evm_tokens import (
     fetch_ethereum_tokens_via_ethplorer,
 )
 
+# ─── _has_spoof_chars — Unicode block branch'leri ──────────────────────
+
+
+def test_cherokee_supplement_spoof():
+    """Cherokee Supplement (U+AB70-ABBF) spoof tespit edilir."""
+    assert _has_spoof_chars("ꭰabc") is True
+
+
+def test_lisu_block_spoof():
+    """Lisu block (U+A4D0-A4FF) spoof tespit edilir."""
+    assert _has_spoof_chars("ꓐxyz") is True
+
+
+def test_basic_latin_no_spoof():
+    assert _has_spoof_chars("Normal Token Name") is False
+
+
 # ─── _looks_like_spam — pure logic ─────────────────────────────────────
 
 
@@ -187,3 +204,86 @@ async def test_ethplorer_filters_huge_amount_spam():
     tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
     # Cok yuksek miktar spam filtre tarafindan elenir (>1e12 raw amount)
     assert tokens == [] or all(t[1] < Decimal("1e12") for t in tokens)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ethplorer_bad_decimals_skipped():
+    """decimals/balance parse edilemez (None/garbage) -> token atlanir (except continue)."""
+    addr = "0x0000000000000000000000000000000000000004"
+    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tokens": [
+                    {
+                        "tokenInfo": {
+                            "symbol": "WEIRD",
+                            "name": "Weird Token",
+                            "address": "0xbbbb000000000000000000000000000000000001",
+                            "decimals": "not-a-number",
+                        },
+                        "balance": "abc",
+                    }
+                ],
+            },
+        )
+    )
+    tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
+    assert tokens == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ethplorer_dust_amount_skipped():
+    """Dust (<= 0.000001) token atlanir."""
+    addr = "0x0000000000000000000000000000000000000005"
+    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tokens": [
+                    {
+                        "tokenInfo": {
+                            "symbol": "DUST",
+                            "name": "Dust Token",
+                            "address": "0xcccc000000000000000000000000000000000001",
+                            "decimals": "18",
+                        },
+                        "balance": 1,  # 1 / 1e18 = dust
+                    }
+                ],
+            },
+        )
+    )
+    tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
+    assert tokens == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ethplorer_valid_token_passes_all_filters():
+    """Normal token (decimals parse ok, dust ustu, 1e12 alti) -> doner."""
+    addr = "0x0000000000000000000000000000000000000006"
+    respx.get(f"https://api.ethplorer.io/getAddressInfo/{addr}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "tokens": [
+                    {
+                        "tokenInfo": {
+                            "symbol": "LINK",
+                            "name": "Chainlink",
+                            "address": "0x514910771af9ca656af840dff83e8264ecf986ca",
+                            "decimals": "18",
+                        },
+                        "balance": 25_000_000_000_000_000_000,  # 25 LINK
+                    }
+                ],
+            },
+        )
+    )
+    tokens = await fetch_ethereum_tokens_via_ethplorer(addr)
+    assert len(tokens) == 1
+    assert tokens[0][0].symbol == "LINK"
+    assert tokens[0][1] == Decimal("25")

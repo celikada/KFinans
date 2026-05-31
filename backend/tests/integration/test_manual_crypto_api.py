@@ -44,6 +44,22 @@ _COINGECKO_PRICES: dict = {}
 
 
 @pytest.fixture(autouse=True)
+def _no_real_email(monkeypatch):
+    """Register sirasinda gercek Resend HTTP cagrisini engelle.
+
+    .env'de gercek RESEND_API_KEY var; her register ~4sn'lik gercek (basarisiz)
+    network cagrisi yapiyor. Bu hem yavasliga hem batch kosumda session/DB
+    race'ine (db.refresh 'Could not refresh instance') yol aciyor. Test
+    ortaminda e-posta gondermek anlamsiz — no-op patch."""
+
+    async def _noop(*_a, **_k) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.auth.send_verification_email", _noop)
+    monkeypatch.setattr("app.api.v1.auth.send_password_reset_email", _noop)
+
+
+@pytest.fixture(autouse=True)
 def mock_external_http():
     """Binance + TCMB + CoinGecko + Yahoo (commodity) mock'ları, cache temizle.
 
@@ -487,3 +503,284 @@ async def test_import_replaces_existing(client: AsyncClient):
     assert len(positions) == 1
     assert positions[0]["symbol"] == "BTC"
     assert positions[0]["exchange"] == "binancetr"
+
+
+# ---------------------------------------------------------------------------
+# Ek kapsam: auth, update 404, linked coingecko/tefas dispatch, import errors
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_list_without_auth_returns_401(client: AsyncClient):
+    resp = await client.get(BASE)
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_create_without_auth_returns_401(client: AsyncClient):
+    resp = await client.post(BASE, json={"exchange": "x", "symbol": "BTC", "quantity": 1})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_returns_404(client: AsyncClient):
+    headers = await make_user(client, "mc_upd404@example.com")
+    resp = await client.put(f"{BASE}/999999", json={"quantity": 2}, headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_returns_404(client: AsyncClient):
+    headers = await make_user(client, "mc_del404@example.com")
+    resp = await client.delete(f"{BASE}/999999", headers=headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_idor_other_user_returns_404(client: AsyncClient):
+    """Baskasinin kaydini PUT edemez (404)."""
+    h1 = await make_user(client, "mc_updidor1@example.com")
+    h2 = await make_user(client, "mc_updidor2@example.com")
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=h1)
+    hid = create.json()["id"]
+    resp = await client.put(f"{BASE}/{hid}", json={"quantity": 5}, headers=h2)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_all_fields(client: AsyncClient):
+    """PUT tum opsiyonel alanlari gunceller (exchange/label/symbol/avg_cost/notes)."""
+    headers = await make_user(client, "mc_updall@example.com")
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
+    hid = create.json()["id"]
+    resp = await client.put(
+        f"{BASE}/{hid}",
+        json={
+            "exchange": "icrypex",
+            "label": "Yeni Etiket",
+            "symbol": "eth",
+            "avg_cost_tl": 12345,
+            "notes": "guncel not",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exchange"] == "icrypex"
+    assert data["label"] == "Yeni Etiket"
+    assert data["symbol"] == "ETH"
+    assert float(data["avg_cost_tl"]) == 12345.0
+    assert data["notes"] == "guncel not"
+
+
+@pytest.mark.asyncio
+async def test_update_to_manual_sets_price(client: AsyncClient):
+    """auto -> manual gecisinde manual_unit_price_tl set edilir."""
+    headers = await make_user(client, "mc_to_manual@example.com")
+    create = await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
+    hid = create.json()["id"]
+    resp = await client.put(
+        f"{BASE}/{hid}",
+        json={"price_source": "manual", "manual_unit_price_tl": 999},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["price_source"] == "manual"
+    assert float(resp.json()["manual_unit_price_tl"]) == 999.0
+
+
+@pytest.mark.asyncio
+async def test_update_linked_fields(client: AsyncClient):
+    """linked kayitta linked_source/linked_id guncellenir."""
+    headers = await make_user(client, "mc_upd_linked@example.com")
+    create = await client.post(
+        BASE,
+        json={
+            "exchange": "icrypex",
+            "symbol": "XAGX",
+            "quantity": 1,
+            "price_source": "linked",
+            "linked_source": "commodity",
+            "linked_id": "XAG",
+        },
+        headers=headers,
+    )
+    hid = create.json()["id"]
+    resp = await client.put(
+        f"{BASE}/{hid}",
+        json={"linked_source": "commodity", "linked_id": "XAU"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["linked_id"] == "XAU"
+
+
+@pytest.mark.asyncio
+async def test_linked_coingecko_dispatch(client: AsyncClient):
+    """linked=coingecko:ID — fiyat bulunamazsa 0 + unknown (dispatch dali calisir)."""
+    headers = await make_user(client, "mc_linked_cg@example.com")
+    payload = {
+        "exchange": "other",
+        "symbol": "TGOLD",
+        "quantity": 5,
+        "price_source": "linked",
+        "linked_source": "coingecko",
+        "linked_id": "tether-gold",
+    }
+    create = await client.post(BASE, json=payload, headers=headers)
+    assert create.status_code == 201
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    # Mock simple/price bos doner -> 0 -> unknown
+    assert float(pos["unit_price_tl"]) == 0.0
+    assert "TGOLD" in resp.json()["unknown_symbols"]
+
+
+@pytest.mark.asyncio
+async def test_linked_tefas_dispatch(client: AsyncClient):
+    """linked=tefas:CODE — TEFAS mock'lanmadigi icin fiyat 0 (dispatch dali calisir)."""
+    headers = await make_user(client, "mc_linked_tefas@example.com")
+    payload = {
+        "exchange": "other",
+        "symbol": "MYFUND",
+        "quantity": 100,
+        "price_source": "linked",
+        "linked_source": "tefas",
+        "linked_id": "AFA",
+    }
+    create = await client.post(BASE, json=payload, headers=headers)
+    assert create.status_code == 201
+    resp = await client.get(BASE, headers=headers)
+    pos = resp.json()["positions"][0]
+    assert float(pos["unit_price_tl"]) == 0.0
+    assert "MYFUND" in resp.json()["unknown_symbols"]
+
+
+@pytest.mark.asyncio
+async def test_create_validation_quantity_zero_returns_422(client: AsyncClient):
+    """quantity=0 -> gt=0 ihlali -> 422."""
+    headers = await make_user(client, "mc_qty0@example.com")
+    resp = await client.post(
+        BASE,
+        json={"exchange": "x", "symbol": "BTC", "quantity": 0},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_empty_file_returns_422(client: AsyncClient):
+    """Sadece basliklar (max_row < 2) -> 422 bos dosya."""
+    headers = await make_user(client, "mc_imp_empty@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Borsa", "Etiket", "Sembol", "Miktar"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    resp = await client.post(
+        f"{BASE}/import",
+        headers=headers,
+        files={"file": ("e.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_corrupt_file_returns_422(client: AsyncClient):
+    """Gecerli .xlsx magic ama bozuk zip -> openpyxl fail -> 422."""
+    headers = await make_user(client, "mc_imp_corrupt@example.com")
+    corrupt = b"PK\x03\x04" + b"\x00" * 80
+    resp = await client.post(
+        f"{BASE}/import",
+        headers=headers,
+        files={"file": ("c.xlsx", corrupt, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_import_all_rows_invalid_returns_422(client: AsyncClient):
+    """Tum satirlar hatali (eksik zorunlu alan + negatif qty) -> 422."""
+    headers = await make_user(client, "mc_imp_allbad@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Maliyet", "Kaynak", "ManFiyat", "LS", "LID", "Not"])
+    ws.append(["", "", "", "", "", "", "", "", "", ""])  # bos satir -> atlanir (continue)
+    ws.append(["binancetr", "", "", 1, "", "auto", "", "", "", ""])  # symbol eksik -> error
+    ws.append(["binancetr", "", "BTC", -5, "", "auto", "", "", "", ""])  # negatif qty -> error
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    resp = await client.post(
+        f"{BASE}/import",
+        headers=headers,
+        files={"file": ("b.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert resp.status_code == 422
+    assert "islenemedi" in resp.json()["detail"].lower() or "işlenemedi" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_import_full_columns_with_linked_and_manual(client: AsyncClient):
+    """Tum sutunlu import — manual + linked satirlar + gecersiz bir satir errors'a duser."""
+    headers = await make_user(client, "mc_imp_full@example.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Borsa", "Etiket", "Sembol", "Miktar", "Maliyet", "Kaynak", "ManFiyat", "LS", "LID", "Not"])
+    # manual satir
+    ws.append(["icrypex", "Etiket1", "XAGX", 10, 5, "manual", 50, "", "", "gumus"])
+    # linked commodity satir
+    ws.append(["icrypex", None, "XAUT", 1, "", "linked", "", "commodity", "XAU", None])
+    # avg_cost negatif -> None (avg_cost <= 0 dali)
+    ws.append(["binancetr", "", "ETH", 2, -1, "auto", "", "", "", ""])
+    # gecersiz satir (symbol eksik) -> errors listesine, ama digerleri gecerli
+    ws.append(["binancetr", "", "", 1, "", "auto", "", "", "", ""])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    resp = await client.post(
+        f"{BASE}/import",
+        headers=headers,
+        files={"file": ("f.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["imported"] == 3
+    assert len(body["errors"]) >= 1
+
+    listing = await client.get(BASE, headers=headers)
+    by_symbol = {p["symbol"]: p for p in listing.json()["positions"]}
+    assert by_symbol["XAGX"]["price_source"] == "manual"
+    assert float(by_symbol["XAGX"]["manual_unit_price_tl"]) == 50.0
+    assert by_symbol["XAUT"]["linked_source"] == "commodity"
+    assert by_symbol["ETH"]["avg_cost_tl"] is None  # negatif -> None
+
+
+@pytest.mark.asyncio
+async def test_list_price_fetch_failure_returns_503(client: AsyncClient, monkeypatch):
+    """fetch_combined_prices patlarsa _fetch_prices_safe -> 503 (SEC-007)."""
+    headers = await make_user(client, "mc_price_503@example.com")
+    await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("binance down")
+
+    monkeypatch.setattr("app.api.v1.manual_crypto.fetch_combined_prices", _boom)
+    resp = await client.get(BASE, headers=headers)
+    assert resp.status_code == 503
+    # Internal hata detayi sizmamali
+    assert "binance down" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_list_usd_tl_failure_returns_503(client: AsyncClient, monkeypatch):
+    """fetch_usd_to_tl patlarsa -> 503 (ikinci try blogu)."""
+    headers = await make_user(client, "mc_usdtl_503@example.com")
+    await client.post(BASE, json={"exchange": "binancetr", "symbol": "BTC", "quantity": 1}, headers=headers)
+
+    async def _usd_boom(*_a, **_k):
+        raise RuntimeError("tcmb down")
+
+    monkeypatch.setattr("app.api.v1.manual_crypto.fetch_usd_to_tl", _usd_boom)
+    resp = await client.get(BASE, headers=headers)
+    assert resp.status_code == 503
+    assert "tcmb down" not in resp.text
