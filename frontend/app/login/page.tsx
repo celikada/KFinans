@@ -189,7 +189,7 @@ export default function LoginPage() {
                   {resending ? t("auth.resending") : t("auth.resendVerification")}
                 </button>
                 {resendNotice && (
-                  <p role="status" aria-live="polite" className="text-xs text-gray-700">{resendNotice}</p>
+                  <output aria-live="polite" className="block text-xs text-gray-700">{resendNotice}</output>
                 )}
               </div>
             )}
@@ -234,7 +234,7 @@ export default function LoginPage() {
                   autoFocus
                   value={totpCode}
                   onChange={(e) =>
-                    setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    setTotpCode(e.target.value.replaceAll(/\D/g, "").slice(0, 6))
                   }
                   placeholder="123456"
                   data-testid="mfa-login-code"

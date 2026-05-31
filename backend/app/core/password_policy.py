@@ -87,7 +87,9 @@ def check_password_strength(
     return False, msg
 
 
-async def check_hibp_pwned(password: str, timeout: float = _HIBP_TIMEOUT_SECONDS) -> int:
+# S7483: httpx native `timeout=` parametresi (AsyncClient'a iletilir) idiomatik ve
+# yeterli; asyncio.timeout() context manager'a geçmek ek bir katman getirmez.
+async def check_hibp_pwned(password: str, timeout: float = _HIBP_TIMEOUT_SECONDS) -> int:  # NOSONAR
     """Have I Been Pwned k-anonymity kontrol — sizmis sifre var mi?
 
     Sifrenin SHA-1 hash'inin ilk 5 karakteri prefix olarak API'ye gonderilir.

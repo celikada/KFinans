@@ -10,11 +10,11 @@ const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
 export function getAccessToken() {
-  return typeof window !== "undefined" ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+  return globalThis.window === undefined ? null : localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
 export function getRefreshToken() {
-  return typeof window !== "undefined" ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+  return globalThis.window === undefined ? null : localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 export function setAuth(accessToken: string, refreshToken?: string) {
@@ -84,7 +84,8 @@ export function formatErrorDetail(detail: unknown): string {
       .join(" · ");
   }
   if (typeof detail === "object") return JSON.stringify(detail);
-  return String(detail);
+  // detail burada object değil (yukarıda dönüldü); number/boolean gibi primitif.
+  return String(detail); // NOSONAR
 }
 
 export async function request<T>(path: string, options: RequestInit = {}, _isRetry = false): Promise<T> {
@@ -100,13 +101,13 @@ export async function request<T>(path: string, options: RequestInit = {}, _isRet
 
   // Access expired → bir kez refresh dene + retry (FAZ C4 rotation uyumlu).
   // /auth/refresh endpoint'inin kendisinde retry yapma (sonsuz döngü riski).
-  if (res.status === 401 && typeof window !== "undefined" && !_isRetry && path !== "/auth/refresh") {
+  if (res.status === 401 && globalThis.window !== undefined && !_isRetry && path !== "/auth/refresh") {
     const newToken = await tryRefresh();
     if (newToken) {
       return request<T>(path, options, true);
     }
     clearAuth();
-    window.location.replace("/login");
+    globalThis.location.replace("/login");
     throw new Error("Oturum süresi doldu");
   }
 

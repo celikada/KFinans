@@ -5,6 +5,9 @@
 // yazabilir (api.ts re-export ediyor). Sonraki aşama (ileri): endpoint method'ları
 // domain modüllerine (auth.ts, expense.ts, ...) bölünecek.
 
+// Decimal alanlar: backend Numeric → JSON'da string ya da number; form boşsa null.
+export type DecimalInput = number | string | null;
+
 // ─── Auth + Kullanıcı ────────────────────────────────────────────
 
 export interface UserMeDTO {
@@ -430,7 +433,7 @@ export interface CreditCardInput {
   name: string;
   bank_name?: string | null;
   last_4?: string | null;
-  credit_limit?: number | string | null;
+  credit_limit?: DecimalInput;
   statement_day: number;
   payment_due_day: number;
   current_period_debt?: number | string;
@@ -783,9 +786,9 @@ export interface ManualCryptoCreateInput {
   label?: string | null;
   symbol: string;
   quantity: number | string;
-  avg_cost_tl?: number | string | null;
+  avg_cost_tl?: DecimalInput;
   price_source?: ManualCryptoPriceSource;
-  manual_unit_price_tl?: number | string | null;
+  manual_unit_price_tl?: DecimalInput;
   linked_source?: LinkedSource | null;
   linked_id?: string | null;
   notes?: string | null;

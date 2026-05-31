@@ -165,13 +165,12 @@ export default function MfaSecurityPage() {
           </div>
 
           {info && (
-            <p
-              role="status"
+            <output
               aria-live="polite"
-              className="mt-4 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg"
+              className="block mt-4 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg"
             >
               {info}
-            </p>
+            </output>
           )}
           {error && (
             <p
@@ -251,7 +250,7 @@ export default function MfaSecurityPage() {
                 required
                 value={setupCode}
                 onChange={(e) =>
-                  setSetupCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setSetupCode(e.target.value.replaceAll(/\D/g, "").slice(0, 6))
                 }
                 placeholder="123456"
                 className={INPUT_CLS + " text-center tracking-[0.4em] font-mono"}
@@ -347,7 +346,7 @@ export default function MfaSecurityPage() {
                 required
                 value={disableCode}
                 onChange={(e) =>
-                  setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setDisableCode(e.target.value.replaceAll(/\D/g, "").slice(0, 6))
                 }
                 placeholder="123456"
                 className={INPUT_CLS + " text-center tracking-[0.4em] font-mono"}

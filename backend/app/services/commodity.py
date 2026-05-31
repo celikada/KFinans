@@ -45,8 +45,8 @@ BIGA_GRAM_WEIGHTS: dict[str, Decimal] = {
     "G07": Decimal("1000"),
 }
 
-BIGA_METAL: dict[str, str] = {k: "gold" for k in ("A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08")}
-BIGA_METAL.update({k: "silver" for k in ("G01", "G02", "G03", "G04", "G05", "G06", "G07")})
+BIGA_METAL: dict[str, str] = dict.fromkeys(("A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08"), "gold")
+BIGA_METAL.update(dict.fromkeys(("G01", "G02", "G03", "G04", "G05", "G06", "G07"), "silver"))
 
 # 5 dakika in-memory cache
 _PRICE_CACHE_TTL_SEC = 300

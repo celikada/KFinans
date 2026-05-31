@@ -25,7 +25,10 @@ elif _ssl_mode == "prefer":
     # gerektigi icin ayri PR).
     import ssl as _ssl_mod
 
-    _ctx = _ssl_mod.create_default_context()
+    # S5527/S4830: cluster-internal trust modeli — self-signed cert için hostname
+    # ve cert chain doğrulaması bilinçli kapalı (public CA yok). Production "require"
+    # modunu kullanır; bu dal yalnızca cluster-içi defence-in-depth fallback'tir.
+    _ctx = _ssl_mod.create_default_context()  # NOSONAR
     _ctx.check_hostname = False  # noqa: S5527 (cluster-internal trust)
     _ctx.verify_mode = _ssl_mod.CERT_NONE  # noqa: S4830 (self-signed)
     _connect_args = {"ssl": _ctx}
@@ -39,7 +42,9 @@ elif _ssl_mode == "require":
 
     _ca_path = settings.database_ssl_ca_path
     if _ca_path and os.path.isfile(_ca_path):
-        _ctx = _ssl_mod.create_default_context(cafile=_ca_path)
+        # check_hostname=True + CERT_REQUIRED zaten ayarlı (aşağıda); scanner
+        # create_default_context çağrısını generic flag'liyor — false positive.
+        _ctx = _ssl_mod.create_default_context(cafile=_ca_path)  # NOSONAR
         _ctx.check_hostname = True
         _ctx.verify_mode = _ssl_mod.CERT_REQUIRED
         _connect_args = {"ssl": _ctx}

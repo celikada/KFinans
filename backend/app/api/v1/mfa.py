@@ -90,7 +90,7 @@ def _build_qr_png_base64(otpauth_url: str) -> str:
     return f"data:image/png;base64,{b64}"
 
 
-async def _consume_recovery_code(user: User, code: str) -> bool:
+def _consume_recovery_code(user: User, code: str) -> bool:
     """Recovery code'u verify et + listeden cikar. True/False doner.
 
     `totp_recovery_codes` JSON list[str] (bcrypt hash). Eslesen ilk hash
@@ -243,7 +243,7 @@ async def mfa_disable(
         secret_b32 = decrypt_secret(current_user.totp_secret)
         verified = pyotp.TOTP(secret_b32).verify(payload.totp_code, valid_window=1)
     if not verified and payload.recovery_code:
-        verified = await _consume_recovery_code(current_user, payload.recovery_code)
+        verified = _consume_recovery_code(current_user, payload.recovery_code)
         via_recovery = verified
 
     if not verified:
@@ -340,7 +340,7 @@ async def mfa_verify(
         secret_b32 = decrypt_secret(user.totp_secret)
         verified = pyotp.TOTP(secret_b32).verify(payload.totp_code, valid_window=1)
     if not verified and payload.recovery_code:
-        verified = await _consume_recovery_code(user, payload.recovery_code)
+        verified = _consume_recovery_code(user, payload.recovery_code)
         via_recovery = verified
 
     if not verified:

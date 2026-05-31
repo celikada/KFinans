@@ -9,7 +9,8 @@ export const incomesApi = {
     if (params.month !== undefined) q.set("month", String(params.month));
     if (params.category) q.set("category", params.category);
     const qs = q.toString();
-    return request<IncomeDTO[]>(`/income${qs ? `?${qs}` : ""}`);
+    const suffix = qs ? `?${qs}` : "";
+    return request<IncomeDTO[]>(`/income${suffix}`);
   },
   createIncome: (payload: IncomeInput) => request<IncomeDTO>("/income", { method: "POST", body: JSON.stringify(payload) }),
   updateIncome: (id: number, payload: Partial<IncomeInput>) => request<IncomeDTO>(`/income/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -37,7 +38,8 @@ export const incomesApi = {
     if (year !== undefined) q.set("year", String(year));
     if (month !== undefined) q.set("month", String(month));
     const qs = q.toString();
-    return downloadBlob(`/income/export${qs ? `?${qs}` : ""}`, "gelirler.xlsx");
+    const suffix = qs ? `?${qs}` : "";
+    return downloadBlob(`/income/export${suffix}`, "gelirler.xlsx");
   },
   importIncomes: (file: File) => uploadForm<IncomeDTO[]>("/income/import", file),
 };
