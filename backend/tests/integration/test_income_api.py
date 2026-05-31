@@ -1,12 +1,34 @@
 """Income CRUD + summary endpoint testleri."""
 
 import io
+from datetime import date as _date
+from datetime import datetime as _datetime
+from zoneinfo import ZoneInfo
 
 import openpyxl
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import make_user
+
+# Endpoint realize tarihini Europe/Istanbul ile hesaplar (income.py); test de aynı
+# tz'yi kullanmalı, yoksa UTC↔Istanbul gece yarısı farkında off-by-one olur.
+_ISTANBUL = ZoneInfo("Europe/Istanbul")
+
+
+def _monthly_past_count(start_iso: str, day_of_month: int = 1) -> int:
+    """start_iso'dan bugüne aylık geçmiş dönem sayısı (tarih + tz bağımsız).
+
+    realize-past, period_date <= today (Istanbul) olan aylık dönemleri üretir.
+    day_of_month <= bugünün günü ise içinde bulunulan ayın dönemi de geçmiştir.
+    Testler sabit gün sayısı yazamaz (ay dönümünde kayar) — dinamik hesapla.
+    """
+    start = _date.fromisoformat(start_iso)
+    today = _datetime.now(_ISTANBUL).date()
+    count = (today.year - start.year) * 12 + (today.month - start.month)
+    if day_of_month <= today.day:
+        count += 1
+    return max(count, 0)
 
 
 def _inc(amount: float, category: str, date: str, description: str | None = None) -> dict:
@@ -620,12 +642,13 @@ async def test_realize_past_all_periods(client: AsyncClient):
     resp = await client.post(f"/api/v1/income/recurring/{rid}/realize-past", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
-    # Bugun 2026-05-31 → Oca,Sub,Mar,Nis,May (gun 1 hepsi gecmis) = 5
-    assert data["realized"] == 5
+    # 2026-01-01'den bugüne aylık dönemler (tarih-bağımsız hesap; ay dönümünde kaymaz)
+    expected = _monthly_past_count("2026-01-01", day_of_month=1)
+    assert data["realized"] == expected
     # Tekrar cagir → hepsi skip
     again = await client.post(f"/api/v1/income/recurring/{rid}/realize-past", headers=headers)
     assert again.json()["realized"] == 0
-    assert again.json()["skipped"] == 5
+    assert again.json()["skipped"] == expected
 
 
 @pytest.mark.asyncio
@@ -651,8 +674,9 @@ async def test_realize_all_past(client: AsyncClient):
     )
     resp = await client.post("/api/v1/income/recurring/realize-all-past", headers=headers)
     assert resp.status_code == 200
-    # maas: Nis,May = 2; kira: May = 1 → 3
-    assert resp.json()["realized"] == 3
+    # maas (2026-04-01) + kira (2026-05-01) aylık dönemler (tarih-bağımsız)
+    expected = _monthly_past_count("2026-04-01") + _monthly_past_count("2026-05-01")
+    assert resp.json()["realized"] == expected
 
 
 @pytest.mark.asyncio
