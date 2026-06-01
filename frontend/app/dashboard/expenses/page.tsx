@@ -42,11 +42,11 @@ export default function ExpensesPage() {
       setOverBudget(comparison.filter((r) => r.over_budget));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.expenses.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [year, month, handle401]);
+  }, [year, month, handle401, t]);
 
   useEffect(() => {
     refresh();
@@ -66,7 +66,7 @@ export default function ExpensesPage() {
     try {
       await api.exportExpenses(year, month);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.expenses.exportFailed"));
     }
   }
 
@@ -79,7 +79,7 @@ export default function ExpensesPage() {
       await api.importExpenses(file);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.expenses.importFailed"));
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
@@ -96,23 +96,23 @@ export default function ExpensesPage() {
         {/* Üst panel: ay seçici + toplam + toolbar */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Bu ay toplam</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.expenses.monthTotal")}</p>
             <TLValue tl={total} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             {summary && (
-              <p className="text-xs text-gray-400 mt-1">{summary.count} kayıt</p>
+              <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.expenses.records")}</p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
             <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
-              Excel İndir
+              {t("form.excelDownload")}
             </button>
             <button
               onClick={() => importRef.current?.click()}
               disabled={importing}
               className={TOOLBAR_BTN_CLS}
             >
-              {importing ? "Yükleniyor..." : "Excel Yükle"}
+              {importing ? t("common.loading") : t("form.excelUpload")}
             </button>
             <input
               ref={importRef}
@@ -128,7 +128,7 @@ export default function ExpensesPage() {
         {overBudget.length > 0 && (
           <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4">
             <p className="text-sm font-semibold text-red-700 mb-2">
-              {overBudget.length} kategori bütçe limitini aştı
+              {overBudget.length} {t("content.expenses.categoriesOverBudget")}
             </p>
             <ul className="space-y-1">
               {overBudget.map((r) => {
@@ -139,7 +139,7 @@ export default function ExpensesPage() {
                 return (
                   <li key={r.category} className="flex justify-between text-xs text-red-600">
                     <span>{label}</span>
-                    <span className="font-medium">{fmtTL(budget)} ₺ limit · {fmtTL(excess)} ₺ aşım</span>
+                    <span className="font-medium">{fmtTL(budget)} ₺ {t("content.expenses.limit")} · {fmtTL(excess)} ₺ {t("content.expenses.over")}</span>
                   </li>
                 );
               })}
@@ -158,7 +158,7 @@ export default function ExpensesPage() {
         )}
 
         {loading && (
-          <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>
+          <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
         )}
 
         {!loading && summary && summary.by_category.length > 0 && (

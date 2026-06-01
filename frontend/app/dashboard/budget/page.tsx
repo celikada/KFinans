@@ -28,11 +28,11 @@ export default function BudgetPage() {
       setRows(data);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.budget.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [year, month, router]);
+  }, [year, month, router, t]);
 
   useEffect(() => {
     refresh();
@@ -43,7 +43,7 @@ export default function BudgetPage() {
       await api.deleteBudget(category);
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Silinemedi");
+      setError(err instanceof Error ? err.message : t("content.budget.deleteFailed"));
     }
   }
 
@@ -59,7 +59,7 @@ export default function BudgetPage() {
         {/* Özet panel */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-6 justify-between">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Bu ay toplam harcama</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.budget.totalSpendThisMonth")}</p>
             <TLValue
               tl={totalActual}
               className={`text-3xl font-bold ${overBudgetCount > 0 ? "text-red-600" : "text-gray-900"}`}
@@ -67,9 +67,9 @@ export default function BudgetPage() {
             />
             {totalBudget > 0 && (
               <p className="text-xs text-gray-400 mt-1">
-                {fmtTL(totalBudget)} ₺ toplam bütçe
+                {fmtTL(totalBudget)} ₺ {t("content.budget.totalBudgetSuffix")}
                 {overBudgetCount > 0 && (
-                  <span className="ml-2 text-red-500 font-medium">{overBudgetCount} kategori aşıldı</span>
+                  <span className="ml-2 text-red-500 font-medium">{overBudgetCount} {t("content.budget.categoriesExceeded")}</span>
                 )}
               </p>
             )}
@@ -80,7 +80,7 @@ export default function BudgetPage() {
         <BudgetForm onSaved={refresh} />
 
         {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
-        {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
         {!loading && <ComparisonTable rows={rows} onDelete={handleDelete} />}
       </main>
     </div>

@@ -1,10 +1,6 @@
 "use client";
 import { INPUT_CLS } from "@/lib/format";
-
-const MONTHS = [
-  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
-];
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   year: number;
@@ -13,6 +9,7 @@ interface Props {
 }
 
 export function MonthSelector({ year, month, onChange }: Props) {
+  const { t } = useTranslation();
   const now = new Date();
   const currentYear = now.getFullYear();
   const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
@@ -24,8 +21,8 @@ export function MonthSelector({ year, month, onChange }: Props) {
         onChange={(e) => onChange(year, parseInt(e.target.value))}
         className={`w-32 ${INPUT_CLS}`}
       >
-        {MONTHS.map((label, i) => (
-          <option key={i} value={i + 1}>{label}</option>
+        {Array.from({ length: 12 }, (_, i) => (
+          <option key={i} value={i + 1}>{t(`months.${i + 1}`)}</option>
         ))}
       </select>
       <select

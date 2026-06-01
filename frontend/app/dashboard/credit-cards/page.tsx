@@ -35,11 +35,11 @@ export default function CreditCardsPage() {
       setSummary(await api.listCreditCards());
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.creditCards.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     refresh();
@@ -67,7 +67,7 @@ export default function CreditCardsPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Kart adı zorunlu");
+      setError(t("content.creditCards.nameRequired"));
       return;
     }
     setSaving(true);
@@ -91,19 +91,19 @@ export default function CreditCardsPage() {
       cancelEdit();
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kayıt başarısız");
+      setError(err instanceof Error ? err.message : t("content.creditCards.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: number, cardName: string) {
-    if (!(await confirm(`"${cardName}" kartı silinsin mi? Bu kartla ilişkili ileride eklenecek ekstreler ve taksitler de silinecek.`))) return;
+    if (!(await confirm(t("content.creditCards.deleteConfirm").replace("{name}", cardName)))) return;
     try {
       await api.deleteCreditCard(id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Silme başarısız");
+      setError(err instanceof Error ? err.message : t("content.creditCards.deleteFailed"));
     }
   }
 
@@ -114,9 +114,9 @@ export default function CreditCardsPage() {
   const cardsWithMultipleUnpaid = cards.filter((c) => c.unpaid_statement_count >= 2);
 
   let submitLabel: string;
-  if (saving) submitLabel = "Kaydediliyor...";
-  else if (editing) submitLabel = "Güncelle";
-  else submitLabel = "Ekle";
+  if (saving) submitLabel = t("form.saving");
+  else if (editing) submitLabel = t("form.update");
+  else submitLabel = t("form.add");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -126,11 +126,11 @@ export default function CreditCardsPage() {
         {/* Birden fazla ödenmemiş ekstre uyarısı */}
         {cardsWithMultipleUnpaid.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">
-            <p className="font-medium mb-1">⚠ {cardsWithMultipleUnpaid.length} kartta birden fazla ödenmemiş ekstre var</p>
+            <p className="font-medium mb-1">⚠ {t("content.creditCards.multiUnpaidTitle").replace("{count}", String(cardsWithMultipleUnpaid.length))}</p>
             <p className="text-xs text-amber-800">
-              Normalde ödenmemiş ekstre bir sonraki ekstreye devreder. Aşağıdaki kart(lar)da fazla ödenmemiş ekstre kayıtı bulunduğu için <strong>çift sayım yapılıyor olabilir</strong>:
-              <strong> {cardsWithMultipleUnpaid.map((c) => `${c.name} (${c.unpaid_statement_count})`).join(", ")}</strong>.
-              Detayına gidip eski olanları "Ödendi" olarak işaretle ya da sil.
+              {t("content.creditCards.multiUnpaidPre")} <strong>{t("content.creditCards.multiUnpaidEmphasis")}</strong>:{" "}
+              <strong>{cardsWithMultipleUnpaid.map((c) => `${c.name} (${c.unpaid_statement_count})`).join(", ")}</strong>.{" "}
+              {t("content.creditCards.multiUnpaidPost")}
             </p>
           </div>
         )}
@@ -138,22 +138,22 @@ export default function CreditCardsPage() {
         {/* Özet panel: 2 metrik */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Toplam borç</p>
+            <p className="text-xs text-gray-400 mb-1">{t("table.totalDebt")}</p>
             <TLValue
               tl={totalDebtAll}
               className="text-3xl font-bold text-rose-600"
               usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
             />
-            <p className="text-xs text-gray-400 mt-1">Dönem içi + gelecek taksitler · {cards.length} kart</p>
+            <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.totalDebtHint").replace("{count}", String(cards.length))}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1">Dönem içi borç</p>
+            <p className="text-xs text-gray-400 mb-1">{t("dashboard.currentPeriodDebt")}</p>
             <TLValue
               tl={totalPeriodAll}
               className="text-3xl font-bold text-rose-500"
               usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
             />
-            <p className="text-xs text-gray-400 mt-1">Ödenmemiş ekstre + henüz ekstreye düşmemiş</p>
+            <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.periodDebtHint")}</p>
           </div>
         </div>
 
@@ -162,18 +162,18 @@ export default function CreditCardsPage() {
           onSubmit={handleSubmit}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-3"
         >
-          <h3 className="text-sm font-semibold text-gray-700">{editing ? "Kartı düzenle" : "Yeni kart"}</h3>
+          <h3 className="text-sm font-semibold text-gray-700">{editing ? t("content.creditCards.editCard") : t("content.creditCards.newCard")}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <input
               required
-              placeholder="Kart adı (Akbank Visa)"
+              placeholder={t("content.creditCards.cardNamePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={`sm:col-span-2 ${INPUT_CLS}`}
               maxLength={100}
             />
             <input
-              placeholder="Banka adı (ops.)"
+              placeholder={t("content.creditCards.bankNamePlaceholder")}
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
               className={INPUT_CLS}
@@ -182,7 +182,7 @@ export default function CreditCardsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input
-              placeholder="Son 4 hane"
+              placeholder={t("content.creditCards.last4Placeholder")}
               value={last4}
               onChange={(e) => setLast4(e.target.value)}
               maxLength={4}
@@ -191,7 +191,7 @@ export default function CreditCardsPage() {
             />
             <input
               type="number"
-              placeholder="Limit (TL, ops.)"
+              placeholder={t("content.creditCards.limitPlaceholder")}
               value={creditLimit}
               onChange={(e) => setCreditLimit(e.target.value)}
               min="0"
@@ -200,7 +200,7 @@ export default function CreditCardsPage() {
             />
             <input
               type="number"
-              placeholder="Kesim günü (1-28)"
+              placeholder={t("content.creditCards.statementDayPlaceholder")}
               value={statementDay}
               onChange={(e) => setStatementDay(e.target.value)}
               min="1"
@@ -209,7 +209,7 @@ export default function CreditCardsPage() {
             />
             <input
               type="number"
-              placeholder="Son ödeme (1-28)"
+              placeholder={t("content.creditCards.dueDayPlaceholder")}
               value={paymentDueDay}
               onChange={(e) => setPaymentDueDay(e.target.value)}
               min="1"
@@ -220,7 +220,7 @@ export default function CreditCardsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="number"
-              placeholder="Dönem içi borç (TL) — henüz ekstreye düşmemiş"
+              placeholder={t("content.creditCards.currentDebtPlaceholder")}
               value={currentDebt}
               onChange={(e) => setCurrentDebt(e.target.value)}
               min="0"
@@ -228,7 +228,7 @@ export default function CreditCardsPage() {
               className={INPUT_CLS}
             />
             <input
-              placeholder="Notlar (ops.)"
+              placeholder={t("content.creditCards.notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className={INPUT_CLS}
@@ -250,16 +250,16 @@ export default function CreditCardsPage() {
                 onClick={cancelEdit}
                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg border border-gray-200"
               >
-                İptal
+                {t("common.cancel")}
               </button>
             )}
           </div>
         </form>
 
         {/* Liste */}
-        {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
         {!loading && cards.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">Henüz kart yok. Yukarıdaki formdan ekleyebilirsin.</p>
+          <p className="text-center text-sm text-gray-400 py-8">{t("content.creditCards.noCards")}</p>
         )}
         {!loading && cards.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
@@ -292,8 +292,8 @@ export default function CreditCardsPage() {
                         {c.notes && <p className="text-xs text-gray-400 mt-0.5">{c.notes}</p>}
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600 text-xs">
-                        Kesim: {c.statement_day}.<br />
-                        Son ödeme: {c.payment_due_day}.
+                        {t("content.creditCards.statementShort")}: {c.statement_day}.<br />
+                        {t("content.creditCards.dueShort")}: {c.payment_due_day}.
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-700">
                         {fmtTL(currentPeriod)} ₺
@@ -304,7 +304,7 @@ export default function CreditCardsPage() {
                         </span>
                         {c.unpaid_statement_count >= 2 && (
                           <p className="text-[10px] text-amber-600 mt-0.5">
-                            ⚠ {c.unpaid_statement_count} kayıt
+                            ⚠ {t("content.creditCards.recordCount").replace("{count}", String(c.unpaid_statement_count))}
                           </p>
                         )}
                       </td>
@@ -323,21 +323,21 @@ export default function CreditCardsPage() {
                             onClick={() => router.push(`/dashboard/credit-cards/${c.id}`)}
                             className="text-xs px-2 py-1 rounded text-rose-700 border border-rose-200 hover:bg-rose-50"
                           >
-                            Ekstre / Taksit
+                            {t("content.creditCards.statementInstallment")}
                           </button>
                           <button
                             type="button"
                             onClick={() => startEdit(c)}
                             className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
                           >
-                            Düzenle
+                            {t("common.edit")}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDelete(c.id, c.name)}
                             className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                            title="Sil"
-                            aria-label={`${c.name} kartını sil`}
+                            title={t("common.delete")}
+                            aria-label={t("content.creditCards.deleteCardAria").replace("{name}", c.name)}
                           >
                             <span aria-hidden="true">✕</span>
                           </button>

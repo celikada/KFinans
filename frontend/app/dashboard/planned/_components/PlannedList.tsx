@@ -27,7 +27,7 @@ export function PlannedList({ items, onDeleted }: Props) {
   }
 
   async function handleDelete(id: number, title: string) {
-    if (!(await confirm(`"${title}" silinsin mi?`))) return;
+    if (!(await confirm(`"${title}" ${t("content.planned.confirmDeleteSuffix")}`))) return;
     await api.deletePlannedExpense(id);
     onDeleted(id);
   }
@@ -35,7 +35,7 @@ export function PlannedList({ items, onDeleted }: Props) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50">
-        <h3 className="text-sm font-semibold text-gray-700">Kayıtlı planlı ödemeler</h3>
+        <h3 className="text-sm font-semibold text-gray-700">{t("content.planned.listTitle")}</h3>
       </div>
       <ul className="divide-y divide-gray-50">
         {items.map((pe) => (
@@ -45,20 +45,20 @@ export function PlannedList({ items, onDeleted }: Props) {
                 <span className="text-sm font-medium text-gray-900 truncate">{pe.title}</span>
                 {pe.is_estimated && (
                   <span className="text-xs bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded">
-                    tahmini
+                    {t("content.planned.estimatedBadge")}
                   </span>
                 )}
                 {pe.credit_card_id && (
                   <span
                     className="text-[10px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded"
-                    title="Kredi kartından yapılacak"
+                    title={t("content.planned.cardBadgeTitle")}
                   >
-                    💳 kart
+                    💳 {t("content.planned.cardBadge")}
                   </span>
                 )}
                 {pe.is_paid && (
                   <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded">
-                    ✓ ödendi
+                    ✓ {t("content.planned.paidBadge")}
                   </span>
                 )}
               </div>
@@ -66,10 +66,10 @@ export function PlannedList({ items, onDeleted }: Props) {
                 <span>{PLANNED_CATEGORY_LABELS[pe.category] ?? pe.category}</span>
                 <span>·</span>
                 <span>{PLANNED_RECURRENCE_LABELS[pe.recurrence] ?? pe.recurrence}</span>
-                {pe.remaining_count && <span>· {pe.remaining_count} taksit</span>}
-                {pe.end_date && <span>· bitiş {pe.end_date}</span>}
+                {pe.remaining_count && <span>· {pe.remaining_count} {t("content.planned.installments")}</span>}
+                {pe.end_date && <span>· {t("content.planned.endLabel")} {pe.end_date}</span>}
                 {pe.months && pe.months.length > 0 && (
-                  <span>· aylar: {pe.months.join(", ")}</span>
+                  <span>· {t("content.planned.monthsLabel")}: {pe.months.join(", ")}</span>
                 )}
               </div>
               {pe.notes && <p className="text-xs text-gray-400 mt-1 italic">{pe.notes}</p>}
@@ -80,7 +80,7 @@ export function PlannedList({ items, onDeleted }: Props) {
                 onClick={() => handleDelete(pe.id, pe.title)}
                 className="text-xs text-red-400 hover:text-red-600 transition-colors"
               >
-                Sil
+                {t("common.delete")}
               </button>
             </div>
           </li>

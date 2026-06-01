@@ -31,11 +31,11 @@ export default function PlannedPage() {
       setItems(list);
       setForecast(fc);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.planned.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [year]);
+  }, [year, t]);
 
   useEffect(() => {
     refresh();
@@ -63,11 +63,11 @@ export default function PlannedPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-6 justify-between">
           <div className="flex gap-8">
             <div>
-              <p className="text-xs text-gray-400 mb-1">Yıllık toplam</p>
+              <p className="text-xs text-gray-400 mb-1">{t("content.planned.yearlyTotal")}</p>
               <TLValue tl={yearTotal} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Aylık ortalama</p>
+              <p className="text-xs text-gray-400 mb-1">{t("content.planned.monthlyAverage")}</p>
               <p className="text-xl font-semibold text-gray-600">{fmtTL(monthlyAvg)} ₺</p>
             </div>
           </div>
@@ -96,7 +96,7 @@ export default function PlannedPage() {
         )}
 
         {loading && (
-          <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>
+          <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
         )}
 
         {!loading && forecast && <YearlyForecast data={forecast} year={year} />}

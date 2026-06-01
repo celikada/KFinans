@@ -2,6 +2,7 @@
 import { api, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   rows: BudgetComparisonDTO[];
@@ -9,10 +10,11 @@ interface Props {
 }
 
 export function ComparisonTable({ rows, onDelete }: Props) {
+  const { t } = useTranslation();
   if (rows.length === 0) {
     return (
       <p className="text-center text-sm text-gray-400 py-8">
-        Henüz bütçe veya harcama yok.
+        {t("content.budget.noBudgetOrSpend")}
       </p>
     );
   }
@@ -33,13 +35,13 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                 <span className="text-sm font-semibold text-gray-800">{label}</span>
                 {row.over_budget && (
                   <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">
-                    Aşıldı
+                    {t("content.budget.exceeded")}
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-3 text-sm">
                 {budget !== null && (
-                  <span className="text-gray-500 text-xs">Limit: {fmtTL(budget)} ₺</span>
+                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {fmtTL(budget)} ₺</span>
                 )}
                 <TLValue
                   tl={actual}
@@ -50,8 +52,8 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                   <button
                     onClick={() => onDelete(row.category)}
                     className="text-gray-400 hover:text-red-500 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                    title="Bütçeyi kaldır"
-                    aria-label={`${row.category} kategorisinin bütçesini kaldır`}
+                    title={t("content.budget.removeBudget")}
+                    aria-label={`${label} — ${t("content.budget.removeBudget")}`}
                   >
                     <span aria-hidden="true">✕</span>
                   </button>
@@ -68,16 +70,16 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                   />
                 </div>
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span>%{pct.toFixed(0)} kullanıldı</span>
+                  <span>%{pct.toFixed(0)} {t("content.budget.used")}</span>
                   {row.remaining !== null && (
                     <span className={row.over_budget ? "text-red-500 font-medium" : "text-emerald-600"}>
-                      {row.over_budget ? `${fmtTL(Math.abs(parseFloat(row.remaining)))} ₺ aşım` : `${fmtTL(parseFloat(row.remaining))} ₺ kaldı`}
+                      {row.over_budget ? `${fmtTL(Math.abs(parseFloat(row.remaining)))} ₺ ${t("content.budget.over")}` : `${fmtTL(parseFloat(row.remaining))} ₺ ${t("content.budget.remaining")}`}
                     </span>
                   )}
                 </div>
               </>
             ) : (
-              <p className="text-xs text-gray-400">Bütçe tanımlanmamış — yalnızca harcama var</p>
+              <p className="text-xs text-gray-400">{t("content.budget.noBudgetDefined")}</p>
             )}
           </div>
         );

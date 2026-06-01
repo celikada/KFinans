@@ -54,11 +54,11 @@ export default function IncomePage() {
       setRecurring(rec);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.income.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [year, month, router]);
+  }, [year, month, router, t]);
 
   useEffect(() => {
     refresh();
@@ -88,7 +88,7 @@ export default function IncomePage() {
     try {
       await api.exportIncomes(year, month);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.income.exportFailed"));
     }
   }
 
@@ -101,7 +101,7 @@ export default function IncomePage() {
       await api.importIncomes(file);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.income.importFailed"));
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
@@ -121,22 +121,22 @@ export default function IncomePage() {
         {/* 3 metrik kartı */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Bu ay (gerçekleşen)</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.income.thisMonthActual")}</p>
             <TLValue tl={monthTotal} className="text-2xl font-bold text-emerald-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
             {summary && summary.count > 0 && (
-              <p className="text-xs text-gray-400 mt-1">{summary.count} kayıt</p>
+              <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.income.records")}</p>
             )}
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Yıl içi (gerçekleşen)</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.income.ytdActual")}</p>
             <TLValue tl={ytdTotal} className="text-2xl font-bold text-blue-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
-            <p className="text-xs text-gray-400 mt-1">{year} yıl başından</p>
+            <p className="text-xs text-gray-400 mt-1">{year} {t("content.income.sinceYearStart")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Yıl sonu beklentisi</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.income.yearEndEstimate")}</p>
             <TLValue tl={yearEstimate} className="text-2xl font-bold text-purple-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
             {remainingRecurring > 0 && (
-              <p className="text-xs text-gray-400 mt-1">+{fmtTL(remainingRecurring)} ₺ kalan periyodik</p>
+              <p className="text-xs text-gray-400 mt-1">+{fmtTL(remainingRecurring)} ₺ {t("content.income.remainingRecurring")}</p>
             )}
           </div>
         </div>
@@ -146,14 +146,14 @@ export default function IncomePage() {
           <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
           <div className="flex items-center gap-2">
             <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
-              Excel İndir
+              {t("form.excelDownload")}
             </button>
             <button
               onClick={() => importRef.current?.click()}
               disabled={importing}
               className={TOOLBAR_BTN_CLS}
             >
-              {importing ? "Yükleniyor..." : "Excel Yükle"}
+              {importing ? t("common.loading") : t("form.excelUpload")}
             </button>
             <input
               ref={importRef}
@@ -173,7 +173,7 @@ export default function IncomePage() {
               tab === "actual" ? "bg-emerald-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
             }`}
           >
-            Gerçekleşen Gelirler
+            {t("content.income.tabActual")}
           </button>
           <button
             onClick={() => setTab("recurring")}
@@ -181,7 +181,7 @@ export default function IncomePage() {
               tab === "recurring" ? "bg-emerald-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
             }`}
           >
-            Periyodik (Maaş, Kira...)
+            {t("content.income.tabRecurring")}
           </button>
         </div>
 
@@ -191,7 +191,7 @@ export default function IncomePage() {
             {/* Kategori dağılımı (gerçekleşen) */}
             {summary && summary.by_category.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Bu ay kategori dağılımı</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">{t("content.income.monthCategoryBreakdown")}</h3>
                 <div className="space-y-3">
                   {summary.by_category.map((b) => {
                     const pct = monthTotal > 0 ? (parseFloat(b.total) / monthTotal) * 100 : 0;
@@ -218,7 +218,7 @@ export default function IncomePage() {
             />
 
             {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
-            {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+            {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
             {!loading && <IncomeTable incomes={incomes} onDeleted={handleDeleted} onEdit={setEditingIncome} />}
           </>
         )}
@@ -231,7 +231,7 @@ export default function IncomePage() {
               onCancel={() => setEditingRecurring(null)}
             />
             {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
-            {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+            {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
             {!loading && (
               <RecurringIncomeTable
                 items={recurring}

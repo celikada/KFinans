@@ -100,7 +100,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
               <label className="block text-xs text-gray-500 mb-1">{t("form.titleLabel")}</label>
               <input
                 className={INPUT_CLS}
-                placeholder="Ziraat Konut Kredisi"
+                placeholder={t("content.planned.titlePlaceholder")}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required

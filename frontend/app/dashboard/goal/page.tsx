@@ -48,11 +48,11 @@ export default function GoalPage() {
       if (data.goal_amount) setInputVal(data.goal_amount);
       if (data.goal_currency) setCurrency(data.goal_currency as GoalCurrency);
     } catch {
-      setError("Yüklenemedi");
+      setError(t("content.goal.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -60,7 +60,7 @@ export default function GoalPage() {
 
   async function handleSave() {
     const val = parseFloat(inputVal);
-    if (!val || val <= 0) { setError("Geçerli bir tutar girin"); return; }
+    if (!val || val <= 0) { setError(t("content.goal.amountInvalid")); return; }
     setSaving(true);
     setError("");
     setSaved(false);
@@ -70,7 +70,7 @@ export default function GoalPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setError(err instanceof Error ? err.message : t("content.goal.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -93,20 +93,20 @@ export default function GoalPage() {
       <PageHeader title={t("pages.goal")} />
 
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
-        {loading && <p className="text-sm text-gray-400 text-center py-8">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-8">{t("common.loading")}</p>}
 
         {!loading && (
           <>
             {/* Hedef formu — her zaman görünür */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-              <h2 className="text-sm font-semibold text-gray-700">Aylık finansal özgürlük ihtiyacı</h2>
+              <h2 className="text-sm font-semibold text-gray-700">{t("content.goal.monthlyNeedTitle")}</h2>
               <p className="text-xs text-gray-400">
-                Bu değerin {MULTIPLIER} katı finansal özgürlük hedefinizi oluşturur.
+                {t("content.goal.multiplierHint").replace("{multiplier}", String(MULTIPLIER))}
               </p>
 
               {/* Para birimi seçici */}
               <div>
-                <label className="block text-xs text-gray-500 mb-2">Para birimi</label>
+                <label className="block text-xs text-gray-500 mb-2">{t("content.goal.currency")}</label>
                 <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
                   {CURRENCIES.map((c) => (
                     <button
@@ -128,7 +128,7 @@ export default function GoalPage() {
               {/* Tutar girişi */}
               <div>
                 <label className="block text-xs text-gray-500 mb-2">
-                  Aylık ihtiyaç ({currency})
+                  {t("content.goal.monthlyNeed").replace("{currency}", currency)}
                 </label>
                 <div className="flex gap-3">
                   <div className="relative flex-1">
@@ -150,7 +150,7 @@ export default function GoalPage() {
                     disabled={saving}
                     className="text-sm bg-violet-600 text-white px-5 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
                   >
-                    {saving ? "Kaydediliyor..." : saved ? "✓ Kaydedildi" : "Kaydet"}
+                    {saving ? t("form.saving") : saved ? t("content.goal.saved") : t("common.save")}
                   </button>
                 </div>
               </div>
@@ -167,7 +167,7 @@ export default function GoalPage() {
                     </p>
                   )}
                   <p>
-                    Finansal özgürlük hedefi:
+                    {t("content.goal.freedomTarget")}:
                     <span className="font-semibold ml-1">
                       {isForeign && rate
                         ? `${fmtTL(parseFloat(inputVal) * rate * MULTIPLIER)} ₺`
@@ -182,14 +182,14 @@ export default function GoalPage() {
             {amount && targetTL && monthlyTL && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
                 <div className="flex justify-between items-start">
-                  <h2 className="text-sm font-semibold text-gray-700">İlerleme durumu</h2>
+                  <h2 className="text-sm font-semibold text-gray-700">{t("content.goal.progressStatus")}</h2>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400">Kaydedilen hedef</p>
+                    <p className="text-xs text-gray-400">{t("content.goal.savedTarget")}</p>
                     <p className="text-sm font-semibold text-gray-700">
-                      {fmtForeign(amount, goal!.goal_currency as GoalCurrency)}/ay
+                      {fmtForeign(amount, goal!.goal_currency as GoalCurrency)}{t("content.goal.perMonthSuffix")}
                     </p>
                     {isForeign && (
-                      <p className="text-xs text-gray-400">= {fmtTL(monthlyTL)} ₺/ay</p>
+                      <p className="text-xs text-gray-400">= {fmtTL(monthlyTL)} ₺{t("content.goal.perMonthSuffix")}</p>
                     )}
                   </div>
                 </div>
@@ -198,54 +198,54 @@ export default function GoalPage() {
                   <>
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs text-gray-500">
-                        <span>Mevcut portföy</span>
+                        <span>{t("content.goal.currentPortfolio")}</span>
                         <span className="font-semibold text-gray-800">{fmtTL(portfolio)} ₺</span>
                       </div>
                       <ProgressBar pct={pct ?? 0} />
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">%{(pct ?? 0).toFixed(1)} tamamlandı</span>
-                        <span className="text-gray-400">Hedef: {fmtTL(targetTL)} ₺</span>
+                        <span className="text-gray-400">{t("content.goal.percentComplete").replace("{pct}", (pct ?? 0).toFixed(1))}</span>
+                        <span className="text-gray-400">{t("content.goal.targetLabel")}: {fmtTL(targetTL)} ₺</span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <Stat
-                        label="Aylık pasif gelir (TL)"
+                        label={t("content.goal.passiveIncomeTl")}
                         value={`${fmtTL(passiveTL!)} ₺`}
-                        sub="portföy ÷ 300"
+                        sub={t("content.goal.portfolioDivided").replace("{multiplier}", String(MULTIPLIER))}
                         color="text-violet-600"
                       />
                       {isForeign && passiveFgn !== null && rate && (
                         <Stat
-                          label={`Aylık pasif gelir (${goal!.goal_currency})`}
+                          label={t("content.goal.passiveIncomeCurrency").replace("{currency}", goal!.goal_currency)}
                           value={fmtForeign(passiveFgn, goal!.goal_currency as GoalCurrency)}
                           sub={`1 ${goal!.goal_currency} = ${fmtTL(rate)} ₺`}
                           color="text-blue-600"
                         />
                       )}
                       <Stat
-                        label="Hedefe kalan"
+                        label={t("content.goal.remainingToTarget")}
                         value={`${fmtTL(Math.max(0, targetTL - portfolio))} ₺`}
-                        sub={pct! >= 100 ? "Hedefe ulaşıldı 🎉" : `%${(100 - pct!).toFixed(1)} eksik`}
+                        sub={pct! >= 100 ? t("content.goal.targetReached") : t("content.goal.percentShort").replace("{pct}", (100 - pct!).toFixed(1))}
                         color={pct! >= 100 ? "text-green-600" : "text-gray-700"}
                       />
                       <Stat
-                        label="Portföy kaç ay karşılıyor"
-                        value={`${months?.toFixed(0)} ay`}
-                        sub={`${((months ?? 0) / 12).toFixed(1)} yıl`}
+                        label={t("content.goal.monthsCovered")}
+                        value={t("content.goal.monthsValue").replace("{months}", months?.toFixed(0) ?? "0")}
+                        sub={t("content.goal.yearsValue").replace("{years}", ((months ?? 0) / 12).toFixed(1))}
                         color="text-indigo-600"
                       />
                       <Stat
-                        label="Pasif gelir vs ihtiyaç"
+                        label={t("content.goal.passiveVsNeed")}
                         value={
                           isForeign && passiveFgn !== null
-                            ? (passiveFgn >= amount ? "Finansal özgür 🎉" : `${fmtForeign(amount - passiveFgn, goal!.goal_currency as GoalCurrency)} eksik`)
-                            : (passiveTL! >= monthlyTL ? "Finansal özgür 🎉" : `${fmtTL(monthlyTL - passiveTL!)} ₺ eksik`)
+                            ? (passiveFgn >= amount ? t("content.goal.financiallyFree") : t("content.goal.shortBy").replace("{amount}", fmtForeign(amount - passiveFgn, goal!.goal_currency as GoalCurrency)))
+                            : (passiveTL! >= monthlyTL ? t("content.goal.financiallyFree") : t("content.goal.shortBy").replace("{amount}", `${fmtTL(monthlyTL - passiveTL!)} ₺`))
                         }
                         sub={
                           (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
-                            ? "Pasif geliriniz ihtiyacı karşılıyor"
-                            : "Pasif gelir henüz yeterli değil"
+                            ? t("content.goal.passiveSufficient")
+                            : t("content.goal.passiveInsufficient")
                         }
                         color={
                           (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
@@ -256,7 +256,7 @@ export default function GoalPage() {
                   </>
                 ) : (
                   <p className="text-sm text-gray-400 py-2">
-                    Portföy verisi yok — dashboard&apos;dan bir snapshot al, ardından ilerleme hesaplanır.
+                    {t("content.goal.noPortfolioData")}
                   </p>
                 )}
               </div>
@@ -264,14 +264,14 @@ export default function GoalPage() {
 
             {/* Formül */}
             <div className="bg-violet-50 rounded-2xl border border-violet-100 p-5 text-xs text-violet-700 space-y-1">
-              <p className="font-semibold mb-2">Finansal özgürlük formülü</p>
-              <p>Hedef = Aylık ihtiyaç × {MULTIPLIER}</p>
-              <p>Aylık pasif gelir = Portföy ÷ {MULTIPLIER}</p>
+              <p className="font-semibold mb-2">{t("content.goal.formulaTitle")}</p>
+              <p>{t("content.goal.formulaTarget").replace("{multiplier}", String(MULTIPLIER))}</p>
+              <p>{t("content.goal.formulaPassive").replace("{multiplier}", String(MULTIPLIER))}</p>
               {goal?.rate_to_tl && goal.goal_currency !== "TRY" && (
-                <p>Güncel kur (TCMB): 1 {goal.goal_currency} = {fmtTL(parseFloat(goal.rate_to_tl))} ₺</p>
+                <p>{t("content.goal.formulaRate").replace("{currency}", goal.goal_currency).replace("{rate}", fmtTL(parseFloat(goal.rate_to_tl)))}</p>
               )}
               <p className="pt-1 text-violet-500">
-                {MULTIPLIER} ay = 25 yıllık sürdürülebilir çekim oranı (%4 kuralı).
+                {t("content.goal.formulaFootnote").replace("{multiplier}", String(MULTIPLIER))}
               </p>
             </div>
           </>

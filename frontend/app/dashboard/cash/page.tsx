@@ -32,11 +32,11 @@ export default function CashPage() {
       setSummary(await api.listCash());
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.cash.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     refresh();
@@ -44,7 +44,7 @@ export default function CashPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!label.trim() || !amount.trim()) { setError("Etiket ve tutar zorunlu"); return; }
+    if (!label.trim() || !amount.trim()) { setError(t("content.cash.labelAmountRequired")); return; }
     setSaving(true);
     setError("");
     try {
@@ -57,19 +57,19 @@ export default function CashPage() {
       setLabel(""); setAmount(""); setNotes(""); setCurrency("TRY");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kayıt başarısız");
+      setError(err instanceof Error ? err.message : t("content.cash.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: number, lbl: string) {
-    if (!(await confirm(`"${lbl}" silinsin mi?`))) return;
+    if (!(await confirm(t("content.cash.confirmDelete").replace("{label}", lbl)))) return;
     try {
       await api.deleteCash(id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Silme başarısız");
+      setError(err instanceof Error ? err.message : t("content.cash.deleteFailed"));
     }
   }
 
@@ -80,21 +80,21 @@ export default function CashPage() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Özet panel */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <p className="text-xs text-gray-400 mb-1">Toplam nakit</p>
+          <p className="text-xs text-gray-400 mb-1">{t("content.cash.totalCash")}</p>
           {summary && (
             <TLValue tl={summary.total_tl} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
           )}
           {summary && (
-            <p className="text-xs text-gray-400 mt-1">{summary.holdings.length} hesap</p>
+            <p className="text-xs text-gray-400 mt-1">{summary.holdings.length} {t("content.cash.accounts")}</p>
           )}
         </div>
 
         {/* Yeni hesap formu */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">Yeni Nakit Kaydı</h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t("content.cash.newRecord")}</h2>
           <div className="flex gap-2 flex-wrap">
             <input
-              placeholder="Etiket (Akbank Vadesiz, Cüzdan...)"
+              placeholder={t("content.cash.labelPlaceholder")}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className={`flex-1 min-w-[200px] ${INPUT_CLS}`}
@@ -102,7 +102,7 @@ export default function CashPage() {
             />
             <input
               type="number"
-              placeholder="Tutar"
+              placeholder={t("table.amount")}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               min="0"
@@ -118,7 +118,7 @@ export default function CashPage() {
             </select>
           </div>
           <input
-            placeholder="Not (opsiyonel)"
+            placeholder={t("content.cash.notesPlaceholder")}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className={`w-full ${INPUT_CLS}`}
@@ -132,12 +132,12 @@ export default function CashPage() {
             disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Kaydediliyor..." : "Ekle"}
+            {saving ? t("common.saving") : t("form.add")}
           </button>
         </form>
 
         {/* Liste */}
-        {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
         {!loading && summary && summary.holdings.length === 0 && (
           <p className="text-center text-sm text-gray-400 py-8">{t("empty.noCashRecord")}</p>
         )}
@@ -169,8 +169,8 @@ export default function CashPage() {
                       <button
                         onClick={() => handleDelete(h.id, h.label)}
                         className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                        title="Sil"
-                        aria-label={`${h.label} kaydını sil`}
+                        title={t("common.delete")}
+                        aria-label={`${h.label} — ${t("common.delete")}`}
                       >
                         <span aria-hidden="true">✕</span>
                       </button>

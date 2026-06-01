@@ -17,11 +17,10 @@ import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
-const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-
 export default function CashFlowPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const MONTH_NAMES = t("content.cashFlow.monthsShort").split(",");
   const now = new Date();
   const currentYear = now.getFullYear();
   const [year, setYear] = useState(currentYear);
@@ -36,11 +35,11 @@ export default function CashFlowPage() {
       setData(await api.getCashFlow(year));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.cashFlow.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [year, router]);
+  }, [year, router, t]);
 
   useEffect(() => {
     refresh();
@@ -49,9 +48,9 @@ export default function CashFlowPage() {
   // Grafik için data hazırla
   const chartData = (data?.months ?? []).map((m) => ({
     name: MONTH_NAMES[m.month - 1],
-    Gelir: parseFloat(m.income_total),
-    Gider: parseFloat(m.expense_total),
-    Net: parseFloat(m.net),
+    income: parseFloat(m.income_total),
+    expense: parseFloat(m.expense_total),
+    net: parseFloat(m.net),
     is_past: m.is_past,
   }));
 
@@ -78,31 +77,31 @@ export default function CashFlowPage() {
                 }`}
               >
                 {y}
-                {y < currentYear && <span className="ml-1 text-xs opacity-70">(geçmiş)</span>}
-                {y === currentYear && <span className="ml-1 text-xs opacity-70">(bu yıl)</span>}
-                {y > currentYear && <span className="ml-1 text-xs opacity-70">(tahmin)</span>}
+                {y < currentYear && <span className="ml-1 text-xs opacity-70">({t("content.cashFlow.past")})</span>}
+                {y === currentYear && <span className="ml-1 text-xs opacity-70">({t("content.cashFlow.thisYear")})</span>}
+                {y > currentYear && <span className="ml-1 text-xs opacity-70">({t("content.cashFlow.forecast")})</span>}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => api.downloadReport(`/cash-flow/report.xlsx?year=${year}`, `nakit-akis-${year}.xlsx`)}
+              onClick={() => api.downloadReport(`/cash-flow/report.xlsx?year=${year}`, `${t("content.cashFlow.fileSlug")}-${year}.xlsx`)}
               className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
             >
-              Excel İndir
+              {t("form.excelDownload")}
             </button>
             <button
               type="button"
-              onClick={() => api.downloadReport(`/cash-flow/report.pdf?year=${year}`, `nakit-akis-${year}.pdf`)}
+              onClick={() => api.downloadReport(`/cash-flow/report.pdf?year=${year}`, `${t("content.cashFlow.fileSlug")}-${year}.pdf`)}
               className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
             >
-              PDF İndir
+              {t("content.cashFlow.pdfDownload")}
             </button>
           </div>
         </div>
         <p className="text-xs text-gray-400">
-          Geçmiş aylar gerçekleşen, gelecek aylar tahmin (recurring + planlı + taksit + ekstre).
+          {t("content.cashFlow.explainer")}
         </p>
 
         {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
@@ -110,28 +109,28 @@ export default function CashFlowPage() {
         {/* 3 metrik özet */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Toplam Gelir</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalIncome")}</p>
             <p className="text-2xl font-bold text-emerald-600 tabular-nums">{fmtTL(totalIncome)} ₺</p>
-            <p className="text-xs text-gray-400 mt-1">{year} yıl toplamı (gerçek + tahmin)</p>
+            <p className="text-xs text-gray-400 mt-1">{year} {t("content.cashFlow.yearTotalHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Toplam Gider</p>
+            <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalExpense")}</p>
             <p className="text-2xl font-bold text-rose-600 tabular-nums">{fmtTL(totalExpense)} ₺</p>
-            <p className="text-xs text-gray-400 mt-1">harcama + ekstre + taksit + planlı</p>
+            <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.expenseHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs text-gray-400 mb-1">Net</p>
+            <p className="text-xs text-gray-400 mb-1">{t("table.net")}</p>
             <p className={`text-2xl font-bold tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
               {totalNet >= 0 ? "+" : ""}{fmtTL(totalNet)} ₺
             </p>
-            <p className="text-xs text-gray-400 mt-1">gelir − gider</p>
+            <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.netHint")}</p>
           </div>
         </div>
 
         {/* Grafik */}
         {!loading && data && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Aylık Nakit Akışı</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">{t("content.cashFlow.monthlyChartTitle")}</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -143,9 +142,9 @@ export default function CashFlowPage() {
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Gelir" fill="#10b981" />
-                  <Bar dataKey="Gider" fill="#ef4444" />
-                  <Line type="monotone" dataKey="Net" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                  <Bar dataKey="income" name={t("content.cashFlow.income")} fill="#10b981" />
+                  <Bar dataKey="expense" name={t("content.cashFlow.expense")} fill="#ef4444" />
+                  <Line type="monotone" dataKey="net" name={t("table.net")} stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -177,7 +176,7 @@ export default function CashFlowPage() {
                     <tr key={m.month} className={m.is_past ? "" : "bg-gray-50/30"}>
                       <td className="px-4 py-3">
                         <span className="font-medium text-gray-900">{MONTH_NAMES[m.month - 1]}</span>
-                        {!m.is_past && <span className="ml-2 text-[10px] text-gray-400">tahmin</span>}
+                        {!m.is_past && <span className="ml-2 text-[10px] text-gray-400">{t("content.cashFlow.forecast")}</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtTL(incActual)} ₺</td>
                       <td className="px-4 py-3 text-right text-emerald-400 tabular-nums">{fmtTL(incForecast)} ₺</td>
@@ -192,7 +191,7 @@ export default function CashFlowPage() {
               </tbody>
               <tfoot className="bg-gray-50 font-semibold">
                 <tr>
-                  <td className="px-4 py-3 text-gray-700">Yıl Toplamı</td>
+                  <td className="px-4 py-3 text-gray-700">{t("content.cashFlow.yearTotal")}</td>
                   <td colSpan={2} className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtTL(totalIncome)} ₺</td>
                   <td colSpan={2} className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmtTL(totalExpense)} ₺</td>
                   <td className={`px-4 py-3 text-right tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
@@ -204,7 +203,7 @@ export default function CashFlowPage() {
           </div>
         )}
 
-        {loading && <p className="text-sm text-gray-400 text-center py-8">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-8">{t("common.loading")}</p>}
       </main>
     </div>
   );
