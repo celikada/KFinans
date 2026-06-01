@@ -2,6 +2,7 @@
 import { WalletDTO } from "@/lib/api";
 import { shortAddr } from "@/lib/format";
 import { CHAIN_LABELS } from "./constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   wallets: WalletDTO[];
@@ -10,8 +11,9 @@ interface Props {
 }
 
 export function WalletList({ wallets, removing, onRemove }: Props) {
+  const { t } = useTranslation();
   if (wallets.length === 0) {
-    return <p className="text-sm text-gray-400">Henüz cüzdan eklenmedi.</p>;
+    return <p className="text-sm text-gray-400">{t("content.wallets.noWallets")}</p>;
   }
 
   return (
@@ -36,7 +38,7 @@ export function WalletList({ wallets, removing, onRemove }: Props) {
             disabled={removing === w.id}
             className="text-xs text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40 shrink-0 ml-3"
           >
-            {removing === w.id ? "Siliniyor..." : "Kaldır"}
+            {removing === w.id ? t("content.wallets.removing") : t("content.wallets.remove")}
           </button>
         </div>
       ))}

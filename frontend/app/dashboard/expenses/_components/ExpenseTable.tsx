@@ -18,7 +18,7 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
   const [removing, setRemoving] = useState<number | null>(null);
 
   async function handleDelete(id: number) {
-    if (!(await confirm("Bu harcamayı silmek istediğine emin misin?"))) return;
+    if (!(await confirm(t("content.expenses.confirmDelete")))) return;
     setRemoving(id);
     try {
       await api.deleteExpense(id);
@@ -38,12 +38,12 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
     );
   }
 
-  const total = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const total = expenses.reduce((s, e) => s + Number.parseFloat(e.amount), 0);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">Harcama Listesi</h2>
+        <h2 className="text-sm font-semibold text-gray-700">{t("content.expenses.listTitle")}</h2>
         <TLValue tl={total} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
       </div>
 
@@ -69,9 +69,9 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
                   {exp.credit_card_id && (
                     <span
                       className="text-[10px] font-medium text-rose-700 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded"
-                      title="Bu harcama kredi kartından yapıldı — gider toplamına dahil edilmez (kart borcuyla zaten sayılır)"
+                      title={t("content.expenses.cardBadgeTitle")}
                     >
-                      💳 kart
+                      💳 {t("content.expenses.cardBadge")}
                     </span>
                   )}
                   {exp.description ?? <span className="text-gray-300">—</span>}
@@ -87,7 +87,7 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
                       onClick={() => onEdit(exp)}
                       className="text-xs text-gray-500 hover:text-gray-800 transition-colors"
                     >
-                      Düzenle
+                      {t("common.edit")}
                     </button>
                   )}
                   <button
@@ -95,7 +95,7 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
                     disabled={removing === exp.id}
                     className="text-xs text-gray-300 hover:text-red-400 transition-colors disabled:opacity-40"
                   >
-                    {removing === exp.id ? "..." : "Sil"}
+                    {removing === exp.id ? "..." : t("common.delete")}
                   </button>
                 </div>
               </td>

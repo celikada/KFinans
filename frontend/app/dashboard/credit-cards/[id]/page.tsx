@@ -10,7 +10,10 @@ import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 
-const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+const MONTH_KEYS = [
+  "monthJan", "monthFeb", "monthMar", "monthApr", "monthMay", "monthJun",
+  "monthJul", "monthAug", "monthSep", "monthOct", "monthNov", "monthDec",
+];
 const TODAY = new Date().toISOString().slice(0, 10);
 
 export default function CreditCardDetailPage({ params }: Readonly<{ params: Promise<{ id: string }> }>) {
@@ -18,7 +21,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { id } = use(params);
-  const cardId = parseInt(id);
+  const cardId = Number.parseInt(id);
 
   const [detail, setDetail] = useState<CreditCardDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,11 +34,11 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
       setDetail(await api.getCreditCardDetail(cardId));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.creditCards.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [cardId, router]);
+  }, [cardId, router, t]);
 
   useEffect(() => {
     refresh();
@@ -45,7 +48,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
     return (
       <div className="min-h-screen bg-gray-50">
         <PageHeader title={t("pages.creditCards")} back="/dashboard/credit-cards" />
-        <p className="text-sm text-gray-400 text-center py-12">Yükleniyor...</p>
+        <p className="text-sm text-gray-400 text-center py-12">{t("common.loading")}</p>
       </div>
     );
   }
@@ -60,12 +63,12 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (!detail) return null;
 
   const c = detail.card;
-  const limit = c.credit_limit ? parseFloat(c.credit_limit) : null;
-  const currentPeriod = parseFloat(c.current_period_debt);
-  const unpaid = parseFloat(c.unpaid_statement_total);
-  const future = parseFloat(c.future_installment_total);
-  const periodDebt = parseFloat(c.period_debt);
-  const totalDebt = parseFloat(c.total_debt);
+  const limit = c.credit_limit ? Number.parseFloat(c.credit_limit) : null;
+  const currentPeriod = Number.parseFloat(c.current_period_debt);
+  const unpaid = Number.parseFloat(c.unpaid_statement_total);
+  const future = Number.parseFloat(c.future_installment_total);
+  const periodDebt = Number.parseFloat(c.period_debt);
+  const totalDebt = Number.parseFloat(c.total_debt);
   const utilization = limit ? (totalDebt / limit) * 100 : null;
 
   return (
@@ -77,24 +80,24 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
-              <p className="text-xs text-gray-400 mb-1">Banka / Kart</p>
+              <p className="text-xs text-gray-400 mb-1">{t("content.creditCards.bankCard")}</p>
               <p className="text-base font-semibold text-gray-900">{c.bank_name ?? "—"}</p>
               {c.last_4 && <p className="text-xs text-gray-500 font-mono">**** {c.last_4}</p>}
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Kesim / Son ödeme</p>
-              <p className="text-sm text-gray-700">{c.statement_day}. gün → {c.payment_due_day}.</p>
+              <p className="text-xs text-gray-400 mb-1">{t("table.statementDue")}</p>
+              <p className="text-sm text-gray-700">{t("content.creditCards.dayFlow").replace("{statement}", String(c.statement_day)).replace("{due}", String(c.payment_due_day))}</p>
               {limit !== null && (
-                <p className="text-xs text-gray-400 mt-1">Limit: {fmtTL(limit)} ₺</p>
+                <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.limitLabel")}: {fmtTL(limit)} ₺</p>
               )}
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1">Toplam borç</p>
+              <p className="text-xs text-gray-400 mb-1">{t("table.totalDebt")}</p>
               <p className={`text-2xl font-bold tabular-nums ${totalDebt > 0 ? "text-rose-600" : "text-gray-400"}`}>
                 {fmtTL(totalDebt)} ₺
               </p>
               {utilization !== null && limit !== null && limit > 0 && (
-                <p className="text-xs text-gray-400 mt-1">%{utilization.toFixed(0)} kullanım</p>
+                <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.utilization").replace("{pct}", utilization.toFixed(0))}</p>
               )}
             </div>
           </div>
@@ -104,20 +107,20 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
               <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(currentPeriod)} ₺</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Ödenmemiş ekstre</p>
+              <p className="text-xs text-gray-400">{t("table.unpaidStatement")}</p>
               <p className={`font-semibold tabular-nums ${unpaid > 0 ? "text-rose-600" : "text-gray-700"}`}>
                 {fmtTL(unpaid)} ₺
               </p>
               {c.unpaid_statement_count >= 2 && (
-                <p className="text-[10px] text-amber-600 mt-0.5">⚠ {c.unpaid_statement_count} kayıt</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">⚠ {t("content.creditCards.recordCount").replace("{count}", String(c.unpaid_statement_count))}</p>
               )}
             </div>
             <div>
-              <p className="text-xs text-gray-400">Dönem içi borç</p>
+              <p className="text-xs text-gray-400">{t("dashboard.currentPeriodDebt")}</p>
               <p className="font-semibold text-rose-500 tabular-nums">{fmtTL(periodDebt)} ₺</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Gelecek taksit</p>
+              <p className="text-xs text-gray-400">{t("table.futureInstallment")}</p>
               <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(future)} ₺</p>
             </div>
           </div>
@@ -184,13 +187,13 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!amount.trim()) { setErr("Tutar zorunlu"); return; }
+    if (!amount.trim()) { setErr(t("content.creditCards.amountRequired")); return; }
     setSaving(true); setErr("");
     try {
       const payload: StatementInput = {
-        period_year: parseInt(year),
-        period_month: parseInt(month),
-        statement_amount: parseFloat(amount),
+        period_year: Number.parseInt(year),
+        period_month: Number.parseInt(month),
+        statement_amount: Number.parseFloat(amount),
         statement_date: stmtDate,
         due_date: dueDate,
         paid_at: paid ? new Date().toISOString() : null,
@@ -204,55 +207,56 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
       reset();
       onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Kayıt başarısız");
+      setErr(e instanceof Error ? e.message : t("content.creditCards.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(s: StatementDTO) {
-    if (!(await confirm(`${s.period_year}-${MONTH_NAMES[s.period_month - 1]} ekstresi silinsin mi?`))) return;
+    const periodLabel = `${s.period_year}-${t("content.creditCards." + MONTH_KEYS[s.period_month - 1])}`;
+    if (!(await confirm(t("content.creditCards.deleteStatementConfirm").replace("{period}", periodLabel)))) return;
     try {
       await api.deleteStatement(cardId, s.id);
       onChange();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Silme başarısız");
+      alert(e instanceof Error ? e.message : t("content.creditCards.deleteFailed"));
     }
   }
 
   let submitLabel: string;
-  if (saving) submitLabel = "Kaydediliyor...";
-  else if (editing) submitLabel = "Güncelle";
-  else submitLabel = "Ekle";
+  if (saving) submitLabel = t("form.saving");
+  else if (editing) submitLabel = t("form.update");
+  else submitLabel = t("form.add");
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Aylık Ekstreler</h2>
-        <span className="text-xs text-gray-400">{items.length} kayıt</span>
+        <h2 className="text-base font-semibold text-gray-900">{t("content.creditCards.monthlyStatements")}</h2>
+        <span className="text-xs text-gray-400">{t("content.creditCards.recordCount").replace("{count}", String(items.length))}</span>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3 pb-4 border-b border-gray-50">
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-          <input type="number" placeholder="Yıl" value={year} onChange={(e) => setYear(e.target.value)} min="2020" max="2100" className={INPUT_CLS} />
+          <input type="number" placeholder={t("content.creditCards.yearPlaceholder")} value={year} onChange={(e) => setYear(e.target.value)} min="2020" max="2100" className={INPUT_CLS} />
           <select value={month} onChange={(e) => setMonth(e.target.value)} className={INPUT_CLS}>
-            {MONTH_NAMES.map((n, i) => <option key={i + 1} value={i + 1}>{n}</option>)}
+            {MONTH_KEYS.map((k, i) => <option key={i + 1} value={i + 1}>{t("content.creditCards." + k)}</option>)}
           </select>
-          <input type="number" placeholder="Tutar (TL)" value={amount} onChange={(e) => setAmount(e.target.value)} step="0.01" min="0" className={`sm:col-span-2 ${INPUT_CLS}`} />
-          <input type="date" value={stmtDate} onChange={(e) => setStmtDate(e.target.value)} className={INPUT_CLS} title="Kesim tarihi" />
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={INPUT_CLS} title="Son ödeme" />
+          <input type="number" placeholder={t("content.creditCards.amountTlPlaceholder")} value={amount} onChange={(e) => setAmount(e.target.value)} step="0.01" min="0" className={`sm:col-span-2 ${INPUT_CLS}`} />
+          <input type="date" value={stmtDate} onChange={(e) => setStmtDate(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.statementDateTitle")} />
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.dueDateTitle")} />
         </div>
         <div className="flex items-center gap-3">
           <label className="text-xs text-gray-600 inline-flex items-center gap-2">
             <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} className="rounded" />
-            Ödendi
+            {t("content.creditCards.paid")}
           </label>
-          <input placeholder="Notlar (ops.)" value={notes} onChange={(e) => setNotes(e.target.value)} className={`flex-1 ${INPUT_CLS}`} maxLength={500} />
+          <input placeholder={t("content.creditCards.notesPlaceholder")} value={notes} onChange={(e) => setNotes(e.target.value)} className={`flex-1 ${INPUT_CLS}`} maxLength={500} />
         </div>
         {err && <p className="text-xs text-red-500">{err}</p>}
         <div className="flex gap-2">
           <button type="submit" disabled={saving} className="text-sm bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 disabled:opacity-50">{submitLabel}</button>
-          {editing && <button type="button" onClick={reset} className="text-sm border border-gray-200 text-gray-600 px-4 py-2 rounded-lg">İptal</button>}
+          {editing && <button type="button" onClick={reset} className="text-sm border border-gray-200 text-gray-600 px-4 py-2 rounded-lg">{t("common.cancel")}</button>}
         </div>
       </form>
 
@@ -264,16 +268,16 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
             <li key={s.id} className="py-3 flex items-center justify-between gap-3">
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">
-                  {s.period_year} · {MONTH_NAMES[s.period_month - 1]}
-                  {s.paid_at && <span className="ml-2 text-[10px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">ÖDENDİ</span>}
+                  {s.period_year} · {t("content.creditCards." + MONTH_KEYS[s.period_month - 1])}
+                  {s.paid_at && <span className="ml-2 text-[10px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{t("content.creditCards.paidBadge")}</span>}
                 </p>
-                <p className="text-xs text-gray-500">Kesim: {s.statement_date} · Son ödeme: {s.due_date}</p>
+                <p className="text-xs text-gray-500">{t("content.creditCards.statementShort")}: {s.statement_date} · {t("content.creditCards.dueShort")}: {s.due_date}</p>
                 {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(parseFloat(s.statement_amount))} ₺</span>
-                <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">Düzenle</button>
-                <button onClick={() => handleDelete(s)} aria-label="Ekstreyi sil" className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
+                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(Number.parseFloat(s.statement_amount))} ₺</span>
+                <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
+                <button onClick={() => handleDelete(s)} aria-label={t("content.creditCards.deleteStatementAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
             </li>
           ))}
@@ -319,13 +323,13 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!description.trim()) { setErr("Açıklama zorunlu"); return; }
+    if (!description.trim()) { setErr(t("content.creditCards.descriptionRequired")); return; }
     setSaving(true); setErr("");
     try {
       const payload: InstallmentInput = {
         description: description.trim(),
-        monthly_amount: parseFloat(monthlyAmount),
-        installments_total: parseInt(total),
+        monthly_amount: Number.parseFloat(monthlyAmount),
+        installments_total: Number.parseInt(total),
         first_due_date: firstDue,
         notes: notes.trim() || null,
       };
@@ -337,65 +341,65 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
       reset();
       onChange();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Kayıt başarısız");
+      setErr(e instanceof Error ? e.message : t("content.creditCards.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   // Toplam tutar canlı hesaplama (form preview)
-  const monthlyNum = parseFloat(monthlyAmount);
-  const totalCount = parseInt(total) || 0;
+  const monthlyNum = Number.parseFloat(monthlyAmount);
+  const totalCount = Number.parseInt(total) || 0;
   const totalPreview = monthlyNum > 0 && totalCount > 0
     ? (monthlyNum * totalCount).toFixed(2)
     : null;
 
   async function handleDelete(i: InstallmentDTO) {
-    if (!(await confirm(`"${i.description}" taksiti silinsin mi?`))) return;
+    if (!(await confirm(t("content.creditCards.deleteInstallmentConfirm").replace("{name}", i.description)))) return;
     try {
       await api.deleteInstallment(cardId, i.id);
       onChange();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Silme başarısız");
+      alert(e instanceof Error ? e.message : t("content.creditCards.deleteFailed"));
     }
   }
 
   let submitLabel: string;
-  if (saving) submitLabel = "Kaydediliyor...";
-  else if (editing) submitLabel = "Güncelle";
-  else submitLabel = "Ekle";
+  if (saving) submitLabel = t("form.saving");
+  else if (editing) submitLabel = t("form.update");
+  else submitLabel = t("form.add");
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">Taksitler</h2>
-        <span className="text-xs text-gray-400">{items.length} kayıt</span>
+        <h2 className="text-base font-semibold text-gray-900">{t("content.creditCards.installments")}</h2>
+        <span className="text-xs text-gray-400">{t("content.creditCards.recordCount").replace("{count}", String(items.length))}</span>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3 pb-4 border-b border-gray-50">
         <input
-          required placeholder="Açıklama (TV — MediaMarkt)" value={description}
+          required placeholder={t("content.creditCards.installmentDescPlaceholder")} value={description}
           onChange={(e) => setDescription(e.target.value)} maxLength={200}
           className={INPUT_CLS}
         />
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <input type="number" placeholder="Aylık taksit (TL)" value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
-          <input type="number" placeholder="Taksit sayısı" value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
-          <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={INPUT_CLS} title="İlk taksit tarihi" />
+          <input type="number" placeholder={t("content.creditCards.monthlyInstallmentPlaceholder")} value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
+          <input type="number" placeholder={t("content.creditCards.installmentCountPlaceholder")} value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
+          <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.firstDueTitle")} />
         </div>
         {totalPreview && (
           <p className="text-xs text-gray-500">
-            Toplam: <span className="font-semibold text-gray-700">{totalPreview} ₺</span> · Kalan taksit ilk vadeye göre otomatik hesaplanır.
+            {t("content.creditCards.totalLabel")}: <span className="font-semibold text-gray-700">{totalPreview} ₺</span> · {t("content.creditCards.remainingAutoHint")}
           </p>
         )}
         <input
-          placeholder="Notlar (ops.)" value={notes} onChange={(e) => setNotes(e.target.value)}
+          placeholder={t("content.creditCards.notesPlaceholder")} value={notes} onChange={(e) => setNotes(e.target.value)}
           className={INPUT_CLS} maxLength={500}
         />
         {err && <p className="text-xs text-red-500">{err}</p>}
         <div className="flex gap-2">
           <button type="submit" disabled={saving} className="text-sm bg-rose-600 text-white px-4 py-2 rounded-lg hover:bg-rose-700 disabled:opacity-50">{submitLabel}</button>
-          {editing && <button type="button" onClick={reset} className="text-sm border border-gray-200 text-gray-600 px-4 py-2 rounded-lg">İptal</button>}
+          {editing && <button type="button" onClick={reset} className="text-sm border border-gray-200 text-gray-600 px-4 py-2 rounded-lg">{t("common.cancel")}</button>}
         </div>
       </form>
 
@@ -408,22 +412,22 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">{i.description}</p>
                 <p className="text-xs text-gray-500">
-                  {i.installments_remaining}/{i.installments_total} taksit kalan ·
-                  ilk vade {i.first_due_date}
+                  {t("content.creditCards.installmentsRemaining").replace("{remaining}", String(i.installments_remaining)).replace("{total}", String(i.installments_total))} ·
+                  {" "}{t("content.creditCards.firstDueLabel")} {i.first_due_date}
                 </p>
                 {i.notes && <p className="text-xs text-gray-400 mt-0.5">{i.notes}</p>}
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-sm font-semibold text-rose-600 tabular-nums">
-                    {fmtTL(parseFloat(i.monthly_amount))} ₺/ay
+                    {fmtTL(Number.parseFloat(i.monthly_amount))} {t("content.creditCards.perMonth")}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    Toplam: {fmtTL(parseFloat(i.total_amount))} ₺
+                    {t("content.creditCards.totalLabel")}: {fmtTL(Number.parseFloat(i.total_amount))} ₺
                   </p>
                 </div>
-                <button onClick={() => startEdit(i)} className="text-xs text-gray-500 hover:text-gray-800">Düzenle</button>
-                <button onClick={() => handleDelete(i)} aria-label="Taksiti sil" className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
+                <button onClick={() => startEdit(i)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
+                <button onClick={() => handleDelete(i)} aria-label={t("content.creditCards.deleteInstallmentAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
             </li>
           ))}

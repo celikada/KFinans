@@ -58,7 +58,7 @@ export default function StocksPage() {
       setResult(await api.stockPreview(valid));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Fiyat alınamadı");
+      setError(err instanceof Error ? err.message : t("content.stocks.errorFetchFailed"));
     } finally {
       setLoading(false);
     }
@@ -66,13 +66,13 @@ export default function StocksPage() {
 
   async function fetchPrices() {
     const valid = toDTO(holdings);
-    if (!valid.length) { setError("En az bir ticker ve adet giriniz"); return; }
+    if (!valid.length) { setError(t("content.stocks.errorAtLeastOne")); return; }
     await fetchPricesFor(valid);
   }
 
   async function saveHoldings() {
     const valid = toDTO(holdings);
-    if (!valid.length) { setError("Kaydedilecek geçerli holding yok"); return; }
+    if (!valid.length) { setError(t("content.stocks.errorNoValidHolding")); return; }
     setSaving(true);
     setError("");
     try {
@@ -81,7 +81,7 @@ export default function StocksPage() {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Kaydetme başarısız");
+      setError(err instanceof Error ? err.message : t("content.stocks.errorSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -93,7 +93,7 @@ export default function StocksPage() {
     try {
       await api.exportStockHoldings();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.stocks.errorExportFailed"));
     } finally {
       setExporting(false);
     }
@@ -127,7 +127,7 @@ export default function StocksPage() {
       fetchPricesFor(imported);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.stocks.errorImportFailed"));
     } finally {
       setImporting(false);
       e.target.value = "";
@@ -146,10 +146,10 @@ export default function StocksPage() {
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-1">Hisse Holdingleri</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">{t("content.stocks.stockHoldings")}</h2>
           <p className="text-xs text-gray-400 mb-2">
-            BIST için <span className="font-mono bg-gray-50 px-1 rounded">THYAO.IS</span> formatını,
-            ABD için <span className="font-mono bg-gray-50 px-1 rounded">AAPL</span> formatını kullanın.
+            {t("content.stocks.formatHintPre")} <span className="font-mono bg-gray-50 px-1 rounded">THYAO.IS</span> {t("content.stocks.formatHintMid")}{" "}
+            <span className="font-mono bg-gray-50 px-1 rounded">AAPL</span> {t("content.stocks.formatHintPost")}
           </p>
           <MkkHint onUpload={handleMkkUpload} />
 

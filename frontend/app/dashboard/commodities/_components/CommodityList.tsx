@@ -9,15 +9,15 @@ interface Props {
   onDeleted: () => void;
 }
 
-function label(pos: CommodityPositionDTO): string {
+function label(pos: CommodityPositionDTO, t: (k: string) => string): string {
   if (pos.unit_type === "coin") return COIN_LABELS[pos.coin_type as keyof typeof COIN_LABELS] ?? pos.coin_type ?? "";
   if (pos.unit_type === "biga") return `BiGA ${pos.biga_code} (${BIGA_GRAM_WEIGHTS[pos.biga_code!]}g)`;
-  return pos.metal === "gold" ? "Altın (gram)" : "Gümüş (gram)";
+  return pos.metal === "gold" ? t("content.commodities.goldGram") : t("content.commodities.silverGram");
 }
 
-function unitLabel(pos: CommodityPositionDTO): string {
-  if (pos.unit_type === "gram") return `${parseFloat(pos.quantity).toFixed(4)} g`;
-  return `${parseFloat(pos.quantity).toFixed(pos.unit_type === "biga" ? 0 : 0)} adet`;
+function unitLabel(pos: CommodityPositionDTO, t: (k: string) => string): string {
+  if (pos.unit_type === "gram") return `${Number.parseFloat(pos.quantity).toFixed(4)} g`;
+  return `${Number.parseFloat(pos.quantity).toFixed(pos.unit_type === "biga" ? 0 : 0)} ${t("content.commodities.pieceSuffix")}`;
 }
 
 export function CommodityList({ positions, onDeleted }: Props) {
@@ -54,12 +54,12 @@ export function CommodityList({ positions, onDeleted }: Props) {
           {positions.map((pos) => (
             <tr key={pos.id} className="hover:bg-gray-50 transition-colors">
               <td className="px-4 py-3">
-                <span className="font-medium text-gray-800">{label(pos)}</span>
+                <span className="font-medium text-gray-800">{label(pos, t)}</span>
                 {pos.notes && <span className="block text-xs text-gray-400">{pos.notes}</span>}
               </td>
-              <td className="px-4 py-3 text-right text-gray-600 tabular-nums">{unitLabel(pos)}</td>
+              <td className="px-4 py-3 text-right text-gray-600 tabular-nums">{unitLabel(pos, t)}</td>
               <td className="px-4 py-3 text-right text-gray-500 tabular-nums">
-                {parseFloat(pos.gram_equivalent).toFixed(2)} g
+                {Number.parseFloat(pos.gram_equivalent).toFixed(2)} g
               </td>
               <td className="px-4 py-3 text-right">
                 <TLValue tl={pos.total_value_tl} className="font-semibold text-amber-700 tabular-nums" />
@@ -69,7 +69,7 @@ export function CommodityList({ positions, onDeleted }: Props) {
                   onClick={() => handleDelete(pos.id)}
                   disabled={deletingId === pos.id}
                   className="text-gray-300 hover:text-red-400 transition-colors disabled:opacity-50 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                  aria-label="Kaydı sil"
+                  aria-label={t("content.commodities.deleteAria")}
                 >
                   <span aria-hidden="true">✕</span>
                 </button>

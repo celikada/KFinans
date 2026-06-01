@@ -8,40 +8,46 @@ import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 
-const EXCHANGE_OPTIONS = [
+const EXCHANGE_VALUES: { value: string; label: string | null }[] = [
   { value: "binancetr", label: "Binance TR" },
   { value: "icrypex", label: "iCrypex" },
-  { value: "btcturk", label: "BTC Türk" },
+  { value: "btcturk", label: "BtcTurk" },
   { value: "paribu", label: "Paribu" },
   { value: "bybit", label: "Bybit" },
   { value: "kucoin", label: "KuCoin" },
   { value: "bitget", label: "Bitget" },
-  { value: "other", label: "Diğer" },
+  { value: "other", label: null },
 ];
-
-const PRICE_SOURCE_OPTIONS: { value: ManualCryptoPriceSource; label: string; hint: string }[] = [
-  { value: "auto",   label: "Otomatik",     hint: "Binance USDT + CoinGecko fallback (varsayılan)" },
-  { value: "manual", label: "Manuel fiyat", hint: "Birim fiyatı TL olarak kendin gir" },
-  { value: "linked", label: "Bağla",        hint: "Mevcut bir varlığın fiyatına bağla (altın, ETH, fon vs.)" },
-];
-
-const PRICE_SOURCE_LABEL: Record<ManualCryptoPriceSource, string> = {
-  auto: "Otomatik",
-  manual: "Manuel",
-  linked: "Bağlı",
-};
-
-const LINKED_SOURCE_LABEL: Record<LinkedSource, string> = {
-  binance: "Binance",
-  coingecko: "CoinGecko",
-  tefas: "TEFAS",
-  commodity: "Emtia",
-};
 
 export default function ManualCryptoPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const confirm = useConfirm();
+
+  // Exchange options — proper nouns stay constant except "other", which is translated.
+  const EXCHANGE_OPTIONS = EXCHANGE_VALUES.map((o) => ({
+    value: o.value,
+    label: o.label ?? t("content.manualCrypto.exchangeOther"),
+  }));
+
+  const PRICE_SOURCE_OPTIONS: { value: ManualCryptoPriceSource; label: string; hint: string }[] = [
+    { value: "auto",   label: t("content.manualCrypto.sourceAuto"),   hint: t("content.manualCrypto.sourceAutoHint") },
+    { value: "manual", label: t("content.manualCrypto.sourceManual"), hint: t("content.manualCrypto.sourceManualHint") },
+    { value: "linked", label: t("content.manualCrypto.sourceLinked"), hint: t("content.manualCrypto.sourceLinkedHint") },
+  ];
+
+  const PRICE_SOURCE_LABEL: Record<ManualCryptoPriceSource, string> = {
+    auto: t("content.manualCrypto.sourceLabelAuto"),
+    manual: t("content.manualCrypto.sourceLabelManual"),
+    linked: t("content.manualCrypto.sourceLabelLinked"),
+  };
+
+  const LINKED_SOURCE_LABEL: Record<LinkedSource, string> = {
+    binance: "Binance",
+    coingecko: "CoinGecko",
+    tefas: "TEFAS",
+    commodity: t("content.manualCrypto.linkedCommodity"),
+  };
   const [summary, setSummary] = useState<ManualCryptoSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,11 +81,11 @@ export default function ManualCryptoPage() {
         router.replace("/login");
         return;
       }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.manualCrypto.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     refresh();
@@ -108,15 +114,15 @@ export default function ManualCryptoPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!exchange || !symbol.trim() || !quantity.trim()) {
-      setError("Borsa, sembol ve miktar zorunlu");
+      setError(t("content.manualCrypto.requiredFields"));
       return;
     }
-    if (priceSource === "manual" && (!manualPrice.trim() || parseFloat(manualPrice) <= 0)) {
-      setError("Manuel fiyat seçildiğinde TL fiyat alanı zorunludur (>0)");
+    if (priceSource === "manual" && (!manualPrice.trim() || Number.parseFloat(manualPrice) <= 0)) {
+      setError(t("content.manualCrypto.manualPriceRequired"));
       return;
     }
     if (priceSource === "linked" && !linkedSelected) {
-      setError("Bağla seçildiğinde arama yapıp bir varlık seçmelisin");
+      setError(t("content.manualCrypto.linkedRequired"));
       return;
     }
     setSaving(true);
@@ -126,10 +132,10 @@ export default function ManualCryptoPage() {
         exchange,
         label: label.trim() || null,
         symbol: symbol.trim().toUpperCase(),
-        quantity: parseFloat(quantity),
-        avg_cost_tl: avgCost.trim() ? parseFloat(avgCost) : null,
+        quantity: Number.parseFloat(quantity),
+        avg_cost_tl: avgCost.trim() ? Number.parseFloat(avgCost) : null,
         price_source: priceSource,
-        manual_unit_price_tl: priceSource === "manual" ? parseFloat(manualPrice) : null,
+        manual_unit_price_tl: priceSource === "manual" ? Number.parseFloat(manualPrice) : null,
         linked_source: priceSource === "linked" ? linkedSelected!.source : null,
         linked_id: priceSource === "linked" ? linkedSelected!.id : null,
         notes: notes.trim() || null,
@@ -145,19 +151,19 @@ export default function ManualCryptoPage() {
       setNotes("");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kayıt başarısız");
+      setError(err instanceof Error ? err.message : t("content.manualCrypto.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: number, sym: string) {
-    if (!(await confirm(`${sym} silinsin mi?`))) return;
+    if (!(await confirm(t("content.manualCrypto.confirmDelete").replace("{symbol}", sym)))) return;
     try {
       await api.deleteManualCrypto(id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Silme başarısız");
+      setError(err instanceof Error ? err.message : t("content.manualCrypto.deleteFailed"));
     }
   }
 
@@ -165,7 +171,7 @@ export default function ManualCryptoPage() {
     try {
       await api.exportManualCrypto();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.manualCrypto.exportFailed"));
     }
   }
 
@@ -177,18 +183,23 @@ export default function ManualCryptoPage() {
     try {
       const result = await api.importManualCrypto(file);
       if (result.errors.length > 0) {
-        setError(`${result.imported} satır yüklendi, ${result.errors.length} hata: ${result.errors.slice(0, 3).join("; ")}`);
+        setError(
+          t("content.manualCrypto.importResult")
+            .replace("{imported}", String(result.imported))
+            .replace("{errorCount}", String(result.errors.length))
+            .replace("{errors}", result.errors.slice(0, 3).join("; ")),
+        );
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.manualCrypto.importFailed"));
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
     }
   }
 
-  const totalTL = summary ? parseFloat(summary.total_value_tl) : 0;
+  const totalTL = summary ? Number.parseFloat(summary.total_value_tl) : 0;
   const positions = summary?.positions ?? [];
   const unknownSymbols = summary?.unknown_symbols ?? [];
 
@@ -199,21 +210,27 @@ export default function ManualCryptoPage() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Bilgi banner */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-900">
-          <p className="font-medium mb-1">API erişimi olmayan borsalar için manuel giriş</p>
+          <p className="font-medium mb-1">{t("content.manualCrypto.bannerTitle")}</p>
           <p className="text-xs text-blue-700">
-            BinanceTR, iCrypex gibi public read-only API anahtarı vermeyen borsaları buraya ekleyebilirsin.
-            Anlık fiyat Binance USDT pariteleri üzerinden hesaplanır. İleride API geldiğinde geçişi yaparız.
+            {t("content.manualCrypto.bannerText")}
           </p>
         </div>
 
         {/* Bilinmeyen sembol uyarısı */}
         {unknownSymbols.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">
-            <p className="font-medium mb-1">⚠ Fiyatı bulunamayan semboller</p>
+            <p className="font-medium mb-1">{t("content.manualCrypto.unknownSymbolTitle")}</p>
             <p className="text-xs">
-              <strong>{unknownSymbols.join(", ")}</strong> için Binance USDT pariteni bulamadık.
-              Bu pozisyonların TL değeri 0 olarak gösteriliyor.
-              Sembol yazımını kontrol edin (BTC, ETH, USDT...) — küçük altcoin'ler dinlenmiyor olabilir.
+              {(() => {
+                const [before, after] = t("content.manualCrypto.unknownSymbolText").split("{symbols}");
+                return (
+                  <>
+                    {before}
+                    <strong>{unknownSymbols.join(", ")}</strong>
+                    {after}
+                  </>
+                );
+              })()}
             </p>
           </div>
         )}
@@ -222,26 +239,28 @@ export default function ManualCryptoPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex flex-wrap gap-6 justify-between items-start">
             <div>
-              <p className="text-xs text-gray-400 mb-1">Toplam manuel kripto</p>
+              <p className="text-xs text-gray-400 mb-1">{t("content.manualCrypto.totalManualCrypto")}</p>
               <TLValue
                 tl={totalTL}
                 className="text-3xl font-bold text-gray-900"
                 usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
               />
               <p className="text-xs text-gray-400 mt-1">
-                {positions.length} pozisyon · {new Set(positions.map((p) => p.exchange)).size} borsa
+                {t("content.manualCrypto.positionsExchanges")
+                  .replace("{positions}", String(positions.length))
+                  .replace("{exchanges}", String(new Set(positions.map((p) => p.exchange)).size))}
               </p>
             </div>
             <div className="flex gap-2">
               <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
-                Excel İndir
+                {t("form.excelDownload")}
               </button>
               <button
                 onClick={() => importRef.current?.click()}
                 disabled={importing}
                 className={TOOLBAR_BTN_CLS}
               >
-                {importing ? "Yükleniyor..." : "Excel Yükle"}
+                {importing ? t("form.refreshing") : t("form.excelUpload")}
               </button>
               <input
                 ref={importRef}
@@ -259,7 +278,7 @@ export default function ManualCryptoPage() {
           onSubmit={handleSubmit}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-3"
         >
-          <h2 className="text-sm font-semibold text-gray-700">Yeni Pozisyon</h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t("content.manualCrypto.newPositionTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
             <select
               value={exchange}
@@ -271,7 +290,7 @@ export default function ManualCryptoPage() {
               ))}
             </select>
             <input
-              placeholder="Sembol (BTC)"
+              placeholder={t("content.manualCrypto.symbolPlaceholder")}
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
               className={`sm:col-span-1 ${INPUT_CLS}`}
@@ -279,7 +298,7 @@ export default function ManualCryptoPage() {
             />
             <input
               type="number"
-              placeholder="Miktar"
+              placeholder={t("content.manualCrypto.quantityPlaceholder")}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               min="0"
@@ -288,7 +307,7 @@ export default function ManualCryptoPage() {
             />
             <input
               type="number"
-              placeholder="Ort. maliyet TL (ops.)"
+              placeholder={t("content.manualCrypto.avgCostPlaceholder")}
               value={avgCost}
               onChange={(e) => setAvgCost(e.target.value)}
               min="0"
@@ -298,14 +317,14 @@ export default function ManualCryptoPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
-              placeholder="Etiket (BinanceTR Earn... ops.)"
+              placeholder={t("content.manualCrypto.labelPlaceholder")}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className={INPUT_CLS}
               maxLength={100}
             />
             <input
-              placeholder="Not (ops.)"
+              placeholder={t("content.manualCrypto.notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className={INPUT_CLS}
@@ -315,7 +334,7 @@ export default function ManualCryptoPage() {
 
           {/* Fiyat kaynağı seçimi */}
           <div className="space-y-2 pt-2 border-t border-gray-50">
-            <label className="text-xs font-medium text-gray-600">Fiyat Kaynağı</label>
+            <label className="text-xs font-medium text-gray-600">{t("content.manualCrypto.priceSource")}</label>
             <div className="grid grid-cols-3 gap-2">
               {PRICE_SOURCE_OPTIONS.map((opt) => (
                 <label
@@ -343,7 +362,7 @@ export default function ManualCryptoPage() {
             {priceSource === "manual" && (
               <input
                 type="number"
-                placeholder="Birim fiyat (TL)"
+                placeholder={t("content.manualCrypto.unitPriceTlPlaceholder")}
                 value={manualPrice}
                 onChange={(e) => setManualPrice(e.target.value)}
                 min="0"
@@ -364,14 +383,14 @@ export default function ManualCryptoPage() {
                       onClick={() => { setLinkedSelected(null); setLinkedQuery(""); }}
                       className="ml-auto text-green-600 hover:text-green-800"
                     >
-                      Değiştir
+                      {t("content.manualCrypto.change")}
                     </button>
                   </div>
                 ) : (
                   <>
                     <input
                       type="text"
-                      placeholder="Ara: silver, ETH, AFA, tether-gold..."
+                      placeholder={t("content.manualCrypto.linkedSearchPlaceholder")}
                       value={linkedQuery}
                       onChange={(e) => setLinkedQuery(e.target.value)}
                       className={`w-full ${INPUT_CLS}`}
@@ -379,10 +398,10 @@ export default function ManualCryptoPage() {
                     {(searching || linkedResults.length > 0) && (
                       <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50 bg-white">
                         {searching && (
-                          <p className="text-xs text-gray-400 px-3 py-2">Aranıyor…</p>
+                          <p className="text-xs text-gray-400 px-3 py-2">{t("content.manualCrypto.searching")}</p>
                         )}
                         {!searching && linkedResults.length === 0 && (
-                          <p className="text-xs text-gray-400 px-3 py-2">Sonuç yok</p>
+                          <p className="text-xs text-gray-400 px-3 py-2">{t("content.manualCrypto.noResults")}</p>
                         )}
                         {linkedResults.map((r) => (
                           <button
@@ -418,12 +437,12 @@ export default function ManualCryptoPage() {
             disabled={saving}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? "Kaydediliyor..." : "Ekle"}
+            {saving ? t("common.saving") : t("form.add")}
           </button>
         </form>
 
         {/* Liste */}
-        {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
         {!loading && positions.length === 0 && (
           <p className="text-center text-sm text-gray-400 py-8">{t("empty.noManualCrypto")}</p>
         )}
@@ -444,7 +463,7 @@ export default function ManualCryptoPage() {
               <tbody className="divide-y divide-gray-50">
                 {positions.map((p) => {
                   const exchangeLabel = EXCHANGE_OPTIONS.find((o) => o.value === p.exchange)?.label ?? p.exchange;
-                  const gainLoss = p.gain_loss_tl ? parseFloat(p.gain_loss_tl) : null;
+                  const gainLoss = p.gain_loss_tl ? Number.parseFloat(p.gain_loss_tl) : null;
                   const gainPct = p.gain_loss_pct;
                   return (
                     <tr key={p.id} className="hover:bg-gray-50">
@@ -467,7 +486,7 @@ export default function ManualCryptoPage() {
                         {fmtNum(p.quantity, 8)}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-600 tabular-nums">
-                        {parseFloat(p.unit_price_tl) > 0 ? `${fmtTL(p.unit_price_tl)} ₺` : <span className="text-amber-600">—</span>}
+                        {Number.parseFloat(p.unit_price_tl) > 0 ? `${fmtTL(p.unit_price_tl)} ₺` : <span className="text-amber-600">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <TLValue tl={p.total_value_tl} className="font-semibold text-gray-900" />
@@ -488,8 +507,8 @@ export default function ManualCryptoPage() {
                         <button
                           onClick={() => handleDelete(p.id, p.symbol)}
                           className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                          title="Sil"
-                          aria-label={`${p.symbol} kaydını sil`}
+                          title={t("common.delete")}
+                          aria-label={t("content.manualCrypto.deleteAria").replace("{symbol}", p.symbol)}
                         >
                           <span aria-hidden="true">✕</span>
                         </button>
@@ -503,7 +522,7 @@ export default function ManualCryptoPage() {
         )}
 
         <p className="text-xs text-gray-400 text-center">
-          Anlık fiyatlar Binance USDT pariteleri ve TCMB USD/TRY kuru üzerinden hesaplanır.
+          {t("content.manualCrypto.footerNote")}
         </p>
       </main>
     </div>

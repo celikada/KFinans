@@ -22,7 +22,6 @@ interface Props {
 const TODAY = new Date().toISOString().slice(0, 10);
 const CATEGORIES: RecurringIncomeCategory[] = ["salary", "rental", "dividend", "bonus", "freelance", "other"];
 const RECURRENCES: RecurringRecurrence[] = ["one_time", "monthly", "quarterly", "biannual", "yearly", "custom"];
-const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 
 export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
   const { t } = useTranslation();
@@ -73,11 +72,11 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
     try {
       const payload: RecurringIncomeInput = {
         title: title.trim(),
-        amount: parseFloat(amount),
+        amount: Number.parseFloat(amount),
         category,
         recurrence,
         months: recurrence === "custom" ? months : null,
-        day_of_month: parseInt(dayOfMonth) || 1,
+        day_of_month: Number.parseInt(dayOfMonth) || 1,
         start_date: startDate,
         end_date: endDate || null,
         notes: notes.trim() || null,
@@ -114,7 +113,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
           <input
             required
             className={INPUT_CLS}
-            placeholder="Maaş — XYZ A.Ş."
+            placeholder={t("content.income.titlePlaceholder")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={100}
@@ -177,7 +176,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
         <div>
           <label className="block text-xs text-gray-500 mb-2">{t("form.whichMonths2")}</label>
           <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-            {MONTH_NAMES.map((name, i) => {
+            {Array.from({ length: 12 }, (_, i) => {
               const m = i + 1;
               const isOn = months.includes(m);
               return (
@@ -189,7 +188,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
                     isOn ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                   }`}
                 >
-                  {name}
+                  {t(`content.income.monthsShort.${m}`)}
                 </button>
               );
             })}

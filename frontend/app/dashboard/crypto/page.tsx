@@ -41,7 +41,7 @@ export default function CryptoPage() {
     setPosError("");
     try {
       const { positions, errors } = await api.getCryptoPositions();
-      setPositions(positions.filter((p) => parseFloat(p.total_value_tl) > 0.01));
+      setPositions(positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01));
       if (Object.keys(errors).length > 0) {
         const msgs = Object.entries(errors)
           .map(([prov, err]) => `${PROVIDER_LABELS[prov] ?? prov}: ${err}`)
@@ -49,7 +49,7 @@ export default function CryptoPage() {
         setPosError(msgs);
       }
     } catch (err) {
-      setPosError(err instanceof Error ? err.message : "Pozisyonlar alınamadı");
+      setPosError(err instanceof Error ? err.message : t("content.crypto.positionsLoadFailed"));
     } finally {
       setLoadingPositions(false);
     }
@@ -79,7 +79,7 @@ export default function CryptoPage() {
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Bağlı Borsalar</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.crypto.connectedExchanges")}</h2>
           <IntegrationList
             integrations={integrations}
             removing={removing}
@@ -95,7 +95,7 @@ export default function CryptoPage() {
 
         {loadingPositions && (
           <p className="text-sm text-gray-400 text-center py-4">
-            Bakiyeler borsadan çekiliyor...
+            {t("content.crypto.fetchingBalances")}
           </p>
         )}
 

@@ -67,9 +67,9 @@ export default function SettingsPage() {
     try {
       const updated = await api.updateProfile(selectedRisk);
       setUser(updated);
-      setProfileMsg("Profil güncellendi");
+      setProfileMsg(t("content.settings.profileUpdated"));
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : "Kaydedilemedi");
+      setProfileError(err instanceof Error ? err.message : t("content.settings.profileSaveFailed"));
     } finally {
       setProfileSaving(false);
     }
@@ -79,29 +79,29 @@ export default function SettingsPage() {
     setPwdMsg("");
     setPwdError("");
     if (newPwd !== newPwd2) {
-      setPwdError("Yeni şifreler eşleşmiyor");
+      setPwdError(t("content.settings.newPasswordMismatch"));
       return;
     }
     if (newPwd.length < 8) {
-      setPwdError("Yeni şifre en az 8 karakter olmalı");
+      setPwdError(t("content.settings.newPasswordMin"));
       return;
     }
     setPwdSaving(true);
     try {
       await api.changePassword(curPwd, newPwd);
-      setPwdMsg("Şifre güncellendi");
+      setPwdMsg(t("content.settings.passwordUpdated"));
       setCurPwd("");
       setNewPwd("");
       setNewPwd2("");
     } catch (err) {
-      setPwdError(err instanceof Error ? err.message : "Güncellenemedi");
+      setPwdError(err instanceof Error ? err.message : t("content.settings.passwordUpdateFailed"));
     } finally {
       setPwdSaving(false);
     }
   }
 
   async function handleDeleteAccount() {
-    const confirmed = await confirm("Hesabınızı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.");
+    const confirmed = await confirm(t("content.settings.deleteAccountConfirm"));
     if (!confirmed) return;
     try {
       await api.deleteAccount();
@@ -116,7 +116,7 @@ export default function SettingsPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <PageHeader title={t("pages.settings")} />
-        <p className="text-sm text-gray-400 text-center py-16">Yükleniyor...</p>
+        <p className="text-sm text-gray-400 text-center py-16">{t("common.loading")}</p>
       </div>
     );
   }
@@ -129,10 +129,10 @@ export default function SettingsPage() {
 
         {/* Bölüm 1: Hesap Bilgileri */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Hesap Bilgileri</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-4">{t("content.settings.accountInfo")}</h2>
           <div className="space-y-3">
             <div>
-              <label htmlFor="s-email" className="block text-xs text-gray-500 mb-1">E-posta</label>
+              <label htmlFor="s-email" className="block text-xs text-gray-500 mb-1">{t("auth.email")}</label>
               <input
                 id="s-email"
                 type="text"
@@ -142,7 +142,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label htmlFor="s-joined" className="block text-xs text-gray-500 mb-1">Üyelik tarihi</label>
+              <label htmlFor="s-joined" className="block text-xs text-gray-500 mb-1">{t("content.settings.membershipDate")}</label>
               <input
                 id="s-joined"
                 type="text"
@@ -164,7 +164,7 @@ export default function SettingsPage() {
 
         {/* Bölüm 2: Yatırım Profili */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Yatırım Profili</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-4">{t("content.settings.investmentProfile")}</h2>
           <div className="flex gap-2 mb-4">
             {RISK_OPTIONS.map(({ key, label }) => (
               <button
@@ -193,16 +193,16 @@ export default function SettingsPage() {
             disabled={profileSaving}
             className="w-full py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            {profileSaving ? "Kaydediliyor..." : "Kaydet"}
+            {profileSaving ? t("common.saving") : t("common.save")}
           </button>
         </section>
 
         {/* Bölüm 3: Şifre Değiştir */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Şifre Değiştir</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-4">{t("content.settings.changePassword")}</h2>
           <div className="space-y-3 mb-4">
             <div>
-              <label htmlFor="s-cur-pwd" className="block text-xs text-gray-500 mb-1">Mevcut şifre</label>
+              <label htmlFor="s-cur-pwd" className="block text-xs text-gray-500 mb-1">{t("content.settings.currentPassword")}</label>
               <input
                 id="s-cur-pwd"
                 type="password"
@@ -213,7 +213,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label htmlFor="s-new-pwd" className="block text-xs text-gray-500 mb-1">Yeni şifre (en az 8 karakter)</label>
+              <label htmlFor="s-new-pwd" className="block text-xs text-gray-500 mb-1">{t("content.settings.newPasswordWithHint")}</label>
               <input
                 id="s-new-pwd"
                 type="password"
@@ -224,7 +224,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label htmlFor="s-new-pwd2" className="block text-xs text-gray-500 mb-1">Yeni şifre tekrar</label>
+              <label htmlFor="s-new-pwd2" className="block text-xs text-gray-500 mb-1">{t("content.settings.repeatNewPassword")}</label>
               <input
                 id="s-new-pwd2"
                 type="password"
@@ -246,7 +246,7 @@ export default function SettingsPage() {
             disabled={pwdSaving}
             className="w-full py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-700 disabled:opacity-50 transition-colors"
           >
-            {pwdSaving ? "Güncelleniyor..." : "Şifreyi Güncelle"}
+            {pwdSaving ? t("content.settings.updatingPassword") : t("content.settings.updatePasswordBtn")}
           </button>
         </section>
 
@@ -265,12 +265,12 @@ export default function SettingsPage() {
 
         {/* Bölüm 4: Genel Tercihler */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Genel Tercihler</h2>
-          <p className="text-xs text-gray-500 mb-4">Görünüm ayarları.</p>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">{t("content.settings.generalPreferences")}</h2>
+          <p className="text-xs text-gray-500 mb-4">{t("content.settings.generalPreferencesHint")}</p>
           <div className="flex items-center justify-between py-2">
             <div>
-              <p className="text-sm text-gray-700">USD karşılığı göster</p>
-              <p className="text-xs text-gray-400 mt-0.5">TL değerlerin altında anlık $ karşılığı (TCMB kuru, 5 dk önbellek)</p>
+              <p className="text-sm text-gray-700">{t("content.settings.showUsd")}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("content.settings.showUsdHint")}</p>
             </div>
             <button
               type="button"
@@ -280,7 +280,7 @@ export default function SettingsPage() {
                 setShowUsd(next);
               }}
               className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${showUsd ? "bg-blue-600" : "bg-gray-200"}`}
-              aria-label={showUsd ? "USD karşılığını kapat" : "USD karşılığını aç"}
+              aria-label={showUsd ? t("content.settings.showUsdToggleOff") : t("content.settings.showUsdToggleOn")}
             >
               <span
                 className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showUsd ? "translate-x-5" : ""}`}
@@ -291,8 +291,8 @@ export default function SettingsPage() {
 
         {/* Bölüm 5: Dashboard Görünümü */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Dashboard Görünümü</h2>
-          <p className="text-xs text-gray-500 mb-4">Görmek istemediğiniz kartları gizleyin.</p>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">{t("content.settings.dashboardView")}</h2>
+          <p className="text-xs text-gray-500 mb-4">{t("content.settings.dashboardViewHint")}</p>
           <div className="space-y-5">
             {DASHBOARD_GROUPS.map((group) => (
               <div key={group.id}>
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                             saveHiddenCards(next);
                           }}
                           className={`relative w-10 h-5 rounded-full transition-colors ${isHidden ? "bg-gray-200" : "bg-blue-600"}`}
-                          aria-label={isHidden ? `${label} göster` : `${label} gizle`}
+                          aria-label={`${label} ${isHidden ? t("content.settings.showCardAria") : t("content.settings.hideCardAria")}`}
                         >
                           <span
                             className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isHidden ? "" : "translate-x-5"}`}
@@ -332,10 +332,9 @@ export default function SettingsPage() {
 
         {/* Bölüm 5: Geri Bildirim — bug, feature, soru için GitHub'a yönlendir */}
         <section className={CARD_CLS}>
-          <h2 className="text-base font-semibold text-gray-900 mb-2">Geri Bildirim</h2>
+          <h2 className="text-base font-semibold text-gray-900 mb-2">{t("content.settings.feedback")}</h2>
           <p className="text-sm text-gray-500 mb-4">
-            KFinans&apos;ı geliştirmek için yardımınıza ihtiyacımız var. Bug, öneri veya sorularınız için
-            aşağıdaki kanalları kullanın.
+            {t("content.settings.feedbackHint")}
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <a
@@ -345,8 +344,8 @@ export default function SettingsPage() {
               className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-red-300 hover:bg-red-50 transition-colors group"
             >
               <span className="text-2xl mb-2">🐛</span>
-              <span className="text-sm font-semibold text-gray-900 group-hover:text-red-700">Hata Bildir</span>
-              <span className="text-xs text-gray-500 mt-1">Bir şey çalışmıyor mu? Detaylı raporlayın</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-red-700">{t("content.settings.reportBug")}</span>
+              <span className="text-xs text-gray-500 mt-1">{t("content.settings.reportBugHint")}</span>
             </a>
             <a
               href="https://github.com/celikada/KFinans/issues/new?template=feature_request.yml"
@@ -355,8 +354,8 @@ export default function SettingsPage() {
               className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
             >
               <span className="text-2xl mb-2">💡</span>
-              <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-700">Özellik İste</span>
-              <span className="text-xs text-gray-500 mt-1">Yeni bir özellik öneriniz var mı?</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-700">{t("content.settings.requestFeature")}</span>
+              <span className="text-xs text-gray-500 mt-1">{t("content.settings.requestFeatureHint")}</span>
             </a>
             <a
               href="https://github.com/celikada/KFinans/discussions"
@@ -365,35 +364,35 @@ export default function SettingsPage() {
               className="flex flex-col items-start p-4 rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors group"
             >
               <span className="text-2xl mb-2">💬</span>
-              <span className="text-sm font-semibold text-gray-900 group-hover:text-purple-700">Tartışmaya Katıl</span>
-              <span className="text-xs text-gray-500 mt-1">Sorular, fikirler, deneyim paylaşımı</span>
+              <span className="text-sm font-semibold text-gray-900 group-hover:text-purple-700">{t("content.settings.joinDiscussion")}</span>
+              <span className="text-xs text-gray-500 mt-1">{t("content.settings.joinDiscussionHint")}</span>
             </a>
           </div>
           <p className="text-xs text-gray-400 mt-4">
-            🔐 Güvenlik açıkları için public issue açmayın —{" "}
+            {t("content.settings.securityNotePre")}{" "}
             <a
               href="https://github.com/celikada/KFinans/security/advisories/new"
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 hover:underline"
             >
-              private vulnerability report
+              {t("content.settings.securityNoteLink")}
             </a>{" "}
-            kullanın.
+            {t("content.settings.securityNotePost")}
           </p>
         </section>
 
         {/* Bölüm 6: Tehlike Bölgesi */}
         <section className={`${CARD_CLS} border-red-100`}>
-          <h2 className="text-base font-semibold text-red-600 mb-2">Tehlike Bölgesi</h2>
+          <h2 className="text-base font-semibold text-red-600 mb-2">{t("content.settings.dangerZone")}</h2>
           <p className="text-sm text-gray-500 mb-4">
-            Hesabınızı kalıcı olarak silin. Bu işlem geri alınamaz.
+            {t("content.settings.dangerZoneHint")}
           </p>
           <button
             onClick={handleDeleteAccount}
             className="w-full py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
           >
-            Hesabı Sil
+            {t("content.settings.deleteAccountBtn")}
           </button>
         </section>
       </main>

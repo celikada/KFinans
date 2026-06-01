@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, WalletDTO } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
-import { CHAIN_ADDRESS_HINTS, CHAIN_LABELS, CHAIN_PLACEHOLDERS, Chain } from "./constants";
+import { CHAIN_LABELS, Chain } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -71,10 +71,10 @@ export function WalletForm({
           </p>
           <p>
             <span className="font-medium text-gray-600">{t("form.chainAddressFormat")} </span>
-            <span className="font-mono text-[11px]">{CHAIN_ADDRESS_HINTS[chain].format}</span>
+            <span className="font-mono text-[11px]">{t(`content.wallets.hints.${chain}.format`)}</span>
           </p>
           <p className="whitespace-pre-line text-gray-600 leading-relaxed">
-            {CHAIN_ADDRESS_HINTS[chain].howTo}
+            {t(`content.wallets.hints.${chain}.howTo`)}
           </p>
         </div>
       )}
@@ -96,7 +96,7 @@ export function WalletForm({
           <option value="litecoin">Litecoin</option>
         </select>
         <input
-          placeholder={CHAIN_PLACEHOLDERS[chain] ?? t("form.addressPlaceholder")}
+          placeholder={t(`content.wallets.placeholders.${chain}`)}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className={`flex-1 min-w-0 font-mono text-xs ${INPUT_CLS}`}

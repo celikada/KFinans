@@ -46,15 +46,15 @@ function fmtDate(iso: string) {
 function snapshotToPoint(s: SnapshotHistoryDTO): ChartPoint {
   const totals = { crypto: 0, fund: 0, pension: 0, stock: 0, cash: 0, commodity: 0 };
   for (const pos of s.asset_positions) {
-    const v = parseFloat(pos.total_value_tl);
+    const v = Number.parseFloat(pos.total_value_tl);
     if (pos.asset_type in totals) {
       (totals as Record<string, number>)[pos.asset_type] += v;
     }
   }
   return {
     date: s.snapshot_date,
-    total: parseFloat(s.total_value_tl),
-    rate: s.usd_try_rate ? parseFloat(s.usd_try_rate) : null,
+    total: Number.parseFloat(s.total_value_tl),
+    rate: s.usd_try_rate ? Number.parseFloat(s.usd_try_rate) : null,
     issues: s.health_issues ?? [],
     ...totals,
   };
@@ -103,10 +103,10 @@ export default function HistoryPage() {
           handle401();
           return;
         }
-        setError(err instanceof Error ? err.message : "Geçmiş yüklenemedi");
+        setError(err instanceof Error ? err.message : t("content.history.loadFailed"));
       })
       .finally(() => setLoading(false));
-  }, [selectedYear, handle401]);
+  }, [selectedYear, handle401, t]);
 
   const latest = points.length > 0 ? points[points.length - 1] : null;
 
@@ -117,7 +117,7 @@ export default function HistoryPage() {
       setPoints((prev) => prev.filter((p) => p.date !== snapshotDate));
       setConfirmDelete(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Snapshot silinemedi");
+      setError(err instanceof Error ? err.message : t("content.history.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -156,12 +156,12 @@ export default function HistoryPage() {
             value={selectedYear}
             onChange={(e) => {
               const v = e.target.value;
-              setSelectedYear(v === "all" ? "all" : parseInt(v));
+              setSelectedYear(v === "all" ? "all" : Number.parseInt(v));
             }}
             className="ml-auto text-xs px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-700 hover:border-gray-300"
-            aria-label="Yıl filtresi"
+            aria-label={t("content.history.yearFilterAria")}
           >
-            <option value="all">Tüm yıllar</option>
+            <option value="all">{t("content.history.allYears")}</option>
             {availableYears.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
@@ -180,7 +180,7 @@ export default function HistoryPage() {
                   : "bg-white text-gray-500 hover:text-gray-800"
               }`}
             >
-              {c === "TRY" ? "₺ TL" : "$ USD"}
+              {c === "TRY" ? t("content.history.tlToggle") : t("content.history.usdToggle")}
             </button>
           ))}
         </div>
@@ -189,7 +189,7 @@ export default function HistoryPage() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {loading && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-            <p className="text-sm text-gray-400">Yükleniyor...</p>
+            <p className="text-sm text-gray-400">{t("content.history.loading")}</p>
           </div>
         )}
 
@@ -199,10 +199,9 @@ export default function HistoryPage() {
 
         {!loading && !error && points.length === 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center space-y-2">
-            <p className="text-sm font-semibold text-gray-700">Henüz snapshot yok</p>
+            <p className="text-sm font-semibold text-gray-700">{t("content.history.noSnapshotTitle")}</p>
             <p className="text-xs text-gray-400">
-              Dashboard&apos;a dönüp <strong>&quot;Snapshot al&quot;</strong> butonuna basın.
-              Otomatik haftalık snapshot Pazar 23:00&apos;da çalışır.
+              {t("content.history.noSnapshotHintPre")} <strong>{t("content.history.noSnapshotHintBtn")}</strong> {t("content.history.noSnapshotHintPost")}
             </p>
           </div>
         )}
@@ -211,7 +210,7 @@ export default function HistoryPage() {
           <>
             {latest && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <p className="text-xs text-gray-400 mb-1">Son snapshot ({fmtDate(latest.date)})</p>
+                <p className="text-xs text-gray-400 mb-1">{t("content.history.lastSnapshot")} ({fmtDate(latest.date)})</p>
                 {currency === "TRY" ? (
                   <TLValue tl={latest.total} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
                 ) : (
@@ -227,7 +226,7 @@ export default function HistoryPage() {
             {/* Sağlık uyarıları rozet listesi */}
             {points.some((p) => p.issues.length > 0) && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                <p className="text-xs text-gray-500 mb-2">Sorunlu snapshotlar (üzerine tıklayın):</p>
+                <p className="text-xs text-gray-500 mb-2">{t("content.history.problematicSnapshots")}</p>
                 <div className="flex flex-wrap gap-2">
                   {points.filter((p) => p.issues.length > 0).map((p) => (
                     <button
@@ -246,7 +245,7 @@ export default function HistoryPage() {
             {/* Toplam değer eğrisi */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <h2 className="text-sm font-semibold text-gray-700 mb-4">
-                Toplam Portföy Değeri ({currency === "TRY" ? "₺ TL" : "$ USD"})
+                {t("content.history.totalPortfolioValue")} ({currency === "TRY" ? t("content.history.tlToggle") : t("content.history.usdToggle")})
               </h2>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -266,7 +265,7 @@ export default function HistoryPage() {
                       strokeWidth={2}
                       dot={{ r: 3 }}
                       activeDot={{ r: 5 }}
-                      name="Toplam"
+                      name={t("content.history.legendTotal")}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -275,7 +274,7 @@ export default function HistoryPage() {
 
             {/* Varlık tipi bazlı kırılım */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Varlık Tipine Göre</h2>
+              <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.history.byAssetType")}</h2>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -288,12 +287,12 @@ export default function HistoryPage() {
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="crypto" stroke="#f97316" strokeWidth={1.5} dot={{ r: 2 }} name="Kripto" />
-                    <Line type="monotone" dataKey="fund" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 2 }} name="TEFAS" />
-                    <Line type="monotone" dataKey="stock" stroke="#6366f1" strokeWidth={1.5} dot={{ r: 2 }} name="Hisse" />
-                    <Line type="monotone" dataKey="pension" stroke="#16a34a" strokeWidth={1.5} dot={{ r: 2 }} name="BES" />
-                    <Line type="monotone" dataKey="cash" stroke="#6b7280" strokeWidth={1.5} dot={{ r: 2 }} name="Nakit" />
-                    <Line type="monotone" dataKey="commodity" stroke="#d97706" strokeWidth={1.5} dot={{ r: 2 }} name="Altın/Gümüş" />
+                    <Line type="monotone" dataKey="crypto" stroke="#f97316" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendCrypto")} />
+                    <Line type="monotone" dataKey="fund" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendTefas")} />
+                    <Line type="monotone" dataKey="stock" stroke="#6366f1" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendStock")} />
+                    <Line type="monotone" dataKey="pension" stroke="#16a34a" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendBes")} />
+                    <Line type="monotone" dataKey="cash" stroke="#6b7280" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendCash")} />
+                    <Line type="monotone" dataKey="commodity" stroke="#d97706" strokeWidth={1.5} dot={{ r: 2 }} name={t("content.history.legendGoldSilver")} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -302,7 +301,7 @@ export default function HistoryPage() {
             {/* Snapshot listesi (tarih + tutar + sil) */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
-                <h2 className="text-sm font-semibold text-gray-700">Snapshotlar</h2>
+                <h2 className="text-sm font-semibold text-gray-700">{t("content.history.snapshots")}</h2>
               </div>
               <ul className="divide-y divide-gray-50">
                 {[...points].reverse().map((p) => (
@@ -319,7 +318,7 @@ export default function HistoryPage() {
                         type="button"
                         onClick={() => setOpenIssues({ date: p.date, issues: p.issues })}
                         className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-bold"
-                        title={`${p.issues.length} uyarı`}
+                        title={`${p.issues.length} ${t("content.history.warningCountTitle")}`}
                       >
                         !
                       </button>
@@ -328,7 +327,7 @@ export default function HistoryPage() {
                       type="button"
                       onClick={() => api.downloadReport(`/portfolio/snapshot/${p.date}/report.xlsx`, `portfoy-${p.date}.xlsx`)}
                       className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100"
-                      title="Excel olarak indir"
+                      title={t("content.history.xlsxTitle")}
                     >
                       📊 xlsx
                     </button>
@@ -336,7 +335,7 @@ export default function HistoryPage() {
                       type="button"
                       onClick={() => api.downloadReport(`/portfolio/snapshot/${p.date}/report.pdf`, `portfoy-${p.date}.pdf`)}
                       className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100"
-                      title="PDF olarak indir"
+                      title={t("content.history.pdfTitle")}
                     >
                       📄 pdf
                     </button>
@@ -345,7 +344,7 @@ export default function HistoryPage() {
                       onClick={() => setConfirmDelete(p.date)}
                       className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
                     >
-                      Sil
+                      {t("content.history.deleteBtn")}
                     </button>
                   </li>
                 ))}
@@ -353,11 +352,8 @@ export default function HistoryPage() {
             </div>
 
             <p className="text-xs text-gray-400 text-center">
-              Son {points.length} snapshot. {currency === "USD" && (
-                <>
-                  USD değerleri her snapshot&apos;ın <em>kendi</em> kayıt anındaki USD/TRY kuruyla
-                  hesaplanır — TL enflasyonundan etkilenmez.
-                </>
+              {t("content.history.lastCountPre")} {points.length} {t("content.history.lastCountSuffix")} {currency === "USD" && (
+                <>{t("content.history.usdNote")}</>
               )}
             </p>
           </>
@@ -379,10 +375,9 @@ export default function HistoryPage() {
             onKeyDown={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-sm w-full text-left cursor-default"
           >
-            <h3 className="text-base font-semibold text-gray-900 mb-2">Snapshot silinsin mi?</h3>
+            <h3 className="text-base font-semibold text-gray-900 mb-2">{t("content.history.deleteConfirmTitle")}</h3>
             <p className="text-sm text-gray-600 mb-4">
-              <strong>{fmtDate(confirmDelete)}</strong> tarihli snapshot ve içindeki tüm pozisyonlar
-              kalıcı olarak silinecek. Bu işlem geri alınamaz.
+              <strong>{fmtDate(confirmDelete)}</strong> {t("content.history.deleteConfirmBodySuffix")}
             </p>
             <div className="flex gap-2 justify-end">
               <button
@@ -391,7 +386,7 @@ export default function HistoryPage() {
                 disabled={deleting}
                 className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
               >
-                İptal
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -399,7 +394,7 @@ export default function HistoryPage() {
                 disabled={deleting}
                 className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? "Siliniyor…" : "Evet, sil"}
+                {deleting ? t("common.deleting") : t("content.history.confirmDeleteBtn")}
               </button>
             </div>
           </div>
@@ -427,12 +422,12 @@ export default function HistoryPage() {
               return (
                 <>
                   <h3 className="text-base font-semibold text-gray-900 mb-1">
-                    {fmtDate(openIssues.date)} snapshot notları
+                    {fmtDate(openIssues.date)} {t("content.history.issuesTitleSuffix")}
                   </h3>
                   <p className="text-xs text-gray-500 mb-4">
-                    {warns.length > 0 && <span className="text-amber-700">{warns.length} sorun</span>}
+                    {warns.length > 0 && <span className="text-amber-700">{warns.length} {t("content.history.problemsLabel")}</span>}
                     {warns.length > 0 && infos.length > 0 && " · "}
-                    {infos.length > 0 && <span className="text-blue-700">{infos.length} bilgi (manuel/bağlı)</span>}
+                    {infos.length > 0 && <span className="text-blue-700">{infos.length} {t("content.history.infoLabel")}</span>}
                   </p>
                   <ul className="space-y-2 max-h-80 overflow-y-auto">
                     {openIssues.issues.map((iss, i) => {
@@ -468,7 +463,7 @@ export default function HistoryPage() {
               onClick={() => setOpenIssues(null)}
               className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
             >
-              Kapat
+              {t("content.history.close")}
             </button>
           </div>
         </div>

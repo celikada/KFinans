@@ -2,6 +2,7 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { CategoryBreakdownDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   data: CategoryBreakdownDTO[];
@@ -14,23 +15,24 @@ const COLORS = [
 ];
 
 export function CategoryPieChart({ data, total }: Props) {
+  const { t } = useTranslation();
   if (data.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center text-sm text-gray-400">
-        Kategori dağılımı için veri yok.
+        {t("content.expenses.noCategoryData")}
       </div>
     );
   }
 
   const chartData = data.map((b) => ({
     name: EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
-    value: parseFloat(b.total),
-    pct: total > 0 ? (parseFloat(b.total) / total) * 100 : 0,
+    value: Number.parseFloat(b.total),
+    pct: total > 0 ? (Number.parseFloat(b.total) / total) * 100 : 0,
   }));
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-sm font-semibold text-gray-700 mb-4">Kategori Dağılımı</h2>
+      <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.expenses.categoryBreakdown")}</h2>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
