@@ -57,6 +57,9 @@ class Settings(BaseSettings):
 
     # E-posta (Resend) — kullanıcı kayıt doğrulama
     resend_api_key: str = ""
+    # Startup'ta Resend key canlı geçerlilik probu (1 API çağrısı). Prod'da True
+    # önerilir (geçersiz key'i erken yakalar); dev/CI'da False (offline + hızlı).
+    verify_resend_on_startup: bool = False
     email_from: str = "KFinans <noreply@kfinans.app>"
     frontend_url: str = "http://localhost:3000"
     verify_token_expire_hours: int = 24

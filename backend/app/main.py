@@ -24,6 +24,7 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.core.limiter import limiter
 from app.core.middleware import RequestTimingMiddleware, SecurityHeadersMiddleware
+from app.core.startup_checks import check_critical_secrets, verify_resend_key
 from app.observability import init_otel, init_sentry
 from app.scheduler import start_scheduler, stop_scheduler
 
@@ -48,6 +49,10 @@ async def lifespan(app: FastAPI):
     # Sentry once — exception capture FastAPI handler'larini sarmalamadan once aktif.
     init_sentry()
     init_otel(app)
+    # Kritik secret görünürlüğü (RESEND invalid-key sessiz başarısızlık dersi).
+    check_critical_secrets()
+    if settings.verify_resend_on_startup:
+        await verify_resend_key()
     start_scheduler()
     yield
     stop_scheduler()
