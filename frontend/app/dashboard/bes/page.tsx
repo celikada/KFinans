@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, BesHoldingDTO } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Holding {
   plan_name: string;
@@ -31,10 +32,10 @@ function fmtTL(val: number) {
 
 function rowTotal(h: Holding): number {
   return (
-    (parseFloat(h.paid_principal) || 0) +
-    (parseFloat(h.paid_returns) || 0) +
-    (parseFloat(h.govt_contribution) || 0) +
-    (parseFloat(h.govt_returns) || 0)
+    (Number.parseFloat(h.paid_principal) || 0) +
+    (Number.parseFloat(h.paid_returns) || 0) +
+    (Number.parseFloat(h.govt_contribution) || 0) +
+    (Number.parseFloat(h.govt_returns) || 0)
   );
 }
 
@@ -44,15 +45,16 @@ function toDTO(holdings: Holding[]): BesHoldingDTO[] {
     .map((h) => ({
       plan_name: h.plan_name.trim(),
       contract_number: h.contract_number.trim() || null,
-      paid_principal: parseFloat(h.paid_principal) || 0,
-      paid_returns: parseFloat(h.paid_returns) || 0,
-      govt_contribution: parseFloat(h.govt_contribution) || 0,
-      govt_returns: parseFloat(h.govt_returns) || 0,
+      paid_principal: Number.parseFloat(h.paid_principal) || 0,
+      paid_returns: Number.parseFloat(h.paid_returns) || 0,
+      govt_contribution: Number.parseFloat(h.govt_contribution) || 0,
+      govt_returns: Number.parseFloat(h.govt_returns) || 0,
     }));
 }
 
 export default function BesPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [holdings, setHoldings] = useState<Holding[]>([{ ...EMPTY_ROW }]);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -97,7 +99,7 @@ export default function BesPage() {
         handle401();
         return;
       }
-      setError(err instanceof Error ? err.message : "Kaydetme başarısız");
+      setError(err instanceof Error ? err.message : t("content.bes.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -109,7 +111,7 @@ export default function BesPage() {
     try {
       await api.exportBesHoldings();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.bes.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -137,7 +139,7 @@ export default function BesPage() {
         handle401();
         return;
       }
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.bes.importFailed"));
     } finally {
       setImporting(false);
       e.target.value = "";
@@ -165,36 +167,43 @@ export default function BesPage() {
           onClick={() => router.push("/dashboard")}
           className="text-gray-400 hover:text-gray-600 text-sm"
         >
-          ← Geri
+          {t("common.back")}
         </button>
-        <h1 className="text-lg font-semibold text-gray-900">BES — Bireysel Emeklilik</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{t("content.bes.headerTitle")}</h1>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-1">BES Birikimleri</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">{t("content.bes.savingsTitle")}</h2>
           <p className="text-xs text-gray-400 mb-4">
-            BES şirketinden son ekstrenizdeki <span className="font-medium">4 ana kalemi</span> ayrı
-            girin: yatırdığınız ana para + getirisi, devlet katkısı + getirisi. Toplam BES değeriniz
-            otomatik hesaplanır.
+            {(() => {
+              const [before, after] = t("content.bes.savingsHint").split("{emphasis}");
+              return (
+                <>
+                  {before}
+                  <span className="font-medium">{t("content.bes.fourItemsEmphasis")}</span>
+                  {after}
+                </>
+              );
+            })()}
           </p>
 
           {initialLoad ? (
-            <p className="text-sm text-gray-400">Yükleniyor...</p>
+            <p className="text-sm text-gray-400">{t("common.loading")}</p>
           ) : (
             <div className="space-y-4">
               {holdings.map((row, i) => (
                 <div key={i} className="border border-gray-100 rounded-xl p-4 space-y-3">
                   <div className="flex gap-2 items-center">
                     <input
-                      placeholder="Plan adı (örn. AvivaSA Atak Hisse)"
+                      placeholder={t("content.bes.planNamePlaceholder")}
                       value={row.plan_name}
                       onChange={(e) => updateRow(i, "plan_name", e.target.value)}
                       className={`flex-1 ${INPUT_CLS}`}
                       maxLength={200}
                     />
                     <input
-                      placeholder="Sözleşme no (opsiyonel)"
+                      placeholder={t("content.bes.contractNoPlaceholder")}
                       value={row.contract_number}
                       onChange={(e) => updateRow(i, "contract_number", e.target.value)}
                       className={`w-44 font-mono text-xs ${INPUT_CLS}`}
@@ -204,7 +213,7 @@ export default function BesPage() {
                       <button
                         onClick={() => removeRow(i)}
                         className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                        aria-label="Satırı sil"
+                        aria-label={t("content.bes.removeRowAria")}
                       >
                         <span aria-hidden="true">×</span>
                       </button>
@@ -212,18 +221,18 @@ export default function BesPage() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <NumField label="Yatırdığım" value={row.paid_principal}
+                    <NumField label={t("content.bes.fieldPaidPrincipal")} suffix={t("content.bes.fieldSuffixTl")} value={row.paid_principal}
                       onChange={(v) => updateRow(i, "paid_principal", v)} />
-                    <NumField label="Yatırım getirisi" value={row.paid_returns}
+                    <NumField label={t("content.bes.fieldPaidReturns")} suffix={t("content.bes.fieldSuffixTl")} value={row.paid_returns}
                       onChange={(v) => updateRow(i, "paid_returns", v)} />
-                    <NumField label="Devlet katkısı" value={row.govt_contribution}
+                    <NumField label={t("content.bes.fieldGovtContribution")} suffix={t("content.bes.fieldSuffixTl")} value={row.govt_contribution}
                       onChange={(v) => updateRow(i, "govt_contribution", v)} />
-                    <NumField label="Devlet katkı getirisi" value={row.govt_returns}
+                    <NumField label={t("content.bes.fieldGovtReturns")} suffix={t("content.bes.fieldSuffixTl")} value={row.govt_returns}
                       onChange={(v) => updateRow(i, "govt_returns", v)} />
                   </div>
 
                   <div className="text-right text-xs text-gray-500">
-                    Bu plan toplamı: <span className="font-semibold text-gray-700">{fmtTL(rowTotal(row))} ₺</span>
+                    {t("content.bes.planTotal")} <span className="font-semibold text-gray-700">{fmtTL(rowTotal(row))} ₺</span>
                   </div>
                 </div>
               ))}
@@ -232,24 +241,24 @@ export default function BesPage() {
 
           <div className="flex gap-3 mt-4 items-center flex-wrap">
             <button onClick={addRow} className="text-sm text-green-600 hover:text-green-700 font-medium">
-              + Plan ekle
+              {t("content.bes.addPlan")}
             </button>
             <button
               onClick={saveHoldings}
               disabled={saving}
               className="text-sm text-white bg-green-600 hover:bg-green-700 font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {saved ? "✓ Kaydedildi" : saving ? "Kaydediliyor..." : "Kaydet"}
+              {saved ? t("content.bes.saved") : saving ? t("common.saving") : t("common.save")}
             </button>
             <button
               onClick={handleExport}
               disabled={exporting}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {exporting ? "İndiriliyor..." : "Excel İndir"}
+              {exporting ? t("content.bes.exporting") : t("form.excelDownload")}
             </button>
             <label className={`text-sm font-medium border px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${importing ? "text-gray-400 border-gray-100" : "text-gray-500 hover:text-gray-700 border-gray-200"}`}>
-              {importing ? "İçe aktarılıyor..." : "Excel Yükle"}
+              {importing ? t("form.uploading") : t("form.excelUpload")}
               <input
                 type="file"
                 accept=".xlsx,.xls"
@@ -266,7 +275,7 @@ export default function BesPage() {
 
           {grandTotal > 0 && (
             <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-sm text-gray-500">Toplam BES Değeri</span>
+              <span className="text-sm text-gray-500">{t("content.bes.totalBesValue")}</span>
               <TLValue tl={grandTotal} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
             </div>
           )}
@@ -278,16 +287,18 @@ export default function BesPage() {
 
 function NumField({
   label,
+  suffix,
   value,
   onChange,
 }: {
   label: string;
+  suffix: string;
   value: string;
   onChange: (v: string) => void;
 }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label} (₺)</label>
+      <label className="block text-xs text-gray-500 mb-1">{label} {suffix}</label>
       <input
         type="number"
         min="0"

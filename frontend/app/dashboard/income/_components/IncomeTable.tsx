@@ -22,7 +22,7 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
     );
   }
 
-  const runningTotal = incomes.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const runningTotal = incomes.reduce((s, i) => s + Number.parseFloat(i.amount), 0);
 
   async function handleDelete(id: number) {
     if (!(await confirm(t("content.income.confirmDelete")))) return;
@@ -60,7 +60,7 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <span className="text-sm font-semibold text-gray-900 tabular-nums">
-                +{fmtTL(parseFloat(inc.amount))} ₺
+                +{fmtTL(Number.parseFloat(inc.amount))} ₺
               </span>
               {onEdit && (
                 <button

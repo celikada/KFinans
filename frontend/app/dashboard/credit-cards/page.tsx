@@ -77,10 +77,10 @@ export default function CreditCardsPage() {
         name: name.trim(),
         bank_name: bankName.trim() || null,
         last_4: last4.trim() || null,
-        credit_limit: creditLimit.trim() ? parseFloat(creditLimit) : null,
-        statement_day: parseInt(statementDay) || 1,
-        payment_due_day: parseInt(paymentDueDay) || 10,
-        current_period_debt: currentDebt.trim() ? parseFloat(currentDebt) : 0,
+        credit_limit: creditLimit.trim() ? Number.parseFloat(creditLimit) : null,
+        statement_day: Number.parseInt(statementDay) || 1,
+        payment_due_day: Number.parseInt(paymentDueDay) || 10,
+        current_period_debt: currentDebt.trim() ? Number.parseFloat(currentDebt) : 0,
         notes: notes.trim() || null,
       };
       if (editing) {
@@ -107,8 +107,8 @@ export default function CreditCardsPage() {
     }
   }
 
-  const totalDebtAll = summary ? parseFloat(summary.total_debt) : 0;
-  const totalPeriodAll = summary ? parseFloat(summary.total_period_debt) : 0;
+  const totalDebtAll = summary ? Number.parseFloat(summary.total_debt) : 0;
+  const totalPeriodAll = summary ? Number.parseFloat(summary.total_period_debt) : 0;
   const cards = summary?.cards ?? [];
   // Birden fazla ödenmemiş ekstresi olan kartlar (data hijyeni uyarısı)
   const cardsWithMultipleUnpaid = cards.filter((c) => c.unpaid_statement_count >= 2);
@@ -277,10 +277,10 @@ export default function CreditCardsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {cards.map((c) => {
-                  const currentPeriod = parseFloat(c.current_period_debt);
-                  const unpaid = parseFloat(c.unpaid_statement_total);
-                  const future = parseFloat(c.future_installment_total);
-                  const total = parseFloat(c.total_debt);
+                  const currentPeriod = Number.parseFloat(c.current_period_debt);
+                  const unpaid = Number.parseFloat(c.unpaid_statement_total);
+                  const future = Number.parseFloat(c.future_installment_total);
+                  const total = Number.parseFloat(c.total_debt);
                   return (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">

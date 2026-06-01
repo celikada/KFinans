@@ -86,7 +86,7 @@ export default function ExpensesPage() {
     }
   }
 
-  const total = summary ? parseFloat(summary.total) : 0;
+  const total = summary ? Number.parseFloat(summary.total) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -132,8 +132,8 @@ export default function ExpensesPage() {
             </p>
             <ul className="space-y-1">
               {overBudget.map((r) => {
-                const actual = parseFloat(r.actual_amount);
-                const budget = parseFloat(r.budget_amount!);
+                const actual = Number.parseFloat(r.actual_amount);
+                const budget = Number.parseFloat(r.budget_amount!);
                 const excess = actual - budget;
                 const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
                 return (

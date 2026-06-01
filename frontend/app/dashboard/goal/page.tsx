@@ -59,7 +59,7 @@ export default function GoalPage() {
   }, [load]);
 
   async function handleSave() {
-    const val = parseFloat(inputVal);
+    const val = Number.parseFloat(inputVal);
     if (!val || val <= 0) { setError(t("content.goal.amountInvalid")); return; }
     setSaving(true);
     setError("");
@@ -76,14 +76,14 @@ export default function GoalPage() {
     }
   }
 
-  const amount     = goal?.goal_amount        ? parseFloat(goal.goal_amount)        : null;
+  const amount     = goal?.goal_amount        ? Number.parseFloat(goal.goal_amount)        : null;
   const cur        = currency as GoalCurrency;
-  const rate       = goal?.rate_to_tl         ? parseFloat(goal.rate_to_tl)         : null;
-  const monthlyTL  = goal?.monthly_tl         ? parseFloat(goal.monthly_tl)         : null;
-  const targetTL   = goal?.freedom_target_tl  ? parseFloat(goal.freedom_target_tl)  : null;
-  const portfolio  = goal?.portfolio_value    ? parseFloat(goal.portfolio_value)    : null;
-  const passiveTL  = goal?.passive_income_tl  ? parseFloat(goal.passive_income_tl)  : null;
-  const passiveFgn = goal?.passive_income_foreign ? parseFloat(goal.passive_income_foreign) : null;
+  const rate       = goal?.rate_to_tl         ? Number.parseFloat(goal.rate_to_tl)         : null;
+  const monthlyTL  = goal?.monthly_tl         ? Number.parseFloat(goal.monthly_tl)         : null;
+  const targetTL   = goal?.freedom_target_tl  ? Number.parseFloat(goal.freedom_target_tl)  : null;
+  const portfolio  = goal?.portfolio_value    ? Number.parseFloat(goal.portfolio_value)    : null;
+  const passiveTL  = goal?.passive_income_tl  ? Number.parseFloat(goal.passive_income_tl)  : null;
+  const passiveFgn = goal?.passive_income_foreign ? Number.parseFloat(goal.passive_income_foreign) : null;
   const pct        = goal?.progress_pct ?? null;
   const months     = goal?.months_covered ?? null;
   const isForeign  = cur !== "TRY";
@@ -158,20 +158,20 @@ export default function GoalPage() {
               {error && <p className="text-xs text-red-500">{error}</p>}
 
               {/* Anlık özet: girilen değere göre hesap */}
-              {inputVal && parseFloat(inputVal) > 0 && (
+              {inputVal && Number.parseFloat(inputVal) > 0 && (
                 <div className="bg-violet-50 rounded-xl p-4 text-xs space-y-1 text-violet-700">
                   {isForeign && rate && (
                     <p>
-                      {GOAL_CURRENCY_SYMBOLS[currency]}{parseFloat(inputVal).toLocaleString("tr-TR")} × {fmtTL(rate)} ₺ =
-                      <span className="font-semibold"> {fmtTL(parseFloat(inputVal) * rate)} ₺/ay</span>
+                      {GOAL_CURRENCY_SYMBOLS[currency]}{Number.parseFloat(inputVal).toLocaleString("tr-TR")} × {fmtTL(rate)} ₺ =
+                      <span className="font-semibold"> {fmtTL(Number.parseFloat(inputVal) * rate)} ₺/ay</span>
                     </p>
                   )}
                   <p>
                     {t("content.goal.freedomTarget")}:
                     <span className="font-semibold ml-1">
                       {isForeign && rate
-                        ? `${fmtTL(parseFloat(inputVal) * rate * MULTIPLIER)} ₺`
-                        : `${fmtTL(parseFloat(inputVal) * MULTIPLIER)} ₺`}
+                        ? `${fmtTL(Number.parseFloat(inputVal) * rate * MULTIPLIER)} ₺`
+                        : `${fmtTL(Number.parseFloat(inputVal) * MULTIPLIER)} ₺`}
                     </span>
                   </p>
                 </div>
@@ -268,7 +268,7 @@ export default function GoalPage() {
               <p>{t("content.goal.formulaTarget").replace("{multiplier}", String(MULTIPLIER))}</p>
               <p>{t("content.goal.formulaPassive").replace("{multiplier}", String(MULTIPLIER))}</p>
               {goal?.rate_to_tl && goal.goal_currency !== "TRY" && (
-                <p>{t("content.goal.formulaRate").replace("{currency}", goal.goal_currency).replace("{rate}", fmtTL(parseFloat(goal.rate_to_tl)))}</p>
+                <p>{t("content.goal.formulaRate").replace("{currency}", goal.goal_currency).replace("{rate}", fmtTL(Number.parseFloat(goal.rate_to_tl)))}</p>
               )}
               <p className="pt-1 text-violet-500">
                 {t("content.goal.formulaFootnote").replace("{multiplier}", String(MULTIPLIER))}

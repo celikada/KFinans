@@ -50,7 +50,7 @@ export default function CashPage() {
     try {
       await api.createCash({
         label: label.trim(),
-        amount: parseFloat(amount),
+        amount: Number.parseFloat(amount),
         currency,
         notes: notes.trim() || null,
       });

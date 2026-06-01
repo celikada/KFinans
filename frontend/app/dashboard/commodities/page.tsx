@@ -25,11 +25,11 @@ export default function CommoditiesPage() {
       setSummary(await api.getCommodities());
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : "Yüklenemedi");
+      setError(err instanceof Error ? err.message : t("content.commodities.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     refresh();
@@ -39,7 +39,7 @@ export default function CommoditiesPage() {
     try {
       await api.exportCommodities();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.commodities.exportFailed"));
     }
   }
 
@@ -52,20 +52,20 @@ export default function CommoditiesPage() {
       await api.importCommodities(file);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.commodities.importFailed"));
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
     }
   }
 
-  const goldTotal = summary ? parseFloat(summary.total_value_tl) > 0
-    ? summary.positions.filter(p => p.metal === "gold").reduce((s, p) => s + parseFloat(p.total_value_tl), 0)
+  const goldTotal = summary ? Number.parseFloat(summary.total_value_tl) > 0
+    ? summary.positions.filter(p => p.metal === "gold").reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0)
     : 0 : 0;
-  const silverTotal = summary ? summary.positions.filter(p => p.metal === "silver").reduce((s, p) => s + parseFloat(p.total_value_tl), 0) : 0;
-  const totalTL = summary ? parseFloat(summary.total_value_tl) : 0;
-  const goldPrice = summary ? parseFloat(summary.gold_price_tl) : null;
-  const silverPrice = summary ? parseFloat(summary.silver_price_tl) : null;
+  const silverTotal = summary ? summary.positions.filter(p => p.metal === "silver").reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0) : 0;
+  const totalTL = summary ? Number.parseFloat(summary.total_value_tl) : 0;
+  const goldPrice = summary ? Number.parseFloat(summary.gold_price_tl) : null;
+  const silverPrice = summary ? Number.parseFloat(summary.silver_price_tl) : null;
   const hasGoldPositions = summary ? summary.positions.some(p => p.metal === "gold") : false;
   const hasSilverPositions = summary ? summary.positions.some(p => p.metal === "silver") : false;
   const goldUnavailable = summary ? !summary.gold_price_available : false;
@@ -87,17 +87,17 @@ export default function CommoditiesPage() {
             <div className="text-sm text-amber-800">
               <p className="font-semibold">
                 {showGoldWarning && showSilverWarning
-                  ? "Altın ve gümüş fiyatları şu an çekilemiyor"
+                  ? t("content.commodities.bothUnavailable")
                   : showGoldWarning
-                  ? "Altın fiyatı şu an çekilemiyor"
-                  : "Gümüş fiyatı şu an çekilemiyor"}
+                  ? t("content.commodities.goldUnavailable")
+                  : t("content.commodities.silverUnavailable")}
               </p>
               <p className="text-xs mt-0.5 text-amber-700">
-                Yahoo Finance fiyat endpoint&apos;i geçici olarak yanıt vermiyor.
-                {showGoldWarning && hasGoldPositions && " Altın pozisyonlarınız toplam portföy değerine dahil edilmedi."}
-                {showSilverWarning && " Gümüş pozisyonlarınız toplam portföy değerine dahil edilmedi."}
-                {(hasGoldPositions || hasSilverPositions) && " Toplam, gerçek değerden düşük gözüküyor olabilir."}
-                {" "}30 saniye sonra otomatik tekrar denenecek — sayfayı yenileyebilirsiniz.
+                {t("content.commodities.unavailableIntro")}
+                {showGoldWarning && hasGoldPositions && ` ${t("content.commodities.goldExcluded")}`}
+                {showSilverWarning && ` ${t("content.commodities.silverExcluded")}`}
+                {(hasGoldPositions || hasSilverPositions) && ` ${t("content.commodities.totalLower")}`}
+                {" "}{t("content.commodities.retryNote")}
               </p>
             </div>
           </div>
@@ -107,37 +107,37 @@ export default function CommoditiesPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex flex-wrap gap-6 justify-between items-start">
             <div>
-              <p className="text-xs text-gray-400 mb-1">Toplam değer</p>
+              <p className="text-xs text-gray-400 mb-1">{t("content.commodities.totalValue")}</p>
               <TLValue tl={totalTL} className="text-3xl font-bold text-amber-600" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
               {summary && (
-                <p className="text-xs text-gray-400 mt-1">{summary.positions.length} pozisyon</p>
+                <p className="text-xs text-gray-400 mt-1">{summary.positions.length} {t("content.commodities.positions")}</p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               {goldTotal > 0 && (
                 <div className="text-right">
-                  <p className="text-xs text-gray-400 mb-1">Altın</p>
+                  <p className="text-xs text-gray-400 mb-1">{t("content.commodities.gold")}</p>
                   <p className="text-lg font-semibold text-amber-700">{fmtTL(goldTotal)} ₺</p>
-                  <p className="text-xs text-gray-400">{parseFloat(summary?.total_gold_gram ?? "0").toFixed(2)} g</p>
+                  <p className="text-xs text-gray-400">{Number.parseFloat(summary?.total_gold_gram ?? "0").toFixed(2)} g</p>
                 </div>
               )}
               {silverTotal > 0 && (
                 <div className="text-right">
-                  <p className="text-xs text-gray-400 mb-1">Gümüş</p>
+                  <p className="text-xs text-gray-400 mb-1">{t("content.commodities.silver")}</p>
                   <p className="text-lg font-semibold text-gray-600">{fmtTL(silverTotal)} ₺</p>
-                  <p className="text-xs text-gray-400">{parseFloat(summary?.total_silver_gram ?? "0").toFixed(2)} g</p>
+                  <p className="text-xs text-gray-400">{Number.parseFloat(summary?.total_silver_gram ?? "0").toFixed(2)} g</p>
                 </div>
               )}
               <div className="flex gap-2">
                 <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
-                  Excel İndir
+                  {t("form.excelDownload")}
                 </button>
                 <button
                   onClick={() => importRef.current?.click()}
                   disabled={importing}
                   className={TOOLBAR_BTN_CLS}
                 >
-                  {importing ? "Yükleniyor..." : "Excel Yükle"}
+                  {importing ? t("form.refreshing") : t("form.excelUpload")}
                 </button>
                 <input
                   ref={importRef}
@@ -153,11 +153,11 @@ export default function CommoditiesPage() {
           {/* Anlık kurlar */}
           {goldPrice !== null && (
             <div className="mt-4 pt-4 border-t border-gray-50 flex gap-6 text-xs text-gray-400">
-              <span>Altın: <span className="text-gray-600 font-medium">{fmtTL(goldPrice)} ₺/g</span></span>
+              <span>{t("content.commodities.goldRate")} <span className="text-gray-600 font-medium">{t("content.commodities.pricePerGram").replace("{price}", fmtTL(goldPrice))}</span></span>
               {silverPrice !== null && silverPrice > 0 && (
-                <span>Gümüş: <span className="text-gray-600 font-medium">{fmtTL(silverPrice)} ₺/g</span></span>
+                <span>{t("content.commodities.silverRate")} <span className="text-gray-600 font-medium">{t("content.commodities.pricePerGram").replace("{price}", fmtTL(silverPrice))}</span></span>
               )}
-              <span className="ml-auto">Yahoo Finance · TCMB (5dk önbellek)</span>
+              <span className="ml-auto">{t("content.commodities.priceSource")}</span>
             </div>
           )}
         </div>
@@ -165,7 +165,7 @@ export default function CommoditiesPage() {
         <CommodityForm onAdded={refresh} />
 
         {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
-        {loading && <p className="text-sm text-gray-400 text-center py-4">Yükleniyor...</p>}
+        {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
         {!loading && summary && <CommodityList positions={summary.positions} onDeleted={refresh} />}
       </main>
     </div>

@@ -48,8 +48,8 @@ export default function BudgetPage() {
   }
 
   const overBudgetCount = rows.filter((r) => r.over_budget).length;
-  const totalBudget = rows.reduce((s, r) => s + (r.budget_amount ? parseFloat(r.budget_amount) : 0), 0);
-  const totalActual = rows.reduce((s, r) => s + parseFloat(r.actual_amount), 0);
+  const totalBudget = rows.reduce((s, r) => s + (r.budget_amount ? Number.parseFloat(r.budget_amount) : 0), 0);
+  const totalActual = rows.reduce((s, r) => s + Number.parseFloat(r.actual_amount), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">

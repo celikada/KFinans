@@ -30,7 +30,7 @@ export default function WalletsPage() {
     setPosError("");
     try {
       const { positions, errors } = await api.getWalletPositions();
-      setPositions(positions.filter((p) => parseFloat(p.total_value_tl) > 0.01));
+      setPositions(positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01));
       if (Object.keys(errors).length > 0) {
         const msgs = Object.entries(errors)
           .map(([k, v]) => `${k}: ${v}`)
@@ -38,7 +38,7 @@ export default function WalletsPage() {
         setPosError(msgs);
       }
     } catch (err) {
-      setPosError(err instanceof Error ? err.message : "Pozisyonlar alınamadı");
+      setPosError(err instanceof Error ? err.message : t("content.wallets.errorPositions"));
     } finally {
       setLoadingPositions(false);
     }
@@ -54,7 +54,7 @@ export default function WalletsPage() {
     try {
       await api.exportWallets();
     } catch (err) {
-      setPosError(err instanceof Error ? err.message : "Export başarısız");
+      setPosError(err instanceof Error ? err.message : t("content.wallets.errorExportFailed"));
     } finally {
       setExporting(false);
     }
@@ -70,7 +70,7 @@ export default function WalletsPage() {
       setWallets(imported);
       if (imported.length > 0) fetchPositions();
     } catch (err) {
-      setPosError(err instanceof Error ? err.message : "Import başarısız");
+      setPosError(err instanceof Error ? err.message : t("content.wallets.errorImportFailed"));
     } finally {
       setImporting(false);
       e.target.value = "";
@@ -94,7 +94,7 @@ export default function WalletsPage() {
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Kayıtlı Cüzdanlar</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.wallets.savedWallets")}</h2>
           <WalletList wallets={wallets} removing={removing} onRemove={handleRemove} />
           <WalletForm
             hasWallets={wallets.length > 0}
@@ -110,7 +110,7 @@ export default function WalletsPage() {
 
         {loadingPositions && (
           <p className="text-sm text-gray-400 text-center py-4">
-            Blockchain bakiyeleri sorgulanıyor...
+            {t("content.wallets.queryingBalances")}
           </p>
         )}
 

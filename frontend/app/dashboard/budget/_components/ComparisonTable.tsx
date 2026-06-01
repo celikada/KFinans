@@ -22,8 +22,8 @@ export function ComparisonTable({ rows, onDelete }: Props) {
   return (
     <div className="space-y-3">
       {rows.map((row) => {
-        const actual = parseFloat(row.actual_amount);
-        const budget = row.budget_amount !== null ? parseFloat(row.budget_amount) : null;
+        const actual = Number.parseFloat(row.actual_amount);
+        const budget = row.budget_amount !== null ? Number.parseFloat(row.budget_amount) : null;
         const pct = row.pct_used ?? 0;
         const barPct = Math.min(pct, 100);
         const label = EXPENSE_CATEGORY_LABELS[row.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? row.category;
@@ -73,7 +73,7 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                   <span>%{pct.toFixed(0)} {t("content.budget.used")}</span>
                   {row.remaining !== null && (
                     <span className={row.over_budget ? "text-red-500 font-medium" : "text-emerald-600"}>
-                      {row.over_budget ? `${fmtTL(Math.abs(parseFloat(row.remaining)))} ₺ ${t("content.budget.over")}` : `${fmtTL(parseFloat(row.remaining))} ₺ ${t("content.budget.remaining")}`}
+                      {row.over_budget ? `${fmtTL(Math.abs(Number.parseFloat(row.remaining)))} ₺ ${t("content.budget.over")}` : `${fmtTL(Number.parseFloat(row.remaining))} ₺ ${t("content.budget.remaining")}`}
                     </span>
                   )}
                 </div>

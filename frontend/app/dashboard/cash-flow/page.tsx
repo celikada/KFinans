@@ -48,15 +48,15 @@ export default function CashFlowPage() {
   // Grafik için data hazırla
   const chartData = (data?.months ?? []).map((m) => ({
     name: MONTH_NAMES[m.month - 1],
-    income: parseFloat(m.income_total),
-    expense: parseFloat(m.expense_total),
-    net: parseFloat(m.net),
+    income: Number.parseFloat(m.income_total),
+    expense: Number.parseFloat(m.expense_total),
+    net: Number.parseFloat(m.net),
     is_past: m.is_past,
   }));
 
-  const totalIncome = data ? parseFloat(data.total_income) : 0;
-  const totalExpense = data ? parseFloat(data.total_expense) : 0;
-  const totalNet = data ? parseFloat(data.total_net) : 0;
+  const totalIncome = data ? Number.parseFloat(data.total_income) : 0;
+  const totalExpense = data ? Number.parseFloat(data.total_expense) : 0;
+  const totalNet = data ? Number.parseFloat(data.total_net) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -167,11 +167,11 @@ export default function CashFlowPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {data.months.map((m) => {
-                  const incActual = parseFloat(m.income_actual);
-                  const incForecast = parseFloat(m.income_forecast);
-                  const expActual = parseFloat(m.expense_actual);
-                  const expForecast = parseFloat(m.expense_forecast);
-                  const net = parseFloat(m.net);
+                  const incActual = Number.parseFloat(m.income_actual);
+                  const incForecast = Number.parseFloat(m.income_forecast);
+                  const expActual = Number.parseFloat(m.expense_actual);
+                  const expForecast = Number.parseFloat(m.expense_forecast);
+                  const net = Number.parseFloat(m.net);
                   return (
                     <tr key={m.month} className={m.is_past ? "" : "bg-gray-50/30"}>
                       <td className="px-4 py-3">

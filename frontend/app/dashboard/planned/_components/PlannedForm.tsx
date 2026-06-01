@@ -58,17 +58,17 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
     try {
       const payload: PlannedExpenseInput = {
         title: title.trim(),
-        amount: parseFloat(amount),
+        amount: Number.parseFloat(amount),
         category,
         recurrence,
         is_estimated: isEstimated,
         start_date: startDate,
-        day_of_month: parseInt(dayOfMonth),
+        day_of_month: Number.parseInt(dayOfMonth),
         end_date: endDate || null,
-        remaining_count: remainingCount ? parseInt(remainingCount) : null,
+        remaining_count: remainingCount ? Number.parseInt(remainingCount) : null,
         months: recurrence === "custom" ? customMonths : null,
         notes: notes.trim() || null,
-        credit_card_id: creditCardId ? parseInt(creditCardId) : null,
+        credit_card_id: creditCardId ? Number.parseInt(creditCardId) : null,
         is_paid: isPaid,
       };
       const result = await api.createPlannedExpense(payload);

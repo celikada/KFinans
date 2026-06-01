@@ -11,10 +11,10 @@ interface Props {
 
 export function WalletPositionsTable({ positions }: Props) {
   const { t } = useTranslation();
-  const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+  const totalTL = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
 
   const sorted = [...positions].sort(
-    (a, b) => parseFloat(b.total_value_tl) - parseFloat(a.total_value_tl)
+    (a, b) => Number.parseFloat(b.total_value_tl) - Number.parseFloat(a.total_value_tl)
   );
 
   return (
@@ -34,9 +34,9 @@ export function WalletPositionsTable({ positions }: Props) {
         </thead>
         <tbody className="divide-y divide-gray-50">
           {sorted.map((pos, i) => {
-            const liquid = parseFloat(pos.liquid_quantity);
-            const staked = parseFloat(pos.staked_quantity);
-            const rewards = parseFloat(pos.pending_rewards);
+            const liquid = Number.parseFloat(pos.liquid_quantity);
+            const staked = Number.parseFloat(pos.staked_quantity);
+            const rewards = Number.parseFloat(pos.pending_rewards);
             const total = liquid + staked;
             return (
               <tr key={i} className="hover:bg-gray-50 transition-colors">
@@ -51,10 +51,10 @@ export function WalletPositionsTable({ positions }: Props) {
                 <td className="px-6 py-4 text-right text-gray-600">
                   {fmtNum(total.toString())}
                   {staked > 0 && (
-                    <p className="text-xs text-orange-400">{fmtNum(staked.toString())} stake</p>
+                    <p className="text-xs text-orange-400">{fmtNum(staked.toString())} {t("content.wallets.stakeSuffix")}</p>
                   )}
                   {rewards > 0 && (
-                    <p className="text-xs text-green-400">{fmtNum(rewards.toString())} ödül</p>
+                    <p className="text-xs text-green-400">{fmtNum(rewards.toString())} {t("content.wallets.rewardSuffix")}</p>
                   )}
                 </td>
                 <td className="px-6 py-4 text-right text-gray-600">

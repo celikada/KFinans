@@ -72,11 +72,11 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
     try {
       const payload: RecurringIncomeInput = {
         title: title.trim(),
-        amount: parseFloat(amount),
+        amount: Number.parseFloat(amount),
         category,
         recurrence,
         months: recurrence === "custom" ? months : null,
-        day_of_month: parseInt(dayOfMonth) || 1,
+        day_of_month: Number.parseInt(dayOfMonth) || 1,
         start_date: startDate,
         end_date: endDate || null,
         notes: notes.trim() || null,

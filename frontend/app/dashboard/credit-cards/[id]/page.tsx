@@ -21,7 +21,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { id } = use(params);
-  const cardId = parseInt(id);
+  const cardId = Number.parseInt(id);
 
   const [detail, setDetail] = useState<CreditCardDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,12 +63,12 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
   if (!detail) return null;
 
   const c = detail.card;
-  const limit = c.credit_limit ? parseFloat(c.credit_limit) : null;
-  const currentPeriod = parseFloat(c.current_period_debt);
-  const unpaid = parseFloat(c.unpaid_statement_total);
-  const future = parseFloat(c.future_installment_total);
-  const periodDebt = parseFloat(c.period_debt);
-  const totalDebt = parseFloat(c.total_debt);
+  const limit = c.credit_limit ? Number.parseFloat(c.credit_limit) : null;
+  const currentPeriod = Number.parseFloat(c.current_period_debt);
+  const unpaid = Number.parseFloat(c.unpaid_statement_total);
+  const future = Number.parseFloat(c.future_installment_total);
+  const periodDebt = Number.parseFloat(c.period_debt);
+  const totalDebt = Number.parseFloat(c.total_debt);
   const utilization = limit ? (totalDebt / limit) * 100 : null;
 
   return (
@@ -191,9 +191,9 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
     setSaving(true); setErr("");
     try {
       const payload: StatementInput = {
-        period_year: parseInt(year),
-        period_month: parseInt(month),
-        statement_amount: parseFloat(amount),
+        period_year: Number.parseInt(year),
+        period_month: Number.parseInt(month),
+        statement_amount: Number.parseFloat(amount),
         statement_date: stmtDate,
         due_date: dueDate,
         paid_at: paid ? new Date().toISOString() : null,
@@ -275,7 +275,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
                 {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(parseFloat(s.statement_amount))} ₺</span>
+                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(Number.parseFloat(s.statement_amount))} ₺</span>
                 <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
                 <button onClick={() => handleDelete(s)} aria-label={t("content.creditCards.deleteStatementAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
@@ -328,8 +328,8 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     try {
       const payload: InstallmentInput = {
         description: description.trim(),
-        monthly_amount: parseFloat(monthlyAmount),
-        installments_total: parseInt(total),
+        monthly_amount: Number.parseFloat(monthlyAmount),
+        installments_total: Number.parseInt(total),
         first_due_date: firstDue,
         notes: notes.trim() || null,
       };
@@ -348,8 +348,8 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
   }
 
   // Toplam tutar canlı hesaplama (form preview)
-  const monthlyNum = parseFloat(monthlyAmount);
-  const totalCount = parseInt(total) || 0;
+  const monthlyNum = Number.parseFloat(monthlyAmount);
+  const totalCount = Number.parseInt(total) || 0;
   const totalPreview = monthlyNum > 0 && totalCount > 0
     ? (monthlyNum * totalCount).toFixed(2)
     : null;
@@ -420,10 +420,10 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-sm font-semibold text-rose-600 tabular-nums">
-                    {fmtTL(parseFloat(i.monthly_amount))} {t("content.creditCards.perMonth")}
+                    {fmtTL(Number.parseFloat(i.monthly_amount))} {t("content.creditCards.perMonth")}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    {t("content.creditCards.totalLabel")}: {fmtTL(parseFloat(i.total_amount))} ₺
+                    {t("content.creditCards.totalLabel")}: {fmtTL(Number.parseFloat(i.total_amount))} ₺
                   </p>
                 </div>
                 <button onClick={() => startEdit(i)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>

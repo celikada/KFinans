@@ -18,7 +18,7 @@ export function MonthSelector({ year, month, onChange }: Props) {
     <div className="flex gap-2 items-center">
       <select
         value={month}
-        onChange={(e) => onChange(year, parseInt(e.target.value))}
+        onChange={(e) => onChange(year, Number.parseInt(e.target.value))}
         className={`w-32 ${INPUT_CLS}`}
       >
         {Array.from({ length: 12 }, (_, i) => (
@@ -27,7 +27,7 @@ export function MonthSelector({ year, month, onChange }: Props) {
       </select>
       <select
         value={year}
-        onChange={(e) => onChange(parseInt(e.target.value), month)}
+        onChange={(e) => onChange(Number.parseInt(e.target.value), month)}
         className={`w-24 ${INPUT_CLS}`}
       >
         {years.map((y) => (

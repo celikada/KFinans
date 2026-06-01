@@ -1,6 +1,7 @@
 "use client";
 import { IntegrationDTO } from "@/lib/api";
 import { PROVIDER_LABELS } from "./constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   integrations: IntegrationDTO[];
@@ -9,8 +10,9 @@ interface Props {
 }
 
 export function IntegrationList({ integrations, removing, onRemove }: Props) {
+  const { t } = useTranslation();
   if (integrations.length === 0) {
-    return <p className="text-sm text-gray-400">Henüz borsa eklenmedi.</p>;
+    return <p className="text-sm text-gray-400">{t("content.crypto.noExchangeYet")}</p>;
   }
 
   return (
@@ -31,7 +33,7 @@ export function IntegrationList({ integrations, removing, onRemove }: Props) {
             disabled={removing === intg.provider}
             className="text-xs text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40"
           >
-            {removing === intg.provider ? "Siliniyor..." : "Kaldır"}
+            {removing === intg.provider ? t("content.crypto.removing") : t("content.crypto.remove")}
           </button>
         </div>
       ))}

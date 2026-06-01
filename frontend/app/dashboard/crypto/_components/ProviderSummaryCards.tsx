@@ -2,6 +2,7 @@
 import { CryptoPositionDTO } from "@/lib/api";
 import { TLValue } from "@/app/_components/TLValue";
 import { PROVIDER_LABELS } from "./constants";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
   positions: CryptoPositionDTO[];
@@ -10,9 +11,10 @@ interface Props {
 }
 
 export function ProviderSummaryCards({ positions, hidden, onToggle }: Props) {
+  const { t } = useTranslation();
   const byProvider = Object.entries(
     positions.reduce<Record<string, number>>((acc, p) => {
-      acc[p.provider] = (acc[p.provider] ?? 0) + parseFloat(p.total_value_tl);
+      acc[p.provider] = (acc[p.provider] ?? 0) + Number.parseFloat(p.total_value_tl);
       return acc;
     }, {})
   ).sort((a, b) => b[1] - a[1]);
@@ -35,7 +37,7 @@ export function ProviderSummaryCards({ positions, hidden, onToggle }: Props) {
           >
             <p className="text-xs text-gray-400 mb-1 flex items-center gap-1">
               {PROVIDER_LABELS[prov] ?? prov}
-              <span className="ml-auto text-gray-300">{isHidden ? "gizli" : "✓"}</span>
+              <span className="ml-auto text-gray-300">{isHidden ? t("content.crypto.hidden") : "✓"}</span>
             </p>
             <TLValue
               tl={total}

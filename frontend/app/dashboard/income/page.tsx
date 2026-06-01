@@ -108,10 +108,10 @@ export default function IncomePage() {
     }
   }
 
-  const monthTotal = dashboard ? parseFloat(dashboard.this_month_actual) : 0;
-  const ytdTotal = dashboard ? parseFloat(dashboard.ytd_actual) : 0;
-  const yearEstimate = dashboard ? parseFloat(dashboard.year_total_estimate) : 0;
-  const remainingRecurring = dashboard ? parseFloat(dashboard.remaining_year_recurring) : 0;
+  const monthTotal = dashboard ? Number.parseFloat(dashboard.this_month_actual) : 0;
+  const ytdTotal = dashboard ? Number.parseFloat(dashboard.ytd_actual) : 0;
+  const yearEstimate = dashboard ? Number.parseFloat(dashboard.year_total_estimate) : 0;
+  const remainingRecurring = dashboard ? Number.parseFloat(dashboard.remaining_year_recurring) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -194,12 +194,12 @@ export default function IncomePage() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-4">{t("content.income.monthCategoryBreakdown")}</h3>
                 <div className="space-y-3">
                   {summary.by_category.map((b) => {
-                    const pct = monthTotal > 0 ? (parseFloat(b.total) / monthTotal) * 100 : 0;
+                    const pct = monthTotal > 0 ? (Number.parseFloat(b.total) / monthTotal) * 100 : 0;
                     return (
                       <div key={b.category}>
                         <div className="flex justify-between text-xs text-gray-600 mb-1">
                           <span>{INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category}</span>
-                          <span className="font-semibold">{fmtTL(parseFloat(b.total))} ₺ <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
+                          <span className="font-semibold">{fmtTL(Number.parseFloat(b.total))} ₺ <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                           <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />

@@ -38,7 +38,7 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
     );
   }
 
-  const total = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const total = expenses.reduce((s, e) => s + Number.parseFloat(e.amount), 0);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

@@ -18,11 +18,11 @@ const INPUT_CLS =
   "px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400";
 
 function fmt(val: string) {
-  return parseFloat(val).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return Number.parseFloat(val).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
 function fmtTL(val: string | number) {
-  return parseFloat(val.toString()).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number.parseFloat(val.toString()).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
@@ -75,7 +75,7 @@ export default function TefasPage() {
       setResult(await api.tefasPreview(valid));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "TEFAS'tan veri alınamadı");
+      setError(err instanceof Error ? err.message : t("content.tefas.errorFetchFailed"));
     } finally {
       setLoading(false);
     }
@@ -83,13 +83,13 @@ export default function TefasPage() {
 
   async function fetchPrices() {
     const valid = toDTO(holdings);
-    if (!valid.length) { setError("En az bir fon kodu ve adet giriniz"); return; }
+    if (!valid.length) { setError(t("content.tefas.errorAtLeastOne")); return; }
     await fetchPricesFor(valid);
   }
 
   async function saveHoldings() {
     const valid = toDTO(holdings);
-    if (!valid.length) { setError("Kaydedilecek geçerli holding yok"); return; }
+    if (!valid.length) { setError(t("content.tefas.errorNoValidHolding")); return; }
     setSaving(true);
     setError("");
     try {
@@ -98,7 +98,7 @@ export default function TefasPage() {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Kaydetme başarısız");
+      setError(err instanceof Error ? err.message : t("content.tefas.errorSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -111,7 +111,7 @@ export default function TefasPage() {
       await api.exportTefasHoldings();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Export başarısız");
+      setError(err instanceof Error ? err.message : t("content.tefas.errorExportFailed"));
     } finally {
       setExporting(false);
     }
@@ -145,7 +145,7 @@ export default function TefasPage() {
       fetchPricesFor(imported);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
-      setError(err instanceof Error ? err.message : "Import başarısız");
+      setError(err instanceof Error ? err.message : t("content.tefas.errorImportFailed"));
     } finally {
       setImporting(false);
       e.target.value = "";
@@ -164,38 +164,38 @@ export default function TefasPage() {
     setHoldings((h) => h.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
   }
 
-  const totalTL = result.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+  const totalTL = result.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
         <button onClick={() => router.push("/dashboard")} className="text-gray-400 hover:text-gray-600 text-sm">
-          ← Geri
+          {t("common.back")}
         </button>
-        <h1 className="text-lg font-semibold text-gray-900">TEFAS Fon Portföyü</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{t("content.tefas.pageHeading")}</h1>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-2">Fon Holdingleri</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-2">{t("content.tefas.fundHoldings")}</h2>
           <MkkHint onUpload={handleMkkUpload} />
           <div className="mb-4" />
 
           {initialLoad ? (
-            <p className="text-sm text-gray-400">Yükleniyor...</p>
+            <p className="text-sm text-gray-400">{t("content.tefas.loading")}</p>
           ) : (
             <div className="space-y-3">
               {holdings.map((row, i) => (
                 <div key={i} className="flex gap-2 items-center flex-wrap">
                   <input
-                    placeholder="Fon Kodu (YAC)"
+                    placeholder={t("content.tefas.fundCodePlaceholder")}
                     value={row.code}
                     onChange={(e) => updateRow(i, "code", e.target.value.toUpperCase())}
                     className={`w-28 font-mono uppercase ${INPUT_CLS}`}
                     maxLength={6}
                   />
                   <input
-                    placeholder="Adet"
+                    placeholder={t("content.tefas.quantityPlaceholder")}
                     type="number"
                     min="0"
                     value={row.quantity}
@@ -203,31 +203,31 @@ export default function TefasPage() {
                     className={`w-32 ${INPUT_CLS}`}
                   />
                   <input
-                    placeholder="Ort. maliyet ₺"
+                    placeholder={t("content.tefas.avgCostPlaceholder")}
                     type="number"
                     min="0"
                     step="0.0001"
                     value={row.avg_cost_tl}
                     onChange={(e) => updateRow(i, "avg_cost_tl", e.target.value)}
                     className={`w-36 ${INPUT_CLS}`}
-                    title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
+                    title={t("content.tefas.avgCostTitle")}
                   />
                   <input
-                    placeholder="Kurum (Ziraat, Foneria...)"
+                    placeholder={t("content.tefas.distributorPlaceholder")}
                     value={row.distributor}
                     onChange={(e) => updateRow(i, "distributor", e.target.value)}
                     className={`w-44 ${INPUT_CLS}`}
                     maxLength={50}
-                    title="Portföy yönetici kurum — aynı fonu farklı kurumlardan ayrı satır olarak izle"
+                    title={t("content.tefas.distributorTitle")}
                   />
                   <input
-                    placeholder="İsim (opsiyonel)"
+                    placeholder={t("content.tefas.namePlaceholder")}
                     value={row.name}
                     onChange={(e) => updateRow(i, "name", e.target.value)}
                     className={`flex-1 min-w-[160px] ${INPUT_CLS}`}
                   />
                   {holdings.length > 1 && (
-                    <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label="Satırı sil">
+                    <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label={t("content.tefas.removeRow")}>
                       <span aria-hidden="true">×</span>
                     </button>
                   )}
@@ -238,24 +238,24 @@ export default function TefasPage() {
 
           <div className="flex gap-3 mt-4 items-center flex-wrap">
             <button onClick={addRow} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-              + Fon ekle
+              {t("content.tefas.addFund")}
             </button>
             <button
               onClick={saveHoldings}
               disabled={saving}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {saved ? "✓ Kaydedildi" : saving ? "Kaydediliyor..." : "Kaydet"}
+              {saved ? t("content.tefas.saved") : saving ? t("content.tefas.saving") : t("content.tefas.save")}
             </button>
             <button
               onClick={handleExport}
               disabled={exporting}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {exporting ? "İndiriliyor..." : "Excel İndir"}
+              {exporting ? t("content.tefas.downloading") : t("content.tefas.excelDownload")}
             </button>
             <label className={`text-sm font-medium border px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${importing ? "text-gray-400 border-gray-100" : "text-gray-500 hover:text-gray-700 border-gray-200"}`}>
-              {importing ? "İçe aktarılıyor..." : "Excel Yükle"}
+              {importing ? t("content.tefas.importing") : t("content.tefas.excelUpload")}
               <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={importing} />
             </label>
             <button
@@ -263,7 +263,7 @@ export default function TefasPage() {
               disabled={loading}
               className="ml-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {loading ? "Yükleniyor..." : "Fiyatları Getir"}
+              {loading ? t("content.tefas.fetching") : t("content.tefas.fetchPrices")}
             </button>
           </div>
 
@@ -275,7 +275,7 @@ export default function TefasPage() {
         {result.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">Portföy</h2>
+              <h2 className="text-sm font-semibold text-gray-700">{t("dashboard.portfolio")}</h2>
               <TLValue tl={totalTL} className="text-lg font-bold text-gray-900" usdClassName="block text-xs text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
             </div>
 

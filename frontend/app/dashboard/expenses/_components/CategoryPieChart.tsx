@@ -26,8 +26,8 @@ export function CategoryPieChart({ data, total }: Props) {
 
   const chartData = data.map((b) => ({
     name: EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
-    value: parseFloat(b.total),
-    pct: total > 0 ? (parseFloat(b.total) / total) * 100 : 0,
+    value: Number.parseFloat(b.total),
+    pct: total > 0 ? (Number.parseFloat(b.total) / total) * 100 : 0,
   }));
 
   return (

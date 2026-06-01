@@ -51,7 +51,7 @@ export default function PlannedPage() {
     refresh();
   }
 
-  const yearTotal = forecast ? parseFloat(forecast.year_total) : 0;
+  const yearTotal = forecast ? Number.parseFloat(forecast.year_total) : 0;
   const monthlyAvg = yearTotal > 0 ? yearTotal / 12 : 0;
 
   return (

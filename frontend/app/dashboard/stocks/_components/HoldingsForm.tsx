@@ -50,7 +50,7 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
             value={row.avg_cost_tl}
             onChange={(e) => onUpdate(i, "avg_cost_tl", e.target.value)}
             className={`w-36 ${INPUT_CLS}`}
-            title="Ortalama alış maliyeti (TRY/adet) — kâr/zarar hesabı için"
+            title={t("content.stocks.avgCostTitle")}
           />
           <input
             placeholder={t("form.stockDistributorPlaceholder")}
@@ -58,16 +58,16 @@ export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Prop
             onChange={(e) => onUpdate(i, "distributor", e.target.value)}
             className={`w-44 ${INPUT_CLS}`}
             maxLength={50}
-            title="Aracı kurum — aynı hisseyi farklı kurumlardan ayrı satır olarak izle"
+            title={t("content.stocks.distributorTitle")}
           />
           <input
-            placeholder="İsim (opsiyonel)"
+            placeholder={t("content.stocks.namePlaceholder")}
             value={row.name}
             onChange={(e) => onUpdate(i, "name", e.target.value)}
             className={`flex-1 min-w-[120px] ${INPUT_CLS}`}
           />
           {holdings.length > 1 && (
-            <button onClick={() => onRemove(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label="Satırı sil">
+            <button onClick={() => onRemove(i)} className="text-gray-300 hover:text-red-400 text-lg leading-none px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded" aria-label={t("content.stocks.removeRow")}>
               <span aria-hidden="true">×</span>
             </button>
           )}
