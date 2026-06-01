@@ -39,6 +39,10 @@
 | `users.credit_balance` (CHECK >= 0) | DB seviyesinde negatif bakiye koruması | ✅ Aktif |
 | **CI/CD secret tarama** (FAZ B4) | gitleaks (her PR/push) + Trivy fs (deps + IaC HIGH/CRITICAL) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + TS SAST) | ✅ Aktif |
 | **Container image vulnerability scan** (FAZ B3) | Trivy image scan release pipeline'ında (build sonrası, deploy öncesi); HIGH/CRITICAL → fail | ✅ Aktif |
+| **SonarQube quality gate (blocking)** | Yeni kod (new code) için violation + security hotspot review gate; gate fail → CI fail. `new_security_hotspots_reviewed=%100` zorunlu | ✅ Aktif |
+| **GitOps secret yönetimi (SealedSecrets)** | bitnami sealed-secrets; `encryptedData` asimetrik şifreli, sadece cluster private key açar → repo'ya commit güvenli (`k8s/sealed-secrets.yaml`) | ✅ Aktif |
+| **Branch protection** | GitHub `develop`+`main` (force-push + delete engelli); GitLab `develop`/`main` push=No one (MR-only) | ✅ Aktif |
+| **DB TLS (transit şifreleme)** | asyncpg `connect_args` ssl; prod `require` (hostname + cert chain doğrulama AÇIK), cluster-içi `prefer` (self-signed defence-in-depth) — bkz. §14 | ✅ Aktif |
 
 **Bu korumalar regresyon kabul etmez** — production'a çıkmadan önce düşürülemez. CI'da `test_idor.py`, `test_security.py`, `test_integrations_api.py` testleri bunları otomatik doğrular.
 
@@ -257,14 +261,19 @@ def decrypt_secret(ciphertext: str) -> str:
 
 ### 5.3 Kritik: Master Key Yönetimi
 - `FERNET_KEY` değişirse, **tüm mevcut encrypted_key'ler okunamaz hale gelir**
-- Production'da **Kubernetes Secret + sealed-secrets** veya **External Secrets Operator** zorunlu
-- Key rotasyonu: yeni key + dual-decrypt + re-encrypt migration (kritik operasyon, prosedür yazılmalı)
+- Production'da **SealedSecrets** ile GitOps uyumlu secret yönetimi aktif (bkz. §5.4)
+- Key rotasyonu: yeni key + dual-decrypt + re-encrypt migration (kritik operasyon, runbook'u devops alanında)
 
-### 5.4 K8s Secrets Yerleşimi (Mevcut)
+### 5.4 K8s Secrets Yerleşimi (Mevcut — SealedSecrets, GitOps-safe)
 - Tüm hassas env (`DATABASE_URL`, `SECRET_KEY`, `FERNET_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `POSTGRES_PASSWORD`) `kfinans-secrets` adlı Kubernetes Secret'ında
-- `k8s/secrets.example.yaml` şablon olarak versiyon kontrolünde; gerçek `k8s/secrets.yaml` `.gitignore` ile korumalı (commit'lenmemeli)
-- **Önerilen production akışı:** YAML manifest yerine `kubectl create secret generic kfinans-secrets --from-literal=KEY=value -n kfinans` ile imperatif oluşturma; secret değerleri shell history'e veya repo'ya düşmez
-- **Faz 3 hedefi:** External Secrets Operator (AWS Secrets Manager / HashiCorp Vault) veya SealedSecrets ile GitOps uyumlu secret yönetimi
+- **SealedSecrets (bitnami):** `k8s/sealed-secrets.yaml` içindeki `encryptedData` **asimetrik şifreli** ciphertext'tir — yalnızca cluster'daki sealed-secrets controller'ın private key'i açabilir. Bu nedenle dosya repo'ya **commit edilmek için** vardır; plaintext secret değil. gitleaks bu yolu allowlist'e alır (§9.3)
+- **Rotasyon prosedürü (bu oturumda uygulandı — RESEND_API_KEY):**
+  1. Yeni geçerli key alınır (sağlayıcıdan)
+  2. Canlı Secret'a patch: `kubectl patch secret kfinans-secrets -n kfinans` (anlık etki)
+  3. GitOps tutarlılığı için `kubeseal` ile yeniden mühürlenip `k8s/sealed-secrets.yaml`'a yazılır → commit
+  4. Eski key revoke edilir; yeni key `.credentials.local.md` (gitignored) yedeğine kaydedilir
+- `k8s/secrets.example.yaml` şablon olarak versiyon kontrolünde; ham `k8s/secrets.yaml` `.gitignore` korumalı
+- **Faz 4 hedefi (opsiyonel):** External Secrets Operator (HashiCorp Vault) — SealedSecrets yeterli olduğu sürece şart değil
 
 ---
 
@@ -307,7 +316,7 @@ app.add_middleware(
 
 ### 7.2 Production Ayarı
 ```bash
-CORS_ORIGINS=["https://app.kfinans.com","https://kfinans.com"]
+CORS_ORIGINS=["https://kfinans.app","https://www.kfinans.app"]
 ```
 **Asla `["*"]` yapma** — `allow_credentials=True` ile birlikte tarayıcı reddedecek, ayrıca CSRF açığı.
 
@@ -375,7 +384,44 @@ Frontend (`frontend/next.config.ts` async `headers()`) HTML response'larında ek
 - [x] Dependabot aktif (FAZ A4 — `.github/dependabot.yml`; pip + npm + actions + docker, haftalık)
 - [x] CodeQL Python + TypeScript SAST (FAZ B4 — security-and-quality query suite)
 - [x] Gitleaks secret tarama (FAZ B4 — `.gitleaks.toml` allowlist'li; her PR/push)
+- [x] SonarQube quality gate (blocking) — code smell + bug + vulnerability + security hotspot (§9.4)
 - [ ] `pip-tools` ile `requirements.lock` üretimi (Faz 3)
+
+> **Not (CI platform gerçeği):** `develop`/`main` artık **GitLab primary** (self-hosted), GitHub mirror. GitHub Actions hesap flag (#4360519, 2026-06-01 itibarıyla hâlâ aktif) nedeniyle çalışmadığından gate'ler GitLab CI üzerinde yürütülür. Workflow dosya isimleri tarihsel referans amaçlı korunur; aynı kontroller (`.gitlab-ci.yml`) GitLab pipeline'ında koşar.
+
+### 9.3 Gitleaks Allowlist Mantığı
+
+`.gitleaks.toml` allowlist'i yalnızca **kanıtlanmış zararsız** değerleri kapsar — gerçek secret asla allowlist'e alınmaz:
+
+| Allowlist girdisi | Neden zararsız |
+|-------------------|----------------|
+| `k8s/sealed-secrets.yaml` (path) | `encryptedData` asimetrik şifreli; commit edilmek için var, plaintext değil |
+| CI-only test `SECRET_KEY` / `FERNET_KEY` (regex) | `.gitlab-ci.yml` throwaway değerleri; prod secret CI Variables'tan gelir, bu key'ler hiçbir prod sisteme erişim sağlamaz |
+| `wrong-pass-123` (regex) | smoke testi bogus login şifresi (kasıtlı 401 üretir) |
+| `Sifre123!` / `guclu-sifre-123` (regex) | backend/frontend test fixture şifreleri (geçici test DB user'ı) |
+| `curl -u "$TOKEN:"` (regex) | dokümandaki env-var placeholder — gerçek token değil |
+| `backend/tests/`, `playwright/`, `.env*.example` (path) | sahte örnek/fixture değerleri |
+
+**Tam-geçmiş taraması (274 commit, bu oturum):** 14 bulgunun **tamamı** zararsız doğrulandı (commit diff + working tree + full history). **Gerçek secret sızıntısı YOK.** Allowlist bu denetim sonrası SealedSecrets + CI test key + curl placeholder girdileriyle genişletildi.
+
+### 9.4 SonarQube Quality Gate (Blocking)
+
+- **Konum:** `.gitlab-ci.yml` SonarQube tarama job'u; quality gate fail → pipeline fail (blocking).
+- **Yeni kod (new code) odaklı:** gate yeni eklenen/değişen kodda 0 yeni bug + 0 yeni vulnerability + 0 yeni security hotspot (review edilmemiş) bekler.
+- **Security hotspot review akışı:** Her hotspot manuel incelenir → `SAFE` / `FIXED` / `ACKNOWLEDGED` işaretlenir. `new_security_hotspots_reviewed=%100` zorunlu.
+  - Örnek (bu oturum): `password_policy.py` HIBP entegrasyonunun SHA-1 kullanımı hotspot olarak işaretlendi → **SAFE**. Gerekçe: HIBP **k-anonymity** modeli — şifrenin SHA-1 hash'inin yalnızca ilk 5 karakteri (prefix) ağa gönderilir; plaintext veya tam hash hiçbir zaman ağa çıkmaz.
+
+#### NOSONAR — Gerekçeli İstisnalar (bu oturum, 26 violation kapanışı)
+
+26 violation: **21 gerçek fix + 5 gerekçeli `NOSONAR`/`noqa`**. NOSONAR yalnızca kasıtlı/false-positive durumlarda, kod yorumuyla gerekçelendirilerek kullanılır — yeni açık eklenmedi:
+
+| Dosya | Kural | Gerekçe |
+|-------|-------|---------|
+| `core/log_filter.py` | S3516 (her zaman aynı değer döner) | `logging.Filter.filter()` sözleşmesi gereği her zaman `True` döner (kayıt geçirilir; filtre maskeleme yapar, drop etmez) |
+| `core/password_policy.py` | S7483 (timeout) | `httpx` native timeout idiomatik kullanım — SonarQube generic flag'liyor |
+| `database.py` | S5527 ×2 (hostname/cert doğrulama) | `prefer` modu self-signed cluster cert için **bilinçli** olarak `check_hostname=False` + `CERT_NONE`; **prod `require` modu hostname + cert chain doğrulamasını AÇIK tutar** (bkz. §14) |
+
+> **Kritik ayrım:** `database.py` NOSONAR yalnızca cluster-içi `prefer` dalını kapsar. Production trafiği `require` modunda akar ve **TLS hostname + sertifika zinciri doğrulaması tam açıktır** — gevşetilen kontrol yalnızca public CA'sı olmayan cluster-içi defence-in-depth fallback dalındadır.
 
 ---
 
@@ -478,3 +524,29 @@ KVKK m.12 + Veri İhlali Yönetmeliği — **72 saat içinde** Kişisel Verileri
 6. **Post-mortem:** Tekrar olmaması için süreç güncellemesi
 
 > Detaylı KVKK gereksinimleri: [uyumluluk-kvkk.md](./uyumluluk-kvkk.md)
+
+---
+
+## 14. DB TLS (Transit Şifreleme)
+
+`backend/app/database.py` asyncpg `connect_args.ssl` değerini `settings.database_ssl_mode`'a göre kurar:
+
+| Mod | `ssl` ayarı | Hostname + Cert doğrulama | Kullanım |
+|-----|-------------|---------------------------|----------|
+| `disable` | `False` | – | Eski/dev davranış (geriye uyumlu) |
+| `prefer` | self-signed SSLContext | **KAPALI** (`check_hostname=False`, `CERT_NONE`) | Cluster-içi defence-in-depth; public CA'sı olmayan self-signed Postgres cert kabul edilir |
+| `require` | CA bundle'lı SSLContext | **AÇIK** (`check_hostname=True`, `CERT_REQUIRED`) | **Production** — cert-manager `postgres-tls` Secret backend pod'a `/etc/postgres-ca/ca.crt` olarak mount edilir |
+
+- **Production `require` modunda** hem hostname hem sertifika zinciri doğrulaması açıktır; MITM koruması tamdır. CA bundle yoksa asyncpg default `CERT_REQUIRED` context'e (sistem PKI) düşer.
+- `prefer` modundaki gevşetme **yalnızca** node compromise senaryosunda in-flight veri sızıntısını engellemek için (encrypt-in-transit) cluster-içi fallback'tir. SonarQube S5527/S4830 bu dalda `NOSONAR` ile gerekçelendirilmiştir (§9.4).
+- **Geçmiş not:** 3 başarısız "DB TLS handshake fail" denemesi aslında DNS resolution hatasıymış; NetworkPolicy DNS egress fix (a8496ca) ile kapandı, ardından `require` prod'da aktive edildi.
+
+---
+
+## 15. HTTP Yanıt Header'larında Non-ASCII (öğrenilen ders)
+
+**Bug:** `GET /portfolio/wallets/export.xlsx` `Content-Disposition: attachment; filename=...` header'ında Türkçe `ı` (U+0131) karakteri vardı. ASGI/uvicorn HTTP header'larını **latin-1** ile encode eder; non-ASCII karakter `UnicodeEncodeError` → 500 üretti (production'da yakalandı).
+
+**Fix:** Dosya adı ASCII'ye çekildi → `blockchain-cuzdanlari.xlsx` (`backend/app/api/v1/wallets.py:189`).
+
+**Kural:** HTTP yanıt header değerleri **yalnızca ASCII** olmalıdır. Türkçe karakter içeren dosya adı gerekiyorsa RFC 5987 `filename*=UTF-8''...` (percent-encoded) sözdizimi kullanılmalı; ham UTF-8 header'a yazılmamalıdır. Yeni download endpoint'lerinde gözden geçir.

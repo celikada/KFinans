@@ -38,7 +38,7 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 | Frontend | Next.js 16 (App Router, Turbopack) + React 19 + Tailwind CSS v4 |
 | Auth | JWT (python-jose) + slowapi rate limiting + refresh token rotation |
 | Güvenlik | Fernet (API key + wallet xpub) + bcrypt (şifre) + JWT blacklist (revoked_tokens) + SecurityHeadersMiddleware (HSTS, CSP, X-Frame, COOP) + TrustedHostMiddleware + audit_logs |
-| CI/CD | GitHub Actions (5 workflow): ci-backend, ci-frontend, e2e, security (gitleaks+Trivy+pip-audit+npm-audit+CodeQL), sonar; release (semver tag → GHCR build → Trivy → Oracle K3s deploy → smoke) |
+| CI/CD | **GitLab CI primary** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test (coverage) → quality (self-hosted SonarQube **BLOCKING** gate) → build (Docker Hub `celikada/kfinans-*`) → deploy (Oracle K3s, sadece tag). `.github/workflows/*` (5 workflow) dormant/referans — GitHub flag #4360519 nedeniyle Actions çalışmaz. |
 | Hosting | Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + nginx-ingress + cert-manager (Let's Encrypt) |
 | Domain | `kfinans.app` (Namecheap, .app TLD HSTS preload listesinde — tarayıcı zorunlu HTTPS) |
 
@@ -94,13 +94,14 @@ KFinans/
 │   ├── next.config.ts             # FAZ C2: async headers() — HSTS, CSP, X-Frame, Permissions-Policy
 │   └── lib/{api,format}.ts
 ├── docs/                          # 9 sıralı belge (01-tasarim ... 09-altyapi-test)
+├── .gitlab-ci.yml                 # PRIMARY CI: lint→test→quality(SonarQube BLOCKING)→build→deploy
 ├── .github/
-│   ├── workflows/                 # 5 workflow: ci-backend, ci-frontend, e2e, security, sonar, release
+│   ├── workflows/                 # 5 workflow: ci-backend, ci-frontend, e2e, security, sonar, release (DORMANT — GitHub Actions çalışmıyor)
 │   ├── dependabot.yml             # FAZ A4: pip + npm + actions + docker, haftalık
 │   └── pull_request_template.md   # FAZ A6: güvenlik checklist genişletilmiş
 ├── .gitleaks.toml                 # FAZ A1: test fixture allowlist
 ├── .credentials.local.md          # gitignore'da: lokal dev secret yedek + açıklama
-├── sonar-project.properties       # FAZ B2: SonarCloud config (celikada_KFinans)
+├── sonar-project.properties       # SonarCloud değerleri (kullanılmıyor); GitLab CI projectKey=KFinans ile override eder
 ├── LICENSE                        # Apache-2.0 (Mayotek 2026)
 ├── SECURITY.md                    # zafiyet bildirim akışı (TR + EN, 90 gün disclosure)
 ├── CONTRIBUTING.md                # branch stratejisi + commit format + güvenlik
@@ -167,15 +168,19 @@ cd frontend && npm install && npm run dev
 
 **.app TLD HSTS preload:** `kfinans.app` Chromium/Firefox/Safari HSTS preload listesinde — tarayıcı DNS sorgusu yapmadan zorla HTTPS kullanır. Manuel HSTS header (FAZ C2) defence-in-depth için yine eklendi. Bu nedenle ilk deploy öncesi `https://kfinans.app` "ERR_CERT_AUTHORITY_INVALID" verir (sertifika yok); cert-manager Let's Encrypt'i çekince düzelir.
 
-**CI/CD pipeline (FAZ B):** 6 workflow var:
-- `ci-backend.yml`: lint (ruff) + unit + integration (real Postgres) + coverage gate (%50 threshold)
-- `ci-frontend.yml`: lint + vitest unit
-- `e2e.yml`: Playwright E2E
-- `security.yml`: gitleaks (.gitleaks.toml allowlist) + Trivy fs (HIGH/CRITICAL fail) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + JS/TS, security-and-quality query)
-- `sonar.yml`: backend pytest cov XML + frontend vitest LCOV → SonarCloud quality gate (`vars.ENABLE_SONAR == 'true'` iken aktif; bekleme döneminde skip)
-- `release.yml`: semver tag (`v*.*.*`) → Sonar quality gate → matrix Docker buildx & GHCR push (backend + frontend) → Trivy image scan (HIGH/CRITICAL fail) → Oracle SSH `kubectl set image` + rollout → Playwright @smoke → GitHub Release notes
+**CI/CD pipeline (primary = GitLab CI `.gitlab-ci.yml`):** Self-hosted GitLab runner (Kubernetes executor + Kaniko, `gitlab-runner` namespace). Stage'ler: `lint` (ruff + eslint, `allow_failure` kaldırıldı) → `test` (backend pytest unit+integration real Postgres + frontend vitest, coverage.xml/LCOV üretir) → `quality` (self-hosted SonarQube) → `build` (Kaniko → Docker Hub `celikada/kfinans-{backend,frontend}`) → `deploy` (yalnızca `v*.*.*` tag'lerde Oracle K3s `kubectl set image`).
+
+**SonarQube quality gate — self-hosted + BLOCKING (2026-06-01):** Host `http://sonar.192.168.3.191.nip.io`, **projectKey=`KFinans`** (organization yok — SonarCloud.io DEĞİL). `sonarqube-scan` job `sonar-scanner` CLI ile `-Dsonar.qualitygate.wait=true` kullanır + `allow_failure` kaldırıldı → gate kırmızı olursa scanner exit≠0 döner, **pipeline durur**. Gate 4/4 yeşil: `new_violations=0`, `new_security_hotspots_reviewed=100%`, `new_coverage≈%96.3`, duplications OK. `sonar-project.properties`'teki SonarCloud değerleri (`celikada_KFinans` + `organization=celikada`) kullanılmıyor — CLI override eder.
+
+**Coverage greenlet config (2026-06-01, kök neden fix):** `pyproject.toml [tool.coverage.run] concurrency = ["greenlet", "thread"]` eklendi. Async FastAPI handler gövdeleri SQLAlchemy async (greenlet) bağlamında çalışır; greenlet izlemesi olmadan coverage.py API katmanını "çalışmadı" sayıyordu → ölçülen kapsam yapay %57.89'du. Fix + ~800 yeni test ile backend coverage **%95.83**'e çıktı.
+
+**`.github/workflows/*` (5 workflow, dormant):** `ci-backend`, `ci-frontend`, `e2e`, `security` (gitleaks + Trivy fs + pip-audit + npm-audit + CodeQL), `sonar`, `release`. GitHub hesabı flagged (#4360519) → Actions çalışmaz; referans olarak repoda durur. Pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a** bak.
 
 **Branch stratejisi (FAZ B6):** `main` PR şart + lineer history + force-push kapalı + branch silme kapalı + conversation resolution zorunlu (review opsiyonel — tek dev için, ekip büyüdükçe count=1 yapılır). `develop` doğrudan push'a izin (siz lokal), force-push kapalı, branch silme kapalı. Default branch `develop`. Sadece **squash merge** (lineer history). Merge sonrası branch otomatik silme.
+
+**GitHub mirror hijyeni (2026-06-01):** GitHub (`celikada/KFinans`) salt-okunur **mirror** — yalnızca `develop` + `main` + tag'ler push edilir; feature branch'ler **sadece GitLab'a** gider (yarım iş public mirror'a sızmaz). GitHub'da `develop` + `main` protected. GitLab zaten protected + merge sonrası auto-delete. Tüm MR'lar GitLab'da (#12/#13/#14 merged, #15 sealed-secret+gitleaks pending).
+
+**Deploy durumu (2026-06-01):** Production tag **`v0.1.0-rc10`** Oracle K3s'e elle (GitLab CI deploy stage) çıkıldı; smoke testler yeşil, production sağlıklı. v1.0.0 hâlâ KVKK kullanıcı aksiyonlarına (COMP) bağlı.
 
 **BES:** Manuel giriş + Excel import/export. 4 metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Snapshot servisi `_gather_bes_assets()` ile `asset_type="pension"` olarak entegre eder.
 
@@ -253,7 +258,7 @@ cd frontend && npm install && npm run dev
 - **Pydantic v2 modern stiller (DEPS-001):** `model_config = ConfigDict(...)` (NOT `class Config:`); validation için `@field_validator + classmethod` (NOT `model_post_init`). Yeni schema'lar v1 stillerini kullanmamalıdır.
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
-- **Test sayıları:** 192 unit + 357 integration (FAZ H sonu — PERF-004 + OBS-001 dahil). CI coverage gate: line %60 + branch %50 + critical path (auth/security/masking) %90 (TEST-007).
+- **Test sayıları:** ~1180 backend pass (unit + integration) + 202 frontend (vitest) pass. SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
 - **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
 
 ## Son Audit — 2026-05-22 (Faz I post-fix)

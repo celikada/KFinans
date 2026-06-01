@@ -100,22 +100,39 @@ Backend kod yolu:
 - ConfigMap: `EMAIL_FROM=KFinans <noreply@kfinans.app>`, `FRONTEND_URL=https://kfinans.app`
 - Secret: `RESEND_API_KEY`
 
-### 2.4 API Key Rotation (yıllık veya kompromize durumunda)
+### 2.4 API Key Rotation / Secret Fix (yeniden kullanılabilir runbook)
 
+> **‼️ Kritik ders (2026-06-01, RESEND_API_KEY canlı fix):** `kfinans-secrets` Opaque secret tek bir secret nesnesidir; içindeki **tek bir key**'i `kubectl create secret ... | apply` ile güncellersen **diğer tüm key'leri ezersin** (DATABASE_URL, FERNET_KEY vb. kaybolur). Tek key değiştirmek için **`kubectl patch --type=merge`** kullan.
+>
+> **‼️ İkinci ders:** `deploy-production` job'u sadece `kubectl set image` yapar — secret/configmap **apply ETMEZ**. Canlı `kubectl patch` ile yaptığın değişiklik kalıcı **değildir**; bir sonraki `kubectl apply -k k8s/` veya GitOps reconcile, `k8s/sealed-secrets.yaml`'daki **eski** değeri geri getirir. Bu yüzden canlı fix'i **her zaman** SealedSecret güncellemesiyle eşle.
+
+**Aşama A — Canlı düzeltme (anlık etki):**
 ```bash
-# 1. Resend dashboard → API Keys → eski key satırında "Revoke"
-# 2. "Create API Key" → yeni `re_xxx...`
-# 3. Lokal: .credentials.local.md §4.1 güncelle
-# 4. Oracle VM'de K8s secret güncelle:
+# 1. (Rotation ise) Resend dashboard → API Keys → eski "Revoke" → "Create API Key" → re_xxx
+# 2. Lokal: .credentials.local.md §4.1 güncelle
+# 3. SADECE ilgili key'i merge-patch et (diğer key'leri korur):
 ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 "
-  sudo kubectl create secret generic kfinans-secrets \
-    --from-literal=RESEND_API_KEY='re_YENI_KEY' \
-    --dry-run=client -o yaml | sudo kubectl apply -f -
+  sudo kubectl patch secret kfinans-secrets -n kfinans --type=merge \
+    -p '{\"stringData\":{\"RESEND_API_KEY\":\"re_YENI_KEY\"}}'
 "
-# 5. Backend pod'larını yeniden başlat (secret refresh):
+# 4. Backend pod'larını yeniden başlat (secret env'i yeniden okunsun):
 ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
   "sudo kubectl rollout restart deployment/backend -n kfinans"
 ```
+
+**Aşama B — Kalıcılık (GitOps reconcile geri getirmesin):**
+```bash
+# 5. Yeni değeri SADECE bu key için strict-scope mühürle (kubeseal --raw):
+echo -n 're_YENI_KEY' | kubeseal --raw \
+  --scope strict \
+  --namespace kfinans \
+  --name kfinans-secrets \
+  --cert <controller-pub-cert.pem>
+# 6. Çıktıyı k8s/sealed-secrets.yaml içinde spec.encryptedData.RESEND_API_KEY'e yaz
+# 7. MR aç (örn. MR #15 RESEND fix) → develop'a merge
+```
+
+> **Neden `--scope strict`?** Strict scope, ciphertext'i `namespace + name` çiftine kilitler; başka bir namespace/secret adıyla decrypt edilemez. `--raw` tek key'i mühürler — tüm secret'ı yeniden seal etmek gerekmez.
 
 ### 2.5 Fernet Key Rotation (önerilen: yıllık + kompromize halinde acil)
 
@@ -140,14 +157,15 @@ Fernet `FERNET_KEY` — DB'deki şifrelenmiş kolonları (wallet xpub, integrati
 
 3. **Primary key'i YENİ ile değiştir (write artık yeni key ile):**
    ```bash
+   # merge-patch — diğer key'leri (DATABASE_URL, SECRET_KEY ...) ezme! (bkz. §2.4 ders)
    ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 "
-     sudo kubectl create secret generic kfinans-secrets \
-       --from-literal=FERNET_KEY='<yeni-primary-key>' \
-       --dry-run=client -o yaml | sudo kubectl apply -f -
+     sudo kubectl patch secret kfinans-secrets -n kfinans --type=merge \
+       -p '{\"stringData\":{\"FERNET_KEY\":\"<yeni-primary-key>\"}}'
      sudo kubectl rollout restart deployment/backend -n kfinans
    "
    ```
    Bu noktada **yeni encrypt'ler yeni key ile, eski encrypt'ler hâlâ eski key ile**. Yeni key olmadan eski veriler okunamaz, eski key olmadan yeni veriler okunamaz — `MultiFernet` her ikisini de saklar.
+   > Kalıcılık için `FERNET_KEY`'i de `kubeseal --raw --scope strict` ile mühürleyip `k8s/sealed-secrets.yaml`'a yaz (bkz. §2.4 Aşama B) — aksi halde GitOps reconcile eski key'i geri getirir.
 
 4. **Re-encrypt CLI ile tüm row'ları yeni key'e taşı:**
    ```bash
@@ -362,8 +380,9 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 - `.credentials.local.md` — gerçek secret değerleri (gitignore'da, asla commit edilmez)
 - `docs/production-deploy-checklist.md` — ilk prod deploy checklist
 - `docs/09-altyapi-test.md` — altyapı + CI/CD stratejisi
-- `k8s/` — Kubernetes manifest'leri (namespace, configmap, secrets.example, postgres, backend, frontend, ingress, backup-cronjob)
-- `.github/workflows/release.yml` — semver tag → GHCR push → Oracle deploy → smoke
+- `k8s/` — Kubernetes manifest'leri (namespace, configmap, secrets.example, **sealed-secrets.yaml**, postgres, postgres-cert, backend, frontend, ingress, backup-cronjob, kustomization)
+- `.gitlab-ci.yml` — **primary CI/CD**: lint → test → quality (blocking SonarQube) → build (Kaniko → Docker Hub) → deploy-production (semver tag, `when: manual`)
+- `.github/workflows/release.yml` — **çalışmıyor** (GitHub flag #4360519); repoda kalıyor ama 0 run
 
 ---
 
@@ -372,3 +391,4 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 | Tarih | Değişiklik |
 |-------|-----------|
 | 2026-05-14 | İlk versiyon: DNS (A `@` + CNAME `www` + Resend 4 TXT/MX), Resend domain doğrulama, bakım periyodikleri, acil durum komutları |
+| 2026-06-01 | §2.4 yeniden yazıldı: secret fix `kubectl patch --type=merge` (tek key ezme dersi) + SealedSecret kalıcılık (`kubeseal --raw --scope strict`) iki aşamalı runbook. §2.5 Fernet rotation step 3 patch-merge'e çevrildi. §6 GitLab CI referansları. RESEND_API_KEY canlı fix retrospektifi. |

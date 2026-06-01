@@ -14,36 +14,54 @@
 - ✅ Auto-migration: container start'ta `alembic upgrade head`
 - ✅ Healthcheck: PostgreSQL `pg_isready` → backend depends_on healthy
 
-### 1.2 CI Pipeline (Çalışıyor — 6 workflow)
-- ✅ `.github/workflows/ci-backend.yml`: lint (ruff) + unit + integration + coverage gate (%50)
-- ✅ `.github/workflows/ci-frontend.yml`: ESLint + Vitest + Next.js build
-- ✅ `.github/workflows/e2e.yml`: backend + frontend up + Playwright (Chromium) — 5 senaryo
-- ✅ `.github/workflows/security.yml` (FAZ B4): gitleaks (.gitleaks.toml allowlist) + Trivy fs (HIGH/CRITICAL fail) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + JS/TS) — haftalık cron + her PR
-- ✅ `.github/workflows/sonar.yml` (FAZ B2): backend pytest cov XML + frontend vitest LCOV → SonarCloud quality gate (`vars.ENABLE_SONAR='true'` iken aktif; bekleme döneminde skip)
-- ✅ `.github/workflows/release.yml` (FAZ B3): semver tag (`v*.*.*`) → 5 job (Sonar QG → matrix Docker buildx & GHCR push → Trivy image scan HIGH/CRITICAL → Oracle SSH `kubectl set image` + rollout → Playwright @smoke → GitHub Release notes)
+### 1.2 CI/CD Platformu — GitLab Primary, GitHub Salt-Mirror
 
-### 1.3 Yayın Pipeline ✅ TAMAMLANDI (FAZ B3)
-- ✅ Semver tag push (`v*.*.*`) → otomatik Oracle Cloud K3s deploy
-- ✅ GHCR `ghcr.io/celikada/kfinans-backend:tag` + `kfinans-frontend:tag`
-- ✅ Trivy image vulnerability scan deploy öncesi
-- ✅ kubectl set image + rollout status (360s timeout)
-- ✅ Production smoke test (Playwright @smoke etiketi)
-- ✅ GitHub Release notes otomatik
+> **Önemli:** Birincil (ve fiilen tek çalışan) CI/CD **self-hosted GitLab**'tedir (`gitlab.192.168.3.191.nip.io`). GitHub `.github/workflows/*` dosyaları repoda durur ve "active/enabled" görünür ama **0 run üretir** — `celikada` hesabı flag'li (Ticket #4360519). GitHub yalnızca **salt-mirror** (develop/main/tags) olarak kullanılır. Aşağıdaki tüm pipeline gerçeği `.gitlab-ci.yml`'dir.
 
-### 1.4 GitHub Actions Limit Durumu
-- Repo: **PUBLIC** (FAZ B5) → **Sınırsız** GitHub Actions dakikası
-- Workflow path filtresi aktif (sadece ilgili dizin değişince tetiklenir)
+### 1.2.1 GitLab CI Pipeline (Çalışıyor — 5 stage)
+`.gitlab-ci.yml` — 5 stage: `lint → test → quality → build → deploy`.
+
+- ✅ **lint** — `backend-lint` (ruff format --check + ruff check, `allow_failure` kaldırıldı 2026-05-21) + `frontend-lint` (ESLint, `allow_failure` kaldırıldı)
+- ✅ **test** — `backend-test` (Docker python:3.12 + postgres service; pytest --cov coverage.xml + junit; cobertura report artifact) + `frontend-test` (`npm run test:coverage` → lcov.info; vitest threshold %15)
+- ✅ **quality** — `sonarqube-scan`: **self-hosted SonarQube** (`http://sonar.192.168.3.191.nip.io`, `projectKey=KFinans`). **Gate BLOCKING (2026-06-01):** `-Dsonar.qualitygate.wait=true` + `allow_failure` kaldırıldı → gate kırmızıysa pipeline durur. Gate koşulları: `new_violations=0` + `new_security_hotspots_reviewed=100%` + `new_coverage>=80%`. Sadece protected branch (develop/main) + MR + tag'lerde çalışır (`SONAR_TOKEN` Protected variable).
+- ✅ **build** — `backend-build` + `frontend-build`: **Kaniko** (`gcr.io/kaniko-project/executor:v1.23.2-debug`) → **Docker Hub** (`celikada/kfinans-{backend,frontend}`). Sadece `main`, `develop` ve tag'lerde (feature/hotfix branch'lerinde build yok). Tag → ek olarak `:latest` + `:<tag>` push'lar.
+- ✅ **deploy** — `deploy-production`: `when: manual` + **sadece semver tag** (`/^v\d+\.\d+\.\d+/`). SSH → Oracle K3s `kubectl set image deployment/{backend,frontend}` + `rollout status --timeout=5m`. `environment: production` (https://kfinans.app).
+
+### 1.2.2 Manuel Deploy Tetikleme
+`deploy-production` `when: manual` olduğu için GitLab UI'dan "play" butonuyla **veya** GitLab API ile tetiklenir:
+
+```bash
+# 1) Tag'in pipeline'ındaki deploy job ID'sini bul
+curl -s --header "PRIVATE-TOKEN: $GITLAB_PAT" \
+  "http://gitlab.192.168.3.191.nip.io/api/v4/projects/<PROJECT_ID>/pipelines/<PIPELINE_ID>/jobs" \
+  | jq '.[] | select(.name=="deploy-production") | {id, status}'
+
+# 2) Manuel job'u oynat (play)
+curl -s --request POST --header "PRIVATE-TOKEN: $GITLAB_PAT" \
+  "http://gitlab.192.168.3.191.nip.io/api/v4/projects/<PROJECT_ID>/jobs/<JOB_ID>/play"
+```
+
+### 1.3 Yayın Pipeline ✅ ÇALIŞIYOR (GitLab)
+- ✅ Semver tag push (`v*.*.*`) → build (Kaniko → Docker Hub) → **manuel onaylı** deploy-production
+- ✅ Docker Hub `celikada/kfinans-backend:{tag}` + `kfinans-frontend:{tag}` (+ `:{short-sha}` + `:{ref-slug}` + tag'de `:latest`)
+- ✅ kubectl set image + rollout status (5 dk timeout)
+- ✅ Son production deploy: **`v0.1.0-rc10`** — rollout + smoke yeşil (backend `/health` ok, frontend up, security header'lar mevcut)
+- ⚠️ Container image Trivy scan + Playwright @smoke şu an GitLab pipeline'ında **otomatik değil** (GitHub release.yml'de tanımlı ama çalışmıyor). Smoke manuel/curl ile doğrulanıyor (`frontend/scripts/smoke.sh`). GitLab'a image scan + smoke job eklemesi açık TODO.
+
+### 1.4 GitHub Hesap Flag Durumu (#4360519)
+- `celikada` hesabı **hâlâ flag'li** (2026-06-01). Workflow'lar "active" + Actions "enabled" görünür ama **0 run** üretir.
+- SonarCloud OAuth bloklu → bu nedenle **self-hosted SonarQube**'a geçildi.
+- CI/CD **tamamen GitLab'da**; GitHub sadece develop/main/tags salt-mirror.
 
 ### 1.5 Eksik (Production'a Kadar)
 - ✅ Kubernetes manifestleri (`k8s/` klasörü — kustomize, tek komutla deploy) — bkz. §3
-- ✅ Production deployment otomatik (FAZ B3 — release.yml semver tag tetiklemesi)
-- ✅ Branch protection rule'ları (`main` + `develop`) — FAZ B6
-- ✅ Container image vulnerability scan (Trivy) — FAZ B3 + B4
-- ✅ Dependency scan (pip-audit + npm-audit + Dependabot) — FAZ A4 + B4
+- ✅ Production deployment (GitLab semver tag → manuel deploy-production)
+- ✅ Branch hijyeni (GitLab MR-only develop/main + GitHub mirror protected) — bkz. §6
+- ⚠️ Container image vulnerability scan (Trivy) — GitLab pipeline'ına eklenecek (GitHub workflow'da var ama çalışmıyor)
+- ⚠️ Dependency scan (pip-audit + npm-audit + Dependabot) — GitHub workflow'da var ama çalışmıyor; GitLab'a taşınacak
 - ❌ Tilt/Skaffold dev loop (Docker Compose'tan geçiş — bilinçli teknik borç)
 - ❌ Monitoring (Prometheus + Grafana) — Faz 3
 - ❌ Centralized logging (Loki veya ELK) — Faz 3
-- ⏳ SonarCloud entegrasyonu — GitHub flag (Ticket #4360519) çözülmesi bekleniyor; workflow opsiyonel
 
 ---
 
@@ -95,7 +113,24 @@ docker compose exec backend pip install slowapi
 docker compose up -d --build backend
 ```
 
-### 2.3 Bilinen Sorunlar (Cosmetic)
+### 2.3 Lokal Test Ortamı (Windows)
+
+> CI'ın birebir kopyası lokalde Docker üzerinden koşturulur. **Native Windows ile koşturmayın** — Windows Python 3.14 üzerinde `coincurve` (bip-utils bağımlılığı) C build'i patlar.
+
+```bash
+# Backend: Docker python:3.12 + postgres (CI ile aynı imaj)
+# Modül bazlı (~30 sn):
+docker compose run --rm backend pytest tests/unit/test_security.py -q
+# Full suite (mount + coverage, ~28-30 dk):
+docker compose run --rm backend pytest --cov=app --cov-report=term
+
+# Frontend vitest — npx Windows'ta bozuk, node ile doğrudan çağır:
+node node_modules/vitest/vitest.mjs run --pool=forks
+```
+
+**Ders (kayıtlı):** Backend commit öncesi `py -m ruff format --check .` + `py -m ruff check .` zorunlu (lint job `allow_failure` olmadan blocking — kırmızı pipeline = merge yok).
+
+### 2.4 Bilinen Sorunlar (Cosmetic)
 - Turbopack `/app/src` watch error'ı — proje `app/` directory yapısı kullanıyor, `src/` yok. İşlevselliği etkilemez.
 
 ---
@@ -132,7 +167,7 @@ output: "standalone"). Backend Dockerfile production target da mevcut.
 - nginx-ingress controller kurulu
 - cert-manager kurulu + ClusterIssuer (`letsencrypt-prod`) tanımlı
 - DNS: `api.kfinans.app` ve `app.kfinans.app` cluster ingress IP'sine bağlı
-- GHCR'ya push edilmiş image'lar: `ghcr.io/celikada/kfinans-backend:{sha}`, `ghcr.io/celikada/kfinans-frontend:{sha}`
+- Docker Hub'a push edilmiş image'lar: `celikada/kfinans-backend:{tag}`, `celikada/kfinans-frontend:{tag}` (GitLab Kaniko build üretir)
 
 ### 3.3 Tek Komut Deploy
 ```bash
@@ -157,112 +192,115 @@ kubectl -n kfinans rollout status deploy/frontend
 ### 3.4 Faz 3 TODO'ları (manifest seti dışında)
 HPA (HorizontalPodAutoscaler), NetworkPolicy, PodDisruptionBudget, Prometheus + Grafana, PgBouncer, `revoked_tokens` cleanup CronJob, external-secrets/SealedSecrets, `pg_dump` CronJob.
 
-### 3.5 Image Tagging Stratejisi
+### 3.5 Image Tagging Stratejisi (Docker Hub — GitLab Kaniko)
 ```
-ghcr.io/celikada/kfinans-backend:{git-sha}    # immutable, deployment için
-ghcr.io/celikada/kfinans-backend:develop      # son develop build
-ghcr.io/celikada/kfinans-backend:v1.0.0       # release tag
-ghcr.io/celikada/kfinans-backend:latest       # KULLANILMAYACAK — kafa karıştırıcı
+celikada/kfinans-backend:{short-sha}    # immutable, her build (CI_COMMIT_SHORT_SHA)
+celikada/kfinans-backend:{ref-slug}     # branch adı (develop / main)
+celikada/kfinans-backend:v1.0.0         # semver tag → deploy bunu kullanır (set image)
+celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
 ```
+> Deploy job `set image ...:$CI_COMMIT_TAG` ile **semver tag** image'ını çeker — `latest` deploy için kullanılmaz.
 
 ---
 
-## 4. CI/CD Pipeline (FAZ B sonrası — 6 workflow)
+## 4. CI/CD Pipeline (GitLab — 5 stage)
 
 ```
                           ┌──────────────────────────┐
-                          │  develop branch (push)   │
+                          │  GitLab push / MR / tag  │
+                          │  (gitlab.192.168.3.191)  │
                           └─────────────┬────────────┘
                                         │
-        ┌───────────────────────────────┼───────────────────────────────┐
-        │                               │                               │
-        ▼                               ▼                               ▼
-┌──────────────┐               ┌──────────────┐                ┌──────────────┐
-│ ci-backend   │               │ ci-frontend  │                │ e2e          │
-│ ruff+pytest  │               │ eslint+vitest│                │ Playwright   │
-│ +cov gate %50│               │ +next build  │                │              │
-└──────────────┘               └──────────────┘                └──────────────┘
-        │                               │                               │
-        ▼                               ▼                               ▼
         ┌───────────────────────────────────────────────────────────────┐
-        │  security.yml                                                 │
-        │  gitleaks (allowlist) | Trivy fs (HIGH/CRITICAL) | pip-audit  │
-        │  npm-audit (high)     | CodeQL (Python + JS/TS)               │
+        │  STAGE 1: lint                                                │
+        │  backend-lint (ruff fmt+check)  |  frontend-lint (eslint)     │
+        │  allow_failure KALDIRILDI (2026-05-21) — kırmızı = durur      │
         └───────────────────────────────────────────────────────────────┘
-        │
-        ▼
-        ┌───────────────────────────────────────────────────────────────┐
-        │  sonar.yml (vars.ENABLE_SONAR='true' iken)                    │
-        │  backend pytest cov XML + frontend vitest LCOV → SonarCloud   │
-        │  quality gate (wait=true)                                     │
-        └───────────────────────────────────────────────────────────────┘
-
-
-                          ┌──────────────────────────┐
-                          │  main: tag push v*.*.*   │
-                          └─────────────┬────────────┘
                                         │
-                                        ▼  release.yml
         ┌───────────────────────────────────────────────────────────────┐
-        │  Job 0: SonarCloud Quality Gate (opsiyonel)                   │
-        ├───────────────────────────────────────────────────────────────┤
-        │  Job 1: Build & Push (matrix backend + frontend)              │
-        │         docker buildx → ghcr.io/celikada/kfinans-{svc}:tag    │
-        ├───────────────────────────────────────────────────────────────┤
-        │  Job 2: Trivy Image Scan (HIGH/CRITICAL → fail)               │
-        ├───────────────────────────────────────────────────────────────┤
-        │  Job 3: Oracle K3s Deploy                                     │
-        │         SSH → kubectl apply -k k8s/ → set image → rollout     │
-        ├───────────────────────────────────────────────────────────────┤
-        │  Job 4: Production Smoke Test (curl gate + Playwright @smoke) │
-        │         DEPLOY-001: Curl gate Playwright'tan ONCE (5sn):      │
-        │           1. frontend HTTPS up + cert validity                 │
-        │           2. /health JSON {status:ok}                          │
-        │           3. /auth/login bogus -> 401 (DB chain dogru)         │
-        │           4. HSTS + X-Frame + CSP header'lari mevcut          │
-        │         Curl fail ise Playwright bile calismaz.                │
-        ├───────────────────────────────────────────────────────────────┤
-        │  Job 5: GitHub Release (changelog otomatik)                   │
+        │  STAGE 2: test                                                │
+        │  backend-test  (python:3.12 + postgres service, pytest --cov  │
+        │                 → coverage.xml cobertura + junit)             │
+        │  frontend-test (npm run test:coverage → lcov.info)            │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
+        ┌───────────────────────────────────────────────────────────────┐
+        │  STAGE 3: quality  →  self-hosted SonarQube                   │
+        │  sonar.host=sonar.192.168.3.191  projectKey=KFinans           │
+        │  qualitygate.wait=true + allow_failure KALDIRILDI (BLOCKING)  │
+        │  Gate: new_violations=0 + hotspots_reviewed=100%              │
+        │        + new_coverage>=80%   ← kırmızıysa pipeline DURUR       │
+        │  Tetik: protected branch (develop/main) + MR + tag            │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
+        ┌───────────────────────────────────────────────────────────────┐
+        │  STAGE 4: build  →  Kaniko → Docker Hub                       │
+        │  backend-build + frontend-build                               │
+        │  celikada/kfinans-{svc}:{short-sha,ref-slug}                  │
+        │  tag'de ek: :{tag} + :latest                                  │
+        │  Sadece main / develop / tag (feature branch'te build yok)    │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
+                          ┌─────────────┴────────────┐
+                          │  semver tag (v*.*.*)?    │
+                          └─────────────┬────────────┘
+                                        │ evet
+        ┌───────────────────────────────────────────────────────────────┐
+        │  STAGE 5: deploy-production   (when: manual — onay gerekir)    │
+        │  SSH → Oracle K3s                                             │
+        │    kubectl set image deployment/{backend,frontend}=:{tag}     │
+        │    rollout status --timeout=5m (her ikisi)                    │
+        │  ⚠ set image YALNIZCA — configmap/secret APPLY ETMEZ          │
         └───────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
                           ┌──────────────────────────┐
                           │ https://kfinans.app      │
                           │ (Oracle Cloud K3s)       │
+                          │ son deploy: v0.1.0-rc10  │
                           └──────────────────────────┘
 ```
 
-### 4.1 Workflow listesi
-| Workflow | Tetikleyici | Süre | Status check name'leri (branch protection için) |
-|----------|-------------|------|------------------------------------------------|
-| `ci-backend.yml` | develop+main push, PR | ~5 dk | `Lint (ruff)`, `Unit testler`, `Integration testler (real PostgreSQL)`, `Coverage gate` |
-| `ci-frontend.yml` | develop+main push, PR | ~3 dk | `Lint`, `Unit (vitest)`, `Build` |
-| `e2e.yml` | develop+main push, PR | ~8 dk | `E2E (Playwright)` |
-| `security.yml` | develop+main push, PR, weekly cron | ~10 dk | `Gitleaks — secret tarama`, `Trivy — filesystem (deps + IaC)`, `pip-audit — Python deps`, `npm-audit — Node deps`, `CodeQL — python`, `CodeQL — javascript-typescript` |
-| `sonar.yml` | develop+main push, PR | ~6 dk | `Backend coverage (pytest + cobertura XML)`, `Frontend coverage (vitest + LCOV)`, `SonarCloud analiz + quality gate` |
-| `release.yml` | Tag `v*.*.*` push | ~15 dk | (release-only, branch protection check değil) |
+> **Kritik ders (DevOps):** `deploy-production` yalnızca `kubectl set image` yapar — ConfigMap/Secret/manifest **apply ETMEZ**. Secret veya configmap değişiklikleri ayrıca uygulanmalı + SealedSecret güncellenmeli; aksi halde GitOps reconcile eski değeri geri getirir. Bkz. operations-playbook.md §4.4 (RESEND secret fix runbook'u).
 
-### 4.2 Branch Protection (FAZ B6)
-**`main`:**
-- PR şart, lineer history, force-push kapalı, branch silme kapalı
-- Conversation resolution zorunlu
-- Review opsiyonel (count=0 — tek dev için; ekip büyüyünce 1)
-- Status check'ler **manuel UI'dan eklenir** (workflow'lar ilk başarılı run sonrası görünür olur)
+### 4.1 GitLab CI Job Listesi
+| Job | Stage | Tetikleyici | Not |
+|-----|-------|-------------|-----|
+| `backend-lint` | lint | push, MR, tag | ruff format --check + ruff check; blocking |
+| `frontend-lint` | lint | push, MR, tag | ESLint; blocking |
+| `backend-test` | test | push, MR, tag | Docker python:3.12 + postgres; coverage.xml + junit artifact |
+| `frontend-test` | test | push, MR, tag | vitest coverage → lcov.info; threshold %15 |
+| `sonarqube-scan` | quality | develop/main + MR + tag | **BLOCKING** quality gate (wait=true) |
+| `backend-build` / `frontend-build` | build | main, develop, tag | Kaniko → Docker Hub |
+| `deploy-production` | deploy | semver tag (`/^v\d+\.\d+\.\d+/`) | **`when: manual`** — UI play veya API |
 
-**`develop`:**
-- Doğrudan push'a izin (lokal akış için)
-- Force-push kapalı, branch silme kapalı
+### 4.2 Coverage Ölçüm Fix (2026-06-01)
+`backend/pyproject.toml [tool.coverage.run]`'a `concurrency = ["greenlet", "thread"]` eklendi. Async FastAPI handler'ları greenlet/thread içinde çalıştığı için coverage.py varsayılan ölçümde bunları **saymıyordu** → `new_coverage` yapay düşüktü. Fix sonrası CI `coverage.xml` doğru, SonarQube `new_coverage` **%48 → %96**. Frontend vitest LCOV de gate'e dahil (iki dilin coverage'ı birleşik değerlendiriliyor).
 
-### 4.3 GitHub Repo Ayarları
-- Default branch: `develop`
-- Sadece **squash merge** (lineer history)
-- Merge sonrası branch otomatik silme
-- Public repo (Apache-2.0 LICENSE otomatik tanındı)
+### 4.3 Branch Hijyeni (GitLab Primary + GitHub Mirror)
+**GitLab (primary):**
+- `develop` / `main` push = **No one** → sadece MR ile merge
+- `release/*` + `hotfix/*` = maintainer push
+- `remove_source_branch_after_merge = true` (merge'te source branch auto-delete)
+- Feature branch'ler **SADECE GitLab**'a push edilir
 
-### 4.4 Eklenecek (Faz 3)
-- [ ] Slack/Discord deploy bildirimi (release sonrası)
-- [ ] Image signing (cosign) + sigstore attestations
-- [ ] Coverage trend (Codecov SaaS — Sonar zaten gösteriyor, opsiyonel)
+**GitHub (salt-mirror — develop/main/tags):**
+- `develop` + `main` **protected** (force-push + delete engelli)
+- `enforce_admins = false` → mirror FF sync çalışabilir (mirror push admin yetkisiyle FF yapar)
+- ⚠️ **Orphan branch riski:** GitLab merge'te source branch'i siler ama bu silme **GitHub mirror'a yansımaz** → yetim feature branch birikir. Periyodik temizlik gerekir (bu oturumda 10 yetim branch temizlendi).
+
+### 4.4 Repo Ayarları
+- Default branch: `develop` (her iki platformda)
+- Squash merge (lineer history)
+- GitHub Actions workflow'ları repoda durur ama **flag nedeniyle 0 run** — CI tamamen GitLab'da
+
+### 4.5 Eklenecek (Faz 3)
+- [ ] GitLab pipeline'ına container image Trivy scan job (build sonrası, deploy öncesi gate)
+- [ ] GitLab pipeline'ına Playwright @smoke job (deploy sonrası)
+- [ ] gitleaks + pip-audit + npm-audit GitLab'a taşı (GitHub workflow'da var ama çalışmıyor)
+- [ ] Slack/Discord deploy bildirimi
+- [ ] Image signing (cosign)
+- [ ] Orphan GitHub mirror branch otomatik temizlik (cron)
 
 ---
 
@@ -440,22 +478,23 @@ develop       ← aktif geliştirme birleştirme noktası (✅ mevcut)
 └── release/{ver}     → develop'tan dallanır, main + develop'a merge
 ```
 
-### 6.2 PR Kuralları (✅ Aktif)
-- `main` korumalı: doğrudan push yasak
-- Tüm merge'ler PR ile (en az 1 approval)
-- CI yeşil olmadan merge yok
+### 6.2 MR Kuralları (✅ Aktif — GitLab primary)
+- `develop` / `main` korumalı: GitLab'da push = No one → sadece **MR (Merge Request)** ile
+- CI yeşil + **SonarQube gate yeşil** olmadan merge yok (blocking)
 - Commit mesajları Türkçe, imperative: "Kredi sistemi ekle"
-- Feature branch ömrü: merge sonrası silinir
+- Feature branch ömrü: merge sonrası GitLab otomatik siler (`remove_source_branch_after_merge`)
+- Feature branch'ler sadece GitLab'a push edilir (GitHub'a değil)
 
 ### 6.3 Tipik Akış
 ```bash
-git checkout develop && git pull
+git checkout develop && git pull gitlab develop
 git checkout -b feature/yeni-ozellik
-# kodla, test et
+# kodla, test et — commit öncesi: py -m ruff format --check . && py -m ruff check .
 git commit -m "Açıklama: ne ve neden"
-git push origin feature/yeni-ozellik
-# GitHub'da PR aç
+git push gitlab feature/yeni-ozellik    # SADECE gitlab remote'a
+# GitLab'da MR aç → develop'a
 ```
+> `develop`/`main` GitHub mirror'ına push her zaman (her push'ta GitHub'a da gönderilir).
 
 ### 6.4 Release Akışı
 ```bash
