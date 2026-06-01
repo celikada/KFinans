@@ -17,6 +17,8 @@ KFinans, kişisel finansal verileri (portföy, exchange API key, blockchain cüz
 
 Production deploy yalnızca `main` üzerinde tag'li release'lerden yapılır. Açık tespit edildiğinde `main`'e patch düşer ve yeni bir patch release tag'i (`v1.0.x`) yayınlanır.
 
+> **Repo notu:** Kod tabanı self-hosted **GitLab** (primary) üzerinde tutulur; GitHub bir mirror'dır. `develop` ve `main` her iki platformda da korumalıdır (force-push + branch silme engelli; GitLab'da push=No one → yalnızca MR ile).
+
 ### Zafiyet Bildirimi
 
 **Lütfen GÜVENLİK AÇIKLARINI KAMU GitHub Issue'su olarak AÇMAYIN.**
@@ -60,6 +62,23 @@ Bildiriminizde lütfen şu bilgileri verin:
 - Sosyal mühendislik / phishing senaryoları
 - Fiziksel güvenlik
 - Outdated browser zafiyetleri
+
+### Otomatik Güvenlik Gate'leri
+
+Her değişiklik CI pipeline'ında (GitLab primary; GitHub Actions mirror'da hesap flag nedeniyle pasif) şu kontrollerden geçer:
+
+| Gate | Araç | Davranış |
+|------|------|----------|
+| Secret tarama | gitleaks (`.gitleaks.toml` allowlist'li) | Gerçek secret → fail. Allowlist yalnızca kanıtlanmış zararsız test/örnek değerleri ve SealedSecrets ciphertext'ini kapsar |
+| SAST | CodeQL (Python + TS) | security-and-quality query suite |
+| Kod kalitesi + güvenlik | **SonarQube quality gate (blocking)** | Yeni kodda bug/vulnerability/review edilmemiş security hotspot → fail. `new_security_hotspots_reviewed=%100` zorunlu |
+| Bağımlılık (Python) | pip-audit (osv, strict) | HIGH+ → fail |
+| Bağımlılık (Node) | npm audit (`--audit-level=high`) | HIGH+ → fail |
+| Dosya sistemi + IaC | Trivy fs | HIGH/CRITICAL → fail |
+| Container image | Trivy image (release pipeline) | HIGH/CRITICAL → fail (deploy öncesi) |
+| Bağımlılık güncellemeleri | Dependabot (haftalık) | pip + npm + actions + docker |
+
+Secret yönetimi production'da **SealedSecrets (bitnami)** ile GitOps-safe yürütülür: `k8s/sealed-secrets.yaml` içindeki `encryptedData` asimetrik şifrelidir ve yalnızca cluster private key'i ile çözülür.
 
 ### Ödüllendirme
 
@@ -113,10 +132,14 @@ After 90 days (responsible disclosure window) you may publicly disclose. We can 
 In-scope: backend, frontend, k8s manifests, CI/CD, `https://kfinans.app`.
 Out-of-scope: third-party deps, theoretical DoS, unverified scanner output, social engineering, physical security, outdated browsers.
 
+### Automated Gates
+
+Every change passes blocking CI gates (GitLab primary): gitleaks (secret scan), CodeQL SAST, **SonarQube quality gate** (100% new-hotspot review required), pip-audit, npm audit, and Trivy (fs + image). Production secrets are managed GitOps-safely via SealedSecrets (asymmetric ciphertext, committed to the repo).
+
 ### Rewards
 
 No formal bug bounty yet. We offer public credit in `SECURITY-HALL-OF-FAME.md` and may send a token gift for critical findings.
 
 ---
 
-**Last updated:** 2026-05-06
+**Last updated:** 2026-06-01

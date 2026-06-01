@@ -75,7 +75,7 @@ KFinans/
 │   │   ├── schemas/     # Pydantic
 │   │   └── scheduler.py # APScheduler haftalık snapshot
 │   ├── alembic/         # DB migrations
-│   └── tests/           # 175+ test (pytest + respx mocks)
+│   └── tests/           # ~1180 test (pytest + respx mocks), coverage %95+
 ├── frontend/            # Next.js — bkz: frontend/README.md
 │   ├── app/
 │   │   ├── dashboard/   # 11 dashboard kartı + alt sayfalar
@@ -111,7 +111,7 @@ cd backend
 pip install -e ".[dev]"
 alembic upgrade head
 uvicorn app.main:app --reload
-pytest                      # 175+ test
+pytest                      # ~1180 test (coverage %95+)
 ruff check . && ruff format .
 
 # Frontend

@@ -18,7 +18,7 @@
 | Bileşen | Yöntem | Lokasyon | Encryption | Retention |
 |---------|--------|----------|------------|-----------|
 | **Postgres logical** | `pg_dump | gzip | age` | PVC `postgres-backups` (Oracle K3s local-path) | age asymmetric (private key offline) | 30 gün |
-| **K8s manifest** | Git (`k8s/`) | GitHub + GitLab | — | sınırsız |
+| **K8s manifest + SealedSecret** | Git (`k8s/` + `k8s/sealed-secrets.yaml`) | GitLab (primary) + GitHub (mirror) | sealed-secrets ciphertext public-key | sınırsız |
 | **SealedSecret master key** | kubectl get secret | Lokal Temp + Bitwarden + USB | TLS keypair | sınırsız (offline) |
 | **Off-site backup sync** | **YOK** (master audit P0) | — | — | — |
 
@@ -84,10 +84,13 @@ curl -sk https://kfinans.app/health
 Şu an mümkün DEĞİL. Sprint 1'de rclone + Oracle Object Storage tamamlanınca:
 
 1. Yeni Oracle VM provision
-2. K3s + Traefik + cert-manager kurulum (infrastructure-runbook §3)
-3. Object Storage'dan backup indir + age decrypt + restore
-4. DNS A kaydı yeni VM IP'sine güncelle
-5. Verify
+2. K3s + Traefik + cert-manager + sealed-secrets controller kurulum (infrastructure-runbook §3)
+3. **Cluster state'i Git'ten apply et:** `kubectl apply -k k8s/` — namespace, configmap, **sealed-secrets.yaml**, postgres, ingress vb. hepsi repodadır. (Not: GitLab `deploy-production` job'u sadece `set image` yapar, ilk bootstrap'i değil — full cluster'ı **manuel `apply -k`** ile kur.)
+4. SealedSecret controller master key'i Bitwarden/USB'den restore et → `sealed-secrets.yaml` decrypt olur (bkz. §3.5)
+5. Object Storage'dan backup indir + age decrypt + restore (§3.3 adımları)
+6. Doğru image tag'ini canlıya al: `kubectl set image ...=:vX.Y.Z` (son: `v0.1.0-rc10`)
+7. DNS A kaydı yeni VM IP'sine güncelle (infrastructure-runbook §1.4)
+8. Verify (HEALTH 200 + login + DB count)
 
 ### 3.5 SealedSecret Master Key Loss
 

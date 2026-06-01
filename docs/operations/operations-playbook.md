@@ -3,13 +3,16 @@
 > **Amaç:** Günlük operasyon, on-call, alerting ve troubleshooting referansı.
 > **İlgili:** [`infrastructure-runbook.md`](infrastructure-runbook.md) (kurulum), [`disaster-recovery.md`](disaster-recovery.md) (DR), [`../audits/2026-05-22-master-audit.md`](../audits/2026-05-22-master-audit.md) (bekleyen iyileştirmeler)
 
-**Durum:** Taslak — Sprint 2 sonunda 1.0 hedefli (Faz I sonrası).
+**Durum:** Aktif — `v0.1.0-rc10` Oracle K3s'e deploy edildi (rollout + smoke yeşil). Alerting (§3) hâlâ TODO.
+**Son güncelleme:** 2026-06-01 (GitLab CI/SonarQube gerçeği + §4.4 secret fix runbook)
 
 ## 1. Üretim Mimarisi Hızlı Bakış
 
 - **Domain:** `kfinans.app` (Namecheap, `.app` TLD HSTS preload)
 - **Cluster:** Oracle Cloud Always Free K3s `141.144.243.54` (single-node)
-- **CI/CD:** GitLab self-hosted `gitlab.192.168.3.191.nip.io` (Kaniko build → Docker Hub `celikada/kfinans-{backend,frontend}`)
+- **CI/CD:** GitLab self-hosted `gitlab.192.168.3.191.nip.io` — 5 stage (lint→test→quality→build→deploy). Kaniko build → Docker Hub `celikada/kfinans-{backend,frontend}`. Deploy `when: manual` + semver tag. Son: **v0.1.0-rc10**.
+- **Quality gate:** self-hosted SonarQube `sonar.192.168.3.191.nip.io` (BLOCKING — `qualitygate.wait=true`)
+- **GitHub:** salt-mirror (develop/main/tags); Actions flag #4360519 nedeniyle 0 run
 - **Monitoring:** Sentry + OTel opt-in (DSN/endpoint env)
 
 ## 2. Günlük Kontroller (5 dakika)
@@ -61,6 +64,26 @@ P99 > 1s ise: external API timeout, DB query slow, pool tükendi.
 1. `/auth/resend-verification` denenmiş mi? (login sayfasındaki amber banner)
 2. Hesap kilitli mi? (SEC-002: 10 başarısız → 15 dk lockout, 423 status)
 3. MFA aktif mi? (mfa_required: true → totp doğrulama gerek)
+
+### 4.4 Deploy sonrası özellik bozuk — secret değeri yanlış (RESEND vb.)
+
+> Belirti: deploy yeşil ama bir entegrasyon çalışmıyor (örn. email gitmiyor — `403 verified addresses` / Resend log boş). Tipik kök neden: canlı secret değeri hatalı **ve** `deploy-production` job'u `set image` yapar, **secret apply etmez** → eski/yanlış değer canlıda kalır.
+
+**İki aşamalı düzeltme (RESEND_API_KEY örneği — yeniden kullanılabilir):**
+
+```bash
+# A) Canlı patch — SADECE ilgili key (kubectl create|apply tüm secret'ı ezer!)
+ssh oracle-portfoy "sudo kubectl patch secret kfinans-secrets -n kfinans --type=merge \
+  -p '{\"stringData\":{\"RESEND_API_KEY\":\"re_DOGRU_KEY\"}}'"
+ssh oracle-portfoy "sudo kubectl rollout restart deploy/backend -n kfinans"
+
+# B) Kalıcılık — kubeseal --raw --scope strict ile mühürle, k8s/sealed-secrets.yaml'a yaz, MR aç
+#    (aksi halde sonraki apply -k / GitOps reconcile eski değeri geri getirir)
+```
+
+Tam prosedür + neden açıklaması: [`infrastructure-runbook.md`](infrastructure-runbook.md) §2.4.
+
+**Genel kural:** `deploy-production` yalnızca image değiştirir. ConfigMap/Secret/NetworkPolicy/Ingress değişiklikleri **ayrıca** `kubectl apply -k k8s/` (veya hedefli patch) ile uygulanmalı; SealedSecret repo ile senkron tutulmalı.
 
 ## 5. Periyodik Bakım
 

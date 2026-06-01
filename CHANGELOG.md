@@ -8,6 +8,56 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ## [Unreleased] — develop branch
 
+### Kod Kalitesi + CI Sertleştirme (2026-06-01)
+
+SonarQube quality gate'i gerçek BLOCKING kapıya çevirme oturumu; coverage
+ölçüm kök nedeni düzeltildi, ~800 test eklendi, bir production bug giderildi
+ve `v0.1.0-rc10` Oracle K3s'e deploy edildi.
+
+#### Changed — CI/CD + kalite
+
+- **SonarQube gate artık BLOCKING:** `.gitlab-ci.yml` `sonarqube-scan` job'ında
+  `-Dsonar.qualitygate.wait=true` + `allow_failure` kaldırıldı. Gate kırmızı
+  olursa scanner exit≠0 → pipeline durur. Self-hosted host
+  `http://sonar.192.168.3.191.nip.io`, **projectKey=`KFinans`** (SonarCloud.io
+  DEĞİL; `sonar-project.properties` değerleri CLI ile override edilir). Gate 4/4
+  yeşil: `new_violations=0`, `new_security_hotspots_reviewed=100%`,
+  `new_coverage≈%96.3`, duplications OK.
+- **Coverage greenlet config (kök neden fix):** `pyproject.toml
+  [tool.coverage.run] concurrency = ["greenlet", "thread"]` eklendi. Async
+  FastAPI handler'ları SQLAlchemy async (greenlet) bağlamında çalıştığı için
+  coverage.py API katmanını "çalışmadı" sayıyordu → ölçülen kapsam yapay
+  %57.89'du. Fix sonrası gerçek kapsam görünür oldu.
+- **26 SonarQube violation kapatıldı:** 21 refactor + 5 gerekçeli `NOSONAR`.
+- **Branch hijyeni:** GitHub (`celikada/KFinans`) salt-okunur mirror — yalnızca
+  `develop`/`main`/tag push edilir; feature branch'ler sadece GitLab'a gider.
+  GitHub'da `develop`+`main` protected.
+
+#### Added — Test kapsamı
+
+- **~800 yeni test:** blockchain + exchange servisleri, snapshot/aggregator,
+  API endpoint katmanı ve frontend (vitest — `lib/api` %100, login/security
+  sayfaları %98-100). Backend coverage **%57.89 → %95.83**. Mevcut sayılar:
+  ~1180 backend pass + 202 frontend pass.
+
+#### Fixed — Hata düzeltmeleri
+
+- **Wallets export 500 (production bug):** `GET /portfolio/wallets/export`
+  Content-Disposition header'ındaki `ı` (U+0131) karakteri latin-1 encode
+  edilemiyordu (`UnicodeEncodeError` → 500). Dosya adı ASCII'ye çekildi.
+- **2 flaky test (tarih/timezone bağımlı):** income realize testleri ay dönümü
+  ve UTC/Istanbul kayması nedeniyle bazı tarihlerde kırılıyordu →
+  `Europe/Istanbul` tz + dinamik dönem hesabı ile deterministik hale getirildi.
+
+#### Deploy
+
+- **`v0.1.0-rc10` Oracle K3s'e deploy edildi** (GitLab CI deploy stage, elle).
+  Smoke testler yeşil, production sağlıklı.
+
+> **Not:** GitHub flag #4360519 hâlâ aktif (2026-06-01 doğrulandı: workflow
+> görünür + Actions enabled ama 0 run). Kalıcı mitigasyon: GitLab-primary CI +
+> self-hosted SonarQube.
+
 ### FAZ H — Production Öncesi Sertleştirme (2026-05-06 → 2026-05-10)
 
 FAZ G audit'i 240 bulgu raporladı; FAZ H'de 50+ issue kapatıldı (17 critical
