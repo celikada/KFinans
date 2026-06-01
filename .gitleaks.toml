@@ -14,6 +14,12 @@ description = "KFinans test fixture'ları — gerçek secret değil"
 regexTarget = "match"
 regexes = [
     '''guclu-sifre-123''',
+    '''wrong-pass-123''',                  # smoke testi bogus login şifresi (smoke.sh + release.yml)
+    '''Sifre123!''',                       # backend test fixture şifresi
+    # CI-only test key'leri (.gitlab-ci.yml — prod secret'lar CI Variables'tan gelir, bunlar throwaway):
+    '''c619440c6541a08596063b42b136897e4465b01c1cf10b54e9f5be85ef99946f''',  # test SECRET_KEY
+    '''GIFo3aVen_zgPcKtJaF7ehO1nN7CucqXvZ3X5nU4mO8=''',                       # test FERNET_KEY
+    '''curl -u "\$[A-Z_]+:?"''',           # dokümandaki curl -u "$TOKEN:" env-var placeholder (gerçek değer değil)
 ]
 
 # Test dosyalarındaki sahte örnek değerler için path bazlı genişletilebilir hariç tutma:
@@ -23,5 +29,6 @@ paths = [
     '''(?i)backend/\.env\.example''',
     '''(?i)\.env\.prod\.example''',
     '''(?i)k8s/secrets\.example\.yaml''',
+    '''(?i)k8s/sealed-secrets\.yaml''',    # SealedSecrets: asimetrik şifreli ciphertext — commit'lenmek İÇİN var (sadece cluster private key açar)
     '''(?i)\.credentials\.local\.md''',  # gitignore'da ama yine de allowlist
 ]

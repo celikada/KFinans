@@ -43,3 +43,6 @@ k8s/secrets.yaml
 # Lokal credentials referansı (dev .env yedekleri + test fixture'lar) — ASLA commit edilmez
 .credentials.local.md
 .credentials.local.*
+
+# Claude Code lokal ayarlar (kişisel — SSH izin kuralı vb.)
+.claude/settings.local.json
