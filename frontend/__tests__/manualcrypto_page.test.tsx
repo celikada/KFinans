@@ -209,7 +209,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
   it("zorunlu alanlar bos → createManualCrypto cagrilmaz, requiredFields hatasi", async () => {
     const user = userEvent.setup();
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.add" }));
     expect(createManualCrypto).not.toHaveBeenCalled();
@@ -222,7 +222,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
     const user = userEvent.setup();
     createManualCrypto.mockResolvedValue({ id: 9 });
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     await user.type(
       screen.getByPlaceholderText("content.manualCrypto.symbolPlaceholder"),
@@ -270,7 +270,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
     const user = userEvent.setup();
     createManualCrypto.mockRejectedValue(new Error("kayit basarisiz"));
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     await user.type(
       screen.getByPlaceholderText("content.manualCrypto.symbolPlaceholder"),
@@ -289,7 +289,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
     const user = userEvent.setup();
     createManualCrypto.mockResolvedValue({ id: 1 });
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     const select = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
     await user.selectOptions(select, "other");
@@ -301,7 +301,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
 describe("ManualCryptoPage — manual fiyat modu", () => {
   async function selectManual(user: ReturnType<typeof userEvent.setup>) {
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
     await user.click(screen.getByText("content.manualCrypto.sourceManual"));
   }
 
@@ -379,7 +379,7 @@ describe("ManualCryptoPage — linked mod + autocomplete", () => {
 
   async function selectLinked(user: ReturnType<typeof userEvent.setup>) {
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
     await user.click(screen.getByText("content.manualCrypto.sourceLinked"));
   }
 
@@ -443,7 +443,7 @@ describe("ManualCryptoPage — linked mod + autocomplete", () => {
       "content.manualCrypto.linkedSearchPlaceholder",
     );
     await user.type(input, "e");
-    await screen.findByText("Ethereum");
+    expect(await screen.findByText("Ethereum")).toBeInTheDocument();
     expect(searchAssetCatalog).toHaveBeenCalledTimes(1);
 
     await user.type(input, "x");
@@ -539,7 +539,7 @@ describe("ManualCryptoPage — silme", () => {
     confirmResult.value = true;
     deleteManualCrypto.mockResolvedValue(undefined);
     render(<ManualCryptoPage />);
-    await screen.findByText("BTC");
+    expect(await screen.findByText("BTC")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", {
@@ -554,7 +554,7 @@ describe("ManualCryptoPage — silme", () => {
     const user = userEvent.setup();
     confirmResult.value = false;
     render(<ManualCryptoPage />);
-    await screen.findByText("BTC");
+    expect(await screen.findByText("BTC")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.manualCrypto.deleteAria" }),
@@ -568,7 +568,7 @@ describe("ManualCryptoPage — silme", () => {
     confirmResult.value = true;
     deleteManualCrypto.mockRejectedValue(new Error("silme hatasi"));
     render(<ManualCryptoPage />);
-    await screen.findByText("BTC");
+    expect(await screen.findByText("BTC")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.manualCrypto.deleteAria" }),
@@ -583,7 +583,7 @@ describe("ManualCryptoPage — export / import", () => {
     const user = userEvent.setup();
     exportManualCrypto.mockResolvedValue(undefined);
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
     await waitFor(() => expect(exportManualCrypto).toHaveBeenCalledTimes(1));
@@ -593,7 +593,7 @@ describe("ManualCryptoPage — export / import", () => {
     const user = userEvent.setup();
     exportManualCrypto.mockRejectedValue(new Error("export hatasi"));
     render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
     expect(await screen.findByText("export hatasi")).toBeInTheDocument();
@@ -602,7 +602,7 @@ describe("ManualCryptoPage — export / import", () => {
   it("import basarili (hatasiz) → liste yenilenir", async () => {
     importManualCrypto.mockResolvedValue({ imported: 3, errors: [] });
     const { container } = render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     const fileInput = container.querySelector(
       'input[type="file"]',
@@ -627,7 +627,7 @@ describe("ManualCryptoPage — export / import", () => {
       errors: ["satir 2 hata", "satir 5 hata"],
     });
     const { container } = render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     const fileInput = container.querySelector(
       'input[type="file"]',
@@ -645,7 +645,7 @@ describe("ManualCryptoPage — export / import", () => {
   it("import hatasi → importFailed/hata mesaji", async () => {
     importManualCrypto.mockRejectedValue(new Error("import patladi"));
     const { container } = render(<ManualCryptoPage />);
-    await screen.findByText("empty.noManualCrypto");
+    expect(await screen.findByText("empty.noManualCrypto")).toBeInTheDocument();
 
     const fileInput = container.querySelector(
       'input[type="file"]',

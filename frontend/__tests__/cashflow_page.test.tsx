@@ -181,7 +181,7 @@ describe("CashFlowPage — yil secici", () => {
 describe("CashFlowPage — rapor indirme", () => {
   it("Excel butonu → downloadReport dogru xlsx path ile cagrilir", async () => {
     render(<CashFlowPage />);
-    await screen.findByText("content.cashFlow.totalIncome");
+    expect(await screen.findByText("content.cashFlow.totalIncome")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
@@ -193,7 +193,7 @@ describe("CashFlowPage — rapor indirme", () => {
 
   it("PDF butonu → downloadReport dogru pdf path ile cagrilir", async () => {
     render(<CashFlowPage />);
-    await screen.findByText("content.cashFlow.totalIncome");
+    expect(await screen.findByText("content.cashFlow.totalIncome")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "content.cashFlow.pdfDownload" }));
@@ -228,7 +228,7 @@ describe("CashFlowPage — hata + bos durum", () => {
   it("data null iken (hata) grafik ve tablo cizilmez", async () => {
     getCashFlow.mockRejectedValue(new Error("bir sorun"));
     render(<CashFlowPage />);
-    await screen.findByText("bir sorun");
+    expect(await screen.findByText("bir sorun")).toBeInTheDocument();
     expect(screen.queryByTestId("composed-chart")).not.toBeInTheDocument();
     expect(screen.queryByText("table.month")).not.toBeInTheDocument();
     // Metrik kartlari yine cizilir (data yoksa 0 gosterir).

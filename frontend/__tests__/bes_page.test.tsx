@@ -110,7 +110,7 @@ describe("BesPage — yukleme + ilk render", () => {
 
   it("geri butonu /dashboard'a push eder", async () => {
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "common.back" }));
     expect(pushMock).toHaveBeenCalledWith("/dashboard");
@@ -120,7 +120,7 @@ describe("BesPage — yukleme + ilk render", () => {
 describe("BesPage — satir CRUD + toplam hesabi", () => {
   it("plan ekle → ikinci satir gelir, sil → tekrar tek satir", async () => {
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     // Tek satirda sil butonu yok (holdings.length === 1).
@@ -138,7 +138,7 @@ describe("BesPage — satir CRUD + toplam hesabi", () => {
 
   it("alan girisi satir toplamini ve grand total'i gunceller", async () => {
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Test Plan");
@@ -156,7 +156,7 @@ describe("BesPage — satir CRUD + toplam hesabi", () => {
 describe("BesPage — kaydetme akisi", () => {
   it("gecerli kayit → saveBesHoldings cagrilir + saved label kisa sure gorunur", async () => {
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan A");
@@ -177,7 +177,7 @@ describe("BesPage — kaydetme akisi", () => {
   it("save 401 → login'e yonlendirir, hata gosterilmez", async () => {
     saveBesHoldings.mockRejectedValue(new Error("got 401 here"));
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan B");
@@ -190,7 +190,7 @@ describe("BesPage — kaydetme akisi", () => {
   it("save 401 disi hata → hata mesaji gosterilir", async () => {
     saveBesHoldings.mockRejectedValue(new Error("kaydetme reddedildi"));
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan C");
@@ -203,7 +203,7 @@ describe("BesPage — kaydetme akisi", () => {
   it("save Error olmayan deger firlatirsa fallback ceviri mesaji", async () => {
     saveBesHoldings.mockRejectedValue("string hata");
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     fireEvent.change(screen.getAllByPlaceholderText("0,00")[0], { target: { value: "5" } });
@@ -217,7 +217,7 @@ describe("BesPage — kaydetme akisi", () => {
 describe("BesPage — Excel export/import", () => {
   it("export → exportBesHoldings cagrilir", async () => {
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
@@ -227,7 +227,7 @@ describe("BesPage — Excel export/import", () => {
   it("export hata → hata mesaji gosterilir", async () => {
     exportBesHoldings.mockRejectedValue(new Error("export patladi"));
     render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
@@ -237,7 +237,7 @@ describe("BesPage — Excel export/import", () => {
   it("import → importBesHoldings cagrilir + holdings doldurulur", async () => {
     importBesHoldings.mockResolvedValue(SAMPLE);
     const { container } = render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["x"], "bes.xlsx", { type: "application/vnd.ms-excel" });
@@ -250,7 +250,7 @@ describe("BesPage — Excel export/import", () => {
 
   it("import dosya secilmezse hicbir sey yapilmaz", async () => {
     const { container } = render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [] } });
@@ -260,7 +260,7 @@ describe("BesPage — Excel export/import", () => {
   it("import 401 → login'e yonlendirir", async () => {
     importBesHoldings.mockRejectedValue(new Error("401 unauthorized"));
     const { container } = render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["x"], "bes.xlsx");
@@ -272,7 +272,7 @@ describe("BesPage — Excel export/import", () => {
   it("import 401 disi hata → hata mesaji", async () => {
     importBesHoldings.mockRejectedValue(new Error("gecersiz dosya"));
     const { container } = render(<BesPage />);
-    await screen.findByPlaceholderText("content.bes.planNamePlaceholder");
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
 
     const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["x"], "bes.xlsx");

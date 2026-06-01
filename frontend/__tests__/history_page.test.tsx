@@ -120,7 +120,7 @@ describe("HistoryPage — yukleme + bos durum", () => {
 
   it("geri butonu /dashboard'a push eder", async () => {
     render(<HistoryPage />);
-    await screen.findByText("content.history.noSnapshotTitle");
+    expect(await screen.findByText("content.history.noSnapshotTitle")).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "common.back" }));
     expect(pushMock).toHaveBeenCalledWith("/dashboard");
@@ -225,7 +225,7 @@ describe("HistoryPage — yil filtresi", () => {
     getPortfolioHistoryYears.mockRejectedValue(new Error("yil hatasi"));
     getPortfolioHistory.mockResolvedValue([]);
     render(<HistoryPage />);
-    await screen.findByText("content.history.noSnapshotTitle");
+    expect(await screen.findByText("content.history.noSnapshotTitle")).toBeInTheDocument();
     expect(screen.queryByLabelText("content.history.yearFilterAria")).not.toBeInTheDocument();
   });
 });
@@ -304,7 +304,7 @@ describe("HistoryPage — snapshot silme", () => {
   it("backdrop tiklamasi dialogu kapatir", async () => {
     const user = await renderWithRow();
     await user.click(screen.getByRole("button", { name: "content.history.deleteBtn" }));
-    await screen.findByRole("dialog");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     // role=presentation backdrop (dialog'un parent'i).
     const backdrop = screen.getByRole("presentation");
     fireEvent.click(backdrop);

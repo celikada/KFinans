@@ -90,7 +90,7 @@ describe("GoalPage — yukleme", () => {
     expect(screen.getByText("common.loading")).toBeInTheDocument();
 
     resolve(EMPTY_GOAL);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
     expect(getGoal).toHaveBeenCalledTimes(1);
   });
 
@@ -122,7 +122,7 @@ describe("GoalPage — para birimi secimi", () => {
   it("TRY secilince input placeholder + step degisir", async () => {
     const user = userEvent.setup();
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "₺ TRY" }));
     const input = (await screen.findByPlaceholderText("50000")) as HTMLInputElement;
@@ -132,7 +132,7 @@ describe("GoalPage — para birimi secimi", () => {
   it("yabanci para secilince step 100 olur", async () => {
     const user = userEvent.setup();
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "€ EUR" }));
     const input = (await screen.findByPlaceholderText("3000")) as HTMLInputElement;
@@ -145,7 +145,7 @@ describe("GoalPage — para birimi secimi", () => {
 describe("GoalPage — anlik ozet", () => {
   it("rate olmadan TRY girisinde sadece hedef tutar (multiplier) hesaplanir", async () => {
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "₺ TRY" }));
     fireEvent.change(screen.getByPlaceholderText("50000"), {
@@ -162,7 +162,7 @@ describe("GoalPage — anlik ozet", () => {
     // rate dolu hedef yukle, sonra input zaten 3000 dolu.
     getGoal.mockResolvedValue(FULL_USD_GOAL);
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     // isForeign && rate dali → cevrim satirinda "× ... ₺ =" ifadesi gecer.
     expect(
@@ -177,7 +177,7 @@ describe("GoalPage — kaydetme", () => {
   it("gecersiz/sifir tutar → amountInvalid hatasi, setGoal cagrilmaz", async () => {
     const user = userEvent.setup();
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     // input bos → handleSave Number.parseFloat("") = NaN → invalid
     await user.click(screen.getByRole("button", { name: "common.save" }));
@@ -191,7 +191,7 @@ describe("GoalPage — kaydetme", () => {
   it("gecerli tutar → setGoal cagrilir, 'saved' metni gosterilir", async () => {
     setGoal.mockResolvedValue(FULL_USD_GOAL);
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     const saveBtn = screen.getByRole("button", { name: "common.save" });
     fireEvent.change(screen.getByPlaceholderText("3000"), { target: { value: "3000" } });
@@ -206,7 +206,7 @@ describe("GoalPage — kaydetme", () => {
   it("setGoal backend hatasi (Error) → mesaj gosterilir", async () => {
     setGoal.mockRejectedValue(new Error("kaydedilemedi"));
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     const saveBtn = screen.getByRole("button", { name: "common.save" });
     fireEvent.change(screen.getByPlaceholderText("3000"), { target: { value: "3000" } });
@@ -218,7 +218,7 @@ describe("GoalPage — kaydetme", () => {
   it("setGoal hatasi (Error olmayan) → fallback saveFailed", async () => {
     setGoal.mockRejectedValue("string");
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     const saveBtn = screen.getByRole("button", { name: "common.save" });
     fireEvent.change(screen.getByPlaceholderText("3000"), { target: { value: "3000" } });
@@ -233,7 +233,7 @@ describe("GoalPage — kaydetme", () => {
     let resolve!: (v: typeof FULL_USD_GOAL) => void;
     setGoal.mockImplementation(() => new Promise((r) => (resolve = r)));
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
 
     const saveBtn = screen.getByRole("button", { name: "common.save" });
     fireEvent.change(screen.getByPlaceholderText("3000"), { target: { value: "3000" } });
@@ -241,7 +241,7 @@ describe("GoalPage — kaydetme", () => {
 
     expect(await screen.findByText("form.saving")).toBeInTheDocument();
     resolve(FULL_USD_GOAL);
-    await screen.findByText("content.goal.saved");
+    expect(await screen.findByText("content.goal.saved")).toBeInTheDocument();
   });
 });
 
@@ -295,7 +295,7 @@ describe("GoalPage — ilerleme paneli", () => {
   it("hedef hic yoksa (amount null) → ilerleme paneli render edilmez", async () => {
     getGoal.mockResolvedValue(EMPTY_GOAL);
     render(<GoalPage />);
-    await screen.findByText("content.goal.monthlyNeedTitle");
+    expect(await screen.findByText("content.goal.monthlyNeedTitle")).toBeInTheDocument();
     expect(
       screen.queryByText("content.goal.progressStatus"),
     ).not.toBeInTheDocument();
@@ -316,7 +316,7 @@ describe("GoalPage — ilerleme paneli", () => {
     });
     render(<GoalPage />);
 
-    await screen.findByText("content.goal.progressStatus");
+    expect(await screen.findByText("content.goal.progressStatus")).toBeInTheDocument();
     // TRY → yabanci pasif gelir karti olmamali
     expect(
       screen.queryByText("content.goal.passiveIncomeCurrency"),
@@ -346,7 +346,7 @@ describe("GoalPage — formul kutusu", () => {
       rate_to_tl: null,
     });
     render(<GoalPage />);
-    await screen.findByText("content.goal.formulaTitle");
+    expect(await screen.findByText("content.goal.formulaTitle")).toBeInTheDocument();
     expect(
       screen.queryByText("content.goal.formulaRate"),
     ).not.toBeInTheDocument();

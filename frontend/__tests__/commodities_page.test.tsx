@@ -212,7 +212,7 @@ describe("CommoditiesPage — fiyat fallback uyarilari", () => {
 
   it("tum fiyatlar mevcut → uyari banner'i yok", async () => {
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
     expect(
       screen.queryByText("content.commodities.goldUnavailable"),
     ).not.toBeInTheDocument();
@@ -228,7 +228,7 @@ describe("CommoditiesPage — export / import", () => {
     const user = userEvent.setup();
     exportCommodities.mockResolvedValue(undefined);
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
     await waitFor(() => expect(exportCommodities).toHaveBeenCalledTimes(1));
@@ -238,7 +238,7 @@ describe("CommoditiesPage — export / import", () => {
     const user = userEvent.setup();
     exportCommodities.mockRejectedValue(new Error("export hatasi"));
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.excelDownload" }));
     expect(await screen.findByText("export hatasi")).toBeInTheDocument();
@@ -247,7 +247,7 @@ describe("CommoditiesPage — export / import", () => {
   it("import basarili → liste yenilenir", async () => {
     importCommodities.mockResolvedValue([]);
     const { container } = render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     const fileInput = container.querySelector(
       'input[type="file"]',
@@ -265,7 +265,7 @@ describe("CommoditiesPage — export / import", () => {
   it("import hatasi → importFailed mesaji", async () => {
     importCommodities.mockRejectedValue(new Error("import patladi"));
     const { container } = render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     const fileInput = container.querySelector(
       'input[type="file"]',
@@ -286,7 +286,7 @@ describe("CommodityForm — varlik ekleme", () => {
     const user = userEvent.setup();
     createCommodity.mockResolvedValue({ id: 1 });
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     // Miktar input'u (number) — placeholder coin modunda table.count.
     const qty = screen.getByPlaceholderText("table.count") as HTMLInputElement;
@@ -308,7 +308,7 @@ describe("CommodityForm — varlik ekleme", () => {
   it("miktar 0/gecersiz → createCommodity cagrilmaz, amountInvalidQty hatasi", async () => {
     const user = userEvent.setup();
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     // Hic miktar girmeden ekle.
     await user.click(screen.getByRole("button", { name: "form.add" }));
@@ -322,7 +322,7 @@ describe("CommodityForm — varlik ekleme", () => {
     const user = userEvent.setup();
     createCommodity.mockResolvedValue({ id: 1 });
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.gram" }));
     // Gram modunda metal select (gold/silver) gorunur.
@@ -348,7 +348,7 @@ describe("CommodityForm — varlik ekleme", () => {
     const user = userEvent.setup();
     createCommodity.mockResolvedValue({ id: 1 });
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "form.biga" }));
     // Biga modunda 2 select: metal + kod.
@@ -375,7 +375,7 @@ describe("CommodityForm — varlik ekleme", () => {
     const user = userEvent.setup();
     createCommodity.mockRejectedValue(new Error("kayit hatasi"));
     render(<CommoditiesPage />);
-    await screen.findByText("empty.noCommodity");
+    expect(await screen.findByText("empty.noCommodity")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("table.count"), "2");
     await user.click(screen.getByRole("button", { name: "form.add" }));
@@ -400,7 +400,7 @@ describe("CommodityList — silme", () => {
     deleteCommodity.mockResolvedValue(undefined);
     render(<CommoditiesPage />);
     // Coin etiketi (COIN_LABELS.ceyrek) render edilir.
-    await screen.findByText("not");
+    expect(await screen.findByText("not")).toBeInTheDocument();
 
     const delBtn = screen.getByRole("button", {
       name: "content.commodities.deleteAria",

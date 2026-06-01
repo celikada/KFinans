@@ -106,7 +106,7 @@ describe("CreditCardsPage — yükleme ve liste", () => {
     expect(screen.getByText("common.loading")).toBeInTheDocument();
 
     resolve(makeSummary());
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
     expect(listCreditCards).toHaveBeenCalledTimes(1);
   });
 
@@ -114,7 +114,7 @@ describe("CreditCardsPage — yükleme ve liste", () => {
     listCreditCards.mockResolvedValue(makeSummary());
     render(<CreditCardsPage />);
 
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
     expect(screen.getByText("Garanti")).toBeInTheDocument();
     expect(screen.getByText("**** 4242")).toBeInTheDocument();
     expect(screen.getByText("kişisel")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("CreditCardsPage — yükleme ve liste", () => {
     listCreditCards.mockResolvedValue(makeSummary([]));
     render(<CreditCardsPage />);
 
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
   });
 
   it("401 hatası → login'e replace", async () => {
@@ -138,7 +138,7 @@ describe("CreditCardsPage — yükleme ve liste", () => {
     listCreditCards.mockRejectedValue(new Error("sunucu patladı"));
     render(<CreditCardsPage />);
 
-    await screen.findByText("sunucu patladı");
+    expect(await screen.findByText("sunucu patladı")).toBeInTheDocument();
     expect(routerReplace).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe("CreditCardsPage — yükleme ve liste", () => {
     listCreditCards.mockRejectedValue("string hata");
     render(<CreditCardsPage />);
 
-    await screen.findByText("content.creditCards.loadFailed");
+    expect(await screen.findByText("content.creditCards.loadFailed")).toBeInTheDocument();
   });
 });
 
@@ -159,7 +159,7 @@ describe("CreditCardsPage — çoklu ödenmemiş ekstre uyarısı", () => {
     );
     render(<CreditCardsPage />);
 
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
     // başlık "⚠ " prefix'i ile geldiği için substring matcher kullan.
     expect(
       screen.getByText("content.creditCards.multiUnpaidTitle", { exact: false }),
@@ -172,7 +172,7 @@ describe("CreditCardsPage — çoklu ödenmemiş ekstre uyarısı", () => {
     listCreditCards.mockResolvedValue(makeSummary([makeCard({ unpaid_statement_count: 1 })]));
     render(<CreditCardsPage />);
 
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
     expect(screen.queryByText("content.creditCards.multiUnpaidTitle")).not.toBeInTheDocument();
   });
 });
@@ -183,7 +183,7 @@ describe("CreditCardsPage — yeni kart ekleme", () => {
   it("isim boşsa → nameRequired hatası, create çağrılmaz", async () => {
     listCreditCards.mockResolvedValue(makeSummary([]));
     render(<CreditCardsPage />);
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
 
     // required attribute'u jsdom constraint validation'ı submit'i engeller;
     // JS guard'ını (name.trim()) test etmek için form submit'i doğrudan ateşle.
@@ -201,7 +201,7 @@ describe("CreditCardsPage — yeni kart ekleme", () => {
     createCreditCard.mockResolvedValue(makeCard());
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("content.creditCards.cardNamePlaceholder"), "Yeni Kart");
     await user.type(screen.getByPlaceholderText("content.creditCards.bankNamePlaceholder"), "Akbank");
@@ -232,7 +232,7 @@ describe("CreditCardsPage — yeni kart ekleme", () => {
     createCreditCard.mockResolvedValue(makeCard());
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("content.creditCards.cardNamePlaceholder"), "Sade Kart");
     await user.click(screen.getByRole("button", { name: "form.add" }));
@@ -256,7 +256,7 @@ describe("CreditCardsPage — yeni kart ekleme", () => {
     createCreditCard.mockRejectedValue(new Error("kayıt hatası"));
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("content.creditCards.cardNamePlaceholder"), "X");
     await user.click(screen.getByRole("button", { name: "form.add" }));
@@ -269,7 +269,7 @@ describe("CreditCardsPage — yeni kart ekleme", () => {
     createCreditCard.mockRejectedValue("boom");
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("content.creditCards.noCards");
+    expect(await screen.findByText("content.creditCards.noCards")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("content.creditCards.cardNamePlaceholder"), "X");
     await user.click(screen.getByRole("button", { name: "form.add" }));
@@ -286,7 +286,7 @@ describe("CreditCardsPage — düzenleme", () => {
     updateCreditCard.mockResolvedValue(makeCard());
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "common.edit" }));
 
@@ -310,7 +310,7 @@ describe("CreditCardsPage — düzenleme", () => {
     listCreditCards.mockResolvedValue(makeSummary());
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "common.edit" }));
     await user.click(screen.getByRole("button", { name: "common.cancel" }));
@@ -328,7 +328,7 @@ describe("CreditCardsPage — düzenleme", () => {
     );
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "common.edit" }));
     const bankInput = screen.getByPlaceholderText(
@@ -349,7 +349,7 @@ describe("CreditCardsPage — silme", () => {
     confirmMock.mockResolvedValue(true);
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.creditCards.deleteCardAria" }),
@@ -364,7 +364,7 @@ describe("CreditCardsPage — silme", () => {
     confirmMock.mockResolvedValue(false);
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.creditCards.deleteCardAria" }),
@@ -380,7 +380,7 @@ describe("CreditCardsPage — silme", () => {
     confirmMock.mockResolvedValue(true);
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.creditCards.deleteCardAria" }),
@@ -395,7 +395,7 @@ describe("CreditCardsPage — silme", () => {
     confirmMock.mockResolvedValue(true);
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.creditCards.deleteCardAria" }),
@@ -412,7 +412,7 @@ describe("CreditCardsPage — detay navigasyonu", () => {
     listCreditCards.mockResolvedValue(makeSummary([makeCard({ id: 7 })]));
     const user = userEvent.setup({ delay: null });
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "content.creditCards.statementInstallment" }),
@@ -424,7 +424,7 @@ describe("CreditCardsPage — detay navigasyonu", () => {
   it("toplam borç ve dönem borcu özet metriklerini render eder", async () => {
     listCreditCards.mockResolvedValue(makeSummary());
     render(<CreditCardsPage />);
-    await screen.findByText("Bonus Kart");
+    expect(await screen.findByText("Bonus Kart")).toBeInTheDocument();
 
     // Özet panel başlıkları (table.totalDebt hem panelde hem tablo başlığında var)
     expect(screen.getAllByText("table.totalDebt").length).toBeGreaterThan(0);

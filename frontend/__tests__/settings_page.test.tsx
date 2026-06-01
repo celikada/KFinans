@@ -151,7 +151,7 @@ describe("SettingsPage — yukleme", () => {
     getMe.mockRejectedValue(new Error("500 server error"));
     render(<SettingsPage />);
     // loading biter, hesap bilgileri bolumu gorunur
-    await screen.findByText("content.settings.accountInfo");
+    expect(await screen.findByText("content.settings.accountInfo")).toBeInTheDocument();
     expect(routerReplace).not.toHaveBeenCalled();
   });
 
@@ -257,7 +257,7 @@ describe("SettingsPage — sifre degistirme", () => {
   it("yeni sifreler uyusmuyorsa → mismatch hatasi, changePassword cagrilmaz", async () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.changePassword");
+    expect(await screen.findByText("content.settings.changePassword")).toBeInTheDocument();
 
     await fillPwd(user, "Eski123!", "Yeni12345", "Farkli12345");
     expect(
@@ -269,7 +269,7 @@ describe("SettingsPage — sifre degistirme", () => {
   it("yeni sifre 8 karakterden kisa → min hatasi", async () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.changePassword");
+    expect(await screen.findByText("content.settings.changePassword")).toBeInTheDocument();
 
     await fillPwd(user, "Eski123!", "kisa", "kisa");
     expect(
@@ -282,7 +282,7 @@ describe("SettingsPage — sifre degistirme", () => {
     changePassword.mockResolvedValue({});
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.changePassword");
+    expect(await screen.findByText("content.settings.changePassword")).toBeInTheDocument();
 
     await fillPwd(user, "Eski123!", "YeniSifre1", "YeniSifre1");
 
@@ -303,7 +303,7 @@ describe("SettingsPage — sifre degistirme", () => {
     changePassword.mockRejectedValue(new Error("mevcut sifre yanlis"));
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.changePassword");
+    expect(await screen.findByText("content.settings.changePassword")).toBeInTheDocument();
 
     await fillPwd(user, "Eski123!", "YeniSifre1", "YeniSifre1");
     expect(await screen.findByText("mevcut sifre yanlis")).toBeInTheDocument();
@@ -313,7 +313,7 @@ describe("SettingsPage — sifre degistirme", () => {
     changePassword.mockRejectedValue({ x: 1 });
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.changePassword");
+    expect(await screen.findByText("content.settings.changePassword")).toBeInTheDocument();
 
     await fillPwd(user, "Eski123!", "YeniSifre1", "YeniSifre1");
     expect(
@@ -358,7 +358,7 @@ describe("SettingsPage — dashboard kart gizleme", () => {
   it("kart toggle → hidden listeye eklenir + localStorage'a yazilir", async () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.dashboardView");
+    expect(await screen.findByText("content.settings.dashboardView")).toBeInTheDocument();
 
     // "Kripto" kartinin gizle/goster toggle'i (gorunur → hideCardAria)
     const hideBtn = screen.getByRole("button", {
@@ -384,7 +384,7 @@ describe("SettingsPage — dashboard kart gizleme", () => {
     localStorage.setItem("kfinans_hidden_cards", JSON.stringify(["crypto"]));
     const user = userEvent.setup();
     render(<SettingsPage />);
-    await screen.findByText("content.settings.dashboardView");
+    expect(await screen.findByText("content.settings.dashboardView")).toBeInTheDocument();
 
     const showBtn = screen.getByRole("button", {
       name: "Kripto content.settings.showCardAria",
