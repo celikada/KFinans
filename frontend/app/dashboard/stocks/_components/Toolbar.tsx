@@ -19,6 +19,9 @@ export function Toolbar({
   onAddRow, onSave, onExport, onImport, onFetchPrices,
 }: Props) {
   const { t } = useTranslation();
+  let saveLabel = t("content.stocks.save");
+  if (saved) saveLabel = t("content.stocks.saved");
+  else if (saving) saveLabel = t("content.stocks.saving");
   return (
     <div className="flex gap-3 mt-4 items-center flex-wrap">
       <button onClick={onAddRow} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
@@ -29,7 +32,7 @@ export function Toolbar({
         disabled={saving}
         className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
       >
-        {saved ? t("content.stocks.saved") : saving ? t("content.stocks.saving") : t("content.stocks.save")}
+        {saveLabel}
       </button>
       <button
         onClick={onExport}

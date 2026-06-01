@@ -160,6 +160,10 @@ export default function BesPage() {
 
   const grandTotal = holdings.reduce((s, h) => s + rowTotal(h), 0);
 
+  let saveLabel = t("common.save");
+  if (saved) saveLabel = t("content.bes.saved");
+  else if (saving) saveLabel = t("common.saving");
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
@@ -248,7 +252,7 @@ export default function BesPage() {
               disabled={saving}
               className="text-sm text-white bg-green-600 hover:bg-green-700 font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {saved ? t("content.bes.saved") : saving ? t("common.saving") : t("common.save")}
+              {saveLabel}
             </button>
             <button
               onClick={handleExport}
