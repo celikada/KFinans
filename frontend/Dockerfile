@@ -25,6 +25,11 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
+# Guvenlik: runtime'da npm gerekmez (CMD "node server.js"). Base image'in npm CLI
+# bundle'i (cross-spawn/glob/minimatch/tar transitive) HIGH/CRITICAL CVE tasiyor;
+# Trivy gate'ini gecmek + saldiri yuzeyini kucultmek icin global npm/npx kaldirilir.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
