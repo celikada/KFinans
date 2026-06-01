@@ -5,8 +5,8 @@ import { fmtTL } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  data: CategoryBreakdownDTO[];
-  total: number;
+  readonly data: CategoryBreakdownDTO[];
+  readonly total: number;
 }
 
 const COLORS = [
@@ -47,12 +47,12 @@ export function CategoryPieChart({ data, total }: Props) {
               paddingAngle={2}
               label={(props) => {
                 const pct = (props as { pct?: number }).pct;
-                return pct !== undefined ? `${pct.toFixed(0)}%` : "";
+                return pct === undefined ? "" : `${pct.toFixed(0)}%`;
               }}
               labelLine={false}
             >
-              {chartData.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              {chartData.map((entry, i) => (
+                <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip

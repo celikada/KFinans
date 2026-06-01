@@ -153,7 +153,9 @@ async def test_snapshot_fails_when_usd_rate_unavailable(client: AsyncClient):
         resp = await client.post("/api/v1/portfolio/snapshot", headers=headers)
 
     assert resp.status_code == 503
-    assert "USD/TRY" in resp.json()["detail"]
+    # SEC-007: 503 detail'i bilerek generic (internal "USD/TRY fetch fail" sizdirilmaz).
+    # Sozlesme = 503 + generic kullanici mesaji; ic hata mesaji ops log'a yazilir.
+    assert "kaydedilemedi" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio

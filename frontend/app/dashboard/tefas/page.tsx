@@ -7,11 +7,22 @@ import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Holding {
+  _key: string;
   code: string;
   quantity: string;
   name: string;
   avg_cost_tl: string;
   distributor: string;
+}
+
+let _rowKeySeq = 0;
+function newRowKey(): string {
+  _rowKeySeq += 1;
+  return `tefas-row-${_rowKeySeq}`;
+}
+
+function emptyHolding(): Holding {
+  return { _key: newRowKey(), code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" };
 }
 
 const INPUT_CLS =
@@ -40,7 +51,7 @@ function toDTO(holdings: Holding[]): TefasHoldingDTO[] {
 export default function TefasPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [holdings, setHoldings] = useState<Holding[]>([{ code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
+  const [holdings, setHoldings] = useState<Holding[]>([emptyHolding()]);
   const [result, setResult] = useState<TefasPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,7 +68,7 @@ export default function TefasPage() {
     api.getTefasHoldings()
       .then((data) => {
         if (data.length > 0) {
-          setHoldings(data.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
+          setHoldings(data.map((h) => ({ _key: newRowKey(), code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
           fetchPricesFor(data);
         }
       })
@@ -121,6 +132,7 @@ export default function TefasPage() {
     setError("");
     const imported = await api.importTefasMkk(file);
     setHoldings(imported.map((h) => ({
+      _key: newRowKey(),
       code: h.code,
       quantity: h.quantity.toString(),
       name: h.name,
@@ -139,7 +151,7 @@ export default function TefasPage() {
     setError("");
     try {
       const imported = await api.importTefasHoldings(file);
-      setHoldings(imported.map((h) => ({ code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
+      setHoldings(imported.map((h) => ({ _key: newRowKey(), code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
@@ -153,7 +165,7 @@ export default function TefasPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { code: "", quantity: "", name: "", avg_cost_tl: "", distributor: "" }]);
+    setHoldings((h) => [...h, emptyHolding()]);
   }
 
   function removeRow(i: number) {
@@ -165,6 +177,10 @@ export default function TefasPage() {
   }
 
   const totalTL = result.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
+
+  let saveLabel = t("content.tefas.save");
+  if (saved) saveLabel = t("content.tefas.saved");
+  else if (saving) saveLabel = t("content.tefas.saving");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -186,7 +202,7 @@ export default function TefasPage() {
           ) : (
             <div className="space-y-3">
               {holdings.map((row, i) => (
-                <div key={i} className="flex gap-2 items-center flex-wrap">
+                <div key={row._key} className="flex gap-2 items-center flex-wrap">
                   <input
                     placeholder={t("content.tefas.fundCodePlaceholder")}
                     value={row.code}
@@ -245,7 +261,7 @@ export default function TefasPage() {
               disabled={saving}
               className="text-sm text-gray-500 hover:text-gray-700 font-medium border border-gray-200 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {saved ? t("content.tefas.saved") : saving ? t("content.tefas.saving") : t("content.tefas.save")}
+              {saveLabel}
             </button>
             <button
               onClick={handleExport}
@@ -295,7 +311,7 @@ export default function TefasPage() {
               <tbody className="divide-y divide-gray-50">
                 {result.map((pos, idx) => {
                   const weight = totalTL > 0 ? (Number.parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
-                  const gl = pos.gain_loss_tl !== null ? Number.parseFloat(pos.gain_loss_tl) : null;
+                  const gl = pos.gain_loss_tl === null ? null : Number.parseFloat(pos.gain_loss_tl);
                   const glPct = pos.gain_loss_pct;
                   const isPositive = gl !== null && gl >= 0;
                   const hasAnyGainLoss = result.some((p) => p.gain_loss_tl !== null);
@@ -315,7 +331,9 @@ export default function TefasPage() {
                       <td className="px-6 py-4 text-right"><TLValue tl={pos.total_value_tl} className="font-semibold text-gray-900" /></td>
                       {hasAnyGainLoss && (
                         <td className="px-6 py-4 text-right">
-                          {gl !== null ? (
+                          {gl === null ? (
+                            <span className="text-xs text-gray-300">—</span>
+                          ) : (
                             <span className={`font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
                               {isPositive ? "+" : ""}{fmtTL(gl)} ₺
                               {glPct !== null && (
@@ -324,8 +342,6 @@ export default function TefasPage() {
                                 </p>
                               )}
                             </span>
-                          ) : (
-                            <span className="text-xs text-gray-300">—</span>
                           )}
                         </td>
                       )}

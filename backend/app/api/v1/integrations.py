@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +16,8 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 @router.get("", response_model=list[IntegrationOut])
 async def list_integrations(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Integration).where(Integration.user_id == current_user.id))
     return result.scalars().all()
@@ -25,8 +27,8 @@ async def list_integrations(
 async def add_integration(
     request: Request,
     payload: IntegrationCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(Integration).where(
@@ -75,8 +77,8 @@ async def add_integration(
 async def remove_integration(
     provider: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(Integration).where(
@@ -99,6 +101,6 @@ async def remove_integration(
 
 
 @router.post("/sync", status_code=status.HTTP_202_ACCEPTED)
-async def sync_integrations(current_user: User = Depends(get_current_user)):
+async def sync_integrations(current_user: Annotated[User, Depends(get_current_user)]):
     # TODO: arka planda senkronizasyon görevi başlat
     return {"detail": "Senkronizasyon başlatıldı"}

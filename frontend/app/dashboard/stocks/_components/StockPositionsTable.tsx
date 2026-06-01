@@ -5,12 +5,12 @@ import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  positions: StockPositionDTO[];
+  readonly positions: StockPositionDTO[];
 }
 
 export function StockPositionsTable({ positions }: Props) {
   const { t } = useTranslation();
-  const totalTL = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+  const totalTL = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
   const hasGainLoss = positions.some((p) => p.gain_loss_tl !== null);
 
   return (
@@ -33,9 +33,9 @@ export function StockPositionsTable({ positions }: Props) {
         </thead>
         <tbody className="divide-y divide-gray-50">
           {positions.map((pos, idx) => {
-            const weight = totalTL > 0 ? (parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
+            const weight = totalTL > 0 ? (Number.parseFloat(pos.total_value_tl) / totalTL) * 100 : 0;
             const isTRY = pos.currency === "TRY";
-            const gl = pos.gain_loss_tl !== null ? parseFloat(pos.gain_loss_tl) : null;
+            const gl = pos.gain_loss_tl === null ? null : Number.parseFloat(pos.gain_loss_tl);
             const glPct = pos.gain_loss_pct;
             const isPositive = gl !== null && gl >= 0;
 
@@ -67,7 +67,9 @@ export function StockPositionsTable({ positions }: Props) {
                 </td>
                 {hasGainLoss && (
                   <td className="px-6 py-4 text-right">
-                    {gl !== null ? (
+                    {gl === null ? (
+                      <span className="text-xs text-gray-300">—</span>
+                    ) : (
                       <span className={`font-medium ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
                         {isPositive ? "+" : ""}{fmtTL(gl)} ₺
                         {glPct !== null && (
@@ -76,8 +78,6 @@ export function StockPositionsTable({ positions }: Props) {
                           </p>
                         )}
                       </span>
-                    ) : (
-                      <span className="text-xs text-gray-300">—</span>
                     )}
                   </td>
                 )}

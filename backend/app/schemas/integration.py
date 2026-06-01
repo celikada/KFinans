@@ -38,7 +38,7 @@ class IntegrationOut(BaseModel):
     id: uuid.UUID
     provider: str
     is_active: bool
-    last_synced_at: Optional[datetime]
+    last_synced_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

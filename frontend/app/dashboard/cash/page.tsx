@@ -138,7 +138,7 @@ export default function CashPage() {
 
         {/* Liste */}
         {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
-        {!loading && summary && summary.holdings.length === 0 && (
+        {!loading && summary?.holdings.length === 0 && (
           <p className="text-center text-sm text-gray-400 py-8">{t("empty.noCashRecord")}</p>
         )}
         {!loading && summary && summary.holdings.length > 0 && (

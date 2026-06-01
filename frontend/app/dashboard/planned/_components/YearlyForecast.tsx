@@ -5,8 +5,8 @@ import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  data: ForecastResultDTO;
-  year: number;
+  readonly data: ForecastResultDTO;
+  readonly year: number;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -51,28 +51,26 @@ export function YearlyForecast({ data, year }: Props) {
                       <span className="text-xs text-gray-300">—</span>
                     </div>
                   ) : (
-                    <>
-                      <div className="relative h-6 flex items-center">
-                        <div
-                          className="absolute left-0 top-0 h-full bg-indigo-100 rounded-r"
-                          style={{ width: `${barWidth}%` }}
-                        />
-                        <div className="relative flex flex-wrap gap-1 px-1 py-0.5">
-                          {m.items.map((item) => {
-                            const estSuffix = item.is_estimated ? ` (${t("content.planned.estimatedBadge")})` : "";
-                            return (
-                              <span
-                                key={item.id}
-                                className={`text-xs px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-600"}`}
-                                title={`${item.title} — ${fmtTL(Number.parseFloat(item.amount))} ₺${estSuffix}`}
-                              >
-                                {item.title}
-                              </span>
-                            );
-                          })}
-                        </div>
+                    <div className="relative h-6 flex items-center">
+                      <div
+                        className="absolute left-0 top-0 h-full bg-indigo-100 rounded-r"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                      <div className="relative flex flex-wrap gap-1 px-1 py-0.5">
+                        {m.items.map((item) => {
+                          const estSuffix = item.is_estimated ? ` (${t("content.planned.estimatedBadge")})` : "";
+                          return (
+                            <span
+                              key={item.id}
+                              className={`text-xs px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-600"}`}
+                              title={`${item.title} — ${fmtTL(Number.parseFloat(item.amount))} ₺${estSuffix}`}
+                            >
+                              {item.title}
+                            </span>
+                          );
+                        })}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 

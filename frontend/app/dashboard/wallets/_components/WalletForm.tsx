@@ -6,14 +6,14 @@ import { CHAIN_LABELS, Chain } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  hasWallets: boolean;
-  loadingPositions: boolean;
-  exporting: boolean;
-  importing: boolean;
-  onAdded: (wallet: WalletDTO) => void;
-  onRefresh: () => void;
-  onExport: () => void;
-  onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly hasWallets: boolean;
+  readonly loadingPositions: boolean;
+  readonly exporting: boolean;
+  readonly importing: boolean;
+  readonly onAdded: (wallet: WalletDTO) => void;
+  readonly onRefresh: () => void;
+  readonly onExport: () => void;
+  readonly onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export function WalletForm({

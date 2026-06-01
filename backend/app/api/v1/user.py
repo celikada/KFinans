@@ -46,12 +46,50 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 DB = Annotated[AsyncSession, Depends(get_db)]
 
 
-@router.get("/me", response_model=UserMeOut, status_code=status.HTTP_200_OK)
+def _iso_or_none(value) -> str | None:
+    """datetime/date → ISO string; None ise None."""
+    return value.isoformat() if value else None
+
+
+def _serialize_orm(obj, exclude: set[str] | None = None) -> dict:
+    """SQLAlchemy ORM nesnesini dict'e cevir; datetime/decimal/uuid ISO/str."""
+    exclude = exclude or set()
+    out = {}
+    for col in obj.__table__.columns:
+        if col.name in exclude:
+            continue
+        val = getattr(obj, col.name, None)
+        if val is None:
+            out[col.name] = None
+        elif hasattr(val, "isoformat"):  # datetime/date
+            out[col.name] = val.isoformat()
+        else:
+            out[col.name] = str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
+    return out
+
+
+def _export_profile(user: User) -> dict:
+    """Veri tasinabilirligi (KVKK m.11/d) profil bolumu."""
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "risk_profile": user.risk_profile,
+        "email_verified": user.email_verified,
+        "created_at": _iso_or_none(user.created_at),
+        "credit_balance": user.credit_balance,
+        "deleted_at": _iso_or_none(user.deleted_at),
+        "overseas_consent_at": _iso_or_none(user.overseas_consent_at),
+        "terms_accepted_at": _iso_or_none(user.terms_accepted_at),
+        "kvkk_read_at": _iso_or_none(user.kvkk_read_at),
+    }
+
+
+@router.get("/me", status_code=status.HTTP_200_OK)
 async def get_me(current_user: CurrentUser) -> UserMeOut:
     return UserMeOut.model_validate(current_user)
 
 
-@router.put("/profile", response_model=UserMeOut, status_code=status.HTTP_200_OK)
+@router.put("/profile", status_code=status.HTTP_200_OK)
 async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: DB) -> UserMeOut:
     current_user.risk_profile = payload.risk_profile
     await db.commit()
@@ -188,7 +226,7 @@ async def request_email_change(
 async def confirm_email_change(
     request: Request,
     db: DB,
-    token: str = Query(..., min_length=10, max_length=128),
+    token: Annotated[str, Query(min_length=10, max_length=128)],
 ) -> dict:
     """Token ile email swap'i tamamlar. Token tek kullanim — completed
     sonrasi user.email_change_* NULL'lanir. session-token rotation manuel
@@ -320,42 +358,25 @@ async def data_export(
     from app.models.stock import StockHolding
     from app.models.tefas import TefasHolding
 
-    def _serialize(obj, exclude: set[str] | None = None) -> dict:
-        """SQLAlchemy ORM nesnesini dict'e cevir; datetime/decimal/uuid ISO/str."""
-        exclude = exclude or set()
-        out = {}
-        for col in obj.__table__.columns:
-            if col.name in exclude:
-                continue
-            val = getattr(obj, col.name, None)
-            if val is None:
-                out[col.name] = None
-            elif hasattr(val, "isoformat"):  # datetime/date
-                out[col.name] = val.isoformat()
-            else:
-                out[col.name] = str(val) if not isinstance(val, (str, int, float, bool, list, dict)) else val
-        return out
-
     uid = current_user.id
 
     async def _list(model, *, exclude: set[str] | None = None) -> list[dict]:
         result = await db.execute(select(model).where(model.user_id == uid))
-        return [_serialize(o, exclude=exclude) for o in result.scalars().all()]
+        return [_serialize_orm(o, exclude=exclude) for o in result.scalars().all()]
 
     # Wallet'lerde plaintext address (decrypt edilmis); fingerprint atla
     wallets_result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == uid))
-    wallets = []
-    for w in wallets_result.scalars().all():
-        wallets.append(
-            {
-                "id": str(w.id),
-                "chain": w.chain,
-                "address": w.address,  # hybrid_property decrypt
-                "label": w.label,
-                "is_active": w.is_active,
-                "created_at": w.created_at.isoformat() if w.created_at else None,
-            }
-        )
+    wallets = [
+        {
+            "id": str(w.id),
+            "chain": w.chain,
+            "address": w.address,  # hybrid_property decrypt
+            "label": w.label,
+            "is_active": w.is_active,
+            "created_at": _iso_or_none(w.created_at),
+        }
+        for w in wallets_result.scalars().all()
+    ]
 
     # Integrations: API key plaintext DAHIL DEGIL
     intg = await _list(Integration, exclude={"encrypted_key", "encrypted_secret"})
@@ -367,14 +388,14 @@ async def data_export(
         ap_result = await db.execute(select(AssetPosition).where(AssetPosition.snapshot_id == s.id))
         snapshots.append(
             {
-                **_serialize(s),
-                "asset_positions": [_serialize(p) for p in ap_result.scalars().all()],
+                **_serialize_orm(s),
+                "asset_positions": [_serialize_orm(p) for p in ap_result.scalars().all()],
             }
         )
 
     # Audit log
     audit_result = await db.execute(select(AuditLog).where(AuditLog.user_id == uid))
-    audit_logs = [_serialize(a) for a in audit_result.scalars().all()]
+    audit_logs = [_serialize_orm(a) for a in audit_result.scalars().all()]
 
     payload = {
         "_meta": {
@@ -383,18 +404,7 @@ async def data_export(
             "kvkk_article": "m.11/d",
             "gdpr_article": "Art.20",
         },
-        "profile": {
-            "id": str(current_user.id),
-            "email": current_user.email,
-            "risk_profile": current_user.risk_profile,
-            "email_verified": current_user.email_verified,
-            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
-            "credit_balance": current_user.credit_balance,
-            "deleted_at": current_user.deleted_at.isoformat() if current_user.deleted_at else None,
-            "overseas_consent_at": current_user.overseas_consent_at.isoformat() if current_user.overseas_consent_at else None,
-            "terms_accepted_at": current_user.terms_accepted_at.isoformat() if current_user.terms_accepted_at else None,
-            "kvkk_read_at": current_user.kvkk_read_at.isoformat() if current_user.kvkk_read_at else None,
-        },
+        "profile": _export_profile(current_user),
         "integrations": intg,
         "wallets": wallets,
         "snapshots": snapshots,

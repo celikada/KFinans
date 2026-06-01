@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,9 +25,9 @@ ADVICE_COST = 1
 
 @router.get("", response_model=list[AdviceOut])
 async def list_advice(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = 10,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(InvestmentAdvice).where(InvestmentAdvice.user_id == current_user.id).order_by(desc(InvestmentAdvice.generated_at)).limit(limit)
@@ -38,8 +40,8 @@ async def list_advice(
 async def generate_advice(
     request: Request,
     payload: AdviceGenerateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from sqlalchemy.orm import selectinload
 

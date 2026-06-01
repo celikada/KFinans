@@ -127,6 +127,134 @@ def _installment_applies_in_month(inst: CreditCardInstallment, year: int, month:
     return start <= target <= end
 
 
+def _empty_month_map() -> dict[int, Decimal]:
+    return {m: Decimal(0) for m in range(1, 13)}
+
+
+async def _actual_income_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Gerçekleşen gelirler (incomes) — tüm yıl, aya göre toplam."""
+    inc_q = await db.execute(
+        select(Income.date, Income.amount).where(
+            Income.user_id == user_id,
+            Income.date >= date_type(year, 1, 1),
+            Income.date <= date_type(year, 12, 31),
+        )
+    )
+    by_month = _empty_month_map()
+    for d, amt in inc_q.all():
+        by_month[d.month] += Decimal(amt)
+    return by_month
+
+
+async def _actual_expense_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Gerçekleşen giderler (expenses, çift sayım filtresi)."""
+    exp_q = await db.execute(
+        select(Expense.date, Expense.amount).where(
+            Expense.user_id == user_id,
+            Expense.date >= date_type(year, 1, 1),
+            Expense.date <= date_type(year, 12, 31),
+            or_(Expense.credit_card_id.is_(None), Expense.is_paid.is_(False)),
+        )
+    )
+    by_month = _empty_month_map()
+    for d, amt in exp_q.all():
+        by_month[d.month] += Decimal(amt)
+    return by_month
+
+
+async def _statement_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri)."""
+    stmt_q = await db.execute(
+        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount)
+        .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
+        .where(
+            CreditCard.user_id == user_id,
+            CreditCardStatement.due_date >= date_type(year, 1, 1),
+            CreditCardStatement.due_date <= date_type(year, 12, 31),
+        )
+    )
+    by_month = _empty_month_map()
+    for due_date, amount in stmt_q.all():
+        by_month[due_date.month] += Decimal(amount)
+    return by_month
+
+
+async def _installment_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için."""
+    inst_q = await db.execute(
+        select(CreditCardInstallment).join(CreditCard, CreditCardInstallment.card_id == CreditCard.id).where(CreditCard.user_id == user_id)
+    )
+    installments = inst_q.scalars().all()
+    by_month = _empty_month_map()
+    for inst in installments:
+        for m in range(1, 13):
+            if _installment_applies_in_month(inst, year, m):
+                by_month[m] += Decimal(inst.monthly_amount)
+    return by_month
+
+
+async def _recurring_income_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Periyodik gelirler (recurring_incomes) — gelecek için forecast."""
+    rec_inc_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == user_id))
+    recurring_incomes = rec_inc_q.scalars().all()
+    by_month = _empty_month_map()
+    for ri in recurring_incomes:
+        for m in range(1, 13):
+            if _applies_recurring_income_in_month(ri, year, m):
+                by_month[m] += Decimal(ri.amount)
+    return by_month
+
+
+async def _planned_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
+    """Planlı giderler (planned_expenses, çift sayım filtresi)."""
+    pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == user_id))
+    all_planned = pe_q.scalars().all()
+    eligible_planned = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
+    by_month = _empty_month_map()
+    for pe in eligible_planned:
+        for m in range(1, 13):
+            if _applies_planned_in_month(pe, year, m):
+                by_month[m] += Decimal(pe.amount)
+    return by_month
+
+
+def _build_month_row(
+    m: int,
+    is_past: bool,
+    actual_income: dict[int, Decimal],
+    actual_expense: dict[int, Decimal],
+    statement: dict[int, Decimal],
+    recurring_income: dict[int, Decimal],
+    planned: dict[int, Decimal],
+    installment: dict[int, Decimal],
+) -> CashFlowMonth:
+    """Tek bir ay satırını üretir (actual + forecast birleştirme)."""
+    income_actual = actual_income[m]
+    expense_actual = actual_expense[m] + statement[m]
+
+    # Forecast ölçüler — geçmiş ay için 0 göster (yanıltıcı olmasın)
+    if is_past:
+        income_forecast = Decimal(0)
+        expense_forecast = Decimal(0)
+    else:
+        income_forecast = recurring_income[m]
+        expense_forecast = planned[m] + installment[m]
+
+    income_total = income_actual + income_forecast
+    expense_total = expense_actual + expense_forecast
+    return CashFlowMonth(
+        month=m,
+        income_actual=income_actual,
+        income_forecast=income_forecast,
+        expense_actual=expense_actual,
+        expense_forecast=expense_forecast,
+        income_total=income_total,
+        expense_total=expense_total,
+        net=income_total - expense_total,
+        is_past=is_past,
+    )
+
+
 @router.get("", response_model=CashFlowYear)
 async def get_cash_flow(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -137,76 +265,14 @@ async def get_cash_flow(
     today = datetime.now(_ISTANBUL).date()
     current_year = today.year
     current_month = today.month
+    uid = current_user.id
 
-    # 1) Gerçekleşen gelirler (incomes) — tüm yıl
-    inc_q = await db.execute(
-        select(Income.date, Income.amount).where(
-            Income.user_id == current_user.id,
-            Income.date >= date_type(year, 1, 1),
-            Income.date <= date_type(year, 12, 31),
-        )
-    )
-    actual_income_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for d, amt in inc_q.all():
-        actual_income_by_month[d.month] += Decimal(amt)
-
-    # 2) Gerçekleşen giderler (expenses, çift sayım filtresi)
-    exp_q = await db.execute(
-        select(Expense.date, Expense.amount).where(
-            Expense.user_id == current_user.id,
-            Expense.date >= date_type(year, 1, 1),
-            Expense.date <= date_type(year, 12, 31),
-            or_(Expense.credit_card_id.is_(None), Expense.is_paid.is_(False)),
-        )
-    )
-    actual_expense_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for d, amt in exp_q.all():
-        actual_expense_by_month[d.month] += Decimal(amt)
-
-    # 3) Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri)
-    # user_id filtresi SQL'de — lazy load gerekmez
-    stmt_q = await db.execute(
-        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount)
-        .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
-        .where(
-            CreditCard.user_id == current_user.id,
-            CreditCardStatement.due_date >= date_type(year, 1, 1),
-            CreditCardStatement.due_date <= date_type(year, 12, 31),
-        )
-    )
-    statement_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for due_date, amount in stmt_q.all():
-        statement_by_month[due_date.month] += Decimal(amount)
-
-    # 4) Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için
-    inst_q = await db.execute(
-        select(CreditCardInstallment).join(CreditCard, CreditCardInstallment.card_id == CreditCard.id).where(CreditCard.user_id == current_user.id)
-    )
-    installments = inst_q.scalars().all()
-    installment_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for inst in installments:
-        for m in range(1, 13):
-            if _installment_applies_in_month(inst, year, m):
-                installment_by_month[m] += Decimal(inst.monthly_amount)
-
-    # 5) Periyodik gelirler (recurring_incomes) — gelecek için forecast
-    rec_inc_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
-    recurring_incomes = rec_inc_q.scalars().all()
-    recurring_income_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for ri in recurring_incomes:
-        for m in range(1, 13):
-            if _applies_recurring_income_in_month(ri, year, m):
-                recurring_income_by_month[m] += Decimal(ri.amount)
-
-    # 6) Planlı giderler (planned_expenses, çift sayım filtresi)
-    pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == current_user.id))
-    all_planned = pe_q.scalars().all()
-    eligible_planned = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
-    planned_by_month: dict[int, Decimal] = {m: Decimal(0) for m in range(1, 13)}
-    for pe in eligible_planned:
-        for m in range(1, 13):
-            if _applies_planned_in_month(pe, year, m):
-                planned_by_month[m] += Decimal(pe.amount)
+    actual_income = await _actual_income_by_month(db, uid, year)
+    actual_expense = await _actual_expense_by_month(db, uid, year)
+    statement = await _statement_by_month(db, uid, year)
+    installment = await _installment_by_month(db, uid, year)
+    recurring_income = await _recurring_income_by_month(db, uid, year)
+    planned = await _planned_by_month(db, uid, year)
 
     # Aylık birleştirme: actual = geçmiş+bu ay; forecast = gelecek aylar.
     months_out: list[CashFlowMonth] = []
@@ -214,39 +280,19 @@ async def get_cash_flow(
     total_expense = Decimal(0)
     for m in range(1, 13):
         is_past = (year < current_year) or (year == current_year and m <= current_month)
-
-        # Actual ölçüler her zaman var (gerçekleşen ne ise)
-        income_actual = actual_income_by_month[m]
-        expense_actual = actual_expense_by_month[m] + statement_by_month[m]
-
-        # Forecast ölçüler — geçmiş ay için 0 göster (yanıltıcı olmasın)
-        if is_past:
-            income_forecast = Decimal(0)
-            expense_forecast = Decimal(0)
-        else:
-            income_forecast = recurring_income_by_month[m]
-            expense_forecast = planned_by_month[m] + installment_by_month[m]
-
-        income_total = income_actual + income_forecast
-        expense_total = expense_actual + expense_forecast
-        net = income_total - expense_total
-
-        total_income += income_total
-        total_expense += expense_total
-
-        months_out.append(
-            CashFlowMonth(
-                month=m,
-                income_actual=income_actual,
-                income_forecast=income_forecast,
-                expense_actual=expense_actual,
-                expense_forecast=expense_forecast,
-                income_total=income_total,
-                expense_total=expense_total,
-                net=net,
-                is_past=is_past,
-            )
+        row = _build_month_row(
+            m,
+            is_past,
+            actual_income,
+            actual_expense,
+            statement,
+            recurring_income,
+            planned,
+            installment,
         )
+        total_income += row.income_total
+        total_expense += row.expense_total
+        months_out.append(row)
 
     return CashFlowYear(
         year=year,

@@ -28,6 +28,8 @@ from app.schemas.credit_card import (
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
+_CARD_NOT_FOUND = "Kart bulunamadı"
+
 
 def _enrich_card(card: CreditCard) -> CreditCardOut:
     """Bir kart için 5 hesaplanmış alanı doldur ve CreditCardOut döner."""
@@ -130,7 +132,7 @@ async def update_credit_card(
     )
     card = result.scalar_one_or_none()
     if not card:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_CARD_NOT_FOUND)
 
     for attr in (
         "name",
@@ -165,7 +167,7 @@ async def delete_credit_card(
     )
     card = result.scalar_one_or_none()
     if not card:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_CARD_NOT_FOUND)
     await db.delete(card)
     await db.commit()
 
@@ -177,7 +179,7 @@ async def _get_owned_card(card_id: int, user: User, db: AsyncSession) -> CreditC
     result = await db.execute(select(CreditCard).where(CreditCard.id == card_id, CreditCard.user_id == user.id))
     card = result.scalar_one_or_none()
     if not card:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_CARD_NOT_FOUND)
     return card
 
 
@@ -201,7 +203,7 @@ async def get_credit_card_detail(
     )
     card = result.scalar_one_or_none()
     if not card:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kart bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_CARD_NOT_FOUND)
 
     # Statements en yeni dönemler önce, installments first_due_date'e göre
     sorted_statements = sorted(

@@ -20,8 +20,8 @@ class BudgetOut(BaseModel):
 
 class BudgetComparison(BaseModel):
     category: str
-    budget_amount: Optional[Decimal]
+    budget_amount: Optional[Decimal] = None
     actual_amount: Decimal
-    remaining: Optional[Decimal]
-    pct_used: Optional[float]
+    remaining: Optional[Decimal] = None
+    pct_used: Optional[float] = None
     over_budget: bool

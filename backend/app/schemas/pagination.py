@@ -4,11 +4,7 @@ Generic PaginatedResponse[T] — list endpoint'leri buyuk veri'de yavaslamasin
 diye `total_count + has_next + items` formati. limit/offset query param.
 """
 
-from typing import Generic, TypeVar
-
 from pydantic import BaseModel, Field
-
-T = TypeVar("T")
 
 
 class PageParams(BaseModel):
@@ -20,7 +16,7 @@ class PageParams(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     """Generic paginated response wrapper.
 
     items: filtrelenmis ve sayfalanan satirlar

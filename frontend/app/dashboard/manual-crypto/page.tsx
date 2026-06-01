@@ -8,6 +8,17 @@ import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 
+const LINKED_SOURCE_BADGE_CLS: Record<LinkedSource, string> = {
+  commodity: "bg-amber-100 text-amber-800",
+  binance: "bg-yellow-100 text-yellow-800",
+  coingecko: "bg-green-100 text-green-800",
+  tefas: "bg-blue-100 text-blue-800",
+};
+
+function linkedSourceBadgeClass(source: LinkedSource): string {
+  return LINKED_SOURCE_BADGE_CLS[source] ?? "bg-blue-100 text-blue-800";
+}
+
 const EXCHANGE_VALUES: { value: string; label: string | null }[] = [
   { value: "binancetr", label: "Binance TR" },
   { value: "icrypex", label: "iCrypex" },
@@ -410,12 +421,7 @@ export default function ManualCryptoPage() {
                             onClick={() => setLinkedSelected(r)}
                             className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-3"
                           >
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              r.source === "commodity" ? "bg-amber-100 text-amber-800" :
-                              r.source === "binance"   ? "bg-yellow-100 text-yellow-800" :
-                              r.source === "coingecko" ? "bg-green-100 text-green-800" :
-                                                         "bg-blue-100 text-blue-800"
-                            }`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${linkedSourceBadgeClass(r.source)}`}>
                               {LINKED_SOURCE_LABEL[r.source]}
                             </span>
                             <span className="font-medium text-gray-900">{r.symbol || r.id}</span>

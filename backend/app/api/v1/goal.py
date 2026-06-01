@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -38,22 +38,22 @@ class GoalIn(BaseModel):
 
 
 class GoalOut(BaseModel):
-    goal_amount: Decimal | None  # orijinal para biriminde
+    goal_amount: Decimal | None = None  # orijinal para biriminde
     goal_currency: str
-    rate_to_tl: Decimal | None  # 1 birim = X TL
-    monthly_tl: Decimal | None  # TL karsiligi
-    freedom_target_tl: Decimal | None  # monthly_tl × 300
-    portfolio_value: Decimal | None  # son snapshot TL
-    passive_income_tl: Decimal | None  # portfolio / 300
-    passive_income_foreign: Decimal | None  # pasif gelir / kur (hedef para biriminde)
-    progress_pct: float | None
-    months_covered: float | None
+    rate_to_tl: Decimal | None = None  # 1 birim = X TL
+    monthly_tl: Decimal | None = None  # TL karsiligi
+    freedom_target_tl: Decimal | None = None  # monthly_tl × 300
+    portfolio_value: Decimal | None = None  # son snapshot TL
+    passive_income_tl: Decimal | None = None  # portfolio / 300
+    passive_income_foreign: Decimal | None = None  # pasif gelir / kur (hedef para biriminde)
+    progress_pct: float | None = None
+    months_covered: float | None = None
 
 
 @router.get("", response_model=GoalOut)
 async def get_goal(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     snap_q = await db.execute(
         select(PortfolioSnapshot.total_value_tl).where(PortfolioSnapshot.user_id == current_user.id).order_by(desc(PortfolioSnapshot.snapshot_date)).limit(1)
@@ -104,8 +104,8 @@ async def get_goal(
 @router.put("", response_model=GoalOut)
 async def set_goal(
     payload: GoalIn,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     current_user.goal_amount = payload.amount
     current_user.goal_currency = payload.currency

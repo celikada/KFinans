@@ -54,6 +54,20 @@ from app.services.tefas import TefasService
 
 logger = logging.getLogger(__name__)
 
+# Zincir adı → blockchain servis sınıfı eşlemesi (cüzdan asset toplama).
+_WALLET_SERVICES = {
+    "sonic": SonicService,
+    "avalanche_p": AvalanchePChainService,
+    "avalanche_c": AvalancheCChainService,
+    "ethereum": EthereumService,
+    "bitcoin": BitcoinService,
+    "solana": SolanaService,
+    "litecoin": LitecoinService,
+    "algorand": AlgorandService,
+    "cardano": CardanoService,
+    "polkadot": PolkadotService,
+}
+
 
 async def _gather_crypto_assets(
     integrations: list[Integration],
@@ -93,29 +107,14 @@ async def _gather_wallet_assets(
 ) -> list[AssetData]:
     async def _fetch_one(wallet: WalletAddress) -> list[AssetData]:
         wid = str(wallet.id)
+        svc_cls = _WALLET_SERVICES.get(wallet.chain)
+        if svc_cls is None:
+            return []
+        # Test monkeypatch destegi: "app.services.snapshot.<Service>" modul
+        # attribute'u yamali ise (import-time dict referansi yerine) onu kullan.
+        svc_cls = globals().get(svc_cls.__name__, svc_cls)
         try:
-            if wallet.chain == "sonic":
-                svc = SonicService(wallet.address, wid)
-            elif wallet.chain == "avalanche_p":
-                svc = AvalanchePChainService(wallet.address, wid)
-            elif wallet.chain == "avalanche_c":
-                svc = AvalancheCChainService(wallet.address, wid)
-            elif wallet.chain == "ethereum":
-                svc = EthereumService(wallet.address, wid)
-            elif wallet.chain == "bitcoin":
-                svc = BitcoinService(wallet.address, wid)
-            elif wallet.chain == "solana":
-                svc = SolanaService(wallet.address, wid)
-            elif wallet.chain == "litecoin":
-                svc = LitecoinService(wallet.address, wid)
-            elif wallet.chain == "algorand":
-                svc = AlgorandService(wallet.address, wid)
-            elif wallet.chain == "cardano":
-                svc = CardanoService(wallet.address, wid)
-            elif wallet.chain == "polkadot":
-                svc = PolkadotService(wallet.address, wid)
-            else:
-                return []
+            svc = svc_cls(wallet.address, wid)
             assets = await svc.fetch()
             if not assets:
                 # Servis exception fırlatmadı ama 0 asset döndü — uyarı kaydet
@@ -284,24 +283,10 @@ async def _gather_commodity_assets(
             continue
         if val["total_value_tl"] <= 0:
             continue
-        symbol = "XAU" if h.metal == "gold" else "XAG"
-        name = "Altın" if h.metal == "gold" else "Gümüş"
-        if h.unit_type == "biga" and h.biga_code:
-            name = f"{name} ({h.biga_code})"
-        elif h.unit_type == "coin" and h.coin_type:
-            coin_label = {
-                "ceyrek": "Çeyrek",
-                "yarim": "Yarım",
-                "tam": "Tam",
-                "cumhuriyet": "Cumhuriyet",
-                "resat": "Reşat",
-                "ata": "Ata",
-            }.get(h.coin_type, h.coin_type)
-            name = f"{coin_label} Altın"
         out.append(
             AssetData(
-                symbol=symbol,
-                name=name,
+                symbol="XAU" if h.metal == "gold" else "XAG",
+                name=_commodity_display_name(h),
                 provider="commodity",
                 asset_type="commodity",
                 source_type="manual",
@@ -310,6 +295,27 @@ async def _gather_commodity_assets(
             )
         )
     return out
+
+
+_COIN_LABELS = {
+    "ceyrek": "Çeyrek",
+    "yarim": "Yarım",
+    "tam": "Tam",
+    "cumhuriyet": "Cumhuriyet",
+    "resat": "Reşat",
+    "ata": "Ata",
+}
+
+
+def _commodity_display_name(h) -> str:
+    """CommodityHolding için snapshot pozisyon adını üretir."""
+    name = "Altın" if h.metal == "gold" else "Gümüş"
+    if h.unit_type == "biga" and h.biga_code:
+        return f"{name} ({h.biga_code})"
+    if h.unit_type == "coin" and h.coin_type:
+        coin_label = _COIN_LABELS.get(h.coin_type, h.coin_type)
+        return f"{coin_label} Altın"
+    return name
 
 
 async def _gather_manual_crypto_assets(
@@ -328,7 +334,59 @@ async def _gather_manual_crypto_assets(
     if not holdings:
         return []
 
-    # Linked kayıtlar için kaynak başına ID toplama
+    linked_prices = await _fetch_linked_prices(holdings, issues)
+
+    # USD/TL — linked binance/coingecko için unit_tl hesabında lazım; üst loop zaten alıyor
+    # ama bu fonksiyon bağımsız çağrıldığında da çalışsın
+    try:
+        usd_tl = await fetch_usd_to_tl()
+    except Exception:
+        usd_tl = Decimal(0)
+
+    out: list[AssetData] = []
+    for h in holdings:
+        if h.price_source == "manual":
+            unit_tl = _manual_crypto_manual_price(h, issues)
+        elif h.price_source == "linked":
+            unit_tl = _manual_crypto_linked_price(h, linked_prices, usd_tl, issues)
+        else:
+            # auto için unit_tl=0 — ortak enrichment loop yakalar
+            unit_tl = Decimal(0)
+
+        out.append(
+            AssetData(
+                symbol=h.symbol,
+                name=h.label or f"{h.exchange} {h.symbol}",
+                provider=f"manual:{h.exchange}",
+                asset_type="crypto",
+                source_type="manual",
+                liquid_quantity=Decimal(str(h.quantity)),
+                unit_price_tl=unit_tl,
+            )
+        )
+    return out
+
+
+def _mc_issue(h, code: str, msg: str, level: str = "warn") -> dict:
+    """Manuel kripto health issue dict'i üretir (tekrar azaltma)."""
+    return {
+        "level": level,
+        "source": "manual_crypto",
+        "exchange": h.exchange,
+        "symbol": h.symbol,
+        "code": code,
+        "msg": msg,
+    }
+
+
+async def _fetch_linked_prices(
+    holdings: list[ManualCryptoHolding],
+    issues: list[dict],
+) -> dict[str, dict[str, Decimal]]:
+    """Linked kayıtlar için kaynak başına fiyat sözlüklerini çeker.
+
+    Dönüş: {"commodity": {...}, "binance": {...}, "coingecko": {...}, "tefas": {...}}
+    """
     linked = [h for h in holdings if h.price_source == "linked"]
     needs_commodity = any(h.linked_source == "commodity" for h in linked)
     binance_ids = [h.linked_id for h in linked if h.linked_source == "binance" and h.linked_id]
@@ -377,106 +435,101 @@ async def _gather_manual_crypto_assets(
         except Exception as exc:
             logger.warning("Snapshot manuel kripto: TEFAS linked fiyatları çekilemedi: %s", exc)
 
-    # USD/TL — linked binance/coingecko için unit_tl hesabında lazım; üst loop zaten alıyor
-    # ama bu fonksiyon bağımsız çağrıldığında da çalışsın
-    try:
-        usd_tl = await fetch_usd_to_tl()
-    except Exception:
-        usd_tl = Decimal(0)
+    return {
+        "commodity": metal_prices,
+        "binance": binance_prices,
+        "coingecko": cg_prices,
+        "tefas": tefas_prices,
+    }
 
-    out: list[AssetData] = []
-    for h in holdings:
-        unit_tl = Decimal(0)
 
-        if h.price_source == "manual":
-            if h.manual_unit_price_tl and h.manual_unit_price_tl > 0:
-                unit_tl = Decimal(str(h.manual_unit_price_tl))
-                # Bilgi: kullanıcının manuel girdiği fiyat, otomatik fiyat değil
-                issues.append(
-                    {
-                        "level": "info",
-                        "source": "manual_crypto",
-                        "exchange": h.exchange,
-                        "symbol": h.symbol,
-                        "code": "info_manual_price",
-                        "msg": f"{h.exchange} {h.symbol}: manuel girilmiş fiyat ({unit_tl} ₺) — anlık piyasa değeri değil",
-                    }
-                )
-            else:
-                issues.append(
-                    {
-                        "level": "warn",
-                        "source": "manual_crypto",
-                        "exchange": h.exchange,
-                        "symbol": h.symbol,
-                        "code": "manual_price_missing",
-                        "msg": f"{h.exchange} {h.symbol}: 'manual' fiyat seçili ama manual_unit_price_tl boş",
-                    }
-                )
-
-        elif h.price_source == "linked":
-            ls = h.linked_source
-            lid = h.linked_id or ""
-            if ls == "commodity":
-                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
-                unit_tl = metal_prices.get(key, Decimal(0)) if key else Decimal(0)
-            elif ls == "binance":
-                u = lookup_usd_price(lid, binance_prices)
-                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
-            elif ls == "coingecko":
-                u = cg_prices.get(lid, Decimal(0))
-                unit_tl = (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
-            elif ls == "tefas":
-                unit_tl = tefas_prices.get(lid, Decimal(0))
-            else:
-                issues.append(
-                    {
-                        "level": "warn",
-                        "source": "manual_crypto",
-                        "exchange": h.exchange,
-                        "symbol": h.symbol,
-                        "code": "linked_invalid",
-                        "msg": f"{h.exchange} {h.symbol}: 'linked' seçili ama linked_source/linked_id geçersiz",
-                    }
-                )
-
-            if unit_tl > 0:
-                # Bilgi: bu pozisyon başka bir varlığın fiyatına peg edilmiş
-                issues.append(
-                    {
-                        "level": "info",
-                        "source": "manual_crypto",
-                        "exchange": h.exchange,
-                        "symbol": h.symbol,
-                        "code": "info_linked",
-                        "msg": f"{h.exchange} {h.symbol}: {ls}:{lid} fiyatına bağlı (anlık {unit_tl} ₺/birim)",
-                    }
-                )
-            elif ls in ("commodity", "binance", "coingecko", "tefas"):
-                issues.append(
-                    {
-                        "level": "warn",
-                        "source": "manual_crypto",
-                        "exchange": h.exchange,
-                        "symbol": h.symbol,
-                        "code": f"linked_{ls}_no_price",
-                        "msg": f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi/bulunamadı",
-                    }
-                )
-        # auto için unit_tl=0 — ortak enrichment loop yakalar
-
-        out.append(
-            AssetData(
-                symbol=h.symbol,
-                name=h.label or f"{h.exchange} {h.symbol}",
-                provider=f"manual:{h.exchange}",
-                asset_type="crypto",
-                source_type="manual",
-                liquid_quantity=Decimal(str(h.quantity)),
-                unit_price_tl=unit_tl,
+def _manual_crypto_manual_price(h: ManualCryptoHolding, issues: list[dict]) -> Decimal:
+    """price_source='manual' için unit_tl hesaplar + ilgili health issue ekler."""
+    if h.manual_unit_price_tl and h.manual_unit_price_tl > 0:
+        unit_tl = Decimal(str(h.manual_unit_price_tl))
+        # Bilgi: kullanıcının manuel girdiği fiyat, otomatik fiyat değil
+        issues.append(
+            _mc_issue(
+                h,
+                "info_manual_price",
+                f"{h.exchange} {h.symbol}: manuel girilmiş fiyat ({unit_tl} ₺) — anlık piyasa değeri değil",
+                level="info",
             )
         )
-    return out
+        return unit_tl
+    issues.append(
+        _mc_issue(
+            h,
+            "manual_price_missing",
+            f"{h.exchange} {h.symbol}: 'manual' fiyat seçili ama manual_unit_price_tl boş",
+        )
+    )
+    return Decimal(0)
+
+
+def _commodity_metal_key(lid: str) -> str | None:
+    """linked commodity id'sini (XAU/XAG) metal fiyat anahtarına çevirir."""
+    upper = lid.upper()
+    if upper == "XAU":
+        return "gold"
+    if upper == "XAG":
+        return "silver"
+    return None
+
+
+def _usd_to_tl(u: Decimal, usd_tl: Decimal) -> Decimal:
+    """USD birim fiyatı TL'ye çevirir; geçersiz (<=0) ise Decimal(0)."""
+    return (u * usd_tl).quantize(Decimal("0.0001")) if (u > 0 and usd_tl > 0) else Decimal(0)
+
+
+def _manual_crypto_linked_price(
+    h: ManualCryptoHolding,
+    linked_prices: dict[str, dict[str, Decimal]],
+    usd_tl: Decimal,
+    issues: list[dict],
+) -> Decimal:
+    """price_source='linked' için unit_tl hesaplar + ilgili health issue ekler."""
+    ls = h.linked_source
+    lid = h.linked_id or ""
+    unit_tl = Decimal(0)
+
+    if ls == "commodity":
+        key = _commodity_metal_key(lid)
+        unit_tl = linked_prices["commodity"].get(key, Decimal(0)) if key else Decimal(0)
+    elif ls == "binance":
+        unit_tl = _usd_to_tl(lookup_usd_price(lid, linked_prices["binance"]), usd_tl)
+    elif ls == "coingecko":
+        unit_tl = _usd_to_tl(linked_prices["coingecko"].get(lid, Decimal(0)), usd_tl)
+    elif ls == "tefas":
+        unit_tl = linked_prices["tefas"].get(lid, Decimal(0))
+    else:
+        issues.append(
+            _mc_issue(
+                h,
+                "linked_invalid",
+                f"{h.exchange} {h.symbol}: 'linked' seçili ama linked_source/linked_id geçersiz",
+            )
+        )
+
+    if unit_tl > 0:
+        # Bilgi: bu pozisyon başka bir varlığın fiyatına peg edilmiş
+        issues.append(
+            _mc_issue(
+                h,
+                "info_linked",
+                f"{h.exchange} {h.symbol}: {ls}:{lid} fiyatına bağlı (anlık {unit_tl} ₺/birim)",
+                level="info",
+            )
+        )
+    elif ls in ("commodity", "binance", "coingecko", "tefas"):
+        issues.append(
+            _mc_issue(
+                h,
+                f"linked_{ls}_no_price",
+                f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi/bulunamadı",
+            )
+        )
+    return unit_tl
 
 
 def _gather_bes_assets(holdings: list[BesHolding]) -> list[AssetData]:
@@ -600,6 +653,94 @@ async def _last_known_usd_price(
     return (Decimal(unit_price_tl) / Decimal(usd_rate)).quantize(Decimal("0.000001")), snap_date
 
 
+async def _resolve_rates() -> tuple[Decimal, Decimal, dict[str, Decimal]]:
+    """Döviz kurlarını paralel çeker ve hataları normalize eder.
+
+    USD/TL kritik (cekilemezse exception raise edilir). GBP/USD ve TCMB
+    rates best-effort: hata olursa 0 / boş dict ile devam edilir.
+    """
+    rate_results = await asyncio.gather(
+        fetch_usd_to_tl(),
+        fetch_gbp_to_usd(),
+        fetch_tcmb_rates(),
+        return_exceptions=True,
+    )
+    usd_tl, gbp_usd, tcmb_rates = rate_results
+    if isinstance(usd_tl, BaseException):
+        logger.error("Snapshot: USD/TL kuru hicbir kaynaktan cekilemedi, iptal: %s", usd_tl)
+        raise usd_tl
+    if isinstance(gbp_usd, BaseException):
+        logger.warning("Snapshot: GBP/USD cekilemedi, UK hisseleri 0 deger: %s", gbp_usd)
+        gbp_usd = Decimal("0")
+    if isinstance(tcmb_rates, BaseException):
+        logger.warning("Snapshot: TCMB rates cekilemedi, cash USD/TRY ile cevrilecek: %s", tcmb_rates)
+        tcmb_rates = {}
+    return usd_tl, gbp_usd, tcmb_rates
+
+
+async def _apply_last_known_price(
+    a: AssetData,
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    issues: list[dict],
+) -> None:
+    """Spot fiyat alınamayan asset için önceki snapshot'tan son bilinen fiyatı uygular.
+
+    FIN-005 (FAZ H): gorunmez kayip onleme — eski snapshot'taki fiyat kullanilir.
+    """
+    qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
+    if qty <= 0:
+        return
+    last_usd_price, last_snap_date = await _last_known_usd_price(db, user_id, a.symbol)
+    if last_usd_price is not None and last_usd_price > 0:
+        a.unit_price_usd = last_usd_price
+        issues.append(
+            {
+                "source": a.provider,
+                "symbol": a.symbol,
+                "code": "stale_price",
+                "msg": (f"{a.symbol} icin spot fiyat alinamadi, son bilinen fiyat ({last_snap_date}) kullanildi"),
+            }
+        )
+    else:
+        issues.append(
+            {
+                "source": a.provider,
+                "symbol": a.symbol,
+                "code": "no_spot_price",
+                "msg": f"{a.symbol} için Binance USDT pariteni bulunamadı, snapshot'a 0 değerle eklendi",
+            }
+        )
+
+
+async def _enrich_missing_prices(
+    all_assets: list[AssetData],
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    issues: list[dict],
+) -> None:
+    """Fiyatı olmayan asset'lere spot fiyat enjekte eder (in-place).
+
+    Servisler sadece miktar döner; spot fiyat burada lookup'lanır. Spot
+    bulunamazsa son bilinen snapshot fiyatına düşülür (FIN-005).
+    """
+    needs_pricing = [a for a in all_assets if a.unit_price_tl == 0 and a.unit_price_usd == 0]
+    if not needs_pricing:
+        return
+    unique_symbols = list({a.symbol for a in needs_pricing})
+    try:
+        spot_prices = await fetch_combined_prices(unique_symbols)
+    except Exception as exc:
+        logger.warning("Snapshot: spot fiyat çekilemedi: %s", exc)
+        spot_prices = {}
+    for a in needs_pricing:
+        usd_price = lookup_usd_price(a.symbol, spot_prices)
+        if usd_price > 0:
+            a.unit_price_usd = usd_price
+        else:
+            await _apply_last_known_price(a, db, user_id, issues)
+
+
 async def compute_and_save_snapshot(
     user_id: uuid.UUID,
     db: AsyncSession,
@@ -659,22 +800,7 @@ async def compute_and_save_snapshot(
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.
     # GBP/USD sadece UK hisseleri icin; cekilemezse 0 ile devam (UK hisseler 0 deger).
     # TCMB rates EUR/CHF/JPY... cash holding multi-currency icin (FIN-007).
-    rate_results = await asyncio.gather(
-        fetch_usd_to_tl(),
-        fetch_gbp_to_usd(),
-        fetch_tcmb_rates(),
-        return_exceptions=True,
-    )
-    usd_tl, gbp_usd, tcmb_rates = rate_results
-    if isinstance(usd_tl, BaseException):
-        logger.error("Snapshot: USD/TL kuru hicbir kaynaktan cekilemedi, iptal: %s", usd_tl)
-        raise usd_tl
-    if isinstance(gbp_usd, BaseException):
-        logger.warning("Snapshot: GBP/USD cekilemedi, UK hisseleri 0 deger: %s", gbp_usd)
-        gbp_usd = Decimal("0")
-    if isinstance(tcmb_rates, BaseException):
-        logger.warning("Snapshot: TCMB rates cekilemedi, cash USD/TRY ile cevrilecek: %s", tcmb_rates)
-        tcmb_rates = {}
+    usd_tl, gbp_usd, tcmb_rates = await _resolve_rates()
 
     # Tum kaynaklardan asset'leri topla (paralel)
     issues: list[dict] = []
@@ -684,16 +810,15 @@ async def compute_and_save_snapshot(
         tefas_assets,
         stock_assets,
         commodity_assets,
-        cash_assets,
     ) = await asyncio.gather(
         _gather_crypto_assets(integrations, issues),
         _gather_wallet_assets(wallets, issues),
         _gather_tefas_assets(tefas_holdings, issues),
         _gather_stock_assets(stock_holdings, usd_tl, gbp_usd, issues),
         _gather_commodity_assets(commodity_holdings, issues),
-        _gather_cash_assets(cash_holdings, usd_tl, tcmb_rates, issues),
     )
-    bes_assets = _gather_bes_assets(bes_holdings)  # Sync — DB'den cekilen lokal veri
+    cash_assets = await _gather_cash_assets(cash_holdings, usd_tl, tcmb_rates, issues)
+    bes_assets = _gather_bes_assets(bes_holdings)
     manual_crypto_assets = await _gather_manual_crypto_assets(manual_crypto_holdings, issues)
     all_assets: list[AssetData] = (
         list(crypto_assets)
@@ -708,47 +833,7 @@ async def compute_and_save_snapshot(
 
     # Blockchain ve kripto asset'lerine spot fiyat enjekte et
     # (servisler sadece miktar döner, fiyat ayrıca lookup'lanır)
-    needs_pricing = [a for a in all_assets if a.unit_price_tl == 0 and a.unit_price_usd == 0]
-    if needs_pricing:
-        unique_symbols = list({a.symbol for a in needs_pricing})
-        try:
-            spot_prices = await fetch_combined_prices(unique_symbols)
-        except Exception as exc:
-            logger.warning("Snapshot: spot fiyat çekilemedi: %s", exc)
-            spot_prices = {}
-        for a in needs_pricing:
-            usd_price = lookup_usd_price(a.symbol, spot_prices)
-            if usd_price > 0:
-                a.unit_price_usd = usd_price
-            else:
-                # FIN-005 (FAZ H): Spot fiyat alinamadi — onceki snapshot'tan
-                # son bilinen fiyati lookup et (gorunmez kayip onleme).
-                qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
-                if qty > 0:
-                    last_usd_price, last_snap_date = await _last_known_usd_price(
-                        db,
-                        user_id,
-                        a.symbol,
-                    )
-                    if last_usd_price is not None and last_usd_price > 0:
-                        a.unit_price_usd = last_usd_price
-                        issues.append(
-                            {
-                                "source": a.provider,
-                                "symbol": a.symbol,
-                                "code": "stale_price",
-                                "msg": (f"{a.symbol} icin spot fiyat alinamadi, son bilinen fiyat ({last_snap_date}) kullanildi"),
-                            }
-                        )
-                    else:
-                        issues.append(
-                            {
-                                "source": a.provider,
-                                "symbol": a.symbol,
-                                "code": "no_spot_price",
-                                "msg": f"{a.symbol} için Binance USDT pariteni bulunamadı, snapshot'a 0 değerle eklendi",
-                            }
-                        )
+    await _enrich_missing_prices(all_assets, db, user_id, issues)
 
     # Toplam degeri hesapla (weight_pct icin gerekli)
     total_tl = Decimal(0)

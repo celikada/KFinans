@@ -22,8 +22,11 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-export function useFocusTrap(active: boolean, onClose?: () => void) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
+  active: boolean,
+  onClose?: () => void,
+) {
+  const containerRef = useRef<T | null>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -35,7 +38,7 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
 
     const focusables = () =>
       Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-        .filter((el) => !el.hasAttribute("data-focus-skip"));
+        .filter((el) => el.dataset.focusSkip === undefined);
 
     // Initial focus: ilk focusable, yoksa container kendisi.
     const initial = focusables()[0];
@@ -55,12 +58,12 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
       if (e.key !== "Tab") return;
 
       const items = focusables();
-      if (items.length === 0) {
+      const first = items[0];
+      const last = items.at(-1);
+      if (!first || !last) {
         e.preventDefault();
         return;
       }
-      const first = items[0];
-      const last = items[items.length - 1];
       const activeEl = document.activeElement as HTMLElement | null;
 
       if (e.shiftKey && activeEl === first) {

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS, MONTH_NAMES } from "@/lib/api";
+import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import type { BudgetComparisonDTO } from "@/lib/api";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
@@ -154,19 +154,19 @@ export default function DashboardPage() {
         if (!holdings.length) return;
         safeSet(setTefasFundCount)(holdings.length);
         const positions = await api.tefasPreview(holdings);
-        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
         safeSet(setTefasTotal)(total);
-        safeSet(setTefasTop)(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.code));
+        safeSet(setTefasTop)(top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.code));
       }),
 
       // Kripto (Binance/iCrypex)
       safe("crypto", async () => {
         const { positions } = await api.getCryptoPositions();
-        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+        const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
         if (filtered.length === 0) return;
-        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
         safeSet(setCryptoTotal)(total);
-        safeSet(setCryptoTop)(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
+        safeSet(setCryptoTop)(top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol));
       }).finally(() => { if (!cancelled) setCryptoLoading(false); }),
 
       // Hisse senedi: holdings -> preview chain
@@ -175,19 +175,19 @@ export default function DashboardPage() {
         if (!holdings.length) return;
         safeSet(setStockHoldingCount)(holdings.length);
         const positions = await api.stockPreview(holdings);
-        const total = positions.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
         safeSet(setStockTotal)(total);
-        safeSet(setStockTop)(top3(positions, (p) => parseFloat(p.total_value_tl), (p) => p.ticker));
+        safeSet(setStockTop)(top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.ticker));
       }),
 
       // Blockchain cüzdanlar
       safe("wallets", async () => {
         const { positions } = await api.getWalletPositions();
-        const filtered = positions.filter((p) => parseFloat(p.total_value_tl) > 0.01);
+        const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
         if (filtered.length === 0) return;
-        const total = filtered.reduce((s, p) => s + parseFloat(p.total_value_tl), 0);
+        const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
         safeSet(setWalletTotal)(total);
-        safeSet(setWalletTop)(top3(filtered, (p) => parseFloat(p.total_value_tl), (p) => p.symbol));
+        safeSet(setWalletTop)(top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol));
       }).finally(() => { if (!cancelled) setWalletLoading(false); }),
 
       // BES
@@ -198,10 +198,10 @@ export default function DashboardPage() {
         const items = holdings.map((h) => ({
           plan_name: h.plan_name,
           total:
-            (parseFloat(h.paid_principal.toString()) || 0) +
-            (parseFloat(h.paid_returns.toString()) || 0) +
-            (parseFloat(h.govt_contribution.toString()) || 0) +
-            (parseFloat(h.govt_returns.toString()) || 0),
+            (Number.parseFloat(h.paid_principal.toString()) || 0) +
+            (Number.parseFloat(h.paid_returns.toString()) || 0) +
+            (Number.parseFloat(h.govt_contribution.toString()) || 0) +
+            (Number.parseFloat(h.govt_returns.toString()) || 0),
         }));
         const total = items.reduce((s, i) => s + i.total, 0);
         safeSet(setBesTotal)(total);
@@ -212,19 +212,19 @@ export default function DashboardPage() {
       safe("income-summary", async () => {
         const sum = await api.getIncomeSummary(yyyy, mm);
         if (sum.count === 0) return;
-        safeSet(setIncomeTotal)(parseFloat(sum.total));
+        safeSet(setIncomeTotal)(Number.parseFloat(sum.total));
         safeSet(setIncomeCount)(sum.count);
         safeSet(setIncomeTop)(top3(
           sum.by_category,
-          (b) => parseFloat(b.total),
-          (b) => INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category,
+          (b) => Number.parseFloat(b.total),
+          (b) => INCOME_CATEGORY_LABELS[b.category] ?? b.category,
         ));
       }),
 
       // Gelir dashboard (yıl sonu beklentisi)
       safe("income-dashboard", async () => {
         const d = await api.getIncomeDashboard(yyyy, mm);
-        const est = parseFloat(d.year_total_estimate);
+        const est = Number.parseFloat(d.year_total_estimate);
         if (est > 0) safeSet(setIncomeYearEstimate)(est);
       }),
 
@@ -234,25 +234,25 @@ export default function DashboardPage() {
         if (isDecember) fetches.push(api.getCashFlow(yyyy + 1));
         const [thisYear, nextYear] = await Promise.all(fetches);
         const thisMonth = thisYear.months.find((m) => m.month === mm);
-        if (thisMonth) safeSet(setCurrentMonthNet)(parseFloat(thisMonth.net));
+        if (thisMonth) safeSet(setCurrentMonthNet)(Number.parseFloat(thisMonth.net));
         const nextMonthData = isDecember
           ? nextYear?.months.find((m) => m.month === 1)
           : thisYear.months.find((m) => m.month === mm + 1);
-        if (nextMonthData) safeSet(setNextMonthNet)(parseFloat(nextMonthData.net));
+        if (nextMonthData) safeSet(setNextMonthNet)(Number.parseFloat(nextMonthData.net));
       }),
 
       // Kredi kartları
       safe("credit-cards", async () => {
         const s = await api.listCreditCards();
-        safeSet(setCreditCardTotal)(parseFloat(s.total_debt));
-        safeSet(setCreditCardPeriod)(parseFloat(s.total_period_debt));
+        safeSet(setCreditCardTotal)(Number.parseFloat(s.total_debt));
+        safeSet(setCreditCardPeriod)(Number.parseFloat(s.total_period_debt));
         safeSet(setCreditCardCount)(s.cards.length);
       }),
 
       // Kıymetli madenler
       safe("commodities", async () => {
         const s = await api.getCommodities();
-        const total = parseFloat(s.total_value_tl);
+        const total = Number.parseFloat(s.total_value_tl);
         if (s.positions.length > 0) {
           safeSet(setCommodityTotal)(total);
           safeSet(setCommodityCount)(s.positions.length);
@@ -262,7 +262,7 @@ export default function DashboardPage() {
       // Nakit / Banka
       safe("cash", async () => {
         const s = await api.listCash();
-        const total = parseFloat(s.total_tl);
+        const total = Number.parseFloat(s.total_tl);
         if (s.holdings.length > 0) {
           safeSet(setCashTotal)(total);
           safeSet(setCashCount)(s.holdings.length);
@@ -272,13 +272,13 @@ export default function DashboardPage() {
       // Manuel kripto
       safe("manual-crypto", async () => {
         const s = await api.listManualCrypto();
-        const total = parseFloat(s.total_value_tl);
+        const total = Number.parseFloat(s.total_value_tl);
         if (s.positions.length > 0) {
           safeSet(setManualCryptoTotal)(total);
           safeSet(setManualCryptoCount)(s.positions.length);
           safeSet(setManualCryptoTop)(top3(
             s.positions,
-            (p) => parseFloat(p.total_value_tl),
+            (p) => Number.parseFloat(p.total_value_tl),
             (p) => p.symbol,
           ));
         }
@@ -295,13 +295,13 @@ export default function DashboardPage() {
       safe("goal", async () => {
         const g = await api.getGoal();
         if (g.progress_pct !== null) safeSet(setGoalPct)(g.progress_pct);
-        if (g.passive_income_tl) safeSet(setGoalPassive)(parseFloat(g.passive_income_tl));
+        if (g.passive_income_tl) safeSet(setGoalPassive)(Number.parseFloat(g.passive_income_tl));
       }),
 
       // Planlı ödemeler (yıllık tahmin)
       safe("planned", async () => {
         const fc = await api.getForecast(yyyy);
-        const total = parseFloat(fc.year_total);
+        const total = Number.parseFloat(fc.year_total);
         if (total > 0) safeSet(setPlannedTotal)(total);
       }),
 
@@ -309,11 +309,11 @@ export default function DashboardPage() {
       safe("expenses", async () => {
         const sum = await api.getExpenseSummary(yyyy, mm);
         if (sum.count === 0) return;
-        safeSet(setExpenseTotal)(parseFloat(sum.total));
+        safeSet(setExpenseTotal)(Number.parseFloat(sum.total));
         safeSet(setExpenseCount)(sum.count);
         safeSet(setExpenseTop)(top3(
           sum.by_category,
-          (b) => parseFloat(b.total),
+          (b) => Number.parseFloat(b.total),
           (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
         ));
       }),
@@ -366,7 +366,7 @@ export default function DashboardPage() {
     setSnapshotMsg("");
     try {
       const snap = await api.createSnapshot(true);
-      const total = parseFloat(snap.total_value_tl);
+      const total = Number.parseFloat(snap.total_value_tl);
       setPrevSnapshot(total);
       const issues = snap.health_issues ?? [];
       setSnapshotMsg(buildSnapshotMsg(total, snap.asset_positions.length, issues.length));
@@ -386,14 +386,14 @@ export default function DashboardPage() {
       const preview = await api.previewSnapshot();
       if (preview.issues.length > 0) {
         // Onay popup'ı — kullanıcı 'Yine de kaydet' derse saveConfirmedSnapshot çağırır
-        const total = parseFloat(preview.total_value_tl);
+        const total = Number.parseFloat(preview.total_value_tl);
         setPendingIssues({ issues: preview.issues, total });
         setSnapshotting(false);
         return;
       }
       // Sorunsuz → doğrudan kaydet (force gerekmez)
       const snap = await api.createSnapshot(false);
-      const total = parseFloat(snap.total_value_tl);
+      const total = Number.parseFloat(snap.total_value_tl);
       setPrevSnapshot(total);
       setSnapshotMsg(buildSnapshotMsg(total, snap.asset_positions.length, 0));
     } catch (err) {
@@ -457,22 +457,22 @@ export default function DashboardPage() {
             <div className="flex items-baseline gap-6">
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">{t(`months.${new Date().getMonth() + 1}`)}</p>
-                {currentMonthNet !== null ? (
+                {currentMonthNet === null ? (
+                  <p className="text-2xl font-bold text-gray-300">—</p>
+                ) : (
                   <p className={`text-2xl font-bold tabular-nums ${currentMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                     {currentMonthNet >= 0 ? "+" : ""}{fmtTL(currentMonthNet)} ₺
                   </p>
-                ) : (
-                  <p className="text-2xl font-bold text-gray-300">—</p>
                 )}
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">{t(`months.${((new Date().getMonth() + 1) % 12) + 1}`)}</p>
-                {nextMonthNet !== null ? (
+                {nextMonthNet === null ? (
+                  <p className="text-2xl font-bold text-gray-300">—</p>
+                ) : (
                   <p className={`text-2xl font-bold tabular-nums ${nextMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                     {nextMonthNet >= 0 ? "+" : ""}{fmtTL(nextMonthNet)} ₺
                   </p>
-                ) : (
-                  <p className="text-2xl font-bold text-gray-300">—</p>
                 )}
               </div>
             </div>

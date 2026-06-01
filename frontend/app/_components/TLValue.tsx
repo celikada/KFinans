@@ -8,14 +8,14 @@ const RATE_KEY = "kfinans_usd_rate_cache";
 const RATE_TTL_MS = 5 * 60 * 1000;
 
 export function getShowUsd(): boolean {
-  if (typeof window === "undefined") return false;
+  if (globalThis.window === undefined) return false;
   return localStorage.getItem(STORAGE_KEY) === "true";
 }
 
 export function setShowUsd(v: boolean) {
   localStorage.setItem(STORAGE_KEY, v ? "true" : "false");
   // Tüm bileşenlere haber ver — storage event aynı sekmede tetiklenmez
-  window.dispatchEvent(new CustomEvent("kfinans-show-usd-changed"));
+  globalThis.dispatchEvent(new CustomEvent("kfinans-show-usd-changed"));
 }
 
 interface CachedRate {
@@ -25,7 +25,7 @@ interface CachedRate {
 
 export function useUsdRate(): number | null {
   const [rate, setRate] = useState<number | null>(() => {
-    if (typeof window === "undefined") return null;
+    if (globalThis.window === undefined) return null;
     try {
       const raw = localStorage.getItem(RATE_KEY);
       if (!raw) return null;
@@ -41,7 +41,7 @@ export function useUsdRate(): number | null {
     api.getUsdRate()
       .then((r) => {
         if (cancelled) return;
-        const n = parseFloat(r.usd_try);
+        const n = Number.parseFloat(r.usd_try);
         setRate(n);
         localStorage.setItem(RATE_KEY, JSON.stringify({ ts: Date.now(), rate: n }));
       })
@@ -54,11 +54,11 @@ export function useUsdRate(): number | null {
 
 interface Props {
   /** TRY cinsinden değer (number veya parsable string). */
-  tl: number | string | null | undefined;
+  readonly tl: number | string | null | undefined;
   /** Tipografi sınıfları — opsiyonel override. */
-  className?: string;
+  readonly className?: string;
   /** USD karşılığı için ek class (varsayılan: küçük gri). */
-  usdClassName?: string;
+  readonly usdClassName?: string;
 }
 
 /**
@@ -74,14 +74,14 @@ export function TLValue({ tl, className, usdClassName }: Props) {
   useEffect(() => {
     setShow(getShowUsd());
     const handler = () => setShow(getShowUsd());
-    window.addEventListener("kfinans-show-usd-changed", handler);
-    return () => window.removeEventListener("kfinans-show-usd-changed", handler);
+    globalThis.addEventListener("kfinans-show-usd-changed", handler);
+    return () => globalThis.removeEventListener("kfinans-show-usd-changed", handler);
   }, []);
 
   if (tl === null || tl === undefined || tl === "") {
     return <span className={className}>—</span>;
   }
-  const n = typeof tl === "string" ? parseFloat(tl) : tl;
+  const n = typeof tl === "string" ? Number.parseFloat(tl) : tl;
   if (Number.isNaN(n)) return <span className={className}>—</span>;
 
   return (

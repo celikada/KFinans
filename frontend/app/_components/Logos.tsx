@@ -1,14 +1,18 @@
 "use client";
 
-export function KFinansLogo({ size = "md" }: { size?: "sm" | "md" | "lg" | "xl" }) {
-  const iconSize =
-    size === "sm" ? 24 :
-    size === "lg" ? 40 :
-    size === "xl" ? 64 : 32;
-  const textCls =
-    size === "sm" ? "text-base" :
-    size === "lg" ? "text-2xl" :
-    size === "xl" ? "text-4xl" : "text-xl";
+type LogoSize = "sm" | "md" | "lg" | "xl";
+
+const ICON_SIZE: Record<LogoSize, number> = { sm: 24, md: 32, lg: 40, xl: 64 };
+const TEXT_CLS: Record<LogoSize, string> = {
+  sm: "text-base",
+  md: "text-xl",
+  lg: "text-2xl",
+  xl: "text-4xl",
+};
+
+export function KFinansLogo({ size = "md" }: { readonly size?: LogoSize }) {
+  const iconSize = ICON_SIZE[size];
+  const textCls = TEXT_CLS[size];
 
   return (
     <div className="flex items-center gap-2.5 select-none">

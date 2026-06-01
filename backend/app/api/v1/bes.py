@@ -1,6 +1,7 @@
 import io
 import logging
 from decimal import Decimal, InvalidOperation
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -16,11 +17,14 @@ from app.schemas.bes import BesHolding
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/bes", tags=["bes"])
 
+CurrentUser = Annotated[User, Depends(get_current_user)]
+DB = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/holdings", response_model=list[BesHolding])
 async def get_bes_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DB,
 ):
     result = await db.execute(select(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
@@ -40,8 +44,8 @@ async def get_bes_holdings(
 @router.put("/holdings", response_model=list[BesHolding])
 async def save_bes_holdings(
     holdings: list[BesHolding],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DB,
 ):
     await db.execute(delete(BesHoldingModel).where(BesHoldingModel.user_id == current_user.id))
     for h in holdings:
@@ -62,8 +66,8 @@ async def save_bes_holdings(
 
 @router.get("/export")
 async def export_bes_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DB,
 ):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -123,11 +127,38 @@ def _parse_decimal(value) -> Decimal:
         return Decimal("0")
 
 
+def _parse_bes_row(row) -> BesHolding | None:
+    """Bir Excel satirini BesHolding'e cevir; bos/gecersiz satir -> None."""
+    plan_name = str(row[0]).strip() if row[0] else ""
+    if not plan_name or plan_name.lower() == "none":
+        return None
+    contract = str(row[1]).strip() if len(row) > 1 and row[1] else None
+    if contract and contract.lower() == "none":
+        contract = None
+    paid_principal = _parse_decimal(row[2] if len(row) > 2 else None)
+    paid_returns = _parse_decimal(row[3] if len(row) > 3 else None)
+    govt_contribution = _parse_decimal(row[4] if len(row) > 4 else None)
+    govt_returns = _parse_decimal(row[5] if len(row) > 5 else None)
+
+    # En az bir sayisal alan > 0 olmali (tum sifirsa atla — bos satir)
+    if paid_principal + paid_returns + govt_contribution + govt_returns <= 0:
+        return None
+
+    return BesHolding(
+        plan_name=plan_name,
+        contract_number=contract,
+        paid_principal=paid_principal,
+        paid_returns=paid_returns,
+        govt_contribution=govt_contribution,
+        govt_returns=govt_returns,
+    )
+
+
 @router.post("/import", response_model=list[BesHolding])
 async def import_bes_holdings(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DB,
 ):
     from openpyxl import load_workbook
 
@@ -144,31 +175,9 @@ async def import_bes_holdings(
 
     parsed: list[BesHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        plan_name = str(row[0]).strip() if row[0] else ""
-        if not plan_name or plan_name.lower() == "none":
-            continue
-        contract = str(row[1]).strip() if len(row) > 1 and row[1] else None
-        if contract and contract.lower() == "none":
-            contract = None
-        paid_principal = _parse_decimal(row[2] if len(row) > 2 else None)
-        paid_returns = _parse_decimal(row[3] if len(row) > 3 else None)
-        govt_contribution = _parse_decimal(row[4] if len(row) > 4 else None)
-        govt_returns = _parse_decimal(row[5] if len(row) > 5 else None)
-
-        # En az bir sayisal alan > 0 olmali (tum sifirsa atla — bos satir)
-        if paid_principal + paid_returns + govt_contribution + govt_returns <= 0:
-            continue
-
-        parsed.append(
-            BesHolding(
-                plan_name=plan_name,
-                contract_number=contract,
-                paid_principal=paid_principal,
-                paid_returns=paid_returns,
-                govt_contribution=govt_contribution,
-                govt_returns=govt_returns,
-            )
-        )
+        holding = _parse_bes_row(row)
+        if holding is not None:
+            parsed.append(holding)
 
     if not parsed:
         raise HTTPException(

@@ -3,9 +3,9 @@ import { INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  year: number;
-  month: number;
-  onChange: (year: number, month: number) => void;
+  readonly year: number;
+  readonly month: number;
+  readonly onChange: (year: number, month: number) => void;
 }
 
 export function MonthSelector({ year, month, onChange }: Props) {

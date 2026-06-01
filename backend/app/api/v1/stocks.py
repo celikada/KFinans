@@ -39,11 +39,14 @@ def convert_to_tl(price: Decimal, currency: str, usd_tl: Decimal, gbp_usd: Decim
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/stocks", tags=["stocks"])
 
+CurrentUser = Annotated[User, Depends(get_current_user)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/holdings", response_model=list[StockHolding])
 async def get_stock_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
@@ -62,8 +65,8 @@ async def get_stock_holdings(
 @router.put("/holdings", response_model=list[StockHolding])
 async def save_stock_holdings(
     holdings: list[StockHolding],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     await db.execute(delete(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     for h in holdings:
@@ -140,10 +143,50 @@ async def stock_preview(
     return out
 
 
+async def _fetch_stock_export_quotes(rows) -> dict:
+    """Holding'ler için TL'ye çevrilmiş canlı fiyatları çeker; hata olursa boş dict."""
+    if not rows:
+        return {}
+    quotes: dict = {}
+    try:
+        tickers = [r.ticker for r in rows]
+        usd_tl, gbp_usd, raw_quotes = await asyncio.gather(
+            fetch_usd_to_tl(),
+            fetch_gbp_to_usd(),
+            fetch_stock_quotes(tickers),
+        )
+        for ticker, q in raw_quotes.items():
+            if q:
+                price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd).quantize(Decimal("0.01"))
+                quotes[ticker] = (price_tl, q.currency)
+    except Exception:
+        logger.warning("Hisse export: canlı fiyat alınamadı")
+    return quotes
+
+
+def _write_stock_export_row(ws, row_idx: int, holding, quotes: dict) -> None:
+    """Tek bir hisse holding satırını export worksheet'ine yazar."""
+    price_tl, _ = quotes.get(holding.ticker, (None, None))
+    total = float(holding.quantity) * float(price_tl) if price_tl else None
+    avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
+    gain_loss = None
+    if total is not None and avg_cost is not None:
+        cost_basis = float(holding.quantity) * avg_cost
+        gain_loss = round(total - cost_basis, 2)
+    ws.cell(row=row_idx, column=1, value=holding.ticker)
+    ws.cell(row=row_idx, column=2, value=float(holding.quantity))
+    ws.cell(row=row_idx, column=3, value=holding.name)
+    ws.cell(row=row_idx, column=4, value=float(price_tl) if price_tl else "")
+    ws.cell(row=row_idx, column=5, value=total if total is not None else "")
+    ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
+    ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
+    ws.cell(row=row_idx, column=8, value=holding.distributor or "")
+
+
 @router.get("/export")
 async def export_stock_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -151,21 +194,7 @@ async def export_stock_holdings(
     result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
-    quotes: dict = {}
-    if rows:
-        try:
-            tickers = [r.ticker for r in rows]
-            usd_tl, gbp_usd, raw_quotes = await asyncio.gather(
-                fetch_usd_to_tl(),
-                fetch_gbp_to_usd(),
-                fetch_stock_quotes(tickers),
-            )
-            for ticker, q in raw_quotes.items():
-                if q:
-                    price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd).quantize(Decimal("0.01"))
-                    quotes[ticker] = (price_tl, q.currency)
-        except Exception:
-            logger.warning("Hisse export: canlı fiyat alınamadı")
+    quotes = await _fetch_stock_export_quotes(rows)
 
     wb = Workbook()
     ws = wb.active
@@ -189,21 +218,7 @@ async def export_stock_holdings(
         cell.alignment = Alignment(horizontal="center")
 
     for row_idx, holding in enumerate(rows, 2):
-        price_tl, _ = quotes.get(holding.ticker, (None, None))
-        total = float(holding.quantity) * float(price_tl) if price_tl else None
-        avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
-        gain_loss = None
-        if total is not None and avg_cost is not None:
-            cost_basis = float(holding.quantity) * avg_cost
-            gain_loss = round(total - cost_basis, 2)
-        ws.cell(row=row_idx, column=1, value=holding.ticker)
-        ws.cell(row=row_idx, column=2, value=float(holding.quantity))
-        ws.cell(row=row_idx, column=3, value=holding.name)
-        ws.cell(row=row_idx, column=4, value=float(price_tl) if price_tl else "")
-        ws.cell(row=row_idx, column=5, value=total if total is not None else "")
-        ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
-        ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
-        ws.cell(row=row_idx, column=8, value=holding.distributor or "")
+        _write_stock_export_row(ws, row_idx, holding, quotes)
 
     for col, width in zip("ABCDEFGH", [12, 14, 30, 18, 18, 18, 18, 20]):
         ws.column_dimensions[col].width = width
@@ -218,11 +233,56 @@ async def export_stock_holdings(
     )
 
 
+def _find_mkk_header_row(sh) -> int:
+    """MKK sheet'inde 'Üye' başlık satırını bulur; yoksa 422 fırlatır."""
+    for r in range(min(sh.nrows, 20)):
+        if str(sh.cell_value(r, 0)).strip().lower() == "üye":
+            return r
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
+    )
+
+
+def _parse_mkk_stock_row(sh, r: int) -> StockHolding | None:
+    """MKK satırından hisse kaydı üretir; HS/A değilse veya geçersizse None."""
+    kind = str(sh.cell_value(r, 2)).strip()
+    ek_tanim = str(sh.cell_value(r, 5)).strip().upper()
+    if kind != "HS" or ek_tanim != "A":
+        return None
+    code_raw = sh.cell_value(r, 3)
+    bist_code = str(code_raw).strip().upper() if code_raw else ""
+    if not bist_code:
+        return None
+    # MKK BIST kodlarını Yahoo Finance ticker formatına çevir
+    ticker = bist_code if "." in bist_code else f"{bist_code}.IS"
+    name_raw = sh.cell_value(r, 4)
+    name = str(name_raw).strip() if name_raw else ""
+    try:
+        qty = float(sh.cell_value(r, 7))
+        price_raw = sh.cell_value(r, 8)
+        price = float(price_raw) if price_raw not in ("", "-") else 0
+    except (TypeError, ValueError):
+        return None
+    if qty <= 0:
+        return None
+    member = str(sh.cell_value(r, 0)).strip() or None
+    if member:
+        member = member[:50]
+    return StockHolding(
+        ticker=ticker,
+        quantity=qty,
+        name=name,
+        avg_cost_tl=price if price > 0 else None,
+        distributor=member,
+    )
+
+
 @router.post("/import-mkk", response_model=list[StockHolding])
 async def import_stocks_mkk(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """MKK e-Yatırımcı 'Tüm Kıymetler' raporundan hisse senetlerini içe aktarır.
 
@@ -239,57 +299,19 @@ async def import_stocks_mkk(
     try:
         wb = xlrd.open_workbook(file_contents=content)
         sh = wb.sheet_by_index(0)
-    except Exception:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="MKK Excel dosyası okunamadı (.xls binary formatında olmalı)",
-        )
+        ) from exc
 
-    header_row = None
-    for r in range(min(sh.nrows, 20)):
-        if str(sh.cell_value(r, 0)).strip().lower() == "üye":
-            header_row = r
-            break
-    if header_row is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
-        )
+    header_row = _find_mkk_header_row(sh)
 
     parsed: list[StockHolding] = []
     for r in range(header_row + 1, sh.nrows):
-        kind = str(sh.cell_value(r, 2)).strip()
-        ek_tanim = str(sh.cell_value(r, 5)).strip().upper()
-        if kind != "HS" or ek_tanim != "A":
-            continue
-        code_raw = sh.cell_value(r, 3)
-        bist_code = str(code_raw).strip().upper() if code_raw else ""
-        if not bist_code:
-            continue
-        # MKK BIST kodlarını Yahoo Finance ticker formatına çevir
-        ticker = bist_code if "." in bist_code else f"{bist_code}.IS"
-        name_raw = sh.cell_value(r, 4)
-        name = str(name_raw).strip() if name_raw else ""
-        try:
-            qty = float(sh.cell_value(r, 7))
-            price_raw = sh.cell_value(r, 8)
-            price = float(price_raw) if price_raw not in ("", "-") else 0
-        except (TypeError, ValueError):
-            continue
-        if qty <= 0:
-            continue
-        member = str(sh.cell_value(r, 0)).strip() or None
-        if member:
-            member = member[:50]
-        parsed.append(
-            StockHolding(
-                ticker=ticker,
-                quantity=qty,
-                name=name,
-                avg_cost_tl=price if price > 0 else None,
-                distributor=member,
-            )
-        )
+        holding = _parse_mkk_stock_row(sh, r)
+        if holding is not None:
+            parsed.append(holding)
 
     if not parsed:
         raise HTTPException(
@@ -322,11 +344,48 @@ async def import_stocks_mkk(
     return parsed
 
 
+def _parse_avg_cost(avg_cost_raw) -> float | None:
+    """Ortalama maliyeti float'a çevirir; geçersiz veya <=0 ise None."""
+    if avg_cost_raw is None:
+        return None
+    try:
+        avg_cost_tl = float(avg_cost_raw)
+    except (TypeError, ValueError):
+        return None
+    return avg_cost_tl if avg_cost_tl > 0 else None
+
+
+def _parse_stock_import_row(row: tuple) -> StockHolding | None:
+    """Export-template Excel satırından hisse holding üretir; geçersizse None."""
+    ticker = str(row[0]).strip().upper() if row[0] else ""
+    if not ticker or ticker == "NONE":
+        return None
+    try:
+        qty = float(row[1])
+    except (TypeError, ValueError):
+        return None
+    if qty <= 0:
+        return None
+
+    name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+    avg_cost_raw = row[3] if len(row) > 3 else None
+    distributor_raw = row[7] if len(row) > 7 else None
+    distributor = str(distributor_raw).strip()[:50] or None if distributor_raw else None
+
+    return StockHolding(
+        ticker=ticker,
+        quantity=qty,
+        name=name,
+        avg_cost_tl=_parse_avg_cost(avg_cost_raw),
+        distributor=distributor,
+    )
+
+
 @router.post("/import", response_model=list[StockHolding])
 async def import_stock_holdings(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     from openpyxl import load_workbook
 
@@ -335,44 +394,14 @@ async def import_stock_holdings(
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı") from exc
 
     parsed: list[StockHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        ticker = str(row[0]).strip().upper() if row[0] else ""
-        qty_raw = row[1]
-        name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
-        avg_cost_raw = row[3] if len(row) > 3 else None
-        distributor_raw = row[7] if len(row) > 7 else None
-        if not ticker or ticker == "NONE":
-            continue
-        try:
-            qty = float(qty_raw)
-        except (TypeError, ValueError):
-            continue
-        if qty <= 0:
-            continue
-        avg_cost_tl: float | None = None
-        if avg_cost_raw is not None:
-            try:
-                avg_cost_tl = float(avg_cost_raw)
-                if avg_cost_tl <= 0:
-                    avg_cost_tl = None
-            except (TypeError, ValueError):
-                avg_cost_tl = None
-        distributor: str | None = None
-        if distributor_raw:
-            distributor = str(distributor_raw).strip()[:50] or None
-        parsed.append(
-            StockHolding(
-                ticker=ticker,
-                quantity=qty,
-                name=name,
-                avg_cost_tl=avg_cost_tl,
-                distributor=distributor,
-            )
-        )
+        holding = _parse_stock_import_row(row)
+        if holding is not None:
+            parsed.append(holding)
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")

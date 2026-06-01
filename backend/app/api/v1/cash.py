@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cash", tags=["cash"])
 
+_NOT_FOUND_DESC = "Nakit kaydı bulunamadı"
+
 
 async def _amount_to_tl(amount: Decimal, currency: str) -> Decimal:
     """Currency → TL dönüşüm.
@@ -108,7 +110,11 @@ async def create_cash(
     )
 
 
-@router.put("/{cash_id}", response_model=CashOut)
+@router.put(
+    "/{cash_id}",
+    response_model=CashOut,
+    responses={404: {"description": _NOT_FOUND_DESC}},
+)
 async def update_cash(
     cash_id: int,
     payload: CashUpdate,
@@ -124,7 +130,7 @@ async def update_cash(
         )
     ).scalar_one_or_none()
     if not holding:
-        raise HTTPException(status_code=404, detail="Nakit kaydı bulunamadı")
+        raise HTTPException(status_code=404, detail=_NOT_FOUND_DESC)
     if payload.label is not None:
         holding.label = payload.label
     if payload.amount is not None:
@@ -147,7 +153,11 @@ async def update_cash(
     )
 
 
-@router.delete("/{cash_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{cash_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": _NOT_FOUND_DESC}},
+)
 async def delete_cash(
     cash_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -160,5 +170,5 @@ async def delete_cash(
         )
     )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Nakit kaydı bulunamadı")
+        raise HTTPException(status_code=404, detail=_NOT_FOUND_DESC)
     await db.commit()

@@ -28,7 +28,7 @@ class CashOut(BaseModel):
     label: str
     amount: Decimal
     currency: str
-    notes: str | None
+    notes: str | None = None
     updated_at: datetime
     amount_tl: Decimal  # Endpoint'te TL'ye çevrilmiş hali
 

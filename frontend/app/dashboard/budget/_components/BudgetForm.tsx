@@ -4,7 +4,7 @@ import { api, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  onSaved: () => void;
+  readonly onSaved: () => void;
 }
 
 export function BudgetForm({ onSaved }: Props) {
@@ -16,7 +16,7 @@ export function BudgetForm({ onSaved }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const val = parseFloat(amount);
+    const val = Number.parseFloat(amount);
     if (!val || val <= 0) { setError(t("form.amountInvalid")); return; }
     setSaving(true);
     setError("");

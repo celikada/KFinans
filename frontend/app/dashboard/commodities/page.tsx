@@ -59,11 +59,13 @@ export default function CommoditiesPage() {
     }
   }
 
-  const goldTotal = summary ? Number.parseFloat(summary.total_value_tl) > 0
-    ? summary.positions.filter(p => p.metal === "gold").reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0)
-    : 0 : 0;
-  const silverTotal = summary ? summary.positions.filter(p => p.metal === "silver").reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0) : 0;
   const totalTL = summary ? Number.parseFloat(summary.total_value_tl) : 0;
+  const sumMetal = (metal: string) =>
+    summary
+      ? summary.positions.filter(p => p.metal === metal).reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0)
+      : 0;
+  const goldTotal = totalTL > 0 ? sumMetal("gold") : 0;
+  const silverTotal = sumMetal("silver");
   const goldPrice = summary ? Number.parseFloat(summary.gold_price_tl) : null;
   const silverPrice = summary ? Number.parseFloat(summary.silver_price_tl) : null;
   const hasGoldPositions = summary ? summary.positions.some(p => p.metal === "gold") : false;
@@ -73,6 +75,10 @@ export default function CommoditiesPage() {
   // Altın yoksa bile (yeni hesap) altın çekilemiyorsa kullanıcıya bildir — fiyat panelini boş bırakmamak için
   const showGoldWarning = goldUnavailable;
   const showSilverWarning = silverUnavailable;
+
+  let warningTitle = t("content.commodities.silverUnavailable");
+  if (showGoldWarning && showSilverWarning) warningTitle = t("content.commodities.bothUnavailable");
+  else if (showGoldWarning) warningTitle = t("content.commodities.goldUnavailable");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,11 +92,7 @@ export default function CommoditiesPage() {
             </svg>
             <div className="text-sm text-amber-800">
               <p className="font-semibold">
-                {showGoldWarning && showSilverWarning
-                  ? t("content.commodities.bothUnavailable")
-                  : showGoldWarning
-                  ? t("content.commodities.goldUnavailable")
-                  : t("content.commodities.silverUnavailable")}
+                {warningTitle}
               </p>
               <p className="text-xs mt-0.5 text-amber-700">
                 {t("content.commodities.unavailableIntro")}

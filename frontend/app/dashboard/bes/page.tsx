@@ -6,6 +6,7 @@ import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Holding {
+  _key: string;
   plan_name: string;
   contract_number: string;
   paid_principal: string;
@@ -17,14 +18,23 @@ interface Holding {
 const INPUT_CLS =
   "px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 placeholder:text-gray-400";
 
-const EMPTY_ROW: Holding = {
-  plan_name: "",
-  contract_number: "",
-  paid_principal: "",
-  paid_returns: "",
-  govt_contribution: "",
-  govt_returns: "",
-};
+let _rowKeySeq = 0;
+function newRowKey(): string {
+  _rowKeySeq += 1;
+  return `bes-row-${_rowKeySeq}`;
+}
+
+function emptyRow(): Holding {
+  return {
+    _key: newRowKey(),
+    plan_name: "",
+    contract_number: "",
+    paid_principal: "",
+    paid_returns: "",
+    govt_contribution: "",
+    govt_returns: "",
+  };
+}
 
 function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -55,7 +65,7 @@ function toDTO(holdings: Holding[]): BesHoldingDTO[] {
 export default function BesPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [holdings, setHoldings] = useState<Holding[]>([{ ...EMPTY_ROW }]);
+  const [holdings, setHoldings] = useState<Holding[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -70,6 +80,7 @@ export default function BesPage() {
       .then((data) => {
         if (data.length > 0) {
           setHoldings(data.map((h) => ({
+            _key: newRowKey(),
             plan_name: h.plan_name,
             contract_number: h.contract_number ?? "",
             paid_principal: h.paid_principal.toString(),
@@ -125,6 +136,7 @@ export default function BesPage() {
     try {
       const imported = await api.importBesHoldings(file);
       setHoldings(imported.map((h) => ({
+        _key: newRowKey(),
         plan_name: h.plan_name,
         contract_number: h.contract_number ?? "",
         paid_principal: h.paid_principal.toString(),
@@ -147,7 +159,7 @@ export default function BesPage() {
   }
 
   function addRow() {
-    setHoldings((h) => [...h, { ...EMPTY_ROW }]);
+    setHoldings((h) => [...h, emptyRow()]);
   }
 
   function removeRow(i: number) {
@@ -197,7 +209,7 @@ export default function BesPage() {
           ) : (
             <div className="space-y-4">
               {holdings.map((row, i) => (
-                <div key={i} className="border border-gray-100 rounded-xl p-4 space-y-3">
+                <div key={row._key} className="border border-gray-100 rounded-xl p-4 space-y-3">
                   <div className="flex gap-2 items-center">
                     <input
                       placeholder={t("content.bes.planNamePlaceholder")}
@@ -294,12 +306,12 @@ function NumField({
   suffix,
   value,
   onChange,
-}: {
+}: Readonly<{
   label: string;
   suffix: string;
   value: string;
   onChange: (v: string) => void;
-}) {
+}>) {
   return (
     <div>
       <label className="block text-xs text-gray-500 mb-1">{label} {suffix}</label>

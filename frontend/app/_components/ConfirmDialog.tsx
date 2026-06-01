@@ -41,7 +41,7 @@ const ConfirmContext = React.createContext<ConfirmContextValue>({
   confirm: async () => false,
 });
 
-export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
+export function ConfirmDialogProvider({ children }: { readonly children: React.ReactNode }) {
   const [pending, setPending] = React.useState<PendingConfirm | null>(null);
 
   const confirm = React.useCallback(
@@ -82,12 +82,12 @@ export function useConfirm() {
 function ConfirmDialog({
   pending, onConfirm, onCancel,
 }: {
-  pending: PendingConfirm;
-  onConfirm: () => void;
-  onCancel: () => void;
+  readonly pending: PendingConfirm;
+  readonly onConfirm: () => void;
+  readonly onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const containerRef = useFocusTrap(true, onCancel);
+  const containerRef = useFocusTrap<HTMLDivElement>(true, onCancel);
   const destructive = pending.options.destructive ?? true;
 
   const title = pending.options.title ?? t("common.confirm");
@@ -97,7 +97,8 @@ function ConfirmDialog({
   return (
     <div
       role="presentation"
-      onClick={onCancel}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
       className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]"
     >
       <div
@@ -106,7 +107,6 @@ function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
-        onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-md w-full"
       >
         <h3 id="confirm-dialog-title" className="text-base font-semibold text-gray-900 mb-2">

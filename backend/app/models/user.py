@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
+_CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -63,19 +65,19 @@ class User(Base):
     goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
-    integrations: Mapped[list["Integration"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    wallet_addresses: Mapped[list["WalletAddress"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    portfolio_snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    investment_advice: Mapped[list["InvestmentAdvice"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    tefas_holdings: Mapped[list["TefasHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    stock_holdings: Mapped[list["StockHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    bes_holdings: Mapped[list["BesHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    expenses: Mapped[list["Expense"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    planned_expenses: Mapped[list["PlannedExpense"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    incomes: Mapped[list["Income"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    recurring_incomes: Mapped[list["RecurringIncome"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    budgets: Mapped[list["Budget"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    commodity_holdings: Mapped[list["CommodityHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    cash_holdings: Mapped[list["CashHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    credit_cards: Mapped[list["CreditCard"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    manual_crypto_holdings: Mapped[list["ManualCryptoHolding"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    integrations: Mapped[list["Integration"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    wallet_addresses: Mapped[list["WalletAddress"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    portfolio_snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    investment_advice: Mapped[list["InvestmentAdvice"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    tefas_holdings: Mapped[list["TefasHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    stock_holdings: Mapped[list["StockHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    bes_holdings: Mapped[list["BesHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    expenses: Mapped[list["Expense"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    planned_expenses: Mapped[list["PlannedExpense"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    incomes: Mapped[list["Income"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    recurring_incomes: Mapped[list["RecurringIncome"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    budgets: Mapped[list["Budget"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    commodity_holdings: Mapped[list["CommodityHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    cash_holdings: Mapped[list["CashHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    credit_cards: Mapped[list["CreditCard"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    manual_crypto_holdings: Mapped[list["ManualCryptoHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)

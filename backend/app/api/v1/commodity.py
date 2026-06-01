@@ -33,8 +33,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/portfolio/commodities", tags=["commodities"])
 
+_VALID_UNIT_TYPES = {"gram", "biga", "coin"}
+_VALID_METALS = {"gold", "silver"}
+_VALID_BIGA = frozenset(BIGA_GRAM_WEIGHTS.keys())
+_VALID_COIN = frozenset(COIN_GRAM_WEIGHTS.keys())
 
-@router.get("", response_model=CommoditySummaryOut)
+
+@router.get("")
 async def list_commodities(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -169,7 +174,10 @@ async def delete_commodity(
     await db.commit()
 
 
-@router.get("/export")
+@router.get(
+    "/export",
+    responses={500: {"description": "openpyxl kütüphanesi bulunamadı"}},
+)
 async def export_commodities(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -178,8 +186,8 @@ async def export_commodities(
     try:
         import openpyxl
         from openpyxl.styles import Alignment, Font, PatternFill
-    except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı") from exc
 
     result = await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == current_user.id).order_by(CommodityHolding.created_at))
     holdings = result.scalars().all()
@@ -226,7 +234,90 @@ async def export_commodities(
     )
 
 
-@router.post("/import", response_model=list[CommodityOut], status_code=status.HTTP_201_CREATED)
+def _cell(row: tuple, idx: int):
+    """Tuple'dan güvenli hücre erişimi; index yoksa veya değer falsy ise None."""
+    return row[idx] if len(row) > idx and row[idx] else None
+
+
+def _parse_commodity_row(row: tuple, user_id) -> CommodityHolding | None:
+    """Excel satırını doğrular ve CommodityHolding üretir; geçersizse None döner."""
+    if not row or all(v is None for v in row):
+        return None
+
+    unit_type_val = str(row[0]).strip().lower() if row[0] is not None else ""
+    if unit_type_val not in _VALID_UNIT_TYPES:
+        return None
+
+    metal_cell = _cell(row, 1)
+    metal_val = str(metal_cell).strip().lower() if metal_cell is not None else "gold"
+    if metal_val not in _VALID_METALS:
+        metal_val = "gold"
+
+    quantity = _parse_quantity(row[4] if len(row) > 4 else None)
+    if quantity is None:
+        return None
+
+    biga_cell = _cell(row, 2)
+    coin_cell = _cell(row, 3)
+    notes_cell = _cell(row, 5)
+    biga_code_val = str(biga_cell).strip().upper() if biga_cell else None
+    coin_type_val = str(coin_cell).strip().lower() if coin_cell else None
+    notes_val = str(notes_cell).strip() if notes_cell else None
+
+    resolved = _resolve_metal_type(unit_type_val, metal_val, biga_code_val, coin_type_val)
+    if resolved is None:
+        return None
+    resolved_metal, resolved_biga, resolved_coin = resolved
+
+    return CommodityHolding(
+        user_id=user_id,
+        unit_type=unit_type_val,
+        metal=resolved_metal,
+        biga_code=resolved_biga,
+        coin_type=resolved_coin,
+        quantity=quantity,
+        notes=notes_val or None,
+    )
+
+
+def _parse_quantity(quantity_val) -> Decimal | None:
+    """Miktarı Decimal'e çevirir; geçersiz veya <=0 ise None döner."""
+    try:
+        quantity = Decimal(str(quantity_val)).quantize(Decimal("0.0001"))
+    except (InvalidOperation, TypeError):
+        return None
+    if quantity <= 0:
+        return None
+    return quantity
+
+
+def _resolve_metal_type(
+    unit_type_val: str,
+    metal_val: str,
+    biga_code_val: str | None,
+    coin_type_val: str | None,
+) -> tuple[str, str | None, str | None] | None:
+    """Tür bazlı doğrulama; (metal, biga_code, coin_type) veya geçersizse None."""
+    if unit_type_val == "biga":
+        if not biga_code_val or biga_code_val not in _VALID_BIGA:
+            return None
+        return BIGA_METAL[biga_code_val], biga_code_val, None
+    if unit_type_val == "coin":
+        if not coin_type_val or coin_type_val not in _VALID_COIN:
+            return None
+        return "gold", None, coin_type_val
+    return metal_val, None, None
+
+
+@router.post(
+    "/import",
+    response_model=list[CommodityOut],
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"description": "Geçersiz Excel dosyası"},
+        500: {"description": "openpyxl kütüphanesi bulunamadı"},
+    },
+)
 async def import_commodities(
     file: Annotated[UploadFile, File(...)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -235,78 +326,23 @@ async def import_commodities(
     """Excel dosyasından kıymetli maden varlığı içe aktar (append — mevcut kayıtlar silinmez)."""
     try:
         import openpyxl
-    except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı") from exc
 
     # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
     content = await validate_excel_upload(file)
     try:
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Geçersiz Excel dosyası")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Geçersiz Excel dosyası") from exc
 
     ws = wb.active
-    valid_unit_types = {"gram", "biga", "coin"}
-    valid_metals = {"gold", "silver"}
-    valid_biga = frozenset(BIGA_GRAM_WEIGHTS.keys())
-    valid_coin = frozenset(COIN_GRAM_WEIGHTS.keys())
-
     added: list[CommodityHolding] = []
-
     for row in ws.iter_rows(min_row=2, values_only=True):
-        if not row or all(v is None for v in row):
-            continue
-
-        unit_type_val = str(row[0]).strip().lower() if row[0] is not None else ""
-        metal_val = str(row[1]).strip().lower() if len(row) > 1 and row[1] is not None else "gold"
-        biga_code_val = str(row[2]).strip().upper() if len(row) > 2 and row[2] else None
-        coin_type_val = str(row[3]).strip().lower() if len(row) > 3 and row[3] else None
-        quantity_val = row[4] if len(row) > 4 else None
-        notes_val = str(row[5]).strip() if len(row) > 5 and row[5] else None
-
-        # unit_type doğrulama
-        if unit_type_val not in valid_unit_types:
-            continue
-
-        # metal doğrulama
-        if metal_val not in valid_metals:
-            metal_val = "gold"
-
-        # Miktar
-        try:
-            quantity = Decimal(str(quantity_val)).quantize(Decimal("0.0001"))
-            if quantity <= 0:
-                continue
-        except (InvalidOperation, TypeError):
-            continue
-
-        # Tür bazlı doğrulama
-        resolved_metal = metal_val
-        resolved_biga: str | None = None
-        resolved_coin: str | None = None
-
-        if unit_type_val == "biga":
-            if not biga_code_val or biga_code_val not in valid_biga:
-                continue
-            resolved_biga = biga_code_val
-            resolved_metal = BIGA_METAL[biga_code_val]
-        elif unit_type_val == "coin":
-            if not coin_type_val or coin_type_val not in valid_coin:
-                continue
-            resolved_coin = coin_type_val
-            resolved_metal = "gold"
-
-        holding = CommodityHolding(
-            user_id=current_user.id,
-            unit_type=unit_type_val,
-            metal=resolved_metal,
-            biga_code=resolved_biga,
-            coin_type=resolved_coin,
-            quantity=quantity,
-            notes=notes_val or None,
-        )
-        db.add(holding)
-        added.append(holding)
+        holding = _parse_commodity_row(row, current_user.id)
+        if holding is not None:
+            db.add(holding)
+            added.append(holding)
 
     await db.commit()
     for h in added:

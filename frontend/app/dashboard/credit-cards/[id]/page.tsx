@@ -19,7 +19,6 @@ const TODAY = new Date().toISOString().slice(0, 10);
 export default function CreditCardDetailPage({ params }: Readonly<{ params: Promise<{ id: string }> }>) {
   const router = useRouter();
   const { t } = useTranslation();
-  const confirm = useConfirm();
   const { id } = use(params);
   const cardId = Number.parseInt(id);
 

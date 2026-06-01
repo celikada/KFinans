@@ -10,8 +10,8 @@ import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  items: PlannedExpenseDTO[];
-  onDeleted: (id: number) => void;
+  readonly items: PlannedExpenseDTO[];
+  readonly onDeleted: (id: number) => void;
 }
 
 export function PlannedList({ items, onDeleted }: Props) {
