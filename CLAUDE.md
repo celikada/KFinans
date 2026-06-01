@@ -38,7 +38,7 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 | Frontend | Next.js 16 (App Router, Turbopack) + React 19 + Tailwind CSS v4 |
 | Auth | JWT (python-jose) + slowapi rate limiting + refresh token rotation |
 | Güvenlik | Fernet (API key + wallet xpub) + bcrypt (şifre) + JWT blacklist (revoked_tokens) + SecurityHeadersMiddleware (HSTS, CSP, X-Frame, COOP) + TrustedHostMiddleware + audit_logs |
-| CI/CD | **GitLab CI primary** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test (coverage) → quality (self-hosted SonarQube **BLOCKING** gate) → build (Docker Hub `celikada/kfinans-*`) → deploy (Oracle K3s, sadece tag). `.github/workflows/*` (5 workflow) dormant/referans — GitHub flag #4360519 nedeniyle Actions çalışmaz. |
+| CI/CD | **GitLab CI primary** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test (coverage) → quality (self-hosted SonarQube **BLOCKING** gate) → build (Docker Hub `celikada/kfinans-*`) → **scan (Trivy image HIGH/CRITICAL gate, tag)** → deploy (Oracle K3s, sadece tag, manuel) → **smoke (post-deploy curl gate)**. `.github/workflows/*` (5 workflow) dormant/referans — GitHub flag #4360519 nedeniyle Actions çalışmaz. |
 | Hosting | Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + nginx-ingress + cert-manager (Let's Encrypt) |
 | Domain | `kfinans.app` (Namecheap, .app TLD HSTS preload listesinde — tarayıcı zorunlu HTTPS) |
 
@@ -94,7 +94,7 @@ KFinans/
 │   ├── next.config.ts             # FAZ C2: async headers() — HSTS, CSP, X-Frame, Permissions-Policy
 │   └── lib/{api,format}.ts
 ├── docs/                          # 9 sıralı belge (01-tasarim ... 09-altyapi-test)
-├── .gitlab-ci.yml                 # PRIMARY CI: lint→test→quality(SonarQube BLOCKING)→build→deploy
+├── .gitlab-ci.yml                 # PRIMARY CI: lint→test→quality(SonarQube BLOCKING)→build→scan(Trivy)→deploy→smoke
 ├── .github/
 │   ├── workflows/                 # 5 workflow: ci-backend, ci-frontend, e2e, security, sonar, release (DORMANT — GitHub Actions çalışmıyor)
 │   ├── dependabot.yml             # FAZ A4: pip + npm + actions + docker, haftalık

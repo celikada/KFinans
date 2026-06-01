@@ -38,7 +38,9 @@
 | Soft delete altyapısı | `users.deleted_at` kolonu hazır (cron Faz 3) | ✅ Şema hazır |
 | `users.credit_balance` (CHECK >= 0) | DB seviyesinde negatif bakiye koruması | ✅ Aktif |
 | **CI/CD secret tarama** (FAZ B4) | gitleaks (her PR/push) + Trivy fs (deps + IaC HIGH/CRITICAL) + pip-audit (osv strict) + npm-audit (high) + CodeQL (Python + TS SAST) | ✅ Aktif |
-| **Container image vulnerability scan** (FAZ B3) | Trivy image scan release pipeline'ında (build sonrası, deploy öncesi); HIGH/CRITICAL → fail | ✅ Aktif |
+| **Container image vulnerability scan** | `.gitlab-ci.yml` `scan` stage (`trivy-image-scan`, 2026-06-01) — build sonrası, **deploy öncesi gate**; tag image'ları HIGH/CRITICAL `--ignore-unfixed` → fail | ✅ Aktif |
+| **Post-deploy smoke gate** | `.gitlab-ci.yml` `smoke` stage (`smoke-test`, 2026-06-01) — deploy sonrası 4-adımlı curl gate (HTTPS+cert, /health, bogus login→401, HSTS); prod bozuksa pipeline kırmızı | ✅ Aktif |
+| **Startup secret görünürlüğü** | `app/core/startup_checks.py` (2026-06-01) — format/varlık kontrolü + opt-in canlı Resend probu (`VERIFY_RESEND_ON_STARTUP`); geçersiz key sessiz başarısızlığını yakalar | ✅ Aktif |
 | **SonarQube quality gate (blocking)** | Yeni kod (new code) için violation + security hotspot review gate; gate fail → CI fail. `new_security_hotspots_reviewed=%100` zorunlu | ✅ Aktif |
 | **GitOps secret yönetimi (SealedSecrets)** | bitnami sealed-secrets; `encryptedData` asimetrik şifreli, sadece cluster private key açar → repo'ya commit güvenli (`k8s/sealed-secrets.yaml`) | ✅ Aktif |
 | **Branch protection** | GitHub `develop`+`main` (force-push + delete engelli); GitLab `develop`/`main` push=No one (MR-only) | ✅ Aktif |
@@ -379,7 +381,7 @@ Frontend (`frontend/next.config.ts` async `headers()`) HTML response'larında ek
 ### 9.2 Yapılacak
 - [x] `pip-audit` CI'da çalışıyor (FAZ B4 — `.github/workflows/security.yml`, strict mode + osv vulnerability service)
 - [x] `npm audit` CI'da çalışıyor (FAZ B4 — `--audit-level=high`, fail on threshold)
-- [x] Trivy ile container image vulnerability scan (FAZ B3 — `.github/workflows/release.yml::trivy-scan` job; HIGH/CRITICAL → fail)
+- [x] Trivy ile container image vulnerability scan (`.gitlab-ci.yml::trivy-image-scan`, `scan` stage — build sonrası/deploy öncesi gate; HIGH/CRITICAL `--ignore-unfixed` → fail). GitHub `release.yml::trivy-scan` dormant referans.
 - [x] Trivy filesystem scan (FAZ B4 — `.github/workflows/security.yml::trivy-fs`; deps + IaC)
 - [x] Dependabot aktif (FAZ A4 — `.github/dependabot.yml`; pip + npm + actions + docker, haftalık)
 - [x] CodeQL Python + TypeScript SAST (FAZ B4 — security-and-quality query suite)

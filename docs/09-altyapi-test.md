@@ -18,14 +18,16 @@
 
 > **Önemli:** Birincil (ve fiilen tek çalışan) CI/CD **self-hosted GitLab**'tedir (`gitlab.192.168.3.191.nip.io`). GitHub `.github/workflows/*` dosyaları repoda durur ve "active/enabled" görünür ama **0 run üretir** — `celikada` hesabı flag'li (Ticket #4360519). GitHub yalnızca **salt-mirror** (develop/main/tags) olarak kullanılır. Aşağıdaki tüm pipeline gerçeği `.gitlab-ci.yml`'dir.
 
-### 1.2.1 GitLab CI Pipeline (Çalışıyor — 5 stage)
-`.gitlab-ci.yml` — 5 stage: `lint → test → quality → build → deploy`.
+### 1.2.1 GitLab CI Pipeline (Çalışıyor — 7 stage)
+`.gitlab-ci.yml` — 7 stage: `lint → test → quality → build → scan → deploy → smoke`.
 
 - ✅ **lint** — `backend-lint` (ruff format --check + ruff check, `allow_failure` kaldırıldı 2026-05-21) + `frontend-lint` (ESLint, `allow_failure` kaldırıldı)
 - ✅ **test** — `backend-test` (Docker python:3.12 + postgres service; pytest --cov coverage.xml + junit; cobertura report artifact) + `frontend-test` (`npm run test:coverage` → lcov.info; vitest threshold %15)
 - ✅ **quality** — `sonarqube-scan`: **self-hosted SonarQube** (`http://sonar.192.168.3.191.nip.io`, `projectKey=KFinans`). **Gate BLOCKING (2026-06-01):** `-Dsonar.qualitygate.wait=true` + `allow_failure` kaldırıldı → gate kırmızıysa pipeline durur. Gate koşulları: `new_violations=0` + `new_security_hotspots_reviewed=100%` + `new_coverage>=80%`. Sadece protected branch (develop/main) + MR + tag'lerde çalışır (`SONAR_TOKEN` Protected variable).
 - ✅ **build** — `backend-build` + `frontend-build`: **Kaniko** (`gcr.io/kaniko-project/executor:v1.23.2-debug`) → **Docker Hub** (`celikada/kfinans-{backend,frontend}`). Sadece `main`, `develop` ve tag'lerde (feature/hotfix branch'lerinde build yok). Tag → ek olarak `:latest` + `:<tag>` push'lar.
+- ✅ **scan** — `trivy-image-scan` (2026-06-01): **Trivy** (`aquasec/trivy:0.58.0`) Docker Hub'a push edilen tag image'larını tarar. `--severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed` → açık varsa **deploy ÖNCESİ** pipeline durur. `build → scan → deploy` sırası deploy'u gate'ler. Sadece semver tag'lerde. Trivy DB cache'li; Docker Hub auth `TRIVY_USERNAME/PASSWORD`.
 - ✅ **deploy** — `deploy-production`: `when: manual` + **sadece semver tag** (`/^v\d+\.\d+\.\d+/`). SSH → Oracle K3s `kubectl set image deployment/{backend,frontend}` + `rollout status --timeout=5m`. `environment: production` (https://kfinans.app).
+- ✅ **smoke** — `smoke-test` (2026-06-01): deploy SONRASI (`needs: deploy-production`). DEPLOY-001 4-adımlı curl gate: frontend HTTPS+cert, `/health` `{status:ok}`, bogus login→401, HSTS header. Deploy bozuksa pipeline kırmızı (alarm). Sadece semver tag'lerde.
 
 ### 1.2.2 Manuel Deploy Tetikleme
 `deploy-production` `when: manual` olduğu için GitLab UI'dan "play" butonuyla **veya** GitLab API ile tetiklenir:
