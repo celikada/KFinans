@@ -106,7 +106,7 @@ export default function RegisterPage() {
           </p>
 
           {resendNotice && (
-            <p role="status" aria-live="polite" className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg mb-4">{resendNotice}</p>
+            <output aria-live="polite" className="block text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg mb-4">{resendNotice}</output>
           )}
 
           <button

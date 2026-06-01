@@ -13,8 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
 from app.core.upload_validation import validate_excel_upload
-
-logger = logging.getLogger(__name__)
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.user import User
 from app.schemas.manual_crypto import (
@@ -32,7 +30,13 @@ from app.services.aggregator import (
 )
 from app.services.tefas import fetch_tefas_prices_by_codes
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/manual-crypto", tags=["manual-crypto"])
+
+# linked commodity ID (XAU/XAG) → fetch_metal_prices() anahtari (gold/silver)
+_COMMODITY_METAL_KEYS = {"XAU": "gold", "XAG": "silver"}
+
+_HOLDING_NOT_FOUND = "Manuel kripto kaydı bulunamadı"
 
 
 def _calc_gain_loss(quantity: Decimal, total_tl: Decimal, avg_cost_tl: Decimal | None) -> tuple[Decimal | None, Decimal | None, float | None]:
@@ -43,6 +47,96 @@ def _calc_gain_loss(quantity: Decimal, total_tl: Decimal, avg_cost_tl: Decimal |
     gain_loss = (total_tl - cost_basis).quantize(Decimal("0.01"))
     pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
     return cost_basis, gain_loss, pct
+
+
+class _PriceContext:
+    """_enrich_positions icinde toplu cekilen fiyat kaynaklarini tasiyan kap."""
+
+    def __init__(
+        self,
+        usd_tl: Decimal,
+        prices: dict,
+        metal_prices: dict[str, Decimal],
+        cg_prices_by_id: dict[str, Decimal],
+        tefas_prices: dict[str, Decimal],
+    ) -> None:
+        self.usd_tl = usd_tl
+        self.prices = prices
+        self.metal_prices = metal_prices
+        self.cg_prices_by_id = cg_prices_by_id
+        self.tefas_prices = tefas_prices
+
+
+def _usd_from_tl(unit_tl: Decimal, usd_tl: Decimal) -> Decimal:
+    """TL fiyattan USD karsiligi (kur > 0 ve fiyat > 0 ise)."""
+    if usd_tl > 0 and unit_tl > 0:
+        return (unit_tl / usd_tl).quantize(Decimal("0.000001"))
+    return Decimal(0)
+
+
+def _tl_from_usd(usd: Decimal, usd_tl: Decimal) -> Decimal:
+    """USD fiyattan TL karsiligi."""
+    return (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
+
+
+def _price_linked(h: ManualCryptoHolding, ctx: _PriceContext) -> tuple[Decimal, Decimal]:
+    """linked_source bazinda (usd, unit_tl) cozumle."""
+    ls = h.linked_source
+    lid = h.linked_id or ""
+    if ls == "commodity":
+        key = _COMMODITY_METAL_KEYS.get(lid.upper())
+        if not key:
+            return Decimal(0), Decimal(0)
+        unit_tl = ctx.metal_prices.get(key, Decimal(0))
+        return _usd_from_tl(unit_tl, ctx.usd_tl), unit_tl
+    if ls == "binance":
+        usd = lookup_usd_price(lid, ctx.prices)
+        return usd, _tl_from_usd(usd, ctx.usd_tl)
+    if ls == "coingecko":
+        usd = ctx.cg_prices_by_id.get(lid, Decimal(0))
+        return usd, _tl_from_usd(usd, ctx.usd_tl)
+    if ls == "tefas":
+        unit_tl = ctx.tefas_prices.get(lid, Decimal(0))
+        return _usd_from_tl(unit_tl, ctx.usd_tl), unit_tl
+    return Decimal(0), Decimal(0)
+
+
+def _resolve_unit_price(h: ManualCryptoHolding, ctx: _PriceContext) -> tuple[Decimal, Decimal]:
+    """price_source bazinda (usd, unit_tl) doner."""
+    if h.price_source == "manual":
+        unit_tl = h.manual_unit_price_tl or Decimal(0)
+        return _usd_from_tl(unit_tl, ctx.usd_tl), unit_tl
+    if h.price_source == "linked":
+        return _price_linked(h, ctx)
+    # auto
+    usd = lookup_usd_price(h.symbol, ctx.prices)
+    return usd, _tl_from_usd(usd, ctx.usd_tl)
+
+
+def _build_position(h: ManualCryptoHolding, usd: Decimal, unit_tl: Decimal) -> tuple[ManualCryptoPositionOut, Decimal]:
+    """Bir holding icin pozisyon cikti'si + TL deger doner."""
+    value_tl = (h.quantity * unit_tl).quantize(Decimal("0.01"))
+    cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(h.quantity, value_tl, h.avg_cost_tl)
+    position = ManualCryptoPositionOut(
+        id=h.id,
+        exchange=h.exchange,
+        label=h.label,
+        symbol=h.symbol,
+        quantity=h.quantity,
+        avg_cost_tl=h.avg_cost_tl,
+        price_source=h.price_source,
+        manual_unit_price_tl=h.manual_unit_price_tl,
+        linked_source=h.linked_source,
+        linked_id=h.linked_id,
+        unit_price_usd=usd,
+        unit_price_tl=unit_tl,
+        total_value_tl=value_tl,
+        cost_basis_tl=cost_basis,
+        gain_loss_tl=gain_loss,
+        gain_loss_pct=gain_loss_pct,
+        notes=h.notes,
+    )
+    return position, value_tl
 
 
 async def _enrich_positions(
@@ -57,6 +151,29 @@ async def _enrich_positions(
     if not holdings:
         return ManualCryptoSummaryOut(positions=[], total_value_tl=Decimal(0), unknown_symbols=[])
 
+    ctx = await _build_price_context(holdings)
+
+    positions: list[ManualCryptoPositionOut] = []
+    total_tl = Decimal(0)
+    unknown: list[str] = []
+
+    for h in holdings:
+        usd, unit_tl = _resolve_unit_price(h, ctx)
+        position, value_tl = _build_position(h, usd, unit_tl)
+        total_tl += value_tl
+        if unit_tl <= 0:
+            unknown.append(h.symbol)
+        positions.append(position)
+
+    return ManualCryptoSummaryOut(
+        positions=positions,
+        total_value_tl=total_tl.quantize(Decimal("0.01")),
+        unknown_symbols=sorted(set(unknown)),
+    )
+
+
+async def _build_price_context(holdings: list[ManualCryptoHolding]) -> _PriceContext:
+    """Tum holding'ler icin gereken fiyat kaynaklarini bir kerede toplar."""
     auto_holdings = [h for h in holdings if h.price_source == "auto"]
     linked_holdings = [h for h in holdings if h.price_source == "linked"]
 
@@ -87,73 +204,12 @@ async def _enrich_positions(
     cg_prices_by_id: dict[str, Decimal] = await fetch_coingecko_prices_by_ids(cg_linked_ids) if cg_linked_ids else {}
     tefas_prices: dict[str, Decimal] = await fetch_tefas_prices_by_codes(tefas_linked_codes) if tefas_linked_codes else {}
 
-    positions: list[ManualCryptoPositionOut] = []
-    total_tl = Decimal(0)
-    unknown: list[str] = []
-
-    for h in holdings:
-        usd = Decimal(0)
-        unit_tl = Decimal(0)
-
-        if h.price_source == "manual":
-            unit_tl = h.manual_unit_price_tl or Decimal(0)
-            if usd_tl > 0 and unit_tl > 0:
-                usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
-
-        elif h.price_source == "linked":
-            ls = h.linked_source
-            lid = h.linked_id or ""
-            if ls == "commodity":
-                key = "gold" if lid.upper() == "XAU" else ("silver" if lid.upper() == "XAG" else None)
-                if key:
-                    unit_tl = metal_prices.get(key, Decimal(0))
-                    if usd_tl > 0 and unit_tl > 0:
-                        usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
-            elif ls == "binance":
-                usd = lookup_usd_price(lid, prices)
-                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
-            elif ls == "coingecko":
-                usd = cg_prices_by_id.get(lid, Decimal(0))
-                unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
-            elif ls == "tefas":
-                unit_tl = tefas_prices.get(lid, Decimal(0))
-                if usd_tl > 0 and unit_tl > 0:
-                    usd = (unit_tl / usd_tl).quantize(Decimal("0.000001"))
-
-        else:  # auto
-            usd = lookup_usd_price(h.symbol, prices)
-            unit_tl = (usd * usd_tl).quantize(Decimal("0.0001")) if usd > 0 else Decimal(0)
-
-        value_tl = (h.quantity * unit_tl).quantize(Decimal("0.01"))
-        total_tl += value_tl
-        if unit_tl <= 0:
-            unknown.append(h.symbol)
-        cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(h.quantity, value_tl, h.avg_cost_tl)
-        positions.append(
-            ManualCryptoPositionOut(
-                id=h.id,
-                exchange=h.exchange,
-                label=h.label,
-                symbol=h.symbol,
-                quantity=h.quantity,
-                avg_cost_tl=h.avg_cost_tl,
-                price_source=h.price_source,
-                manual_unit_price_tl=h.manual_unit_price_tl,
-                linked_source=h.linked_source,
-                linked_id=h.linked_id,
-                unit_price_usd=usd,
-                unit_price_tl=unit_tl,
-                total_value_tl=value_tl,
-                cost_basis_tl=cost_basis,
-                gain_loss_tl=gain_loss,
-                gain_loss_pct=gain_loss_pct,
-                notes=h.notes,
-            )
-        )
-    return ManualCryptoSummaryOut(
-        positions=positions,
-        total_value_tl=total_tl.quantize(Decimal("0.01")),
-        unknown_symbols=sorted(set(unknown)),
+    return _PriceContext(
+        usd_tl=usd_tl,
+        prices=prices,
+        metal_prices=metal_prices,
+        cg_prices_by_id=cg_prices_by_id,
+        tefas_prices=tefas_prices,
     )
 
 
@@ -226,7 +282,11 @@ async def create_manual_crypto(
     return holding
 
 
-@router.put("/{holding_id}", response_model=ManualCryptoOut)
+@router.put(
+    "/{holding_id}",
+    response_model=ManualCryptoOut,
+    responses={404: {"description": "Manuel kripto kaydı bulunamadı"}},
+)
 async def update_manual_crypto(
     holding_id: int,
     payload: ManualCryptoUpdate,
@@ -242,17 +302,14 @@ async def update_manual_crypto(
         )
     ).scalar_one_or_none()
     if not holding:
-        raise HTTPException(status_code=404, detail="Manuel kripto kaydı bulunamadı")
-    if payload.exchange is not None:
-        holding.exchange = payload.exchange
-    if payload.label is not None:
-        holding.label = payload.label
-    if payload.symbol is not None:
-        holding.symbol = payload.symbol
-    if payload.quantity is not None:
-        holding.quantity = payload.quantity
-    if payload.avg_cost_tl is not None:
-        holding.avg_cost_tl = payload.avg_cost_tl
+        raise HTTPException(status_code=404, detail=_HOLDING_NOT_FOUND)
+
+    # Duz alanlar — None olmayan degerler dogrudan yazilir
+    for attr in ("exchange", "label", "symbol", "quantity", "avg_cost_tl", "notes"):
+        value = getattr(payload, attr)
+        if value is not None:
+            setattr(holding, attr, value)
+
     if payload.price_source is not None:
         holding.price_source = payload.price_source
         # mod değişince ilgisiz alanları temizle
@@ -261,6 +318,7 @@ async def update_manual_crypto(
         if payload.price_source != "linked":
             holding.linked_source = None
             holding.linked_id = None
+
     if payload.manual_unit_price_tl is not None and holding.price_source == "manual":
         holding.manual_unit_price_tl = payload.manual_unit_price_tl
     if holding.price_source == "linked":
@@ -268,14 +326,17 @@ async def update_manual_crypto(
             holding.linked_source = payload.linked_source
         if payload.linked_id is not None:
             holding.linked_id = payload.linked_id
-    if payload.notes is not None:
-        holding.notes = payload.notes
+
     await db.commit()
     await db.refresh(holding)
     return holding
 
 
-@router.delete("/{holding_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{holding_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "Manuel kripto kaydı bulunamadı"}},
+)
 async def delete_manual_crypto(
     holding_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -288,7 +349,7 @@ async def delete_manual_crypto(
         )
     )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Manuel kripto kaydı bulunamadı")
+        raise HTTPException(status_code=404, detail=_HOLDING_NOT_FOUND)
     await db.commit()
 
 
@@ -357,11 +418,95 @@ async def export_manual_crypto(
     )
 
 
+def _avg_cost_or_none(raw) -> Decimal | None:
+    """Excel hucresinden pozitif Decimal; bos/0/negatif -> None.
+
+    Hatali sayi (InvalidOperation vb.) caller'in outer try/except'ine
+    propagate eder — orijinal davranis korunur (satir error listesine duser).
+    """
+    if raw in (None, ""):
+        return None
+    value = Decimal(str(raw))
+    return value if value > 0 else None
+
+
+def _manual_price_or_none(raw) -> Decimal | None:
+    """Manuel fiyat hucresi — bos/0/negatif/hatali tum durumlarda None (sessiz)."""
+    if raw in (None, ""):
+        return None
+    try:
+        value = Decimal(str(raw))
+    except Exception:
+        return None
+    return value if value > 0 else None
+
+
+def _cell(row, idx: int) -> str | None:
+    """row[idx] -> strip edilmis string; index yoksa veya bos ise None."""
+    if idx >= len(row) or not row[idx]:
+        return None
+    return str(row[idx]).strip()
+
+
+def _resolve_linked_import(price_source: str, source_raw: str | None, id_raw: str | None) -> tuple[str | None, str | None]:
+    """Import satirinda linked_source/linked_id cozumle (gecersizse None/None)."""
+    if price_source == "linked" and source_raw in ("binance", "coingecko", "tefas", "commodity") and id_raw:
+        return source_raw, id_raw[:100]
+    return None, None
+
+
+def _parse_import_row(row, idx: int, user_id, errors: list[str]) -> ManualCryptoHolding | None:
+    """Bir Excel satirini ManualCryptoHolding'e cevir.
+
+    Zorunlu alan eksik/gecersizse errors'a mesaj ekler ve None doner.
+    """
+    exchange = _cell(row, 0) or ""
+    label = _cell(row, 1)
+    symbol_raw = _cell(row, 2)
+    symbol = symbol_raw.upper() if symbol_raw else ""
+    qty_raw = row[3]
+    avg_cost_raw = row[4] if len(row) > 4 else None
+    price_src_cell = _cell(row, 5)
+    price_src_raw = price_src_cell.lower() if price_src_cell else "auto"
+    manual_price_raw = row[6] if len(row) > 6 else None
+    linked_source_cell = _cell(row, 7)
+    linked_source_raw = linked_source_cell.lower() if linked_source_cell else None
+    linked_id_raw = _cell(row, 8)
+    notes = _cell(row, 9)
+
+    if not exchange or not symbol or qty_raw in (None, ""):
+        errors.append(f"Satır {idx}: Borsa, Sembol ve Miktar zorunlu")
+        return None
+    quantity = Decimal(str(qty_raw))
+    if quantity <= 0:
+        errors.append(f"Satır {idx}: Miktar pozitif olmalı")
+        return None
+
+    avg_cost = _avg_cost_or_none(avg_cost_raw)
+    price_source = price_src_raw if price_src_raw in ("auto", "manual", "linked") else "auto"
+    manual_price = _manual_price_or_none(manual_price_raw) if price_source == "manual" else None
+    linked_source, linked_id = _resolve_linked_import(price_source, linked_source_raw, linked_id_raw)
+
+    return ManualCryptoHolding(
+        user_id=user_id,
+        exchange=exchange[:40],
+        label=label[:100] if label else None,
+        symbol=symbol[:20],
+        quantity=quantity,
+        avg_cost_tl=avg_cost,
+        price_source=price_source,
+        manual_unit_price_tl=manual_price,
+        linked_source=linked_source,
+        linked_id=linked_id,
+        notes=notes[:500] if notes else None,
+    )
+
+
 @router.post("/import")
 async def import_manual_crypto(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Excel import. Mevcut tüm manuel kayıtlar SİLİNİP yenisi yüklenir
     (replace-all semantik — expenses/income import ile aynı pattern)."""
@@ -390,58 +535,9 @@ async def import_manual_crypto(
         if not row or all(v in (None, "") for v in row):
             continue
         try:
-            exchange = str(row[0]).strip() if row[0] else ""
-            label = str(row[1]).strip() if row[1] else None
-            symbol = str(row[2]).strip().upper() if row[2] else ""
-            qty_raw = row[3]
-            avg_cost_raw = row[4] if len(row) > 4 else None
-            price_src_raw = str(row[5]).strip().lower() if len(row) > 5 and row[5] else "auto"
-            manual_price_raw = row[6] if len(row) > 6 else None
-            linked_source_raw = str(row[7]).strip().lower() if len(row) > 7 and row[7] else None
-            linked_id_raw = str(row[8]).strip() if len(row) > 8 and row[8] else None
-            notes = str(row[9]).strip() if len(row) > 9 and row[9] else None
-
-            if not exchange or not symbol or qty_raw in (None, ""):
-                errors.append(f"Satır {idx}: Borsa, Sembol ve Miktar zorunlu")
-                continue
-            quantity = Decimal(str(qty_raw))
-            if quantity <= 0:
-                errors.append(f"Satır {idx}: Miktar pozitif olmalı")
-                continue
-            avg_cost = None
-            if avg_cost_raw not in (None, ""):
-                avg_cost = Decimal(str(avg_cost_raw))
-                if avg_cost <= 0:
-                    avg_cost = None
-            price_source = price_src_raw if price_src_raw in ("auto", "manual", "linked") else "auto"
-            manual_price = None
-            if price_source == "manual" and manual_price_raw not in (None, ""):
-                try:
-                    manual_price = Decimal(str(manual_price_raw))
-                    if manual_price <= 0:
-                        manual_price = None
-                except Exception:
-                    manual_price = None
-            linked_source = None
-            linked_id = None
-            if price_source == "linked" and linked_source_raw in ("binance", "coingecko", "tefas", "commodity") and linked_id_raw:
-                linked_source = linked_source_raw
-                linked_id = linked_id_raw[:100]
-            new_rows.append(
-                ManualCryptoHolding(
-                    user_id=current_user.id,
-                    exchange=exchange[:40],
-                    label=label[:100] if label else None,
-                    symbol=symbol[:20],
-                    quantity=quantity,
-                    avg_cost_tl=avg_cost,
-                    price_source=price_source,
-                    manual_unit_price_tl=manual_price,
-                    linked_source=linked_source,
-                    linked_id=linked_id,
-                    notes=notes[:500] if notes else None,
-                )
-            )
+            holding = _parse_import_row(row, idx, current_user.id, errors)
+            if holding is not None:
+                new_rows.append(holding)
         except Exception as e:
             errors.append(f"Satır {idx}: {e}")
 

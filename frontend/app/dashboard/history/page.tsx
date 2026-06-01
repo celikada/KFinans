@@ -362,18 +362,17 @@ export default function HistoryPage() {
 
       {/* Silme onayı */}
       {confirmDelete && (
-        <div
-          role="presentation"
-          onClick={() => setConfirmDelete(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setConfirmDelete(null); }}
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-        >
-          <div
-            role="dialog"
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => setConfirmDelete(null)}
+            className="absolute inset-0 bg-black/40 cursor-default"
+          />
+          <dialog
+            open
             aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-sm w-full text-left cursor-default"
+            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-sm w-full text-left cursor-default relative z-10"
           >
             <h3 className="text-base font-semibold text-gray-900 mb-2">{t("content.history.deleteConfirmTitle")}</h3>
             <p className="text-sm text-gray-600 mb-4">
@@ -397,24 +396,23 @@ export default function HistoryPage() {
                 {deleting ? t("common.deleting") : t("content.history.confirmDeleteBtn")}
               </button>
             </div>
-          </div>
+          </dialog>
         </div>
       )}
 
       {/* Health issues popup */}
       {openIssues && (
-        <div
-          role="presentation"
-          onClick={() => setOpenIssues(null)}
-          onKeyDown={(e) => { if (e.key === "Escape") setOpenIssues(null); }}
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-        >
-          <div
-            role="dialog"
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => setOpenIssues(null)}
+            className="absolute inset-0 bg-black/40 cursor-default"
+          />
+          <dialog
+            open
             aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
+            className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default relative z-10"
           >
             {(() => {
               const warns = openIssues.issues.filter((i) => (i.level ?? "warn") === "warn");
@@ -430,11 +428,15 @@ export default function HistoryPage() {
                     {infos.length > 0 && <span className="text-blue-700">{infos.length} {t("content.history.infoLabel")}</span>}
                   </p>
                   <ul className="space-y-2 max-h-80 overflow-y-auto">
-                    {openIssues.issues.map((iss, i) => {
+                    {openIssues.issues.map((iss) => {
                       const isInfo = iss.level === "info";
+                      const key = [
+                        iss.source, iss.code, iss.exchange, iss.symbol,
+                        iss.chain, iss.provider, iss.label, iss.msg,
+                      ].filter(Boolean).join("|");
                       return (
                         <li
-                          key={i}
+                          key={key}
                           className={`rounded-lg px-3 py-2 text-xs border ${
                             isInfo
                               ? "bg-blue-50 border-blue-100"
@@ -465,7 +467,7 @@ export default function HistoryPage() {
             >
               {t("content.history.close")}
             </button>
-          </div>
+          </dialog>
         </div>
       )}
     </div>

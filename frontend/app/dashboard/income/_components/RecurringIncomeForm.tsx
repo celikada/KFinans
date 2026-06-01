@@ -23,7 +23,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const CATEGORIES: RecurringIncomeCategory[] = ["salary", "rental", "dividend", "bonus", "freelance", "other"];
 const RECURRENCES: RecurringRecurrence[] = ["one_time", "monthly", "quarterly", "biannual", "yearly", "custom"];
 
-export function RecurringIncomeForm({ onSaved, existing, onCancel }: Props) {
+export function RecurringIncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   const { t } = useTranslation();
   const isEdit = !!existing;
   const [title, setTitle] = useState(existing?.title ?? "");

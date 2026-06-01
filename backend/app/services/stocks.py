@@ -85,4 +85,4 @@ async def fetch_stock_quotes(tickers: list[str]) -> dict[str, StockQuote | None]
     """Verilen ticker'lar için Yahoo Finance'ten anlık fiyat çeker."""
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(*[_fetch_one(client, t) for t in tickers])
-    return {ticker: quote for ticker, quote in zip(tickers, results)}
+    return dict(zip(tickers, results))

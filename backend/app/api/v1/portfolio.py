@@ -2,6 +2,7 @@ import asyncio
 import logging
 from datetime import date
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -45,10 +46,29 @@ from app.services.snapshot import compute_and_save_snapshot
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
+_NO_PORTFOLIO_DATA = "Henüz portföy verisi yok"
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+# Zincir adı → blockchain servis sınıfı eşlemesi (cüzdan pozisyon çekimi)
+_WALLET_SERVICES = {
+    "sonic": SonicService,
+    "avalanche_p": AvalanchePChainService,
+    "avalanche_c": AvalancheCChainService,
+    "ethereum": EthereumService,
+    "bitcoin": BitcoinService,
+    "solana": SolanaService,
+    "litecoin": LitecoinService,
+    "algorand": AlgorandService,
+    "cardano": CardanoService,
+    "polkadot": PolkadotService,
+}
+
 
 @router.get("/usd-rate")
 async def get_usd_rate(
-    _: User = Depends(get_current_user),
+    _: CurrentUser,
 ):
     """Anlık USD/TRY kuru (TCMB → Yahoo Finance fallback). Frontend USD karşılığı
     göstermek için kullanır. 5 dk in-memory cache (aggregator katmanında)."""
@@ -60,8 +80,8 @@ async def get_usd_rate(
 @limiter.limit("6/hour")
 async def preview_snapshot(
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Snapshot öncesi sağlık kontrolü.
 
@@ -89,9 +109,9 @@ async def preview_snapshot(
 @limiter.limit("6/hour")
 async def create_snapshot(
     request: Request,
+    current_user: CurrentUser,
+    db: DbSession,
     force: bool = False,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """Mevcut kullanici icin manuel olarak portfoy snapshot'i alir.
 
@@ -123,8 +143,8 @@ async def create_snapshot(
 async def delete_snapshot(
     snapshot_date: date,
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Belirli bir tarihteki snapshot'i siler. Yanlış kaydedilmiş (ör. timezone)
     snapshot'ları temizlemek için. Cascade ile asset_positions da silinir."""
@@ -170,8 +190,8 @@ async def _load_snapshot_with_positions(snapshot_date: date, current_user: User,
 @router.get("/snapshot/{snapshot_date}/report.xlsx")
 async def download_snapshot_xlsx(
     snapshot_date: date,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Belirli bir tarihteki snapshot için Excel raporu (tüm pozisyonlar)."""
     from app.services.reports import snapshot_to_xlsx
@@ -188,8 +208,8 @@ async def download_snapshot_xlsx(
 @router.get("/snapshot/{snapshot_date}/report.pdf")
 async def download_snapshot_pdf(
     snapshot_date: date,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Belirli bir tarihteki snapshot için PDF raporu."""
     from app.services.reports import snapshot_to_pdf
@@ -205,8 +225,8 @@ async def download_snapshot_pdf(
 
 @router.get("", response_model=SnapshotOut)
 async def get_current_portfolio(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(PortfolioSnapshot)
@@ -217,16 +237,16 @@ async def get_current_portfolio(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_PORTFOLIO_DATA)
     return snapshot
 
 
 @router.get("/history", response_model=list[SnapshotOut])
 async def get_portfolio_history(
+    current_user: CurrentUser,
+    db: DbSession,
     limit: int = 12,
     year: int | None = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """Snapshot geçmişi.
 
@@ -250,8 +270,8 @@ async def get_portfolio_history(
 
 @router.get("/history/years", response_model=list[int])
 async def get_portfolio_history_years(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """Kullanıcının snapshot'larının olduğu yılların listesi (yeni → eski)."""
     from sqlalchemy import extract
@@ -267,15 +287,15 @@ async def get_portfolio_history_years(
 
 @router.get("/changes", response_model=PortfolioChanges)
 async def get_portfolio_changes(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(PortfolioSnapshot).where(PortfolioSnapshot.user_id == current_user.id).order_by(desc(PortfolioSnapshot.snapshot_date)).limit(5)
     )
     snapshots = result.scalars().all()
     if not snapshots:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_PORTFOLIO_DATA)
 
     from app.services.aggregator import calculate_changes
 
@@ -284,8 +304,8 @@ async def get_portfolio_changes(
 
 @router.get("/breakdown", response_model=PortfolioBreakdown)
 async def get_portfolio_breakdown(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(PortfolioSnapshot)
@@ -296,7 +316,7 @@ async def get_portfolio_breakdown(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_PORTFOLIO_DATA)
 
     from app.services.aggregator import calculate_breakdown
 
@@ -305,8 +325,8 @@ async def get_portfolio_breakdown(
 
 @router.get("/crypto", response_model=CryptoResponse)
 async def get_crypto_positions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(Integration).where(
@@ -357,8 +377,8 @@ async def get_crypto_positions(
 
 @router.get("/wallets", response_model=WalletResponse)
 async def get_wallet_positions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(WalletAddress).where(
@@ -393,53 +413,36 @@ async def get_wallet_positions(
     all_positions: list[WalletPositionOut] = []
     errors: dict[str, str] = {}
 
+    def _build_position(wallet: WalletAddress, wid: str, a) -> WalletPositionOut:
+        usd = lookup_usd_price(a.symbol, prices)
+        # Snapshot ile tutarlı: pending_rewards da toplama dahil
+        total_qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
+        return WalletPositionOut(
+            wallet_id=wid,
+            chain=wallet.chain,
+            address=wallet.address,
+            label=wallet.label,
+            symbol=a.symbol,
+            liquid_quantity=a.liquid_quantity,
+            staked_quantity=a.staked_quantity,
+            pending_rewards=a.pending_rewards,
+            unit_price_usd=usd,
+            unit_price_tl=(usd * usd_tl).quantize(Decimal("0.01")),
+            total_value_tl=(total_qty * usd * usd_tl).quantize(Decimal("0.01")),
+        )
+
     async def fetch_wallet(wallet: WalletAddress) -> list[WalletPositionOut]:
+        wid = str(wallet.id)
+        svc_cls = _WALLET_SERVICES.get(wallet.chain)
+        if svc_cls is None:
+            return []
+        # Test monkeypatch destegi: "app.api.v1.portfolio.<Service>" modul
+        # attribute'u yamali ise import-time dict referansi yerine onu kullan.
+        svc_cls = globals().get(svc_cls.__name__, svc_cls)
         try:
-            wid = str(wallet.id)
-            if wallet.chain == "sonic":
-                svc = SonicService(wallet.address, wid)
-            elif wallet.chain == "avalanche_p":
-                svc = AvalanchePChainService(wallet.address, wid)
-            elif wallet.chain == "avalanche_c":
-                svc = AvalancheCChainService(wallet.address, wid)
-            elif wallet.chain == "ethereum":
-                svc = EthereumService(wallet.address, wid)
-            elif wallet.chain == "bitcoin":
-                svc = BitcoinService(wallet.address, wid)
-            elif wallet.chain == "solana":
-                svc = SolanaService(wallet.address, wid)
-            elif wallet.chain == "litecoin":
-                svc = LitecoinService(wallet.address, wid)
-            elif wallet.chain == "algorand":
-                svc = AlgorandService(wallet.address, wid)
-            elif wallet.chain == "cardano":
-                svc = CardanoService(wallet.address, wid)
-            elif wallet.chain == "polkadot":
-                svc = PolkadotService(wallet.address, wid)
-            else:
-                return []
+            svc = svc_cls(wallet.address, wid)
             assets = await svc.fetch()
-            out = []
-            for a in assets:
-                usd = lookup_usd_price(a.symbol, prices)
-                # Snapshot ile tutarlı: pending_rewards da toplama dahil
-                total_qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
-                out.append(
-                    WalletPositionOut(
-                        wallet_id=wid,
-                        chain=wallet.chain,
-                        address=wallet.address,
-                        label=wallet.label,
-                        symbol=a.symbol,
-                        liquid_quantity=a.liquid_quantity,
-                        staked_quantity=a.staked_quantity,
-                        pending_rewards=a.pending_rewards,
-                        unit_price_usd=usd,
-                        unit_price_tl=(usd * usd_tl).quantize(Decimal("0.01")),
-                        total_value_tl=(total_qty * usd * usd_tl).quantize(Decimal("0.01")),
-                    )
-                )
-            return out
+            return [_build_position(wallet, wid, a) for a in assets]
         except Exception as e:
             key = f"{wallet.chain}:{wallet.address[:10]}"
             logger.error("Cüzdan fetch hatası [%s]: %s", key, e)
@@ -455,8 +458,8 @@ async def get_wallet_positions(
 
 @router.get("/staking", response_model=list[StakingPosition])
 async def get_staking_positions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(PortfolioSnapshot)
@@ -467,7 +470,7 @@ async def get_staking_positions(
     )
     snapshot = result.scalar_one_or_none()
     if not snapshot:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz portföy verisi yok")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NO_PORTFOLIO_DATA)
 
     from app.services.aggregator import extract_staking_positions
 

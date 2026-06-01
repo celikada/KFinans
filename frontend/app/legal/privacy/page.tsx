@@ -50,8 +50,8 @@ export default function PrivacyPage() {
         <p>
           Borsa entegrasyonu eklediğinizde, API anahtarlarınız Fernet simetrik şifreleme ile
           şifrelenip veri tabanında saklanır. Anahtarlar yalnızca bakiye okumak için kullanılır;
-          KFinans bu anahtarlarla işlem yapma, para çekme veya transfer etme yetkisi
-          <strong> talep etmez ve kullanmaz</strong>.
+          KFinans bu anahtarlarla işlem yapma, para çekme veya transfer etme yetkisi{" "}
+          <strong>talep etmez ve kullanmaz</strong>.
         </p>
         <p className="text-xs text-gray-500">
           Tavsiye: borsa hesabınızda API anahtarına yalnızca <em>read-only</em> izin verin,

@@ -4,6 +4,7 @@ import logging
 from datetime import date as date_type
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 # Realize işlemlerinde "bugün" Türkiye saatine göre belirlenmeli — snapshot'la
@@ -38,6 +39,9 @@ from app.schemas.income import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/income", tags=["income"])
 
+_NOT_FOUND_DETAIL = "Kayıt bulunamadı"
+_OPENPYXL_MISSING = "openpyxl kütüphanesi bulunamadı"
+
 # Türkçe label -> İngilizce key haritası (import için)
 LABEL_TO_KEY: dict[str, str] = {
     "maaş": "salary",
@@ -61,11 +65,11 @@ LABEL_TO_KEY: dict[str, str] = {
 
 @router.get("", response_model=list[IncomeOut])
 async def list_incomes(
-    year: int | None = Query(default=None, ge=2020, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    category: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+    category: Annotated[str | None, Query()] = None,
 ):
     stmt = select(Income).where(Income.user_id == current_user.id)
     if year is not None and month is not None:
@@ -87,8 +91,8 @@ async def list_incomes(
 @router.post("", response_model=IncomeOut, status_code=status.HTTP_201_CREATED)
 async def create_income(
     payload: IncomeCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     inc = Income(
         user_id=current_user.id,
@@ -107,13 +111,13 @@ async def create_income(
 async def update_income(
     income_id: int,
     payload: IncomeUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     if payload.amount is not None:
         inc.amount = payload.amount
@@ -132,23 +136,23 @@ async def update_income(
 @router.delete("/{income_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_income(
     income_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Income).where(Income.id == income_id, Income.user_id == current_user.id))
     inc = result.scalar_one_or_none()
     if not inc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
     await db.delete(inc)
     await db.commit()
 
 
 @router.get("/summary", response_model=IncomeSummary)
 async def get_income_summary(
-    year: int = Query(..., ge=2020, le=2100),
-    month: int = Query(..., ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    month: Annotated[int, Query(ge=1, le=12)],
 ):
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
@@ -177,19 +181,19 @@ async def get_income_summary(
     )
 
 
-@router.get("/export")
+@router.get("/export", responses={500: {"description": _OPENPYXL_MISSING}})
 async def export_incomes(
-    year: int | None = Query(default=None, ge=2020, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
 ):
     """Gelirleri Excel dosyası olarak indir."""
     try:
         import openpyxl
         from openpyxl.styles import Alignment, Font, PatternFill
     except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
+        raise HTTPException(status_code=500, detail=_OPENPYXL_MISSING)
 
     stmt = select(Income).where(Income.user_id == current_user.id)
     if year is not None and month is not None:
@@ -237,17 +241,79 @@ async def export_incomes(
     )
 
 
-@router.post("/import", response_model=list[IncomeOut], status_code=status.HTTP_201_CREATED)
+def _parse_excel_date(date_val) -> date_type | None:
+    """Excel hücresinden tarih parse — desteklenmeyen/boş ise None."""
+    if isinstance(date_val, date_type):
+        return date_val
+    if isinstance(date_val, str):
+        try:
+            return date_type.fromisoformat(date_val.strip())
+        except ValueError:
+            return None
+    try:
+        from openpyxl.utils.datetime import from_excel
+
+        return from_excel(date_val).date() if date_val is not None else None
+    except Exception:
+        return None
+
+
+def _parse_amount(amount_val) -> Decimal | None:
+    """Tutar parse — pozitif değilse veya geçersizse None."""
+    try:
+        amount = Decimal(str(amount_val)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError):
+        return None
+    return amount if amount > 0 else None
+
+
+def _income_from_row(row, user_id) -> Income | None:
+    """Bir Excel satırından Income üretir; geçersiz satırda None döner."""
+    n = len(row)
+    date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
+
+    parsed_date = _parse_excel_date(date_val)
+    if parsed_date is None:
+        return None
+
+    cat_str = str(cat_val).strip().lower() if cat_val is not None else ""
+    category = LABEL_TO_KEY.get(cat_str)
+    if not category:
+        return None
+
+    amount = _parse_amount(amount_val)
+    if amount is None:
+        return None
+
+    description = str(desc_val).strip() if desc_val else None
+    return Income(
+        user_id=user_id,
+        amount=amount,
+        category=category,
+        date=parsed_date,
+        description=description or None,
+    )
+
+
+@router.post(
+    "/import",
+    response_model=list[IncomeOut],
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"description": "Geçersiz Excel dosyası"},
+        500: {"description": _OPENPYXL_MISSING},
+    },
+)
 async def import_incomes(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
 ):
     """Excel dosyasından gelir içe aktar (append — mevcut kayıtlar silinmez)."""
     try:
         import openpyxl
     except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl kütüphanesi bulunamadı")
+        raise HTTPException(status_code=500, detail=_OPENPYXL_MISSING)
 
     # SEC-009 (FAZ H): magic-byte + boyut + extension dogrulamasi
     content = await validate_excel_upload(file)
@@ -262,50 +328,9 @@ async def import_incomes(
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or all(v is None for v in row):
             continue
-        n = len(row)
-        date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
-
-        # Tarih parse
-        if isinstance(date_val, date_type):
-            parsed_date = date_val
-        elif isinstance(date_val, str):
-            try:
-                parsed_date = date_type.fromisoformat(date_val.strip())
-            except ValueError:
-                continue
-        else:
-            try:
-                from openpyxl.utils.datetime import from_excel
-
-                parsed_date = from_excel(date_val).date() if date_val is not None else None
-                if parsed_date is None:
-                    continue
-            except Exception:
-                continue
-
-        # Kategori normalize
-        cat_str = str(cat_val).strip().lower() if cat_val is not None else ""
-        category = LABEL_TO_KEY.get(cat_str)
-        if not category:
+        inc = _income_from_row(row, current_user.id)
+        if inc is None:
             continue
-
-        # Tutar
-        try:
-            amount = Decimal(str(amount_val)).quantize(Decimal("0.01"))
-            if amount <= 0:
-                continue
-        except (InvalidOperation, TypeError):
-            continue
-
-        description = str(desc_val).strip() if desc_val else None
-
-        inc = Income(
-            user_id=current_user.id,
-            amount=amount,
-            category=category,
-            date=parsed_date,
-            description=description or None,
-        )
         db.add(inc)
         added.append(inc)
 
@@ -350,8 +375,8 @@ def _applies_in_month(ri: RecurringIncome, year: int, month: int) -> bool:
 
 @router.get("/recurring", response_model=list[RecurringIncomeOut])
 async def list_recurring_incomes(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id).order_by(RecurringIncome.start_date.desc()))
     return result.scalars().all()
@@ -360,8 +385,8 @@ async def list_recurring_incomes(
 @router.post("/recurring", response_model=RecurringIncomeOut, status_code=status.HTTP_201_CREATED)
 async def create_recurring_income(
     payload: RecurringIncomeCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if payload.recurrence == "custom" and not payload.months:
         raise HTTPException(
@@ -390,13 +415,13 @@ async def create_recurring_income(
 async def update_recurring_income(
     rid: int,
     payload: RecurringIncomeUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
 
     for attr in (
         "title",
@@ -421,23 +446,23 @@ async def update_recurring_income(
 @router.delete("/recurring/{rid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_recurring_income(
     rid: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == current_user.id))
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND_DETAIL)
     await db.delete(ri)
     await db.commit()
 
 
 @router.get("/dashboard", response_model=IncomeDashboard)
 async def get_income_dashboard(
-    year: int = Query(..., ge=2020, le=2100),
-    month: int = Query(..., ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    month: Annotated[int, Query(ge=1, le=12)],
 ):
     """Gelir özet paneli: gerçekleşen + tahmini metrikler.
 
@@ -577,8 +602,8 @@ async def _realize_one(
 async def realize_recurring_period(
     rid: int,
     payload: RealizeMonthRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Periyodik kaydın belirli bir ay-yılı için income oluştur.
     Idempotent: aynı dönem ikinci kez çağrılırsa skip."""
@@ -613,8 +638,8 @@ async def realize_recurring_period(
 @router.post("/recurring/{rid}/realize-past", response_model=RealizeResult)
 async def realize_recurring_past(
     rid: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Periyodik kaydın start_date'ten bugüne kadar olan tüm geçmiş dönemleri
     income'a aktar. Mevcut realize'ler skip."""
@@ -652,8 +677,8 @@ async def realize_recurring_past(
 
 @router.post("/recurring/realize-all-past", response_model=RealizeResult)
 async def realize_all_recurring_past(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Kullanıcının TÜM periyodik kayıtları için bugüne kadar olan tüm
     geçmiş dönemleri income'a aktar."""

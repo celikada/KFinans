@@ -5,9 +5,9 @@ import { PROVIDER_LABELS } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  positions: CryptoPositionDTO[];
-  hidden: Set<string>;
-  onToggle: (provider: string) => void;
+  readonly positions: CryptoPositionDTO[];
+  readonly hidden: Set<string>;
+  readonly onToggle: (provider: string) => void;
 }
 
 export function ProviderSummaryCards({ positions, hidden, onToggle }: Props) {

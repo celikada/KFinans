@@ -2,6 +2,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -51,6 +52,9 @@ _LOCK_DURATION = timedelta(minutes=15)
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+DB = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
 
 def _new_verify_token() -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
@@ -66,62 +70,75 @@ def _new_reset_token() -> tuple[str, datetime]:
     return token, expires_at
 
 
+async def _raise_if_locked(db: AsyncSession, request: Request, user: User | None, email: str) -> None:
+    """SEC-002 (FAZ H): Account lockout — locked_until > now ise direkt 423.
+
+    Bu kontrol parola dogrulamasindan ONCE; saldirgan kilit suresi icinde
+    yeni denemeler yaparak counter'i kabartamaz.
+    """
+    if not (user and user.locked_until and user.locked_until > datetime.now(timezone.utc)):
+        return
+    retry_seconds = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
+    logger.warning(
+        "Kilitli hesap login denedi: %s (kalan=%ssn)",
+        mask_email(email),
+        retry_seconds,
+    )
+    await log_audit(
+        db,
+        request,
+        action=AuditAction.LOGIN_FAILED,
+        user_id=user.id,
+        extra={"email": mask_email(email), "reason": "locked"},
+    )
+    await db.commit()
+    raise HTTPException(
+        status_code=status.HTTP_423_LOCKED,
+        detail=f"Hesap guvenlik nedeniyle gecici kilitli. Lutfen {retry_seconds // 60 + 1} dk sonra deneyin.",
+        headers={"Retry-After": str(retry_seconds)},
+    )
+
+
+async def _handle_failed_login(db: AsyncSession, request: Request, user: User | None, email: str) -> None:
+    """SEC-002 (FAZ H): Basarisiz login — counter artir, threshold'da kilitle,
+    audit'le ve 401 firlat."""
+    logger.warning("Başarısız giriş denemesi: %s", mask_email(email))
+    # User varsa counter'i artir; threshold'u asarsa kilitle.
+    if user:
+        user.failed_login_count = (user.failed_login_count or 0) + 1
+        if user.failed_login_count >= _FAILED_LOGIN_THRESHOLD:
+            user.locked_until = datetime.now(timezone.utc) + _LOCK_DURATION
+            logger.warning(
+                "Account lockout: %s (%s deneme)",
+                mask_email(email),
+                user.failed_login_count,
+            )
+    # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
+    await log_audit(
+        db,
+        request,
+        action=AuditAction.LOGIN_FAILED,
+        user_id=user.id if user else None,
+        extra={
+            "email": mask_email(email),
+            "failed_count": user.failed_login_count if user else None,
+            "locked": bool(user and user.locked_until),
+        },
+    )
+    await db.commit()
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
+
+
 @router.post("/login", response_model=TokenResponse | MFALoginRequiredOut)
 @limiter.limit("10/minute")
-async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, payload: LoginRequest, db: DB):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
-    # SEC-002 (FAZ H): Account lockout — locked_until > now ise direkt 423.
-    # Bu kontrol parola dogrulamasindan ONCE; saldirgan kilit suresi icinde
-    # yeni denemeler yaparak counter'i kabartamaz.
-    if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
-        retry_seconds = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
-        logger.warning(
-            "Kilitli hesap login denedi: %s (kalan=%ssn)",
-            mask_email(payload.email),
-            retry_seconds,
-        )
-        await log_audit(
-            db,
-            request,
-            action=AuditAction.LOGIN_FAILED,
-            user_id=user.id,
-            extra={"email": mask_email(payload.email), "reason": "locked"},
-        )
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail=f"Hesap guvenlik nedeniyle gecici kilitli. Lutfen {retry_seconds // 60 + 1} dk sonra deneyin.",
-            headers={"Retry-After": str(retry_seconds)},
-        )
+    await _raise_if_locked(db, request, user, payload.email)
 
     if not user or not verify_password(payload.password, user.password_hash):
-        logger.warning("Başarısız giriş denemesi: %s", mask_email(payload.email))
-        # SEC-002: User varsa counter'i artir; threshold'u asarsa kilitle.
-        if user:
-            user.failed_login_count = (user.failed_login_count or 0) + 1
-            if user.failed_login_count >= _FAILED_LOGIN_THRESHOLD:
-                user.locked_until = datetime.now(timezone.utc) + _LOCK_DURATION
-                logger.warning(
-                    "Account lockout: %s (%s deneme)",
-                    mask_email(payload.email),
-                    user.failed_login_count,
-                )
-        # Failed login audit (user_id=None — anonim, hesap olabilir/olmayabilir)
-        await log_audit(
-            db,
-            request,
-            action=AuditAction.LOGIN_FAILED,
-            user_id=user.id if user else None,
-            extra={
-                "email": mask_email(payload.email),
-                "failed_count": user.failed_login_count if user else None,
-                "locked": bool(user and user.locked_until),
-            },
-        )
-        await db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-posta veya şifre hatalı")
+        await _handle_failed_login(db, request, user, payload.email)
     if not user.email_verified:
         logger.info("Doğrulanmamış kullanıcı giriş denedi: %s", mask_email(payload.email))
         raise HTTPException(
@@ -167,7 +184,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("30/minute")
-async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(request: Request, payload: RefreshRequest, db: DB):
     try:
         data = decode_token(payload.refresh_token)
         if data.get("type") != "refresh":
@@ -221,9 +238,9 @@ async def refresh(request: Request, payload: RefreshRequest, db: AsyncSession = 
 async def logout(
     request: Request,
     payload: LogoutRequest,
-    access_token: str = Depends(_oauth2),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    access_token: Annotated[str, Depends(_oauth2)],
+    current_user: CurrentUser,
+    db: DB,
 ):
     """Header'daki access token'i ve (varsa) body'deki refresh token'i blacklist'e alir.
 
@@ -282,7 +299,7 @@ async def logout(
 
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, payload: RegisterRequest, db: DB):
     # COMP-010 (FAZ H): 18+ yas dogrulama (KVKK 2018/482, TMK m.16).
     # Frontend register form'unda zorunlu checkbox; eksik/False ise reddet.
     if not payload.age_confirmed:
@@ -363,8 +380,8 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 @limiter.limit("20/minute")
 async def verify_email(
     request: Request,
-    token: str = Query(..., min_length=10, max_length=128),
-    db: AsyncSession = Depends(get_db),
+    token: Annotated[str, Query(min_length=10, max_length=128)],
+    db: DB,
 ):
     result = await db.execute(select(User).where(User.verify_token == token))
     user = result.scalar_one_or_none()
@@ -394,24 +411,23 @@ async def verify_email(
 async def resend_verification(
     request: Request,
     payload: ResendVerificationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DB,
 ):
     """Doğrulama e-postasını yeniden gönderir. Bilgi sızdırmayı önlemek için
     kullanıcı bulunmasa veya zaten doğrulanmış olsa bile aynı yanıtı döner."""
-    generic_response = {"detail": "Doğrulama e-postası gönderilecek"}
-
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
-    if not user or user.email_verified:
-        return generic_response
 
-    token, expires_at = _new_verify_token()
-    user.verify_token = token
-    user.verify_token_expires_at = expires_at
-    await db.commit()
+    # Bilgi sizdirmamak icin kullanici yoksa/dogrulanmissa sessizce gec —
+    # her durumda ayni generic 202 doner (anti-enumeration).
+    if user and not user.email_verified:
+        token, expires_at = _new_verify_token()
+        user.verify_token = token
+        user.verify_token_expires_at = expires_at
+        await db.commit()
+        await send_verification_email(to=user.email, token=token)
 
-    await send_verification_email(to=user.email, token=token)
-    return generic_response
+    return {"detail": "Doğrulama e-postası gönderilecek"}
 
 
 # ─── SEC-001 (FAZ H): Password reset (OWASP Forgot Password Cheat Sheet) ───
@@ -422,7 +438,7 @@ async def resend_verification(
 async def forgot_password(
     request: Request,
     payload: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DB,
 ):
     """Sifre sifirlama e-postasi gonderir. Bilgi sizdirmamak icin kullanici
     bulunmasa veya silinmis olsa bile generic 202 doner. Audit log her durumda
@@ -462,7 +478,7 @@ async def forgot_password(
 async def reset_password(
     request: Request,
     payload: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DB,
 ):
     """Token ile yeni sifre belirler. Tek kullanimlik — token + expiry tuketilir.
 

@@ -11,6 +11,7 @@ Sentry/OTel (OBS-001) eklenince bu endpoint deprecate edilebilir.
 from __future__ import annotations
 
 import secrets
+from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException
 
@@ -20,9 +21,12 @@ from app.core import perf_metrics
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
-@router.get("/performance")
+@router.get(
+    "/performance",
+    responses={404: {"description": "Token gecersiz veya metrics endpoint kapali"}},
+)
 async def performance_snapshot(
-    x_metrics_token: str | None = Header(default=None, alias="X-Metrics-Token"),
+    x_metrics_token: Annotated[str | None, Header(alias="X-Metrics-Token")] = None,
 ) -> dict[str, dict]:
     """Per-route latency snapshot dondu.
 

@@ -14,13 +14,13 @@ import { useRouter } from "next/navigation";
 
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
   const { t } = useTranslation();
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const hasToken = typeof window !== "undefined"
+    const hasToken = globalThis.window !== undefined
       && localStorage.getItem("access_token") !== null;
     if (!hasToken) {
       router.replace("/login");

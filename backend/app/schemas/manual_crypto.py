@@ -64,15 +64,15 @@ class ManualCryptoUpdate(BaseModel):
 class ManualCryptoOut(BaseModel):
     id: int
     exchange: str
-    label: str | None
+    label: str | None = None
     symbol: str
     quantity: Decimal
-    avg_cost_tl: Decimal | None
+    avg_cost_tl: Decimal | None = None
     price_source: str
-    manual_unit_price_tl: Decimal | None
-    linked_source: str | None
-    linked_id: str | None
-    notes: str | None
+    manual_unit_price_tl: Decimal | None = None
+    linked_source: str | None = None
+    linked_id: str | None = None
+    notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -84,21 +84,21 @@ class ManualCryptoPositionOut(BaseModel):
 
     id: int
     exchange: str
-    label: str | None
+    label: str | None = None
     symbol: str
     quantity: Decimal
-    avg_cost_tl: Decimal | None
+    avg_cost_tl: Decimal | None = None
     price_source: str
-    manual_unit_price_tl: Decimal | None
-    linked_source: str | None
-    linked_id: str | None
+    manual_unit_price_tl: Decimal | None = None
+    linked_source: str | None = None
+    linked_id: str | None = None
     unit_price_usd: Decimal
     unit_price_tl: Decimal
     total_value_tl: Decimal
-    cost_basis_tl: Decimal | None
-    gain_loss_tl: Decimal | None
-    gain_loss_pct: float | None
-    notes: str | None
+    cost_basis_tl: Decimal | None = None
+    gain_loss_tl: Decimal | None = None
+    gain_loss_pct: float | None = None
+    notes: str | None = None
 
 
 class AssetCatalogItem(BaseModel):

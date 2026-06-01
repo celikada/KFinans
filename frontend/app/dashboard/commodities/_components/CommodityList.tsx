@@ -5,8 +5,8 @@ import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  positions: CommodityPositionDTO[];
-  onDeleted: () => void;
+  readonly positions: CommodityPositionDTO[];
+  readonly onDeleted: () => void;
 }
 
 function label(pos: CommodityPositionDTO, t: (k: string) => string): string {
@@ -17,7 +17,7 @@ function label(pos: CommodityPositionDTO, t: (k: string) => string): string {
 
 function unitLabel(pos: CommodityPositionDTO, t: (k: string) => string): string {
   if (pos.unit_type === "gram") return `${Number.parseFloat(pos.quantity).toFixed(4)} g`;
-  return `${Number.parseFloat(pos.quantity).toFixed(pos.unit_type === "biga" ? 0 : 0)} ${t("content.commodities.pieceSuffix")}`;
+  return `${Number.parseFloat(pos.quantity).toFixed(0)} ${t("content.commodities.pieceSuffix")}`;
 }
 
 export function CommodityList({ positions, onDeleted }: Props) {

@@ -133,7 +133,7 @@ export default function ExpensesPage() {
             <ul className="space-y-1">
               {overBudget.map((r) => {
                 const actual = Number.parseFloat(r.actual_amount);
-                const budget = Number.parseFloat(r.budget_amount!);
+                const budget = Number.parseFloat(r.budget_amount ?? "");
                 const excess = actual - budget;
                 const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
                 return (

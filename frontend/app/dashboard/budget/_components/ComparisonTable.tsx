@@ -1,12 +1,12 @@
 "use client";
-import { api, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  rows: BudgetComparisonDTO[];
-  onDelete: (category: string) => void;
+  readonly rows: BudgetComparisonDTO[];
+  readonly onDelete: (category: string) => void;
 }
 
 export function ComparisonTable({ rows, onDelete }: Props) {
@@ -23,10 +23,15 @@ export function ComparisonTable({ rows, onDelete }: Props) {
     <div className="space-y-3">
       {rows.map((row) => {
         const actual = Number.parseFloat(row.actual_amount);
-        const budget = row.budget_amount !== null ? Number.parseFloat(row.budget_amount) : null;
+        const budget = row.budget_amount === null ? null : Number.parseFloat(row.budget_amount);
         const pct = row.pct_used ?? 0;
         const barPct = Math.min(pct, 100);
         const label = EXPENSE_CATEGORY_LABELS[row.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? row.category;
+
+        let barColor: string;
+        if (row.over_budget) barColor = "bg-red-500";
+        else if (pct > 80) barColor = "bg-amber-400";
+        else barColor = "bg-emerald-500";
 
         return (
           <div key={row.category} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -61,11 +66,13 @@ export function ComparisonTable({ rows, onDelete }: Props) {
               </div>
             </div>
 
-            {budget !== null ? (
+            {budget === null ? (
+              <p className="text-xs text-gray-400">{t("content.budget.noBudgetDefined")}</p>
+            ) : (
               <>
                 <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1">
                   <div
-                    className={`h-full rounded-full transition-all ${row.over_budget ? "bg-red-500" : pct > 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+                    className={`h-full rounded-full transition-all ${barColor}`}
                     style={{ width: `${barPct}%` }}
                   />
                 </div>
@@ -78,8 +85,6 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                   )}
                 </div>
               </>
-            ) : (
-              <p className="text-xs text-gray-400">{t("content.budget.noBudgetDefined")}</p>
             )}
           </div>
         );

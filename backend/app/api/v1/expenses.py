@@ -3,6 +3,7 @@ import io
 import logging
 from datetime import date as date_type
 from decimal import Decimal, InvalidOperation
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -52,11 +53,11 @@ LABEL_TO_KEY: dict[str, str] = {
 
 @router.get("", response_model=list[ExpenseOut])
 async def list_expenses(
-    year: int | None = Query(default=None, ge=2020, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    category: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
+    category: Annotated[str | None, Query()] = None,
 ):
     """Harcama listesi — opsiyonel year/month/category filtresi.
 
@@ -84,8 +85,8 @@ async def list_expenses(
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     payload: ExpenseCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     expense = Expense(
         user_id=current_user.id,
@@ -106,8 +107,8 @@ async def create_expense(
 async def update_expense(
     expense_id: int,
     payload: ExpenseUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(Expense).where(
@@ -143,8 +144,8 @@ async def update_expense(
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_expense(
     expense_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(Expense).where(
@@ -162,10 +163,10 @@ async def delete_expense(
 
 @router.get("/summary", response_model=ExpenseSummary)
 async def get_expense_summary(
-    year: int = Query(..., ge=2020, le=2100),
-    month: int = Query(..., ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    month: Annotated[int, Query(ge=1, le=12)],
 ):
     """Belirli ay icin toplam + kategori bazinda kirilim.
 
@@ -220,12 +221,12 @@ async def get_expense_summary(
     )
 
 
-@router.get("/export")
+@router.get("/export", responses={500: {"description": "openpyxl kütüphanesi bulunamadı"}})
 async def export_expenses(
-    year: int | None = Query(default=None, ge=2020, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int | None, Query(ge=2020, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
 ):
     """Harcamaları Excel dosyası olarak indir."""
     try:
@@ -282,11 +283,74 @@ async def export_expenses(
     )
 
 
-@router.post("/import", response_model=list[ExpenseOut], status_code=status.HTTP_201_CREATED)
+def _parse_excel_date(date_val) -> date_type | None:
+    """Excel hücresinden tarih parse — desteklenmeyen/boş ise None."""
+    if isinstance(date_val, date_type):
+        return date_val
+    if isinstance(date_val, str):
+        try:
+            return date_type.fromisoformat(date_val.strip())
+        except ValueError:
+            return None
+    # Excel numeric date
+    try:
+        from openpyxl.utils.datetime import from_excel
+
+        return from_excel(date_val).date() if date_val is not None else None
+    except Exception:
+        return None
+
+
+def _parse_amount(amount_val) -> Decimal | None:
+    """Tutar parse — pozitif değilse veya geçersizse None."""
+    try:
+        amount = Decimal(str(amount_val)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError):
+        return None
+    return amount if amount > 0 else None
+
+
+def _expense_from_row(row, user_id) -> Expense | None:
+    """Bir Excel satırından Expense üretir; geçersiz satırda None döner."""
+    n = len(row)
+    date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
+
+    parsed_date = _parse_excel_date(date_val)
+    if parsed_date is None:
+        return None
+
+    cat_str = str(cat_val).strip().lower() if cat_val is not None else ""
+    category = LABEL_TO_KEY.get(cat_str)
+    if not category:
+        return None
+
+    amount = _parse_amount(amount_val)
+    if amount is None:
+        return None
+
+    description = str(desc_val).strip() if desc_val else None
+    return Expense(
+        user_id=user_id,
+        amount=amount,
+        category=category,
+        date=parsed_date,
+        description=description or None,
+    )
+
+
+@router.post(
+    "/import",
+    response_model=list[ExpenseOut],
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"description": "Geçersiz Excel dosyası"},
+        500: {"description": "openpyxl kütüphanesi bulunamadı"},
+    },
+)
 async def import_expenses(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
 ):
     """Excel dosyasından harcama içe aktar (append — mevcut kayıtlar silinmez)."""
     try:
@@ -307,51 +371,9 @@ async def import_expenses(
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or all(v is None for v in row):
             continue
-        n = len(row)
-        date_val, cat_val, amount_val, desc_val = (row[i] if i < n else None for i in range(4))
-
-        # Tarih parse
-        if isinstance(date_val, date_type):
-            parsed_date = date_val
-        elif isinstance(date_val, str):
-            try:
-                parsed_date = date_type.fromisoformat(date_val.strip())
-            except ValueError:
-                continue
-        else:
-            # Excel numeric date
-            try:
-                from openpyxl.utils.datetime import from_excel
-
-                parsed_date = from_excel(date_val).date() if date_val is not None else None
-                if parsed_date is None:
-                    continue
-            except Exception:
-                continue
-
-        # Kategori normalize
-        cat_str = str(cat_val).strip().lower() if cat_val is not None else ""
-        category = LABEL_TO_KEY.get(cat_str)
-        if not category:
+        exp = _expense_from_row(row, current_user.id)
+        if exp is None:
             continue
-
-        # Tutar
-        try:
-            amount = Decimal(str(amount_val)).quantize(Decimal("0.01"))
-            if amount <= 0:
-                continue
-        except (InvalidOperation, TypeError):
-            continue
-
-        description = str(desc_val).strip() if desc_val else None
-
-        exp = Expense(
-            user_id=current_user.id,
-            amount=amount,
-            category=category,
-            date=parsed_date,
-            description=description or None,
-        )
         db.add(exp)
         added.append(exp)
 

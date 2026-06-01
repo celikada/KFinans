@@ -18,11 +18,14 @@ from app.schemas.tefas import TefasHolding, TefasPositionOut
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/tefas", tags=["tefas"])
 
+CurrentUser = Annotated[User, Depends(get_current_user)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 
 @router.get("/holdings", response_model=list[TefasHolding])
 async def get_tefas_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
@@ -41,8 +44,8 @@ async def get_tefas_holdings(
 @router.put("/holdings", response_model=list[TefasHolding])
 async def save_tefas_holdings(
     holdings: list[TefasHolding],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     await db.execute(delete(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     for h in holdings:
@@ -120,27 +123,52 @@ async def tefas_preview(
     return out
 
 
+async def _fetch_tefas_prices(rows) -> dict[str, Decimal]:
+    """Holding'ler için canlı TEFAS fiyatlarını çeker; hata olursa boş dict."""
+    if not rows:
+        return {}
+    from app.services.tefas import TefasService
+
+    try:
+        svc = TefasService([{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows])
+        assets = await svc.fetch()
+        return {a.symbol: a.unit_price_tl for a in assets}
+    except Exception:
+        logger.warning("TEFAS export: canlı fiyat alınamadı")
+        return {}
+
+
+def _write_tefas_export_row(ws, row_idx: int, holding, prices: dict[str, Decimal]) -> None:
+    """Tek bir holding satırını export worksheet'ine yazar."""
+    unit_price = prices.get(holding.code, Decimal("0"))
+    total = float(holding.quantity) * float(unit_price) if unit_price else None
+    avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
+    gain_loss = None
+    if total is not None and avg_cost is not None:
+        cost_basis = float(holding.quantity) * avg_cost
+        gain_loss = round(total - cost_basis, 2)
+    ws.cell(row=row_idx, column=1, value=holding.code)
+    ws.cell(row=row_idx, column=2, value=float(holding.quantity))
+    ws.cell(row=row_idx, column=3, value=holding.name)
+    ws.cell(row=row_idx, column=4, value=float(unit_price) if unit_price else "")
+    ws.cell(row=row_idx, column=5, value=total if total is not None else "")
+    ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
+    ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
+    ws.cell(row=row_idx, column=8, value=holding.distributor or "")
+
+
 @router.get("/export")
 async def export_tefas_holdings(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    from app.services.tefas import TefasService
-
     result = await db.execute(select(TefasHoldingModel).where(TefasHoldingModel.user_id == current_user.id))
     rows = result.scalars().all()
 
-    prices: dict[str, Decimal] = {}
-    if rows:
-        try:
-            svc = TefasService([{"code": r.code, "quantity": float(r.quantity), "name": r.name} for r in rows])
-            assets = await svc.fetch()
-            prices = {a.symbol: a.unit_price_tl for a in assets}
-        except Exception:
-            logger.warning("TEFAS export: canlı fiyat alınamadı")
+    prices = await _fetch_tefas_prices(rows)
 
     wb = Workbook()
     ws = wb.active
@@ -164,21 +192,7 @@ async def export_tefas_holdings(
         cell.alignment = Alignment(horizontal="center")
 
     for row_idx, holding in enumerate(rows, 2):
-        unit_price = prices.get(holding.code, Decimal("0"))
-        total = float(holding.quantity) * float(unit_price) if unit_price else None
-        avg_cost = float(holding.avg_cost_tl) if holding.avg_cost_tl is not None else None
-        gain_loss = None
-        if total is not None and avg_cost is not None:
-            cost_basis = float(holding.quantity) * avg_cost
-            gain_loss = round(total - cost_basis, 2)
-        ws.cell(row=row_idx, column=1, value=holding.code)
-        ws.cell(row=row_idx, column=2, value=float(holding.quantity))
-        ws.cell(row=row_idx, column=3, value=holding.name)
-        ws.cell(row=row_idx, column=4, value=float(unit_price) if unit_price else "")
-        ws.cell(row=row_idx, column=5, value=total if total is not None else "")
-        ws.cell(row=row_idx, column=6, value=avg_cost if avg_cost is not None else "")
-        ws.cell(row=row_idx, column=7, value=gain_loss if gain_loss is not None else "")
-        ws.cell(row=row_idx, column=8, value=holding.distributor or "")
+        _write_tefas_export_row(ws, row_idx, holding, prices)
 
     for col, width in zip("ABCDEFGH", [12, 14, 30, 18, 18, 18, 18, 20]):
         ws.column_dimensions[col].width = width
@@ -193,11 +207,53 @@ async def export_tefas_holdings(
     )
 
 
+def _find_mkk_header_row(sh) -> int:
+    """MKK sheet'inde 'Üye' başlık satırını bulur; yoksa 422 fırlatır."""
+    for r in range(min(sh.nrows, 20)):
+        first = str(sh.cell_value(r, 0)).strip()
+        if first.lower() == "üye":
+            return r
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
+    )
+
+
+def _parse_mkk_fund_row(sh, r: int) -> TefasHolding | None:
+    """MKK satırından TEFAS fon kaydı üretir; fon değilse/geçersizse None."""
+    kind = str(sh.cell_value(r, 2)).strip()
+    if kind.lower() != "fon":
+        return None
+    code_raw = sh.cell_value(r, 3)
+    code = str(code_raw).strip().upper() if code_raw else ""
+    if not code:
+        return None
+    name_raw = sh.cell_value(r, 4)
+    name = str(name_raw).strip() if name_raw else ""
+    try:
+        qty = float(sh.cell_value(r, 7))
+        price = float(sh.cell_value(r, 8))
+    except (TypeError, ValueError):
+        return None
+    if qty <= 0:
+        return None
+    member = str(sh.cell_value(r, 0)).strip() or None
+    if member:
+        member = member[:50]
+    return TefasHolding(
+        code=code,
+        quantity=qty,
+        name=name,
+        avg_cost_tl=price if price > 0 else None,
+        distributor=member,
+    )
+
+
 @router.post("/import-mkk", response_model=list[TefasHolding])
 async def import_tefas_mkk(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     """MKK e-Yatırımcı 'Tüm Kıymetler' raporundan TEFAS fonlarını içe aktarır.
 
@@ -213,55 +269,19 @@ async def import_tefas_mkk(
     try:
         wb = xlrd.open_workbook(file_contents=content)
         sh = wb.sheet_by_index(0)
-    except Exception:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="MKK Excel dosyası okunamadı (.xls binary formatında olmalı)",
-        )
+        ) from exc
 
-    # Header satırını "Üye" sütunundan tespit et
-    header_row = None
-    for r in range(min(sh.nrows, 20)):
-        first = str(sh.cell_value(r, 0)).strip()
-        if first.lower() == "üye":
-            header_row = r
-            break
-    if header_row is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="MKK formatı tanınmadı: 'Üye' başlık satırı bulunamadı",
-        )
+    header_row = _find_mkk_header_row(sh)
 
     parsed: list[TefasHolding] = []
     for r in range(header_row + 1, sh.nrows):
-        kind = str(sh.cell_value(r, 2)).strip()
-        if kind.lower() != "fon":
-            continue
-        code_raw = sh.cell_value(r, 3)
-        code = str(code_raw).strip().upper() if code_raw else ""
-        if not code:
-            continue
-        name_raw = sh.cell_value(r, 4)
-        name = str(name_raw).strip() if name_raw else ""
-        try:
-            qty = float(sh.cell_value(r, 7))
-            price = float(sh.cell_value(r, 8))
-        except (TypeError, ValueError):
-            continue
-        if qty <= 0:
-            continue
-        member = str(sh.cell_value(r, 0)).strip() or None
-        if member:
-            member = member[:50]
-        parsed.append(
-            TefasHolding(
-                code=code,
-                quantity=qty,
-                name=name,
-                avg_cost_tl=price if price > 0 else None,
-                distributor=member,
-            )
-        )
+        holding = _parse_mkk_fund_row(sh, r)
+        if holding is not None:
+            parsed.append(holding)
 
     if not parsed:
         raise HTTPException(
@@ -294,11 +314,50 @@ async def import_tefas_mkk(
     return parsed
 
 
+def _parse_avg_cost(avg_cost_raw) -> float | None:
+    """Ortalama maliyeti float'a çevirir; geçersiz veya <=0 ise None."""
+    if avg_cost_raw is None:
+        return None
+    try:
+        avg_cost_tl = float(avg_cost_raw)
+    except (TypeError, ValueError):
+        return None
+    return avg_cost_tl if avg_cost_tl > 0 else None
+
+
+def _parse_tefas_import_row(row: tuple) -> TefasHolding | None:
+    """Export-template Excel satırından TEFAS holding üretir; geçersizse None."""
+    code = str(row[0]).strip().upper() if row[0] else ""
+    if not code or code == "NONE":
+        return None
+    try:
+        qty = float(row[1])
+    except (TypeError, ValueError):
+        return None
+    if qty <= 0:
+        return None
+
+    name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+    avg_cost_raw = row[3] if len(row) > 3 else None
+    # Export sırası: Adet(B), İsim(C), Birim(D), Toplam(E), Ort.Maliyet(F), Kâr/Zarar(G), Kurum(H)
+    # Import sırası: aynı template + son sütun Kurum (H, index 7)
+    distributor_raw = row[7] if len(row) > 7 else None
+    distributor = str(distributor_raw).strip()[:50] or None if distributor_raw else None
+
+    return TefasHolding(
+        code=code,
+        quantity=qty,
+        name=name,
+        avg_cost_tl=_parse_avg_cost(avg_cost_raw),
+        distributor=distributor,
+    )
+
+
 @router.post("/import", response_model=list[TefasHolding])
 async def import_tefas_holdings(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     from openpyxl import load_workbook
 
@@ -307,46 +366,14 @@ async def import_tefas_holdings(
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı") from exc
 
     parsed: list[TefasHolding] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        code = str(row[0]).strip().upper() if row[0] else ""
-        qty_raw = row[1]
-        name = str(row[2]).strip() if len(row) > 2 and row[2] else ""
-        avg_cost_raw = row[3] if len(row) > 3 else None
-        # Export sırası: Adet(B), İsim(C), Birim(D), Toplam(E), Ort.Maliyet(F), Kâr/Zarar(G), Kurum(H)
-        # Import sırası: aynı template + son sütun Kurum (H, index 7)
-        distributor_raw = row[7] if len(row) > 7 else None
-        if not code or code == "NONE":
-            continue
-        try:
-            qty = float(qty_raw)
-        except (TypeError, ValueError):
-            continue
-        if qty <= 0:
-            continue
-        avg_cost_tl: float | None = None
-        if avg_cost_raw is not None:
-            try:
-                avg_cost_tl = float(avg_cost_raw)
-                if avg_cost_tl <= 0:
-                    avg_cost_tl = None
-            except (TypeError, ValueError):
-                avg_cost_tl = None
-        distributor: str | None = None
-        if distributor_raw:
-            distributor = str(distributor_raw).strip()[:50] or None
-        parsed.append(
-            TefasHolding(
-                code=code,
-                quantity=qty,
-                name=name,
-                avg_cost_tl=avg_cost_tl,
-                distributor=distributor,
-            )
-        )
+        holding = _parse_tefas_import_row(row)
+        if holding is not None:
+            parsed.append(holding)
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli holding bulunamadı")

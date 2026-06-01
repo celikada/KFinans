@@ -68,7 +68,7 @@ function lookupKey(locale: Locale, key: string): string {
   return typeof val === "string" ? val : key;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
+export function I18nProvider({ children }: { readonly children: React.ReactNode }) {
   const [locale, setLocaleState] = React.useState<Locale>("tr");
 
   React.useEffect(() => {

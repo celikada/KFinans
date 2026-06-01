@@ -9,7 +9,7 @@ import {
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  onAdded: () => void;
+  readonly onAdded: () => void;
 }
 
 export function CommodityForm({ onAdded }: Props) {
@@ -25,9 +25,15 @@ export function CommodityForm({ onAdded }: Props) {
 
   const bigaCodes = metal === "gold" ? BIGA_GOLD_CODES : BIGA_SILVER_CODES;
 
+  const unitTypeLabels: Record<CommodityUnitType, string> = {
+    coin: t("form.coin"),
+    gram: t("form.gram"),
+    biga: t("form.biga"),
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const qty = parseFloat(quantity);
+    const qty = Number.parseFloat(quantity);
     if (!qty || qty <= 0) { setError(t("form.amountInvalidQty")); return; }
     setSaving(true);
     setError("");
@@ -67,7 +73,7 @@ export function CommodityForm({ onAdded }: Props) {
                 : "border-gray-200 text-gray-600 hover:border-amber-300"
             }`}
           >
-            {u === "coin" ? t("form.coin") : u === "gram" ? t("form.gram") : t("form.biga")}
+            {unitTypeLabels[u]}
           </button>
         ))}
       </div>

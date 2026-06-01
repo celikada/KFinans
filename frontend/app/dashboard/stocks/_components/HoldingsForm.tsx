@@ -17,7 +17,7 @@ interface Props {
   onRemove: (i: number) => void;
 }
 
-export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Props) {
+export function HoldingsForm({ holdings, initialLoad, onUpdate, onRemove }: Readonly<Props>) {
   const { t } = useTranslation();
   if (initialLoad) {
     return <p className="text-sm text-gray-400">{t("common.loading")}</p>;

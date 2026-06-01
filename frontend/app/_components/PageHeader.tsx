@@ -5,8 +5,8 @@ import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface PageHeaderProps {
-  title: string;
-  back?: string;  // varsayilan: /dashboard
+  readonly title: string;
+  readonly back?: string;  // varsayilan: /dashboard
 }
 
 export function PageHeader({ title, back = "/dashboard" }: PageHeaderProps) {

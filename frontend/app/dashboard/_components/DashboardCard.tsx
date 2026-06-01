@@ -14,22 +14,22 @@ import { COLOR_MAP, ICONS, type IconName } from "./icons";
 
 
 export interface TopItem {
-  label: string;
-  value: number;
+  readonly label: string;
+  readonly value: number;
 }
 
 export interface CardProps {
-  href: string;
-  icon: IconName;
-  color: keyof typeof COLOR_MAP;
-  title: string;
-  total: number | null;
-  count?: number;
-  countLabel?: string;
-  loading?: boolean;
-  top: TopItem[];
-  placeholder: string;
-  footer?: React.ReactNode;
+  readonly href: string;
+  readonly icon: IconName;
+  readonly color: keyof typeof COLOR_MAP;
+  readonly title: string;
+  readonly total: number | null;
+  readonly count?: number;
+  readonly countLabel?: string;
+  readonly loading?: boolean;
+  readonly top: TopItem[];
+  readonly placeholder: string;
+  readonly footer?: React.ReactNode;
 }
 
 
@@ -47,6 +47,17 @@ export function Card({
   // Sadece null = henüz fetch gelmedi.
   const hasTotal = total !== null;
 
+  let body: React.ReactNode;
+  if (hasTotal) {
+    body = <TLValue tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
+  } else if ((count ?? 0) > 0) {
+    body = <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>;
+  } else if (loading) {
+    body = <p className="text-xs text-gray-400">Yükleniyor...</p>;
+  } else {
+    body = <p className="text-xs text-gray-400">{placeholder}</p>;
+  }
+
   return (
     <button
       onClick={() => router.push(href)}
@@ -57,15 +68,7 @@ export function Card({
       </div>
       <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
 
-      {hasTotal ? (
-        <TLValue tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />
-      ) : (count ?? 0) > 0 ? (
-        <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>
-      ) : loading ? (
-        <p className="text-xs text-gray-400">Yükleniyor...</p>
-      ) : (
-        <p className="text-xs text-gray-400">{placeholder}</p>
-      )}
+      {body}
 
       {top.length > 0 && (
         <ul className="mt-3 pt-3 border-t border-gray-50 space-y-1.5">
@@ -87,7 +90,7 @@ export function Card({
 }
 
 
-export function GoalCard({ href, pct, passive }: { href: string; pct: number | null; passive: number | null }) {
+export function GoalCard({ href, pct, passive }: { readonly href: string; readonly pct: number | null; readonly passive: number | null }) {
   const router = useRouter();
   const hasData = pct !== null;
 
@@ -100,9 +103,9 @@ export function GoalCard({ href, pct, passive }: { href: string; pct: number | n
         <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 group-hover:bg-violet-100 transition-colors">
           {ICONS.goal}
         </div>
-        {hasData && (
+        {pct !== null && (
           <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
-            %{pct!.toFixed(0)}
+            %{pct.toFixed(0)}
           </span>
         )}
       </div>
@@ -113,7 +116,7 @@ export function GoalCard({ href, pct, passive }: { href: string; pct: number | n
           <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mb-2">
             <div
               className="h-full bg-violet-500 rounded-full transition-all"
-              style={{ width: `${Math.min(pct!, 100)}%` }}
+              style={{ width: `${Math.min(pct ?? 0, 100)}%` }}
             />
           </div>
           {passive !== null && (
@@ -130,8 +133,16 @@ export function GoalCard({ href, pct, passive }: { href: string; pct: number | n
 }
 
 
-export function BudgetCard({ href, overCount }: { href: string; overCount: number | null }) {
+export function BudgetCard({ href, overCount }: { readonly href: string; readonly overCount: number | null }) {
   const router = useRouter();
+  let status: React.ReactNode;
+  if (overCount === null) {
+    status = <p className="text-xs text-gray-400">Kategori bazında limit belirle</p>;
+  } else if (overCount === 0) {
+    status = <p className="text-xs text-emerald-600">Tüm kategoriler bütçe dahilinde</p>;
+  } else {
+    status = <p className="text-xs text-red-500">{overCount} kategori bütçeyi aştı</p>;
+  }
   return (
     <button
       onClick={() => router.push(href)}
@@ -153,12 +164,7 @@ export function BudgetCard({ href, overCount }: { href: string; overCount: numbe
         )}
       </div>
       <h3 className="text-sm font-semibold text-gray-800 mb-1">Bütçe Takibi</h3>
-      {overCount === null
-        ? <p className="text-xs text-gray-400">Kategori bazında limit belirle</p>
-        : overCount === 0
-          ? <p className="text-xs text-emerald-600">Tüm kategoriler bütçe dahilinde</p>
-          : <p className="text-xs text-red-500">{overCount} kategori bütçeyi aştı</p>
-      }
+      {status}
     </button>
   );
 }

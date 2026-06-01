@@ -66,7 +66,8 @@
     "no": "Hayır",
     "confirm": "Onayla",
     "search": "Ara",
-    "noData": "Henüz veri yok"
+    "noData": "Henüz veri yok",
+    "close": "Kapat"
   },
   "dashboard": {
     "totalPortfolio": "Toplam Portföy",

@@ -5,9 +5,9 @@ import { CHAIN_LABELS } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  wallets: WalletDTO[];
-  removing: string | null;
-  onRemove: (walletId: string) => void;
+  readonly wallets: WalletDTO[];
+  readonly removing: string | null;
+  readonly onRemove: (walletId: string) => void;
 }
 
 export function WalletList({ wallets, removing, onRemove }: Props) {

@@ -2,16 +2,16 @@
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  saved: boolean;
-  saving: boolean;
-  exporting: boolean;
-  importing: boolean;
-  loading: boolean;
-  onAddRow: () => void;
-  onSave: () => void;
-  onExport: () => void;
-  onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onFetchPrices: () => void;
+  readonly saved: boolean;
+  readonly saving: boolean;
+  readonly exporting: boolean;
+  readonly importing: boolean;
+  readonly loading: boolean;
+  readonly onAddRow: () => void;
+  readonly onSave: () => void;
+  readonly onExport: () => void;
+  readonly onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onFetchPrices: () => void;
 }
 
 export function Toolbar({

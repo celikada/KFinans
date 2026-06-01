@@ -27,10 +27,10 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 class AuditLogOut(BaseModel):
     id: UUID
     action: str
-    resource: Optional[str]
-    ip_address: Optional[str]
-    user_agent: Optional[str]
-    extra: Optional[dict]
+    resource: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    extra: Optional[dict] = None
     created_at: datetime
 
     class Config:
@@ -41,12 +41,12 @@ class AuditLogOut(BaseModel):
 async def list_audit_logs(
     current_user: CurrentUser,
     db: DB,
-    action_prefix: Optional[str] = Query(
-        None,
-        description="Filtrelemek icin action prefix (orn. 'auth.', 'wallet.')",
-    ),
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    action_prefix: Annotated[
+        Optional[str],
+        Query(description="Filtrelemek icin action prefix (orn. 'auth.', 'wallet.')"),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ):
     """PERF-001 (FAZ H): Pagination eklendi — buyuk veri'de yavaslamasin.
 

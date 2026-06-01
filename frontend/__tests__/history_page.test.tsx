@@ -305,9 +305,8 @@ describe("HistoryPage — snapshot silme", () => {
     const user = await renderWithRow();
     await user.click(screen.getByRole("button", { name: "content.history.deleteBtn" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    // role=presentation backdrop (dialog'un parent'i).
-    const backdrop = screen.getByRole("presentation");
-    fireEvent.click(backdrop);
+    // Backdrop artik native <button> (aria-label=common.close); tiklayinca kapatir.
+    fireEvent.click(screen.getByRole("button", { name: "common.close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });

@@ -6,10 +6,10 @@ import { CryptoProvider } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  hasIntegrations: boolean;
-  loadingPositions: boolean;
-  onAdded: (added: IntegrationDTO) => void;
-  onRefresh: () => void;
+  readonly hasIntegrations: boolean;
+  readonly loadingPositions: boolean;
+  readonly onAdded: (added: IntegrationDTO) => void;
+  readonly onRefresh: () => void;
 }
 
 export function IntegrationForm({ hasIntegrations, loadingPositions, onAdded, onRefresh }: Props) {

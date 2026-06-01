@@ -87,7 +87,7 @@ export default function KvkkPage() {
           <li>Hukuka aykırı işleme nedeniyle zarara uğramışsanız tazminat isteme</li>
         </ul>
         <p>
-          Başvurularınızı <strong>Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ</strong>
+          Başvurularınızı <strong>Veri Sorumlusuna Başvuru Usul ve Esasları Hakkında Tebliğ</strong>{" "}
           uyarınca aşağıdaki kanallardan birini kullanarak iletebilirsiniz:
         </p>
         <ul className="list-disc pl-5">

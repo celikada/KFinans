@@ -66,7 +66,8 @@
     "no": "No",
     "confirm": "Confirm",
     "search": "Search",
-    "noData": "No data yet"
+    "noData": "No data yet",
+    "close": "Close"
   },
   "dashboard": {
     "totalPortfolio": "Total Portfolio",

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
-import { getShowUsd, setShowUsd } from "@/app/_components/TLValue";
+import { getShowUsd, setShowUsd as persistShowUsd } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 
@@ -33,12 +33,18 @@ export default function SettingsPage() {
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
   // Genel: USD karşılığı göster
-  const [showUsd, setShowUsdState] = useState(false);
+  const [showUsd, setShowUsd] = useState(false);
 
   useEffect(() => {
     setHiddenCards(getHiddenCards());
-    setShowUsdState(getShowUsd());
+    setShowUsd(getShowUsd());
   }, []);
+
+  function toggleCardVisibility(id: DashboardCardId, isHidden: boolean) {
+    const next = isHidden ? hiddenCards.filter((c) => c !== id) : [...hiddenCards, id];
+    setHiddenCards(next);
+    saveHiddenCards(next);
+  }
 
   // Şifre değiştir
   const [curPwd, setCurPwd]     = useState("");
@@ -276,8 +282,8 @@ export default function SettingsPage() {
               type="button"
               onClick={() => {
                 const next = !showUsd;
-                setShowUsdState(next);
                 setShowUsd(next);
+                persistShowUsd(next);
               }}
               className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${showUsd ? "bg-blue-600" : "bg-gray-200"}`}
               aria-label={showUsd ? t("content.settings.showUsdToggleOff") : t("content.settings.showUsdToggleOn")}
@@ -307,13 +313,7 @@ export default function SettingsPage() {
                         <span className="text-sm text-gray-700 select-none">{label}</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            const next = isHidden
-                              ? hiddenCards.filter((c) => c !== id)
-                              : [...hiddenCards, id];
-                            setHiddenCards(next);
-                            saveHiddenCards(next);
-                          }}
+                          onClick={() => toggleCardVisibility(id, isHidden)}
                           className={`relative w-10 h-5 rounded-full transition-colors ${isHidden ? "bg-gray-200" : "bg-blue-600"}`}
                           aria-label={`${label} ${isHidden ? t("content.settings.showCardAria") : t("content.settings.hideCardAria")}`}
                         >

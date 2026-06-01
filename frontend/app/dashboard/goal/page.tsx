@@ -1,10 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { api, GoalDTO, GoalCurrency, GOAL_CURRENCY_SYMBOLS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
-import { INPUT_CLS } from "@/lib/format";
+import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 const MULTIPLIER = 300;
@@ -16,12 +14,52 @@ function fmtForeign(val: number, currency: GoalCurrency) {
   return currency === "TRY" ? `${n} ₺` : `${sym}${n}`;
 }
 
-function ProgressBar({ pct }: { pct: number }) {
+interface PassiveVsNeed {
+  value: string;
+  sub: string;
+  color: string;
+}
+
+function computePassiveVsNeed(args: {
+  t: (k: string) => string;
+  isForeign: boolean;
+  passiveFgn: number | null;
+  passiveTL: number;
+  monthlyTL: number;
+  amount: number;
+  currency: GoalCurrency;
+}): PassiveVsNeed {
+  const { t, isForeign, passiveFgn, passiveTL, monthlyTL, amount, currency } = args;
+  const sufficient = isForeign && passiveFgn !== null ? passiveFgn >= amount : passiveTL >= monthlyTL;
+
+  let value: string;
+  if (isForeign && passiveFgn !== null) {
+    value = passiveFgn >= amount
+      ? t("content.goal.financiallyFree")
+      : t("content.goal.shortBy").replace("{amount}", fmtForeign(amount - passiveFgn, currency));
+  } else {
+    value = passiveTL >= monthlyTL
+      ? t("content.goal.financiallyFree")
+      : t("content.goal.shortBy").replace("{amount}", `${fmtTL(monthlyTL - passiveTL)} ₺`);
+  }
+
+  return {
+    value,
+    sub: sufficient ? t("content.goal.passiveSufficient") : t("content.goal.passiveInsufficient"),
+    color: sufficient ? "text-green-600" : "text-orange-500",
+  };
+}
+
+function progressColor(clamped: number): string {
+  if (clamped >= 100) return "bg-green-500";
+  if (clamped >= 70) return "bg-blue-500";
+  if (clamped >= 40) return "bg-indigo-500";
+  return "bg-violet-400";
+}
+
+function ProgressBar({ pct }: Readonly<{ pct: number }>) {
   const clamped = Math.min(pct, 100);
-  const color =
-    clamped >= 100 ? "bg-green-500" :
-    clamped >= 70  ? "bg-blue-500"  :
-    clamped >= 40  ? "bg-indigo-500" : "bg-violet-400";
+  const color = progressColor(clamped);
   return (
     <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
       <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${clamped}%` }} />
@@ -30,7 +68,6 @@ function ProgressBar({ pct }: { pct: number }) {
 }
 
 export default function GoalPage() {
-  const router = useRouter();
   const { t } = useTranslation();
   const [goal, setGoal] = useState<GoalDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +83,7 @@ export default function GoalPage() {
       const data = await api.getGoal();
       setGoal(data);
       if (data.goal_amount) setInputVal(data.goal_amount);
-      if (data.goal_currency) setCurrency(data.goal_currency as GoalCurrency);
+      if (data.goal_currency) setCurrency(data.goal_currency);
     } catch {
       setError(t("content.goal.loadFailed"));
     } finally {
@@ -77,7 +114,7 @@ export default function GoalPage() {
   }
 
   const amount     = goal?.goal_amount        ? Number.parseFloat(goal.goal_amount)        : null;
-  const cur        = currency as GoalCurrency;
+  const cur        = currency;
   const rate       = goal?.rate_to_tl         ? Number.parseFloat(goal.rate_to_tl)         : null;
   const monthlyTL  = goal?.monthly_tl         ? Number.parseFloat(goal.monthly_tl)         : null;
   const targetTL   = goal?.freedom_target_tl  ? Number.parseFloat(goal.freedom_target_tl)  : null;
@@ -87,6 +124,10 @@ export default function GoalPage() {
   const pct        = goal?.progress_pct ?? null;
   const months     = goal?.months_covered ?? null;
   const isForeign  = cur !== "TRY";
+
+  let saveLabel = t("common.save");
+  if (saving) saveLabel = t("form.saving");
+  else if (saved) saveLabel = t("content.goal.saved");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -150,7 +191,7 @@ export default function GoalPage() {
                     disabled={saving}
                     className="text-sm bg-violet-600 text-white px-5 py-2 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
                   >
-                    {saving ? t("form.saving") : saved ? t("content.goal.saved") : t("common.save")}
+                    {saveLabel}
                   </button>
                 </div>
               </div>
@@ -180,86 +221,20 @@ export default function GoalPage() {
 
             {/* İlerleme */}
             {amount && targetTL && monthlyTL && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-                <div className="flex justify-between items-start">
-                  <h2 className="text-sm font-semibold text-gray-700">{t("content.goal.progressStatus")}</h2>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400">{t("content.goal.savedTarget")}</p>
-                    <p className="text-sm font-semibold text-gray-700">
-                      {fmtForeign(amount, goal!.goal_currency as GoalCurrency)}{t("content.goal.perMonthSuffix")}
-                    </p>
-                    {isForeign && (
-                      <p className="text-xs text-gray-400">= {fmtTL(monthlyTL)} ₺{t("content.goal.perMonthSuffix")}</p>
-                    )}
-                  </div>
-                </div>
-
-                {portfolio ? (
-                  <>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>{t("content.goal.currentPortfolio")}</span>
-                        <span className="font-semibold text-gray-800">{fmtTL(portfolio)} ₺</span>
-                      </div>
-                      <ProgressBar pct={pct ?? 0} />
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">{t("content.goal.percentComplete").replace("{pct}", (pct ?? 0).toFixed(1))}</span>
-                        <span className="text-gray-400">{t("content.goal.targetLabel")}: {fmtTL(targetTL)} ₺</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <Stat
-                        label={t("content.goal.passiveIncomeTl")}
-                        value={`${fmtTL(passiveTL!)} ₺`}
-                        sub={t("content.goal.portfolioDivided").replace("{multiplier}", String(MULTIPLIER))}
-                        color="text-violet-600"
-                      />
-                      {isForeign && passiveFgn !== null && rate && (
-                        <Stat
-                          label={t("content.goal.passiveIncomeCurrency").replace("{currency}", goal!.goal_currency)}
-                          value={fmtForeign(passiveFgn, goal!.goal_currency as GoalCurrency)}
-                          sub={`1 ${goal!.goal_currency} = ${fmtTL(rate)} ₺`}
-                          color="text-blue-600"
-                        />
-                      )}
-                      <Stat
-                        label={t("content.goal.remainingToTarget")}
-                        value={`${fmtTL(Math.max(0, targetTL - portfolio))} ₺`}
-                        sub={pct! >= 100 ? t("content.goal.targetReached") : t("content.goal.percentShort").replace("{pct}", (100 - pct!).toFixed(1))}
-                        color={pct! >= 100 ? "text-green-600" : "text-gray-700"}
-                      />
-                      <Stat
-                        label={t("content.goal.monthsCovered")}
-                        value={t("content.goal.monthsValue").replace("{months}", months?.toFixed(0) ?? "0")}
-                        sub={t("content.goal.yearsValue").replace("{years}", ((months ?? 0) / 12).toFixed(1))}
-                        color="text-indigo-600"
-                      />
-                      <Stat
-                        label={t("content.goal.passiveVsNeed")}
-                        value={
-                          isForeign && passiveFgn !== null
-                            ? (passiveFgn >= amount ? t("content.goal.financiallyFree") : t("content.goal.shortBy").replace("{amount}", fmtForeign(amount - passiveFgn, goal!.goal_currency as GoalCurrency)))
-                            : (passiveTL! >= monthlyTL ? t("content.goal.financiallyFree") : t("content.goal.shortBy").replace("{amount}", `${fmtTL(monthlyTL - passiveTL!)} ₺`))
-                        }
-                        sub={
-                          (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
-                            ? t("content.goal.passiveSufficient")
-                            : t("content.goal.passiveInsufficient")
-                        }
-                        color={
-                          (isForeign ? passiveFgn! >= amount : passiveTL! >= monthlyTL)
-                            ? "text-green-600" : "text-orange-500"
-                        }
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-400 py-2">
-                    {t("content.goal.noPortfolioData")}
-                  </p>
-                )}
-              </div>
+              <ProgressSection
+                t={t}
+                currency={goal!.goal_currency}
+                isForeign={isForeign}
+                amount={amount}
+                targetTL={targetTL}
+                monthlyTL={monthlyTL}
+                portfolio={portfolio}
+                passiveTL={passiveTL}
+                passiveFgn={passiveFgn}
+                pct={pct}
+                rate={rate}
+                months={months}
+              />
             )}
 
             {/* Formül */}
@@ -281,7 +256,109 @@ export default function GoalPage() {
   );
 }
 
-function Stat({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+interface ProgressSectionProps {
+  t: (k: string) => string;
+  currency: GoalCurrency;
+  isForeign: boolean;
+  amount: number;
+  targetTL: number;
+  monthlyTL: number;
+  portfolio: number | null;
+  passiveTL: number | null;
+  passiveFgn: number | null;
+  pct: number | null;
+  rate: number | null;
+  months: number | null;
+}
+
+function ProgressSection(props: Readonly<ProgressSectionProps>) {
+  const { t, currency, isForeign, amount, targetTL, monthlyTL, portfolio, passiveTL, passiveFgn, pct, rate, months } = props;
+  const pctVal = pct ?? 0;
+  const remaining = pctVal >= 100
+    ? t("content.goal.targetReached")
+    : t("content.goal.percentShort").replace("{pct}", (100 - pctVal).toFixed(1));
+  const pvn = computePassiveVsNeed({
+    t, isForeign, passiveFgn,
+    passiveTL: passiveTL ?? 0,
+    monthlyTL,
+    amount,
+    currency,
+  });
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+      <div className="flex justify-between items-start">
+        <h2 className="text-sm font-semibold text-gray-700">{t("content.goal.progressStatus")}</h2>
+        <div className="text-right">
+          <p className="text-xs text-gray-400">{t("content.goal.savedTarget")}</p>
+          <p className="text-sm font-semibold text-gray-700">
+            {fmtForeign(amount, currency)}{t("content.goal.perMonthSuffix")}
+          </p>
+          {isForeign && (
+            <p className="text-xs text-gray-400">= {fmtTL(monthlyTL)} ₺{t("content.goal.perMonthSuffix")}</p>
+          )}
+        </div>
+      </div>
+
+      {portfolio ? (
+        <>
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>{t("content.goal.currentPortfolio")}</span>
+              <span className="font-semibold text-gray-800">{fmtTL(portfolio)} ₺</span>
+            </div>
+            <ProgressBar pct={pctVal} />
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">{t("content.goal.percentComplete").replace("{pct}", pctVal.toFixed(1))}</span>
+              <span className="text-gray-400">{t("content.goal.targetLabel")}: {fmtTL(targetTL)} ₺</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Stat
+              label={t("content.goal.passiveIncomeTl")}
+              value={`${fmtTL(passiveTL ?? 0)} ₺`}
+              sub={t("content.goal.portfolioDivided").replace("{multiplier}", String(MULTIPLIER))}
+              color="text-violet-600"
+            />
+            {isForeign && passiveFgn !== null && rate && (
+              <Stat
+                label={t("content.goal.passiveIncomeCurrency").replace("{currency}", currency)}
+                value={fmtForeign(passiveFgn, currency)}
+                sub={`1 ${currency} = ${fmtTL(rate)} ₺`}
+                color="text-blue-600"
+              />
+            )}
+            <Stat
+              label={t("content.goal.remainingToTarget")}
+              value={`${fmtTL(Math.max(0, targetTL - portfolio))} ₺`}
+              sub={remaining}
+              color={pctVal >= 100 ? "text-green-600" : "text-gray-700"}
+            />
+            <Stat
+              label={t("content.goal.monthsCovered")}
+              value={t("content.goal.monthsValue").replace("{months}", months?.toFixed(0) ?? "0")}
+              sub={t("content.goal.yearsValue").replace("{years}", ((months ?? 0) / 12).toFixed(1))}
+              color="text-indigo-600"
+            />
+            <Stat
+              label={t("content.goal.passiveVsNeed")}
+              value={pvn.value}
+              sub={pvn.sub}
+              color={pvn.color}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-gray-400 py-2">
+          {t("content.goal.noPortfolioData")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, color }: Readonly<{ label: string; value: string; sub: string; color: string }>) {
   return (
     <div className="bg-gray-50 rounded-xl p-4">
       <p className="text-xs text-gray-400 mb-1">{label}</p>

@@ -17,7 +17,7 @@ interface Props {
   onRefresh: () => void;
 }
 
-export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Props) {
+export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Readonly<Props>) {
   const confirm = useConfirm();
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);

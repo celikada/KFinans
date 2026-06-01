@@ -22,8 +22,8 @@ class AdviceOut(BaseModel):
     id: uuid.UUID
     horizon: str
     content: str
-    prompt_tokens: Optional[int]
-    completion_tokens: Optional[int]
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
     credits_used: int
     generated_at: datetime
 

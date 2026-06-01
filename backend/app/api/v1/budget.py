@@ -2,6 +2,7 @@ import calendar
 import logging
 from datetime import date as date_type
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
@@ -21,8 +22,8 @@ router = APIRouter(prefix="/budgets", tags=["budgets"])
 
 @router.get("", response_model=list[BudgetOut])
 async def list_budgets(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(Budget).where(Budget.user_id == current_user.id).order_by(Budget.category))
     return result.scalars().all()
@@ -32,8 +33,8 @@ async def list_budgets(
 async def upsert_budget(
     category: str,
     payload: BudgetUpsert,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if category not in EXPENSE_CATEGORIES:
         raise HTTPException(
@@ -60,8 +61,8 @@ async def upsert_budget(
 @router.delete("/{category}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_budget(
     category: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(Budget).where(
@@ -78,10 +79,10 @@ async def delete_budget(
 
 @router.get("/comparison", response_model=list[BudgetComparison])
 async def get_comparison(
-    year: int = Query(..., ge=2020, le=2100),
-    month: int = Query(..., ge=1, le=12),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    month: Annotated[int, Query(ge=1, le=12)],
 ):
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])

@@ -1,6 +1,7 @@
 import calendar
 from datetime import date as date_type
 from decimal import Decimal
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -59,8 +60,8 @@ def _applies_in_month(pe: PlannedExpense, year: int, month: int) -> bool:
 
 @router.get("", response_model=list[PlannedExpenseOut])
 async def list_planned_expenses(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == current_user.id).order_by(PlannedExpense.start_date))
     return result.scalars().all()
@@ -69,8 +70,8 @@ async def list_planned_expenses(
 @router.post("", response_model=PlannedExpenseOut, status_code=status.HTTP_201_CREATED)
 async def create_planned_expense(
     payload: PlannedExpenseCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     end_date = payload.end_date
     if payload.remaining_count and not end_date and payload.recurrence == "monthly":
@@ -102,8 +103,8 @@ async def create_planned_expense(
 async def update_planned_expense(
     pe_id: int,
     payload: PlannedExpenseUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(PlannedExpense).where(
@@ -144,8 +145,8 @@ async def update_planned_expense(
 @router.delete("/{pe_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_planned_expense(
     pe_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     result = await db.execute(
         select(PlannedExpense).where(
@@ -162,9 +163,9 @@ async def delete_planned_expense(
 
 @router.get("/forecast", response_model=ForecastResult)
 async def get_forecast(
-    year: int = Query(..., ge=2020, le=2100),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
 ):
     """Yillik nakit akisi tahmini — planli odemeler baz alinir.
 

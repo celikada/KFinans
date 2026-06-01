@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 
 interface Props {
   /** Dosya seçildiğinde çağrılır. Tanımlıysa "MKK Excel'i Yükle" butonu gösterilir. */
-  onUpload?: (file: File) => Promise<void>;
+  readonly onUpload?: (file: File) => Promise<void>;
 }
 
 /**
@@ -22,8 +22,8 @@ export function MkkHint({ onUpload }: Props) {
     setErr("");
     try {
       await onUpload(file);
-    } catch (caught) {
-      setErr(caught instanceof Error ? caught.message : "Yükleme başarısız");
+    } catch (error_) {
+      setErr(error_ instanceof Error ? error_.message : "Yükleme başarısız");
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";

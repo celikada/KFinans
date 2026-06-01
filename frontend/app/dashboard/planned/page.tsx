@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { api, PlannedExpenseDTO, ForecastResultDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL } from "@/lib/format";
@@ -11,7 +10,6 @@ import { YearlyForecast } from "./_components/YearlyForecast";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function PlannedPage() {
-  const router = useRouter();
   const { t } = useTranslation();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);

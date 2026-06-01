@@ -6,7 +6,7 @@ import { CHAIN_LABELS } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  positions: WalletPositionDTO[];
+  readonly positions: WalletPositionDTO[];
 }
 
 export function WalletPositionsTable({ positions }: Props) {
@@ -33,13 +33,13 @@ export function WalletPositionsTable({ positions }: Props) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {sorted.map((pos, i) => {
+          {sorted.map((pos) => {
             const liquid = Number.parseFloat(pos.liquid_quantity);
             const staked = Number.parseFloat(pos.staked_quantity);
             const rewards = Number.parseFloat(pos.pending_rewards);
             const total = liquid + staked;
             return (
-              <tr key={i} className="hover:bg-gray-50 transition-colors">
+              <tr key={`${pos.chain}-${pos.symbol}-${pos.address}`} className="hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4">
                   <span className="font-mono font-semibold text-gray-900">{pos.symbol}</span>
                   <p className="text-xs text-gray-400 mt-0.5">

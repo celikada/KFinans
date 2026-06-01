@@ -53,7 +53,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const value = parseFloat(amount);
+    const value = Number.parseFloat(amount);
     if (!value || value <= 0) { setError(t("form.amountInvalid")); return; }
     setSaving(true);
     try {
@@ -62,7 +62,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
         category,
         date,
         description: description.trim() || null,
-        credit_card_id: creditCardId ? parseInt(creditCardId) : null,
+        credit_card_id: creditCardId ? Number.parseInt(creditCardId) : null,
         is_paid: true,
       };
       const result = isEdit && existing

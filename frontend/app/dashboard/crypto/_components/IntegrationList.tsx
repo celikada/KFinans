@@ -4,9 +4,9 @@ import { PROVIDER_LABELS } from "./constants";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
-  integrations: IntegrationDTO[];
-  removing: string | null;
-  onRemove: (provider: string) => void;
+  readonly integrations: IntegrationDTO[];
+  readonly removing: string | null;
+  readonly onRemove: (provider: string) => void;
 }
 
 export function IntegrationList({ integrations, removing, onRemove }: Props) {

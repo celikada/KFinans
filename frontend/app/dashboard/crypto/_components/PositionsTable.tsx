@@ -10,7 +10,7 @@ type SortCol = "value" | "name" | "amount";
 type SortDir = "desc" | "asc";
 
 interface Props {
-  positions: CryptoPositionDTO[];
+  readonly positions: CryptoPositionDTO[];
 }
 
 export function PositionsTable({ positions }: Props) {
@@ -57,11 +57,11 @@ export function PositionsTable({ positions }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
-            {headers.map((h, i) => {
+            {headers.map((h) => {
               const active = h.col && sortBy === h.col;
               return (
                 <th
-                  key={i}
+                  key={h.label}
                   className={`px-6 py-3 ${h.align} ${h.col ? "cursor-pointer select-none hover:text-gray-600" : ""} ${active ? "text-gray-700" : ""}`}
                   onClick={() => h.col && toggleSort(h.col)}
                 >

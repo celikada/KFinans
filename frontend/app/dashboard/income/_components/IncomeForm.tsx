@@ -13,7 +13,7 @@ interface Props {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-export function IncomeForm({ onSaved, existing, onCancel }: Props) {
+export function IncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   const { t } = useTranslation();
   const isEdit = !!existing;
   const [amount, setAmount] = useState(existing?.amount ?? "");
@@ -38,7 +38,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Props) {
     setError("");
     try {
       const payload = {
-        amount: parseFloat(amount),
+        amount: Number.parseFloat(amount),
         category,
         date,
         description: description.trim() || null,

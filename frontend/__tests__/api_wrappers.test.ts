@@ -200,7 +200,7 @@ describe("creditCardsApi", () => {
     expectFetch("/credit-cards/1/installments", "POST");
   });
   it("updateInstallment", async () => {
-    await creditCardsApi.updateInstallment(1, 3, { total_amount: 200 });
+    await creditCardsApi.updateInstallment(1, 3, { monthly_amount: 200 });
     expectFetch("/credit-cards/1/installments/3", "PUT");
   });
   it("deleteInstallment", async () => {

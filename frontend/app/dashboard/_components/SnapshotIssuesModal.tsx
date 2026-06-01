@@ -27,19 +27,20 @@ function fmtTL(val: number) {
 export function SnapshotIssuesModal({
   pending, onCancel, onConfirm, saving,
 }: {
-  pending: PendingIssues;
-  onCancel: () => void;
-  onConfirm: () => void;
-  saving: boolean;
+  readonly pending: PendingIssues;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+  readonly saving: boolean;
 }) {
   const warns = pending.issues.filter((i) => (i.level ?? "warn") === "warn");
   const infos = pending.issues.filter((i) => i.level === "info");
-  const containerRef = useFocusTrap(true, onCancel);
+  const containerRef = useFocusTrap<HTMLDivElement>(true, onCancel);
 
   return (
     <div
       role="presentation"
-      onClick={onCancel}
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
       className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
     >
       <div
@@ -48,7 +49,6 @@ export function SnapshotIssuesModal({
         aria-modal="true"
         aria-labelledby="snapshot-issues-title"
         aria-describedby="snapshot-issues-desc"
-        onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
       >
         <h3 id="snapshot-issues-title" className="text-base font-semibold text-gray-900 mb-1">
@@ -63,11 +63,15 @@ export function SnapshotIssuesModal({
           Sorunlar/notlar geçmişte de görünür kalır.
         </p>
         <ul className="space-y-2 max-h-72 overflow-y-auto mb-4">
-          {pending.issues.map((iss, i) => {
+          {pending.issues.map((iss) => {
             const isInfo = iss.level === "info";
+            const key = [
+              iss.source, iss.exchange, iss.symbol, iss.chain,
+              iss.provider, iss.label, iss.msg,
+            ].filter(Boolean).join("|");
             return (
               <li
-                key={i}
+                key={key}
                 className={`rounded-lg px-3 py-2 text-xs border ${
                   isInfo
                     ? "bg-blue-50 border-blue-100"

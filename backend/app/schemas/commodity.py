@@ -42,10 +42,10 @@ class CommodityOut(BaseModel):
     id: int
     unit_type: str
     metal: str
-    biga_code: Optional[str]
-    coin_type: Optional[str]
+    biga_code: Optional[str] = None
+    coin_type: Optional[str] = None
     quantity: Decimal
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -1,5 +1,6 @@
 import io
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,9 @@ from app.services.audit import AuditAction, log_audit
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
 
+CurrentUser = Annotated[User, Depends(get_current_user)]
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
 VALID_CHAINS = {
     "sonic",
     "avalanche_c",
@@ -33,8 +37,8 @@ VALID_CHAINS = {
 
 @router.get("", response_model=list[WalletOut])
 async def list_wallets(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
     return result.scalars().all()
@@ -44,8 +48,8 @@ async def list_wallets(
 async def add_wallet(
     request: Request,
     payload: WalletCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     if payload.chain not in VALID_CHAINS:
         raise HTTPException(
@@ -84,8 +88,8 @@ async def add_wallet(
 async def remove_wallet(
     wallet_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     result = await db.execute(
         select(WalletAddress).where(
@@ -112,9 +116,9 @@ async def remove_wallet(
 @router.get("/export")
 async def export_wallets(
     request: Request,
+    current_user: CurrentUser,
+    db: DbSession,
     include_full_address: bool = False,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """COMP-024 (FAZ H): Wallet export'ta xpub maskelenir (default).
 
@@ -190,11 +194,28 @@ async def export_wallets(
     )
 
 
+def _parse_wallet_row(row: tuple) -> dict | None:
+    """Excel satırını doğrular ve cüzdan dict'i üretir; geçersizse None döner."""
+    chain = str(row[0]).strip().lower() if row[0] else ""
+    if not chain or chain == "none" or chain not in VALID_CHAINS:
+        return None
+
+    address = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+    if not address or address == "none":
+        return None
+
+    label = str(row[2]).strip() if len(row) > 2 and row[2] else None
+    if label == "none":
+        label = None
+
+    return {"chain": chain, "address": address, "label": label}
+
+
 @router.post("/import", response_model=list[WalletOut])
 async def import_wallets(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    db: DbSession,
 ):
     from openpyxl import load_workbook
 
@@ -203,23 +224,14 @@ async def import_wallets(
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         ws = wb.active
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Dosya okunamadı") from exc
 
     parsed: list[dict] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        chain = str(row[0]).strip().lower() if row[0] else ""
-        address = str(row[1]).strip() if len(row) > 1 and row[1] else ""
-        label = str(row[2]).strip() if len(row) > 2 and row[2] else None
-
-        if not chain or chain == "none" or chain not in VALID_CHAINS:
-            continue
-        if not address or address == "none":
-            continue
-        if label == "none":
-            label = None
-
-        parsed.append({"chain": chain, "address": address, "label": label})
+        wallet_data = _parse_wallet_row(row)
+        if wallet_data is not None:
+            parsed.append(wallet_data)
 
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli cüzdan bulunamadı")
@@ -247,5 +259,5 @@ async def import_wallets(
 
 
 @router.post("/sync", status_code=status.HTTP_202_ACCEPTED)
-async def sync_wallets(current_user: User = Depends(get_current_user)):
+async def sync_wallets(current_user: CurrentUser):
     return {"detail": "Blockchain senkronizasyonu başlatıldı"}

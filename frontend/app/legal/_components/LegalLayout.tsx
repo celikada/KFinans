@@ -4,9 +4,9 @@ import Link from "next/link";
 import { MayotekLogo } from "@/app/_components/Logos";
 
 interface LegalLayoutProps {
-  title: string;
-  lastUpdated: string;
-  children: ReactNode;
+  readonly title: string;
+  readonly lastUpdated: string;
+  readonly children: ReactNode;
 }
 
 export function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
@@ -42,7 +42,7 @@ export function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) 
   );
 }
 
-function LegalLink({ href, label }: { href: string; label: string }) {
+function LegalLink({ href, label }: { readonly href: string; readonly label: string }) {
   return (
     <Link href={href} className="text-blue-600 hover:text-blue-700 hover:underline">
       {label}
@@ -50,7 +50,7 @@ function LegalLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export function LegalSection({ title, children }: { title: string; children: ReactNode }) {
+export function LegalSection({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return (
     <section className="space-y-2">
       <h2 className="text-base font-semibold text-gray-900 mt-6">{title}</h2>

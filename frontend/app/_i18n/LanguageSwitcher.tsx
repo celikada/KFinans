@@ -13,14 +13,13 @@ import { useTranslation, type Locale } from "./I18nProvider";
 const LOCALES: Locale[] = ["tr", "en"];
 const LABEL: Record<Locale, string> = { tr: "TR", en: "EN" };
 
-export function LanguageSwitcher({ className = "" }: { className?: string }) {
+export function LanguageSwitcher({ className = "" }: { readonly className?: string }) {
   const { locale, setLocale, t } = useTranslation();
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label={t("common.languageSwitcher")}
-      className={`inline-flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5 text-xs ${className}`}
+      className={`m-0 inline-flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-0.5 text-xs ${className}`}
     >
       {LOCALES.map((l) => {
         const active = l === locale;
@@ -40,6 +39,6 @@ export function LanguageSwitcher({ className = "" }: { className?: string }) {
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

@@ -4,20 +4,19 @@
  */
 
 export function fmtTL(val: string | number, decimals = 2) {
-  return parseFloat(val.toString()).toLocaleString("tr-TR", {
+  return Number.parseFloat(val.toString()).toLocaleString("tr-TR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: decimals,
   });
 }
 
 export function fmtNum(val: string | number, decimals = 6) {
-  return parseFloat(val.toString()).toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: decimals,
-  });
+  return fmtTL(val, decimals);
 }
 
-export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short" }) {
+const DEFAULT_DATE_OPTS: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short" };
+
+export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = DEFAULT_DATE_OPTS) {
   return new Date(iso).toLocaleDateString("tr-TR", opts);
 }
 
@@ -60,7 +59,7 @@ export const DASHBOARD_GROUPS: { id: DashboardGroup; label: string }[] = [
 ];
 
 export function getHiddenCards(): DashboardCardId[] {
-  if (typeof window === "undefined") return [];
+  if (globalThis.window === undefined) return [];
   try {
     return JSON.parse(localStorage.getItem("kfinans_hidden_cards") ?? "[]");
   } catch {
