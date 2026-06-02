@@ -920,6 +920,18 @@
           "howTo": "For a SINGLE ADDRESS: Ledger Live → Litecoin account → 'Receive' → ltc1... address.\nFor an HD WALLET (recommended): Ledger Live → Litecoin account → ⚙ settings → 'Edit account' → 'Show xpub' (starts with Ltub... — the Litecoin xpub format)."
         }
       }
+    },
+    "dashboard": {
+      "goalTitle": "Financial Goal",
+      "goalPassiveIncome": "Passive income:",
+      "perMonthSuffix": "₺/mo",
+      "goalEmptyHint": "Enter your monthly need, calculate your goal",
+      "budgetTitle": "Budget Tracking",
+      "budgetEmptyHint": "Set limits per category",
+      "budgetAllWithin": "All categories within budget",
+      "budgetOverCount": "{count} categories over budget",
+      "budgetOverBadge": "{count} over",
+      "budgetWithinBadge": "Within"
     }
   }
 }

@@ -180,7 +180,11 @@ cd frontend && npm install && npm run dev
 
 **GitHub mirror hijyeni (2026-06-01):** GitHub (`celikada/KFinans`) salt-okunur **mirror** — yalnızca `develop` + `main` + tag'ler push edilir; feature branch'ler **sadece GitLab'a** gider (yarım iş public mirror'a sızmaz). GitHub'da `develop` + `main` protected. GitLab zaten protected + merge sonrası auto-delete. Tüm MR'lar GitLab'da (#12/#13/#14 merged, #15 sealed-secret+gitleaks pending).
 
-**Deploy durumu (2026-06-01):** Production tag **`v0.1.0-rc10`** Oracle K3s'e elle (GitLab CI deploy stage) çıkıldı; smoke testler yeşil, production sağlıklı. v1.0.0 hâlâ KVKK kullanıcı aksiyonlarına (COMP) bağlı.
+**Deploy durumu (2026-06-02):** Production tag **`v0.1.0-rc12`** Oracle K3s'e çıkıldı (pipeline #94: build → trivy → manuel deploy → smoke, hepsi yeşil); production sağlıklı (`/health` → `{"status":"ok"}`). rc12 = SonarQube legacy bulgu temizliği (455→13) + frontend image HIGH/CRITICAL CVE fix (bkz. aşağı). Önceki: rc10 (2026-06-01). v1.0.0 hâlâ KVKK kullanıcı aksiyonlarına (COMP) bağlı.
+
+**Frontend image CVE hardening (2026-06-02, rc12):** `frontend/Dockerfile` runner stage'inden global `npm`/`npx` kaldırıldı (`rm -rf /usr/local/lib/node_modules/npm`) — base `node:20-alpine`'in npm CLI bundle'ı (cross-spawn/glob/minimatch/tar) HIGH/CRITICAL CVE taşıyordu ve runtime `node server.js` için npm gereksiz (saldırı yüzeyi ↓). `next` 16.2.4 → **16.2.6** (CVE-2026-44573/44574/44575/44578/44579 Middleware/Proxy bypass + SSRF + DoS, CVE-2026-45109, GHSA-8h8q). Standalone çıktıda yalnız next@16.2.6 var; diğerleri npm-bundle kaynaklıydı. Trivy image gate (`--severity HIGH,CRITICAL --ignore-unfixed`) bu nedenle rc11'de kırmızıydı, rc12'de yeşil.
+
+**SonarQube legacy bulgu temizliği (2026-06-02, MR !19/!20/!22):** Genel/baseline açık bulgu **455 → ~9** (%98). Gate "Clean as You Code" yalnız yeni kodu zorladığı için eski koddaki S8410 (FastAPI deps→Annotated, 192 BLOCKER), S8396/S8415/S8409/S3776/S1192 (backend) + S7773/S6759/S3358/S1082/S6819 (frontend) birikmişti; 6 paralel uzman ajanla kapatıldı. Refactor regresyonu dersi: modül-seviye servis dispatch dict'i (`_WALLET_SERVICES`) import-time class yakalar → test monkeypatch'i kırar; çözüm `globals().get(cls.__name__, cls)` override. Kalan ~9 non-gating + kasıtlı (S7484 blockchain ağ döngüleri, S6479 HoldingsForm, S1135 TODO, S1172 force API yüzeyi, S7503 _gather_cash_assets test-uyumu için async, 3× S6819 a11y role).
 
 **BES:** Manuel giriş + Excel import/export. 4 metric (yatırılan ana para + getirisi, devlet katkısı + getirisi). Snapshot servisi `_gather_bes_assets()` ile `asset_type="pension"` olarak entegre eder.
 
@@ -258,7 +262,7 @@ cd frontend && npm install && npm run dev
 - **Pydantic v2 modern stiller (DEPS-001):** `model_config = ConfigDict(...)` (NOT `class Config:`); validation için `@field_validator + classmethod` (NOT `model_post_init`). Yeni schema'lar v1 stillerini kullanmamalıdır.
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
-- **Test sayıları:** ~1180 backend pass (unit + integration) + 202 frontend (vitest) pass. SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
+- **Test sayıları:** ~1188 backend pass (unit + integration) + 387 frontend (vitest) pass (i18n-002 + SonarQube temizliği turlarında frontend testleri 202→387'ye çıktı). SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
 - **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
 
 ## Son Audit — 2026-05-22 (Faz I post-fix)

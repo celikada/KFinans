@@ -920,6 +920,18 @@
           "howTo": "TEK ADRES için: Ledger Live → Litecoin hesabı → 'Receive' → ltc1... adresi.\nHD WALLET (önerilir) için: Ledger Live → Litecoin hesabı → ⚙ ayarlar → 'Edit account' → 'Show xpub' (Ltub... ile başlar — Litecoin xpub formatı)."
         }
       }
+    },
+    "dashboard": {
+      "goalTitle": "Finansal Hedef",
+      "goalPassiveIncome": "Pasif gelir:",
+      "perMonthSuffix": "₺/ay",
+      "goalEmptyHint": "Aylık ihtiyacını gir, hedefini hesapla",
+      "budgetTitle": "Bütçe Takibi",
+      "budgetEmptyHint": "Kategori bazında limit belirle",
+      "budgetAllWithin": "Tüm kategoriler bütçe dahilinde",
+      "budgetOverCount": "{count} kategori bütçeyi aştı",
+      "budgetOverBadge": "{count} aşım",
+      "budgetWithinBadge": "Dahilinde"
     }
   }
 }
