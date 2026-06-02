@@ -295,6 +295,7 @@ describe("downloadBlob()", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("başarılı → blob alır, <a> click eder, URL revoke eder", async () => {
+    vi.useFakeTimers();
     const blob = new Blob(["data"], { type: "application/octet-stream" });
     const fetchMock = vi.fn().mockResolvedValue(new Response(blob, { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -304,8 +305,10 @@ describe("downloadBlob()", () => {
     vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
 
     const clickMock = vi.fn();
-    const anchor = { href: "", download: "", click: clickMock } as unknown as HTMLAnchorElement;
+    // saveBlob <a>'yi DOM'a ekler + style ayarlar → stub style/remove icermeli, appendChild no-op.
+    const anchor = { href: "", download: "", rel: "", style: {}, click: clickMock, remove: vi.fn() } as unknown as HTMLAnchorElement;
     const createElementSpy = vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    vi.spyOn(document.body, "appendChild").mockImplementation((n) => n as unknown as Node);
 
     await downloadBlob("/export.xlsx", "rapor.xlsx");
 
@@ -313,7 +316,10 @@ describe("downloadBlob()", () => {
     expect(anchor.href).toBe("blob:fake-url");
     expect(anchor.download).toBe("rapor.xlsx");
     expect(clickMock).toHaveBeenCalledOnce();
+    // revoke gecikmeli (setTimeout 1.5s) — timer'i ilerlet.
+    vi.advanceTimersByTime(1600);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake-url");
+    vi.useRealTimers();
   });
 
   it("!ok → 'İndirme başarısız' hatası fırlatır", async () => {
