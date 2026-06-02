@@ -63,8 +63,13 @@ function stubDownload() {
   vi.spyOn(document, "createElement").mockReturnValue({
     href: "",
     download: "",
+    rel: "",
+    style: {},
     click: vi.fn(),
+    remove: vi.fn(),
   } as unknown as HTMLAnchorElement);
+  // saveBlob artik <a>'yi DOM'a ekliyor — stub anchor gercek Node degil, appendChild no-op.
+  vi.spyOn(document.body, "appendChild").mockImplementation((n) => n as unknown as Node);
 }
 
 describe("besApi", () => {

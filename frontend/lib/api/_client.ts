@@ -138,16 +138,27 @@ export async function authedFetch(path: string, options: RequestInit = {}): Prom
  * Excel/PDF dosyası indir + tarayıcı download'u tetikle.
  * 13+ export* method'unda kopya-yapıştır pattern'i kapsüller.
  */
-export async function downloadBlob(path: string, filename: string): Promise<void> {
-  const res = await authedFetch(path);
-  if (!res.ok) throw new Error("İndirme başarısız");
-  const blob = await res.blob();
+/**
+ * Blob'u tarayıcı indirmesi olarak kaydet. `<a>` DOM'a eklenir + tıklanır + kaldırılır;
+ * revoke gecikmeli (Chrome "Needs permission"/iptal sorunlarına karşı daha uyumlu).
+ */
+function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+export async function downloadBlob(path: string, filename: string): Promise<void> {
+  const res = await authedFetch(path);
+  if (!res.ok) throw new Error("İndirme başarısız");
+  saveBlob(await res.blob(), filename);
 }
 
 /**
@@ -164,13 +175,7 @@ export async function downloadBlobPost(path: string, body: unknown, filename: st
     const err = (await res.json().catch(() => ({ detail: res.statusText }))) as { detail?: unknown };
     throw new Error(formatErrorDetail(err.detail) || "İndirme başarısız");
   }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveBlob(await res.blob(), filename);
 }
 
 /**
