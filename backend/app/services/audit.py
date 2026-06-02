@@ -58,6 +58,7 @@ class AuditAction(str, Enum):
     # Integrations (exchange API key'ler)
     INTEGRATION_ADD = "integration.add"
     INTEGRATION_DELETE = "integration.delete"
+    INTEGRATION_EXPORT = "integration.export"  # plaintext API key disa aktarimi (sifre dogrulamali) — forensic
 
     # Wallets (blockchain adresleri)
     WALLET_ADD = "wallet.add"

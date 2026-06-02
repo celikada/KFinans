@@ -674,7 +674,17 @@
       "colPriceUsdt": "Fiyat (USDT)",
       "colTotalTl": "Toplam (₺)",
       "stakeSuffix": "stake",
-      "hidden": "gizli"
+      "hidden": "gizli",
+      "exportKeys": "API anahtarlarını indir",
+      "importKeys": "İçe aktar",
+      "exportPasswordTitle": "API anahtarlarını indir",
+      "exportPasswordHint": "Tam (açık) borsa API anahtarları çok hassastır (hesap erişimi). İndirmek için şifreni gir; şifre doğrulanmadan anahtarlar verilmez.",
+      "passwordPlaceholder": "Şifren",
+      "exportFullBtn": "Şifreyi doğrula ve indir",
+      "exportPasswordRequired": "Lütfen şifreni gir.",
+      "exportFailed": "Dışa aktarma başarısız",
+      "importFailed": "İçe aktarma başarısız",
+      "removeFailed": "Entegrasyon silinemedi"
     },
     "history": {
       "loadFailed": "Geçmiş yüklenemedi",

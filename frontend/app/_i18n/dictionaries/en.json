@@ -674,7 +674,17 @@
       "colPriceUsdt": "Price (USDT)",
       "colTotalTl": "Total (₺)",
       "stakeSuffix": "staked",
-      "hidden": "hidden"
+      "hidden": "hidden",
+      "exportKeys": "Download API keys",
+      "importKeys": "Import",
+      "exportPasswordTitle": "Download API keys",
+      "exportPasswordHint": "Full (plaintext) exchange API keys are highly sensitive (account access). Enter your password to download; keys are not provided without password verification.",
+      "passwordPlaceholder": "Your password",
+      "exportFullBtn": "Verify password and download",
+      "exportPasswordRequired": "Please enter your password.",
+      "exportFailed": "Export failed",
+      "importFailed": "Import failed",
+      "removeFailed": "Could not remove integration"
     },
     "history": {
       "loadFailed": "Failed to load history",
