@@ -122,16 +122,27 @@ export async function request<T>(path: string, options: RequestInit = {}, _isRet
 /**
  * Auth header'ı ile raw fetch — Content-Type/JSON kararı çağırana ait.
  * Blob/FormData download/upload için kullanılır.
+ *
+ * 401 → bir kez refresh + retry (request() ile aynı mantık). Önceden upload/download
+ * token süresi dolunca "Kimlik doğrulama başarısız" ile patlıyordu; artık şeffaf yenilenir.
+ * Retry'de aynı `options` (FormData/JSON body) yeniden gönderilir — File/string tekrar okunabilir.
  */
-export async function authedFetch(path: string, options: RequestInit = {}): Promise<Response> {
+export async function authedFetch(path: string, options: RequestInit = {}, _isRetry = false): Promise<Response> {
   const token = getAccessToken();
-  return fetch(`${BASE}${path}`, {
+  const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
+  if (res.status === 401 && globalThis.window !== undefined && !_isRetry && path !== "/auth/refresh") {
+    const newToken = await tryRefresh();
+    if (newToken) return authedFetch(path, options, true);
+    clearAuth();
+    globalThis.location.replace("/login");
+  }
+  return res;
 }
 
 /**

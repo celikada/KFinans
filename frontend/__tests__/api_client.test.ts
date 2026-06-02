@@ -334,6 +334,8 @@ describe("uploadForm()", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+    // Önceki describe'in stubGlobal("URL", {...}) sızıntısını temizle (new URL kullanan refresh yolu için).
+    vi.unstubAllGlobals();
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -368,5 +370,24 @@ describe("uploadForm()", () => {
 
     const file = new File(["x"], "data.xlsx");
     await expect(uploadForm("/import", file)).rejects.toThrow("Payload Too Large");
+  });
+
+  it("401 → refresh + retry (upload token süresi dolunca şeffaf yenilenir)", async () => {
+    setAuth("eski-acc", "ref-1");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: "Kimlik doğrulama başarısız" }, 401))
+      .mockResolvedValueOnce(jsonResponse({ access_token: "yeni-acc", refresh_token: "yeni-ref" }))
+      .mockResolvedValueOnce(jsonResponse({ imported: 2 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["x"], "data.xlsx");
+    const result = await uploadForm<{ imported: number }>("/wallets/import", file);
+
+    expect(result).toEqual({ imported: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // retry yeni access token ile
+    const retryHeaders = fetchMock.mock.calls[2][1].headers as Record<string, string>;
+    expect(retryHeaders.Authorization).toBe("Bearer yeni-acc");
   });
 });
