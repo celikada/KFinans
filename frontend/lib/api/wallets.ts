@@ -1,5 +1,5 @@
 import type { WalletDTO, WalletPositionDTO } from "./types";
-import { downloadBlob, request, uploadForm } from "./_client";
+import { downloadBlob, downloadBlobPost, request, uploadForm } from "./_client";
 
 export const walletsApi = {
   getWallets: () => request<WalletDTO[]>("/wallets"),
@@ -12,5 +12,8 @@ export const walletsApi = {
   getWalletPositions: () => request<{ positions: WalletPositionDTO[]; errors: Record<string, string> }>("/portfolio/wallets"),
 
   exportWallets: () => downloadBlob("/wallets/export", "blockchain-cüzdanları.xlsx"),
+  // Tam (maskesiz) adresli export — şifre doğrulamalı (yanlışsa 403, tam adres verilmez).
+  exportWalletsFull: (password: string) =>
+    downloadBlobPost("/wallets/export", { password }, "blockchain-cüzdanları.xlsx"),
   importWallets: (file: File) => uploadForm<WalletDTO[]>("/wallets/import", file),
 };

@@ -919,7 +919,13 @@
           "format": "ltc1... (Native SegWit) veya HD için xpub (Ltub.../Ltpv...)",
           "howTo": "TEK ADRES için: Ledger Live → Litecoin hesabı → 'Receive' → ltc1... adresi.\nHD WALLET (önerilir) için: Ledger Live → Litecoin hesabı → ⚙ ayarlar → 'Edit account' → 'Show xpub' (Ltub... ile başlar — Litecoin xpub formatı)."
         }
-      }
+      },
+      "exportPasswordTitle": "Tam adresli Excel indir",
+      "exportPasswordHint": "Tam (maskesiz) cüzdan adresleri hassastır. İndirmek için şifreni gir; şifre doğrulanmadan tam adresler verilmez.",
+      "passwordPlaceholder": "Şifren",
+      "exportFullBtn": "Şifreyi doğrula ve indir",
+      "exportPasswordRequired": "Lütfen şifreni gir.",
+      "errorRemoveFailed": "Cüzdan silinemedi. Lütfen tekrar deneyin."
     },
     "dashboard": {
       "goalTitle": "Finansal Hedef",

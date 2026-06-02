@@ -919,7 +919,13 @@
           "format": "ltc1... (Native SegWit) or xpub for HD (Ltub.../Ltpv...)",
           "howTo": "For a SINGLE ADDRESS: Ledger Live → Litecoin account → 'Receive' → ltc1... address.\nFor an HD WALLET (recommended): Ledger Live → Litecoin account → ⚙ settings → 'Edit account' → 'Show xpub' (starts with Ltub... — the Litecoin xpub format)."
         }
-      }
+      },
+      "exportPasswordTitle": "Download Excel with full addresses",
+      "exportPasswordHint": "Full (unmasked) wallet addresses are sensitive. Enter your password to download; full addresses are not provided without password verification.",
+      "passwordPlaceholder": "Your password",
+      "exportFullBtn": "Verify password and download",
+      "exportPasswordRequired": "Please enter your password.",
+      "errorRemoveFailed": "Could not remove wallet. Please try again."
     },
     "dashboard": {
       "goalTitle": "Financial Goal",

@@ -151,6 +151,29 @@ export async function downloadBlob(path: string, filename: string): Promise<void
 }
 
 /**
+ * POST + JSON body ile dosya indir (ör. şifre doğrulamalı tam-adres export).
+ * Hata gövdesindeki `detail` (ör. "Şifre hatalı") çağırana fırlatılır.
+ */
+export async function downloadBlobPost(path: string, body: unknown, filename: string): Promise<void> {
+  const res = await authedFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({ detail: res.statusText }))) as { detail?: unknown };
+    throw new Error(formatErrorDetail(err.detail) || "İndirme başarısız");
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Excel import — multipart/form-data upload.
  * import* method'larında kopya-yapıştır pattern'i kapsüller.
  * Hata: server detail dict varsa formatErrorDetail ile insan-okunaklı stringe çevir.
