@@ -4,12 +4,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.limiter import limiter
 from app.core.masking import mask_address as _mask_address  # BACK-013: central helper
+from app.core.security import verify_password
 from app.core.upload_validation import validate_excel_upload
 from app.models.integration import WalletAddress
 from app.models.user import User
@@ -113,28 +116,16 @@ async def remove_wallet(
     await db.commit()
 
 
-@router.get("/export")
-async def export_wallets(
-    request: Request,
-    current_user: CurrentUser,
-    db: DbSession,
-    include_full_address: bool = False,
-):
-    """COMP-024 (FAZ H): Wallet export'ta xpub maskelenir (default).
+class WalletExportRequest(BaseModel):
+    """Tam-adres export icin sifre dogrulama govdesi."""
 
-    Default: adres maskeli (`xpub6C...4D4D` formatinda) — Excel sizmasinda
-    blockchain bakiye gecmisi acigi onlenir.
+    password: str
 
-    `?include_full_address=true`: Tam adres dahil edilir (kullanici acik
-    onay vermis sayilir). Audit log'da `full=true` extra ile isaretlenir;
-    KVKK m.12 ihlal halinde forensic icin kim/ne zaman tam xpub indirdi
-    izlenebilir.
-    """
+
+def _build_wallets_xlsx(rows: list[WalletAddress], include_full_address: bool) -> io.BytesIO:
+    """Cüzdan listesinden xlsx üretir. include_full_address=False ise adresler maskelenir."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
-
-    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
-    rows = result.scalars().all()
 
     wb = Workbook()
     ws = wb.active
@@ -144,8 +135,7 @@ async def export_wallets(
     warning_text = (
         "GUVENLIK UYARISI: Bu dosya kripto cuzdan adreslerinizi icerir. "
         "xpub/extended public key sizmasi blockchain bakiye gecmisinizi acik "
-        "yapar. Bu dosyayi e-postayla paylasmayin, bulut deposunda sifresiz "
-        "tutmayin. Tam adres icin ?include_full_address=true ile yeniden indirin."
+        "yapar. Bu dosyayi e-postayla paylasmayin, bulut deposunda sifresiz tutmayin."
     )
     warning_cell = ws.cell(row=1, column=1, value=warning_text)
     warning_cell.font = Font(bold=True, color="C53030")
@@ -170,28 +160,78 @@ async def export_wallets(
     for col, width in zip("ABC", [18, 80 if include_full_address else 30, 20]):
         ws.column_dimensions[col].width = width
 
-    # Audit log — tam xpub indirildi mi izle (forensic icin kritik)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_XLSX_HEADERS = {"Content-Disposition": "attachment; filename=blockchain-cuzdanlari.xlsx"}
+_EXPORT_RESOURCE = "wallet:export.xlsx"
+
+
+@router.get("/export")
+async def export_wallets(request: Request, current_user: CurrentUser, db: DbSession):
+    """COMP-024 (FAZ H): Maskeli adresli Excel export (sifre gerektirmez).
+
+    Adresler maskeli (`xpub6C...4D4D`) — Excel sizmasinda blockchain bakiye
+    gecmisi acigi onlenir. **Tam (maskesiz) adres icin POST /wallets/export**
+    (kullanici sifresi dogrulanir) kullanin; tam xpub her zaman sifre arkasinda.
+    """
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
+    rows = result.scalars().all()
+    buf = _build_wallets_xlsx(rows, include_full_address=False)
     await log_audit(
         db,
         request,
         action=AuditAction.WALLET_EXPORT,
         user_id=current_user.id,
-        resource="wallet:export.xlsx",
-        extra={
-            "wallet_count": len(rows),
-            "include_full_address": include_full_address,
-        },
+        resource=_EXPORT_RESOURCE,
+        extra={"wallet_count": len(rows), "include_full_address": False},
     )
     await db.commit()
+    return StreamingResponse(buf, media_type=_XLSX_MEDIA, headers=_XLSX_HEADERS)
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=blockchain-cuzdanlari.xlsx"},
+
+@router.post(
+    "/export",
+    responses={403: {"description": "Şifre hatalı — tam adres verilmez"}},
+)
+@limiter.limit("5/minute")
+async def export_wallets_full(body: WalletExportRequest, request: Request, current_user: CurrentUser, db: DbSession):
+    """Tam (maskesiz) adresli Excel export — kullanici sifresi dogrulanir.
+
+    Sifre yanlis/eksikse 403 doner ve tam adres VERILMEZ. Tam xpub indirimi
+    audit'lenir (`full=true`) — KVKK m.12 forensic. Rate limit 5/dk (sifre
+    brute-force korumasi). xpub sizmasi blockchain bakiye gecmisini acik yapar;
+    bu yuzden tam adres her zaman sifre dogrulamasi arkasindadir.
+    """
+    if not verify_password(body.password, current_user.password_hash):
+        await log_audit(
+            db,
+            request,
+            action=AuditAction.WALLET_EXPORT,
+            user_id=current_user.id,
+            resource=_EXPORT_RESOURCE,
+            extra={"full": True, "result": "wrong_password"},
+        )
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Şifre hatalı — tam adres verilmedi.")
+
+    result = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id, WalletAddress.is_active.is_(True)))
+    rows = result.scalars().all()
+    buf = _build_wallets_xlsx(rows, include_full_address=True)
+    await log_audit(
+        db,
+        request,
+        action=AuditAction.WALLET_EXPORT,
+        user_id=current_user.id,
+        resource=_EXPORT_RESOURCE,
+        extra={"wallet_count": len(rows), "full": True},
     )
+    await db.commit()
+    return StreamingResponse(buf, media_type=_XLSX_MEDIA, headers=_XLSX_HEADERS)
 
 
 def _parse_wallet_row(row: tuple) -> dict | None:
@@ -236,10 +276,27 @@ async def import_wallets(
     if not parsed:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Geçerli cüzdan bulunamadı")
 
+    # Maskeli-adres korumasi: maskeli export (adres "..." icerir) geri import
+    # edilirse replace-all gercek tam adresleri ezerdi (veri kaybi). Maskeli satir
+    # varsa import'u tamamen reddet — mevcut cuzdanlara DOKUNULMAZ.
+    if any("..." in p["address"] for p in parsed):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                'Bu dosya maskeli adresler ("...") içeriyor; içe aktarılamaz '
+                "(mevcut cüzdanlarınız korundu). Tam adresli dosya için “Excel "
+                "indir” → şifre doğrulaması ile dışa aktarın."
+            ),
+        )
+
     # Mevcut cüzdanları sil, yenilerini ekle
     existing = await db.execute(select(WalletAddress).where(WalletAddress.user_id == current_user.id))
     for w in existing.scalars().all():
         await db.delete(w)
+    # DELETE'leri INSERT'lerden önce flush et — aksi halde aynı adres yeniden
+    # import edilince (user_id, chain, fingerprint) unique kisiti INSERT'i DELETE'ten
+    # once flush ederse 409 verirdi (idempotent re-import).
+    await db.flush()
 
     added = []
     for p in parsed:

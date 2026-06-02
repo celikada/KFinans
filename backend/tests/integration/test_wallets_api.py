@@ -193,14 +193,38 @@ async def test_export_wallets_masked_by_default(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_export_wallets_full_address_opt_in(client: AsyncClient):
+async def test_export_wallets_full_requires_correct_password(client: AsyncClient):
+    """Tam-adres export (POST) dogru sifre ile 200 doner."""
     headers = await make_user(client, "wallet_export_full@example.com")
     await client.post(
         "/api/v1/wallets",
         json={"chain": "ethereum", "address": VALID_ETH, "label": "Ana"},
         headers=headers,
     )
-    assert await _export_executes(client, headers, "/api/v1/wallets/export?include_full_address=true")
+    resp = await client.post(
+        "/api/v1/wallets/export",
+        json={"password": "guclu-sifre-123"},  # make_user sabit sifresi
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/vnd.openxmlformats")
+
+
+@pytest.mark.asyncio
+async def test_export_wallets_full_wrong_password_403(client: AsyncClient):
+    """Yanlis sifre → 403, tam adres VERILMEZ."""
+    headers = await make_user(client, "wallet_export_wrongpw@example.com")
+    await client.post(
+        "/api/v1/wallets",
+        json={"chain": "ethereum", "address": VALID_ETH, "label": "Ana"},
+        headers=headers,
+    )
+    resp = await client.post(
+        "/api/v1/wallets/export",
+        json={"password": "yanlis-sifre"},
+        headers=headers,
+    )
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -241,6 +265,38 @@ async def test_import_wallets_replaces_all(client: AsyncClient):
     assert len(imported) == 2
     chains = {w["chain"] for w in imported}
     assert chains == {"bitcoin", "solana"}
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_masked_addresses_and_preserves_existing(client: AsyncClient):
+    """Maskeli adres ("...") iceren dosya 422 ile reddedilir; mevcut cuzdan korunur.
+
+    Replace-all'in maskeli export'u geri import edince gercek adresleri ezmesini onler.
+    """
+    headers = await make_user(client, "wallet_import_masked@example.com")
+    await client.post(
+        "/api/v1/wallets",
+        json={"chain": "ethereum", "address": VALID_ETH, "label": "Gercek"},
+        headers=headers,
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Zincir", "Adres", "Etiket"])
+    ws.append(["ethereum", "0x1234...7890", "Maskeli"])  # mask_address ciktisi
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        "/api/v1/wallets/import",
+        files={"file": ("w.xlsx", buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    # Mevcut cuzdan korundu (replace-all calismadi)
+    listed = await client.get("/api/v1/wallets", headers=headers)
+    assert len(listed.json()) == 1
 
 
 @pytest.mark.asyncio
