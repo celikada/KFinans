@@ -59,9 +59,11 @@ KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mima
 │                                                                   │
 │   ┌──────────────────────────────────────────────────────┐       │
 │   │  APScheduler (AsyncIOScheduler, backend pod içinde)  │       │
-│   │  Europe/Istanbul, Pazar 23:00 (CronTrigger)          │       │
-│   │  → services/snapshot.py::compute_and_save_snapshot() │       │
-│   │  → portfolio_snapshots + asset_positions             │       │
+│   │  Europe/Istanbul — 4 cron job (advisory-lock leader): │       │
+│   │   • Pazar 23:00 → snapshot.compute_and_save_snapshot()│       │
+│   │   • 03:00 revoked_tokens cleanup                      │       │
+│   │   • 04:00 hard-delete (30 gün soft-delete, KVKK)      │       │
+│   │   • 04:30 audit_logs purge (365 gün retention)        │       │
 │   └──────────────────────────────────────────────────────┘       │
 └───────────────────────────────────────────────────────────────────┘
                               │
@@ -83,14 +85,17 @@ KFinans tüm "monolit ✓" kriterlerine uyuyor; ölçek değişene kadar bu mima
 
 ```
 backend/app/
-├── main.py                # FastAPI app, lifespan, CORS, slowapi, /health
+├── main.py                # FastAPI app, lifespan, CORS, slowapi, /health, SecurityHeaders + TrustedHost + RequestTiming middleware, generic exception handlers
 ├── config.py              # pydantic-settings (Settings class)
-├── scheduler.py           # APScheduler — Pazar 23:00 haftalık snapshot
+├── scheduler.py           # APScheduler — 4 cron job (Europe/Istanbul): Pazar 23:00 snapshot, 03:00 revoked_tokens cleanup, 04:00 hard-delete (KVKK), 04:30 audit_logs purge; pg_try_advisory_lock leader election
+├── observability.py       # Sentry + OpenTelemetry init (opt-in)
 │
-├── api/v1/                # HTTP arayüz katmanı
+├── api/v1/                # HTTP arayüz katmanı (23 router)
 │   ├── router.py          # Tüm router'ları birleştirir
-│   ├── auth.py            # /auth (login, register, refresh, logout, verify-email, resend-verification) + rate limit + JWT blacklist
+│   ├── auth.py            # /auth (login, register, refresh, logout, verify-email, resend-verification) + rate limit + JWT blacklist + refresh rotation + MFA login flow
+│   ├── mfa.py             # /mfa (setup, enable, verify, disable) — TOTP RFC 6238
 │   ├── user.py            # /user (me, profile, password, soft-delete) — Faz 3
+│   ├── metrics.py         # /metrics/performance (X-Metrics-Token korumalı, p50/p95/p99 — PERF-004)
 │   ├── portfolio.py       # /portfolio (snapshot, crypto, wallets, staking) + POST /snapshot manuel tetik
 │   ├── tefas.py           # /portfolio/tefas/* (CRUD + Excel + import-mkk)
 │   ├── stocks.py          # /portfolio/stocks/* (CRUD + Excel + import-mkk)
@@ -139,22 +144,28 @@ backend/app/
 │   ├── aggregator.py      # TL normalize, USD/TRY kuru, calculate_changes/breakdown
 │   ├── snapshot.py        # compute_and_save_snapshot() — tüm kaynakları paralel toplayıp DB'ye yazar (TEFAS, kripto, blockchain, hisse, BES, kıymetli madenler, nakit). Her gather fonksiyonu issues listesine fail/0-değer kaynakları ekler → portfolio_snapshots.health_issues JSONB. usd_try_rate kayıt anındaki TCMB kuru (geçmiş USD eğimi için). MKK import sonrası best-effort tetiklenir
 │   ├── email.py           # Resend SDK — verify_email + HTML şablon
-│   └── advisor.py         # Anthropic SDK — model + max_tokens settings'ten
+│   ├── audit.py           # log_audit() + AuditAction Enum (best-effort — FAZ C6)
+│   ├── reports.py         # reportlab + openpyxl — xlsx/pdf rapor üretimi (DejaVu Sans TR font)
+│   └── advisor.py         # Anthropic SDK (Claude API) — aktif, prompt cache + SPK disclaimer
 │
 ├── models/                # SQLAlchemy ORM
-│   ├── user.py            # users (+ credit_balance, email_verified, deleted_at, goal_amount, goal_currency)
-│   ├── integration.py     # integrations + wallet_addresses
+│   ├── user.py            # users (+ credit_balance, email_verified, deleted_at, goal_amount, goal_currency, anthropic_consent_at/version, totp_secret/enabled/recovery_codes — MFA)
+│   ├── integration.py     # integrations + wallet_addresses (xpub Fernet — FAZ C1)
 │   ├── tefas.py           # tefas_holdings (+ avg_cost_tl, distributor)
 │   ├── stock.py           # stock_holdings (+ avg_cost_tl, distributor)
-│   ├── bes.py             # bes_holdings (plan_name, 4 metric)
+│   ├── bes.py             # bes_holdings (plan_name, 4 metric: paid_principal/returns, govt_contribution/returns)
 │   ├── revoked_token.py   # revoked_tokens (jti PK, JWT blacklist)
-│   ├── portfolio.py       # portfolio_snapshots + asset_positions
-│   ├── advice.py          # investment_advice
-│   ├── expense.py         # expenses (manuel harcama — Faz 3 MVP)
+│   ├── audit_log.py       # audit_logs (FAZ C6 — forensic)
+│   ├── portfolio.py       # portfolio_snapshots (+ health_issues JSONB, usd_try_rate) + asset_positions
+│   ├── advice.py          # investment_advice (+ credits_used)
+│   ├── expense.py         # expenses (manuel harcama — Faz 3 MVP; + credit_card_id, is_paid)
 │   ├── planned_expense.py # planned_expenses (Faz 3)
-│   ├── income.py          # incomes (manuel gelir — Faz 3)
+│   ├── income.py          # incomes (manuel gelir + recurring_income_id FK — Faz 3)
+│   ├── recurring_income.py # recurring_incomes (periyodik gelir tahmini + realize — Faz 3)
 │   ├── budget.py          # budgets (UPSERT: user_id+category UNIQUE — Faz 3)
 │   ├── commodity.py       # commodity_holdings (gram/biga/coin — Faz 3)
+│   ├── cash.py            # cash_holdings (nakit/banka — Faz 3)
+│   ├── credit_card.py     # credit_cards + credit_card_statements + credit_card_installments (Faz 3)
 │   └── manual_crypto.py   # manual_crypto_holdings (API'siz borsalar için manuel kayıt)
 │
 └── schemas/               # Pydantic — request/response sözleşmeleri
@@ -245,17 +256,13 @@ Her Pazar 23:00 (Europe/Istanbul)
 Tüm aktif kullanıcılar için döngü:
   ↓
 services/snapshot.py::compute_and_save_snapshot(user_id, db)
-  ↓ asyncio.gather (paralel, hata izolasyonu):
-  ├── Binance (CCXT)
-  ├── Binance TR (session token)
-  ├── iCrypex (CCXT)
-  ├── Sonic (web3 + SFC)
-  ├── Avalanche P-Chain (REST)
-  ├── Avalanche C-Chain (web3)
-  ├── Ethereum (web3 + Etherscan)
-  ├── TEFAS (httpx)
-  ├── Hisse senedi (Yahoo Finance)
-  └── BES (DB — manuel giriş, _gather_bes_assets())
+  ↓ asyncio.gather + Semaphore(5) (paralel, hata izolasyonu):
+  ├── Binance / iCrypex (CCXT)
+  ├── Sonic (web3 + SFC), Avalanche P (REST) + C (web3), Ethereum (web3 + Ethplorer)
+  ├── Bitcoin (mempool.space), Solana, Cardano, Algorand, Polkadot, Litecoin (public API)
+  ├── TEFAS (httpx) + Hisse senedi (Yahoo Finance) + Kıymetli madenler (commodity.py)
+  ├── BES (_gather_bes_assets()), Nakit (_gather_cash_assets())
+  └── Manuel kripto (_gather_manual_crypto_assets())
   ↓
 fetch_usd_to_tl() (TCMB → exchangerate-api fallback)
 fetch_gbp_to_usd() (TCMB derive → exchangerate-api fallback) — opsiyonel
@@ -273,7 +280,9 @@ calculate_changes() WoW/MoM hesaplaması bu tablo üzerinden
 
 **Snapshot tarihi (timezone):** `snapshot_date` her zaman `Europe/Istanbul` saatine göre belirlenir. Backend Docker container UTC'de çalıştığı için `services/snapshot.py` `date.today()` (UTC tabanlı) yerine `datetime.now(ZoneInfo("Europe/Istanbul")).date()` kullanır. Bu düzeltmeden önce Türkiye saatine göre 00:00–03:00 arası alınan ad-hoc snapshot'lar **bir önceki güne** yazılıyordu (UTC sapması). APScheduler zaten `Europe/Istanbul` ile çalışıyordu; `compute_and_save_snapshot()` fonksiyonundaki tutarsızlık giderildi — scheduler ve manuel tetikleme aynı tarih mantığını paylaşır.
 
-**Hata izolasyonu:** Bir kaynak fail olursa (örn. Binance timeout), diğer kaynaklar devam eder; başarısız kaynak loglanır. Tüm kaynaklar fail olursa snapshot yazılmaz, 502 döner.
+**Hata izolasyonu:** Bir kaynak fail olursa (örn. Binance timeout), diğer kaynaklar devam eder; başarısız kaynak loglanır + `portfolio_snapshots.health_issues` (JSONB) listesine eklenir. Tüm kaynaklar fail olursa snapshot yazılmaz, 502 döner.
+
+**Scheduler — 4 cron job (Europe/Istanbul):** Snapshot (Pazar 23:00) tek job değildir. APScheduler ayrıca her gün `_cleanup_revoked_tokens_job` (03:00, FAZ C5), `_hard_delete_expired_users_job` (04:00, COMP-004 / KVKK m.7), `_purge_old_audit_logs_job` (04:30, COMP-022) çalıştırır. Snapshot job'u multi-replica ortamda `pg_try_advisory_lock` ile leader election yapar (ARC-011 — yalnızca tek pod yürütür); `SCHEDULER_ENABLED=false` ile tamamen kapatılabilir. Snapshot içi paralellik `asyncio.gather + Semaphore(5)` (ARC-003).
 
 **Döviz kuru:** `aggregator.py` `asyncio.gather(..., return_exceptions=True)` ile USD/TL ve GBP/USD ayrı ayrı kontrol edilir.
 - **USD/TL kritik:** TCMB → exchangerate-api → ikisi de fail ise `RuntimeError` → snapshot iptal (503).
@@ -336,7 +345,7 @@ POST /auth/refresh {refresh_token=<iptal-edilmiş>}
 - Tüm primary key'ler **UUID** (`gen_random_uuid()` PostgreSQL default)
 - Tüm timestamp'ler **timezone-aware** (`TIMESTAMPTZ`)
 - Para tutarları **NUMERIC** (asla FLOAT) — kayıp kabul edilmez
-- Soft delete yok (Faz 3'te `deleted_at` eklenecek — KVKK 30 gün bekleme için)
+- Soft delete: `users.deleted_at` (`DELETE /user/me`) + 30 gün sonra hard-delete cron (04:00, COMP-004 / KVKK m.7)
 
 ### 5.2 Tablolar
 
@@ -350,16 +359,21 @@ credit_balance           INT NOT NULL DEFAULT 0           -- CHECK (credit_balan
 email_verified           BOOLEAN NOT NULL DEFAULT FALSE
 verify_token             TEXT                              -- e-posta doğrulama tokeni (secrets.token_urlsafe(32))
 verify_token_expires_at  TIMESTAMPTZ                       -- token ömrü (default 24 saat)
-deleted_at               TIMESTAMPTZ                       -- soft delete (DELETE /user/me Faz 3'te aktif)
+deleted_at               TIMESTAMPTZ                       -- soft delete (DELETE /user/me); 30 gün sonra hard-delete cron siler
 goal_amount              NUMERIC(18, 2)                   -- finansal hedef (pasif gelir hedefi)
 goal_currency            VARCHAR(3) NOT NULL DEFAULT 'TRY' -- 'TRY'|'USD'|'EUR'|'GBP'
+anthropic_consent_at     TIMESTAMPTZ                       -- KVKK m.9 açık rıza (AI tavsiye için zorunlu)
+anthropic_consent_version VARCHAR(10)                      -- rıza metni sürümü
+totp_secret              TEXT                              -- MFA: Fernet ciphertext (plaintext base32)
+totp_enabled             BOOLEAN NOT NULL DEFAULT FALSE    -- MFA aktif mi
+totp_recovery_codes      TEXT                              -- MFA: JSON list[str], bcrypt-hashed 10 kod
 created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 
 INDEX ix_users_email (email)
 INDEX ix_users_verify_token (verify_token)
 ```
 
-> Migration `6e7f8a9b0c1d` ilk hâli `monthly_expense_goal` ekledi; `7f8a9b0c1d2e` bunu `goal_amount` + `goal_currency` (TRY/USD/EUR/GBP) lehine değiştirdi (mevcut TRY değerleri otomatik taşınır). `DELETE /user/me` `deleted_at = now()` set eder; hard-delete cron job henüz yok.
+> Migration `6e7f8a9b0c1d` ilk hâli `monthly_expense_goal` ekledi; `7f8a9b0c1d2e` bunu `goal_amount` + `goal_currency` (TRY/USD/EUR/GBP) lehine değiştirdi (mevcut TRY değerleri otomatik taşınır). `DELETE /user/me` `deleted_at = now()` set eder; `_hard_delete_expired_users_job` (04:00) 30 gün geçmiş kayıtları fiziksel siler. `anthropic_consent_*` AI tavsiye KVKK rızası için (migration ile eklendi). `totp_*` kolonları MFA TOTP için (migration `e2f3a4b5c6d7`).
 
 #### `integrations` (Exchange API key'ler)
 ```sql
@@ -429,15 +443,19 @@ INDEX ix_stock_holdings_user_id (user_id)
 
 #### `bes_holdings`
 ```sql
-id              UUID PK
-user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-plan_name       VARCHAR(200) NOT NULL                  -- 'AgeSA Klasik' vb.
-total_value_tl  NUMERIC(18, 2) NOT NULL CHECK (total_value_tl >= 0)
+id                  BIGSERIAL PK
+user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
+plan_name           TEXT NOT NULL                          -- 'AgeSA Klasik' vb.
+contract_number     TEXT                                   -- sözleşme no (opsiyonel)
+paid_principal      NUMERIC(18, 2) NOT NULL DEFAULT 0       -- yatırılan ana para
+paid_returns        NUMERIC(18, 2) NOT NULL DEFAULT 0       -- ana para getirisi
+govt_contribution   NUMERIC(18, 2) NOT NULL DEFAULT 0       -- devlet katkısı
+govt_returns        NUMERIC(18, 2) NOT NULL DEFAULT 0       -- devlet katkısı getirisi
 
 INDEX ix_bes_holdings_user_id (user_id)
 ```
 
-> BES manuel giriştir; otomatik scraping yok. Snapshot servisi `_gather_bes_assets()` ile her kaydı `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=total_value_tl` olacak şekilde `AssetData`'ya dönüştürür.
+> Migration `1f2e3d4c5b6a` (ilk hâl: plan_name + total_value_tl) → `3b4c5d6e7f8a` (4 metric + contract_number; eski `total_value_tl` kolonu kaldırıldı). Toplam değer model property olarak 4 metrik toplamından hesaplanır. BES manuel giriştir; otomatik scraping yok. Snapshot servisi `_gather_bes_assets()` ile her kaydı `asset_type="pension"`, `provider="bes"`, `source_type="bes"`, `liquid_quantity=1`, `unit_price_tl=` 4 metrik toplamı olacak şekilde `AssetData`'ya dönüştürür.
 
 #### `expenses` (Faz 3 MVP — manuel harcama takibi)
 ```sql
@@ -537,7 +555,7 @@ updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()      -- onupdate=now()
 INDEX ix_manual_crypto_holdings_user_exchange (user_id, exchange)
 ```
 
-> Migration `f5a6b7c8d9e0`. API erişimi olmayan borsalardaki bakiyeleri portföye dahil etmek için. Anlık fiyat: `aggregator.fetch_spot_prices()` (Binance USDT) + `fetch_usd_to_tl()` (TCMB); bulunmayan semboller `unknown_symbols` listesinde döner (TL=0). Snapshot entegrasyonu `_gather_manual_crypto_assets()` → `asset_type="crypto"`, `provider="manual:{exchange}"`. `User.manual_crypto_holdings` ilişkisi cascade all, delete-orphan.
+> Migration `f5a6b7c8d9e0`; `a6b7c8d9e0f1` ile `price_source` enum ('auto'/'manual'/'linked') + `manual_unit_price_tl`; `b7c8d9e0f1a2` ile `linked_source` + `linked_id` (asset catalog bağlama). API erişimi olmayan borsalardaki bakiyeleri portföye dahil etmek için. Anlık fiyat: `aggregator.fetch_combined_prices()` (Binance USDT + CoinGecko fallback) + `fetch_usd_to_tl()` (TCMB); bulunmayan semboller `unknown_symbols` listesinde döner (TL=0). Snapshot entegrasyonu `_gather_manual_crypto_assets()` → `asset_type="crypto"`, `provider="manual:{exchange}"`. `User.manual_crypto_holdings` ilişkisi cascade all, delete-orphan.
 
 #### `cash_holdings` (Faz 3 — nakit ve banka hesabı bakiyesi)
 ```sql
@@ -716,6 +734,8 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 
 ## 6. Mevcut Migration'lar
 
+> **Toplam 39 migration. Head: `e2f3a4b5c6d7`** (MFA TOTP `user.totp_*` kolonları). Yeni migration `down_revision = "e2f3a4b5c6d7"`. Aşağıdaki tablo kronolojik özet; tam zincir `backend/alembic/versions/`.
+
 | Revision       | Açıklama                                                                                                                                                        |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `876bd62e282c` | İlk şema (users, integrations, wallet_addresses, portfolio_snapshots, asset_positions, investment_advice)                                                       |
@@ -739,6 +759,27 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `b1c2d3e4f5a6` | ✅ `tefas_holdings.avg_cost_tl` + `stock_holdings.avg_cost_tl` (NUMERIC 18,6 nullable) — Faz 3 maliyet bazı / kâr-zarar |
 | `c2d3e4f5a6b7` | ✅ `tefas_holdings.distributor` + `stock_holdings.distributor` (VARCHAR 50 nullable) — Faz 3 aracı kurum (aynı varlığı farklı kurumlardan ayrı satır) |
 | `f5a6b7c8d9e0` | ✅ `manual_crypto_holdings` tablosu (id, user_id, exchange, label?, symbol, quantity 28,12, avg_cost_tl?, notes?, created_at, updated_at) + `ix_manual_crypto_holdings_user_exchange` — API'siz borsalar için manuel kripto kayıt |
+| `a6b7c8d9e0f1` | ✅ `manual_crypto_holdings.price_source` enum ('auto'/'manual'/'linked') + `manual_unit_price_tl` |
+| `b7c8d9e0f1a2` | ✅ `manual_crypto_holdings.linked_source` + `linked_id` (asset catalog bağlama) |
+| `c8d9e0f1a2b3` | ✅ `recurring_incomes` tablosu (periyodik gelir tahmini) |
+| `d9e0f1a2b3c4` | ✅ `incomes.recurring_income_id` FK (ON DELETE SET NULL) + `(recurring_income_id, date)` UNIQUE (çift realize engeli) |
+| `d3e4f5a6b7c8` | ✅ `cash_holdings` tablosu (nakit/banka — TRY/USD/EUR/GBP) |
+| `e0f1a2b3c4d5` | ✅ `credit_cards` tablosu (+ current_period_debt) |
+| `f1a2b3c4d5e6` | ✅ `credit_card_statements` + `credit_card_installments` tabloları |
+| `a2b3c4d5e6f7` | ✅ `expenses` + `planned_expenses` `credit_card_id` + `is_paid` (çift sayım kuralı) |
+| `e4f5a6b7c8d9` | ✅ `portfolio_snapshots.health_issues` (JSONB) + `usd_try_rate` (geçmiş USD eğimi) |
+| `e5f6a7b8c9d0` | ✅ `investment_advice.credits_used` |
+| `e6f7a8b9c0d1` | ✅ `investment_advice` prompt cache + token metrics kolonları |
+| `d4e5f6a7b8c9` | ✅ `users` lifecycle kolonları (email_verified, verify_token, deleted_at, credit_balance) |
+| `d5e6f7a8b9c0` | ✅ `asset_positions` unit_price precision genişletme |
+| `d1e2f3a4b5c6` | ✅ PERF-003 ek user_id index'leri |
+| `b3c4d5e6f7a8` | ✅ FAZ C1 — `wallet_addresses` xpub Fernet (`address_encrypted` + `address_fingerprint`) |
+| `c4d5e6f7a8b9` | ✅ FAZ C6 — `audit_logs` tablosu |
+| `b9c0d1e2f3a4` | ✅ KVKK hakları kolonları (age_confirmed vb.) |
+| `c0d1e2f3a4b5` | ✅ AI-005 — `users.anthropic_consent_at` + `anthropic_consent_version` |
+| `a8b9c0d1e2f3` | ✅ SEC-001 — `password_reset_tokens` tablosu |
+| `f7a8b9c0d1e2` | ✅ DBA-001 FK CASCADE düzeltmeleri + SEC-002 hesap kilitleme kolonları |
+| `e2f3a4b5c6d7` | ✅ **(HEAD)** MFA — `users.totp_secret` + `totp_enabled` + `totp_recovery_codes` |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -759,22 +800,26 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 - `ix_asset_positions_snapshot_id`
 - `uq_integrations_user_provider` (UNIQUE)
 - `uq_snapshot_user_date` (UNIQUE)
-- `uq_wallet_user_chain_address` (UNIQUE)
+- `uq_wallet_user_chain_fp` (UNIQUE — `(user_id, chain, address_fingerprint)`)
+- `ix_wallet_addresses_fingerprint`
+- `ix_audit_logs_user_created` + `ix_audit_logs_action_created`
+- `ix_cash_holdings_user_id`, `ix_credit_card_statements_card_id`, `ix_credit_card_installments_card_id`
 - `uq_budget_user_category` (UNIQUE — `(user_id, category)`)
 
-### Eksik (Faz 2-3'te Yapılacak)
-- [ ] `credit_transactions` tablosu (Faz 3 — kredi sistemi)
-- [x] `expenses` tablosu (Faz 3 MVP — migration `4c5d6e7f8a9b` ile eklendi; 10 sabit kategori `Literal` ile schema'da)
-- [x] `planned_expenses` tablosu (Faz 3 — migration `5d6e7f8a9b0c`; 7 kategori + 6 tekrar tipi)
-- [x] `incomes` tablosu (Faz 3 — migration `8a9b0c1d2e3f`; 7 sabit kategori)
-- [x] `budgets` tablosu (Faz 3 — migration `9b0c1d2e3f4a`; UPSERT pattern, kategori UNIQUE)
-- [x] `commodity_holdings` tablosu (Faz 3 — migration `a0b1c2d3e4f5`; gram/BiGA/sikke)
-- [x] `users.goal_amount` + `goal_currency` (Faz 3 — migration `7f8a9b0c1d2e`; USD/EUR/GBP/TRY)
-- [x] TEFAS + Stocks `avg_cost_tl` + `distributor` (Faz 3 — migration `b1c2d3e4f5a6` + `c2d3e4f5a6b7`)
-- [ ] `audit_logs` tablosu (Faz 3 — KVKK uyum)
-- [x] `revoked_tokens` tablosu (Faz 2 — JWT blacklist) — migration `2a3b4c5d6e7f`
-- [ ] `revoked_tokens` cleanup cron job (`expires_at < now()` olanları sil — Faz 3)
-- [ ] Soft delete cron — 30 gün sonra hard delete (`users.deleted_at`'a göre)
+### Durum
+- [ ] `credit_transactions` tablosu (Faz 2/3 — kredi sistemi; **kodda henüz YOK**, backlog)
+- [x] `expenses` tablosu (migration `4c5d6e7f8a9b`; 10 sabit kategori `Literal`)
+- [x] `planned_expenses` tablosu (migration `5d6e7f8a9b0c`; 7 kategori + 6 tekrar tipi)
+- [x] `incomes` tablosu (migration `8a9b0c1d2e3f`; 7 sabit kategori) + `recurring_incomes` (`c8d9e0f1a2b3`)
+- [x] `budgets` tablosu (migration `9b0c1d2e3f4a`; UPSERT pattern, kategori UNIQUE)
+- [x] `commodity_holdings` tablosu (migration `a0b1c2d3e4f5`; gram/BiGA/sikke)
+- [x] `cash_holdings` (migration `d3e4f5a6b7c8`) + `credit_cards`/`statements`/`installments` (`e0f1a2b3c4d5` + `f1a2b3c4d5e6`)
+- [x] `users.goal_amount` + `goal_currency` (migration `7f8a9b0c1d2e`; USD/EUR/GBP/TRY)
+- [x] TEFAS + Stocks `avg_cost_tl` + `distributor` (migration `b1c2d3e4f5a6` + `c2d3e4f5a6b7`)
+- [x] `audit_logs` tablosu (FAZ C6 — migration `c4d5e6f7a8b9`; KVKK uyum)
+- [x] `revoked_tokens` tablosu (migration `2a3b4c5d6e7f`) + cleanup cron (03:00, FAZ C5)
+- [x] Soft delete hard-delete cron — 30 gün (04:00, COMP-004) + audit_logs purge cron (04:30, COMP-022)
+- [x] MFA TOTP `users.totp_*` (migration `e2f3a4b5c6d7`)
 
 ---
 
@@ -887,7 +932,7 @@ KFinans dış API kaynaklarını **kritik** ve **best-effort** olarak ayırır.
 | `_BALANCE_CACHE` (dict, 10 dk TTL) | Dashboard yenileme rate limit'e takılmasın |
 | `_INFLIGHT` (dict[address, asyncio.Future]) | Paralel cache miss'lerde tek tarama paylaşılır (single-flight) |
 
-xpub HD tarama maliyetli olduğu için cache hit oranını yüksek tutar. **Düşürülmüş TTL:** Tüm metal 0 dönerse cache TTL 30 saniyeye düşer — geçici 404 sonrası hızlı recovery sağlar.
+xpub HD tarama maliyetli olduğu için cache hit oranını yüksek tutar. **Düşürülmüş TTL:** Bakiye 0 dönerse (geçici upstream 404/timeout) cache TTL 30 saniyeye düşer — kısa süre sonra otomatik yeniden denenir, 10 dk boyunca yanlış 0 değer takılı kalmaz. Avalanche P-Chain ve Litecoin de aynı cache + single-flight pattern'ini kullanır.
 
 ### 8.3.3 ERC-20 Token Discovery (Ethplorer + Spam Filter)
 

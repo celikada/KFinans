@@ -12,11 +12,22 @@
 Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı bekler. Token süresi dolduğunda 401 döner; istemci `/auth/refresh` ile yeniler.
 
 ### 1.2 Hata Formatı
+Endpoint'lerin manuel fırlattığı `HTTPException`'lar tek alanlı döner:
 ```json
 { "detail": "İnsan okunabilir Türkçe açıklama" }
 ```
 
-> **422 Validation Logger:** `main.py` `RequestValidationError` exception handler 422 hata detayını (`exc.errors()`) sunucu log'una yazar — frontend response formatı değişmez. Geliştirme sırasında schema doğrulama hatasının hangi alandan kaynaklandığı log'dan görülebilir.
+**Yakalanmayan/altyapı hataları** (BACK-008 + ARC-006) `main.py` global handler'ları ile sanitize edilip 3 alanlı döner — internal SQL/exception trace frontend'e sızmaz:
+```json
+{ "detail": "...", "code": "integrity_error|db_error|internal_error", "request_id": "uuid4hex" }
+```
+| Exception | HTTP | code |
+| --- | --- | --- |
+| `IntegrityError` (UNIQUE/FK ihlali) | 409 | `integrity_error` |
+| `SQLAlchemyError` (genel ORM) | 500 | `db_error` |
+| Yakalanmayan `Exception` | 500 | `internal_error` |
+
+> **422 Validation Logger:** `main.py` `RequestValidationError` handler 422 detayını (`exc.errors()`, `jsonable_encoder` ile JSON-safe) sunucu log'una yazar — frontend response formatı değişmez (`{detail: [...]}`). Geliştirme sırasında schema doğrulama hatasının hangi alandan geldiği log'dan görülebilir.
 
 ### 1.3 Standart HTTP Kodları
 | Kod | Anlamı               | Örnek                                   |
@@ -27,8 +38,9 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 | 404 | Not Found            | Snapshot yok                            |
 | 409 | Conflict             | E-posta zaten kayıtlı                   |
 | 422 | Unprocessable Entity | Geçersiz girdi (Pydantic validation)    |
+| 423 | Locked               | Account lockout — 10 başarısız login (15 dk) |
 | 429 | Too Many Requests    | slowapi rate limit aşıldı               |
-| 402 | Payment Required     | Yetersiz kredi (Faz 3)                  |
+| 402 | Payment Required     | Yetersiz kredi (advice/generate)        |
 | 500 | Internal Error       | Beklenmeyen hata (loglanır)             |
 | 502 | Bad Gateway          | Snapshot — tüm kaynaklar fail           |
 | 503 | Service Unavailable  | Snapshot — kritik USD/TL kuru alınamadı |
@@ -48,11 +60,17 @@ Auth gerektiren endpoint'ler `Authorization: Bearer {access_token}` header'ı be
 | `POST /auth/reset-password`               | 5/dakika    | Token brute-force engeli (SEC-001) |
 | `GET /auth/verify-email`                  | 20/dakika   | E-posta tıklama hızı |
 | `POST /auth/resend-verification`          | 3/dakika    | E-posta abuse engeli |
+| `POST /mfa/setup`                         | 3/dakika    | TOTP setup brute-force koruma (audit #5 MFA) |
+| `POST /mfa/enable`                        | 5/dakika    | TOTP kod doğrulama brute-force (audit #5 MFA) |
+| `POST /mfa/verify`                        | 5/dakika    | Login adım 2 TOTP/recovery brute-force (audit #5 MFA) |
+| `POST /mfa/disable`                       | 3/dakika    | TOTP/recovery brute-force (audit #5 MFA) |
 | `POST /advice/generate`                   | 5/saat      | Anthropic API maliyet (AI-007) |
 | `POST /portfolio/snapshot`                | 6/saat      | 14 dış API tetikler (SEC-005) |
 | `POST /portfolio/snapshot/preview`        | 6/saat      | Aynı (SEC-005) |
 | `POST /portfolio/stocks/preview`          | 30/dakika   | Yahoo Finance rate limit (SEC-005) |
 | `POST /portfolio/tefas/preview`           | 30/dakika   | TEFAS API hızı (SEC-005) |
+| `POST /integrations/export`               | 5/dakika    | Şifreli API key export — şifre brute-force koruma |
+| `POST /wallets/export`                    | 5/dakika    | Tam xpub export — şifre brute-force koruma |
 | `POST /user/email/request`                | 3/dakika    | Token guess + spam (SEC-005) |
 | `GET  /user/data-export`                  | 5/saat      | Büyük JSON DoS koruma (SEC-005) |
 | `POST /user/anthropic-consent`            | 10/saat     | KVKK abuse engeli (SEC-005) |
@@ -76,41 +94,71 @@ Health check. Auth gerektirmez. Kubernetes liveness/readiness için.
 
 ### `POST /auth/register`
 Yeni kullanıcı kaydı. Rate limit: 5/dk. Kayıt sonrası **doğrulama maili** otomatik tetiklenir (Resend SDK), `email_verified=False` olur ve `verify_token` üretilir (24 saat ömürlü).
+
+**Şifre politikası (audit #5):** zxcvbn güç skoru + HIBP (Have I Been Pwned k-anonymity) sızıntı kontrolü. Zayıf veya sızmış şifre 422 döner. **18+ yaş onayı (COMP-010):** `age_confirmed=true` zorunlu; eksik/False ise 422 (KVKK 2018/482, TMK m.16). KVKK açık rızaları (`terms_accepted`, `kvkk_read`, `overseas_consent`) timestamp'le kaydedilir.
+
 ```json
 // Request — RegisterRequest
 {
-  "email":        "user@example.com",
-  "password":     "12345678",
-  "risk_profile": "balanced"        // 'conservative'|'balanced'|'aggressive' (opsiyonel)
+  "email":            "user@example.com",
+  "password":         "Gucl3-P4ss!word",
+  "risk_profile":     "balanced",     // 'conservative'|'balanced'|'aggressive' (opsiyonel)
+  "age_confirmed":    true,           // ZORUNLU — eksik/False → 422
+  "terms_accepted":   true,           // opsiyonel — timestamp kaydedilir
+  "kvkk_read":        true,           // opsiyonel
+  "overseas_consent": false           // opsiyonel — yurt dışı veri aktarımı rızası
 }
 
-// 201 Created
-{ "id": "uuid", "email": "user@example.com", "created_at": "2026-04-29T..." }
+// 201 Created — RegisterResponse
+{
+  "id":                      "uuid",
+  "email":                   "user@example.com",
+  "risk_profile":            "balanced",
+  "email_verified":          false,
+  "verification_email_sent": true
+}
 
 // 409 Conflict
 { "detail": "Bu e-posta zaten kayıtlı" }
+
+// 422 Unprocessable Entity
+{ "detail": "Kayit icin 18 yasini doldurmus olmaniz gerekir." }                       // age_confirmed eksik
+{ "detail": "Bu sifre bilinen veri sizintilarinda bulundu. Lutfen baska bir sifre secin." } // HIBP
 ```
 
 > Mail gönderimi başarısız olsa bile kullanıcı oluşturulur — kullanıcı `POST /auth/resend-verification` ile yeniden talep edebilir.
 
 ### `POST /auth/login`
-Giriş. Rate limit: 10/dk. **E-posta doğrulanmamışsa hard block (403).**
+Giriş. Rate limit: 10/dk. **E-posta doğrulanmamışsa hard block (403).** Response model `TokenResponse | MFALoginRequiredOut` union'ı: MFA (TOTP) aktif kullanıcıda full token yerine `pre_mfa_token` döner (bkz. §3.1 MFA).
+
+**Account lockout (SEC-002):** 10 üst üste başarısız giriş → hesap 15 dakika kilitlenir (OWASP ASVS V2.2.1). Kilit süresince login 423 döner (`Retry-After` header'lı). Doğru parola ile başarılı girişte `failed_login_count` sıfırlanır.
+
 ```json
-// Request
+// Request — LoginRequest
 { "email": "user@example.com", "password": "12345678" }
 
-// 200 OK
+// 200 OK — MFA kapalı kullanıcı: full token
 {
-  "access_token":  "eyJ...",  // JWT, 480 dk
+  "access_token":  "eyJ...",  // JWT, prod 30 dk / dev 480 dk
   "refresh_token": "eyJ...",  // JWT, 7 gün
   "token_type":    "bearer"
+}
+
+// 200 OK — MFA (TOTP) aktif kullanıcı: pre_mfa_token (MFALoginRequiredOut)
+{
+  "mfa_required":       true,
+  "pre_mfa_token":      "eyJ...",   // JWT type=pre_mfa, 15 dk TTL — sadece /mfa/verify'da geçerli
+  "expires_in_seconds": 900
 }
 
 // 401 Unauthorized
 { "detail": "E-posta veya şifre hatalı" }
 
 // 403 Forbidden — email doğrulanmamış (hard block)
-{ "detail": "E-posta adresiniz henüz doğrulanmadı. Lütfen e-postanızı kontrol edin veya yeni doğrulama linki isteyin." }
+{ "detail": "E-posta adresiniz henüz doğrulanmadı. Lütfen gelen kutunuzu kontrol edin." }
+
+// 423 Locked — 10 başarısız giriş sonrası geçici kilit
+{ "detail": "Hesap guvenlik nedeniyle gecici kilitli. Lutfen N dk sonra deneyin." }
 ```
 
 ### `POST /auth/refresh`
@@ -145,27 +193,109 @@ Mevcut access token'ı (header'dan) ve opsiyonel olarak body'deki refresh token'
 > Frontend şu an `localStorage`'da yalnızca access token tutuyor; bu nedenle pratikte sadece access token blacklist'e alınıyor. Refresh akışı eklendiğinde refresh token da gönderilmeli.
 
 ### `GET /auth/verify-email?token=...`
-E-posta doğrulama linki. Token DB'deki `users.verify_token` ile eşleşmeli ve `verify_token_expires_at` geçmemiş olmalı. Başarıda `email_verified=True` set edilir, token sıfırlanır.
+E-posta doğrulama linki. Rate limit: 20/dk. Query param `token` `min_length=10, max_length=128`. Token DB'deki `users.verify_token` ile eşleşmeli ve `verify_token_expires_at` geçmemiş olmalı. Başarıda `email_verified=True` set edilir, token sıfırlanır.
 ```json
-// 200 OK
-{ "message": "E-posta adresiniz doğrulandı." }
+// 200 OK — başarılı doğrulama
+{ "detail": "E-posta başarıyla doğrulandı" }
 
-// 400 Bad Request
-{ "detail": "Geçersiz veya süresi dolmuş doğrulama linki." }
+// 200 OK — zaten doğrulanmış (idempotent)
+{ "detail": "E-posta zaten doğrulanmış" }
+
+// 400 Bad Request — geçersiz token
+{ "detail": "Doğrulama bağlantısı geçersiz" }
+
+// 400 Bad Request — süresi dolmuş token
+{ "detail": "Doğrulama bağlantısının süresi dolmuş. Lütfen yeniden gönderin." }
 ```
 
 ### `POST /auth/resend-verification`
-Doğrulama linkini yeniden gönderir. **Bilgi sızdırmamak için her zaman 202 döner** (e-posta kayıtlı mı, doğrulanmış mı bilgisi response'tan çıkarılamaz).
+Doğrulama linkini yeniden gönderir. Rate limit: 3/dk. **Bilgi sızdırmamak için her zaman 202 döner** (e-posta kayıtlı mı, doğrulanmış mı bilgisi response'tan çıkarılamaz — anti-enumeration).
 ```json
-// Request
+// Request — ResendVerificationRequest
 { "email": "user@example.com" }
 
 // 202 Accepted (her durumda)
-{ "message": "E-posta adresiniz kayıtlıysa doğrulama linki gönderildi." }
+{ "detail": "Doğrulama e-postası gönderilecek" }
 ```
 
-### `POST /auth/forgot-password` / `POST /auth/reset-password` (Faz 2 — sonraki adım)
-Şifre sıfırlama akışı.
+### `POST /auth/forgot-password` (SEC-001)
+Şifre sıfırlama e-postası gönderir. Rate limit: 3/dk. **Anti-enumeration:** kullanıcı bulunmasa veya silinmiş olsa bile generic 202 döner. Token (`secrets.token_urlsafe(32)`, 256 bit) yalnızca var olan + doğrulanmış + silinmemiş kullanıcı için üretilir. Audit her durumda yazılır (`auth.password_reset_request`).
+```json
+// Request — ForgotPasswordRequest
+{ "email": "user@example.com" }
+
+// 202 Accepted (her durumda)
+{ "detail": "Sifre sifirlama e-postasi gonderilecek" }
+```
+
+### `POST /auth/reset-password` (SEC-001)
+Token ile yeni şifre belirler. Rate limit: 5/dk. Tek kullanımlık — token + expiry tüketilir. Yeni şifre register ile aynı politikaya (zxcvbn + HIBP) tabidir. Başarıda lockout state (`failed_login_count`, `locked_until`) sıfırlanır.
+```json
+// Request — ResetPasswordRequest
+{ "token": "...", "new_password": "Yeni-Gucl3-Sifre!" }
+
+// 200 OK
+{ "detail": "Sifre basariyla degistirildi. Yeni sifrenizle giris yapabilirsiniz." }
+
+// 400 Bad Request — token geçersiz/expired
+{ "detail": "Sifirlama bagsantisi gecersiz ya da suresi dolmus." }
+
+// 422 — yeni şifre zayıf veya sızmış (zxcvbn / HIBP)
+```
+
+---
+
+## 3.1 MFA — TOTP (`/api/v1/mfa`)
+
+RFC 6238 TOTP (Google Authenticator / Authy / 1Password uyumlu). Akış: login → `mfa_required` → `/mfa/verify`. Tüm endpoint'ler `Request` parametreli (audit + rate limit).
+
+### `POST /mfa/setup`
+Setup başlatır. Rate limit: 3/dk. Auth gerektirir. Secret üretir, DB'ye Fernet şifreli yazar (`totp_enabled` False kalır), QR PNG döner. `totp_enabled=True` ise 400.
+```json
+// 200 OK — MFASetupOut
+{
+  "secret_base32":  "JBSWY3DPEHPK3PXP",
+  "otpauth_url":    "otpauth://totp/KFinans:user@example.com?secret=...&issuer=KFinans",
+  "qr_png_base64":  "data:image/png;base64,iVBOR..."
+}
+```
+
+### `POST /mfa/enable`
+Setup secret + ilk TOTP kodu doğrular. Rate limit: 5/dk. Auth gerektirir. Başarıda `totp_enabled=True` + 10 recovery code (bcrypt hash'li saklanır, **plaintext tek seferlik** döner).
+```json
+// Request — MFAEnableIn
+{ "totp_code": "123456" }
+
+// 200 OK — MFAEnableOut
+{ "recovery_codes": ["a1b2c3d4e5f6", "..."] }   // 10 adet, tek seferlik gösterilir
+
+// 400 — TOTP kodu geçersiz veya setup yapılmamış
+```
+
+### `POST /mfa/verify`
+Login akışının ikinci adımı. Rate limit: 5/dk. **Auth GEREKTİRMEZ** — body'deki `pre_mfa_token` (login'den) + TOTP veya recovery kod ile full token döner. `totp_code` veya `recovery_code` birinden biri zorunlu (ikisi de boşsa 422).
+```json
+// Request — MFAVerifyIn
+{ "pre_mfa_token": "eyJ...", "totp_code": "123456" }   // veya "recovery_code": "a1b2c3d4e5f6"
+
+// 200 OK — TokenResponse (full access + refresh)
+{ "access_token": "eyJ...", "refresh_token": "eyJ...", "token_type": "bearer" }
+
+// 401 — pre_mfa_token geçersiz/expired veya doğrulama başarısız
+```
+> Recovery code tek kullanımlık — doğrulandığı anda hash listeden silinir. `pre_mfa_token` blacklist'e atılmaz (15 dk TTL ile doğal expire).
+
+### `POST /mfa/disable`
+TOTP veya recovery kod ile MFA kapatır. Rate limit: 3/dk. Auth gerektirir. Başarıda tüm `totp_*` alanlar NULL'lanır.
+```json
+// Request — MFADisableIn (biri zorunlu)
+{ "totp_code": "123456" }   // veya { "recovery_code": "a1b2c3d4e5f6" }
+
+// 200 OK
+{ "detail": "MFA kapatildi." }
+
+// 400 — MFA zaten kapalı veya doğrulama başarısız; 422 — ikisi de boş
+```
 
 ---
 
@@ -292,10 +422,10 @@ Tüm staking pozisyonları (Sonic, Avalanche).
 ```
 
 ### `POST /portfolio/snapshot`
-Manuel snapshot tetikleyici. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Sonic, Avalanche P/C, Ethereum, TEFAS, hisse) paralel veri çeker, TL'ye normalize eder, `portfolio_snapshots` + `asset_positions` kayıtlarını yazar. **İdempotent** — aynı gün içinde tekrar çalıştırılırsa eski snapshot silinip yenisi yazılır.
+Manuel snapshot tetikleyici. Status: **201 Created**. Rate limit: 6/saat. Tüm kaynaklardan (Binance, BinanceTR, iCrypex, Sonic, Avalanche P/C, Ethereum, TEFAS, hisse) paralel veri çeker, TL'ye normalize eder, `portfolio_snapshots` + `asset_positions` kayıtlarını yazar. **İdempotent** — aynı gün içinde tekrar çalıştırılırsa eski snapshot silinip yenisi yazılır.
 
 ```json
-// 200 OK
+// 201 Created
 {
   "id":             "uuid",
   "snapshot_date":  "2026-04-30",
@@ -528,30 +658,62 @@ multipart/form-data: file=bes.xlsx
 ## 7. Exchange Entegrasyonları (`/api/v1/integrations`)
 
 ### `GET /integrations`
-Aktif entegrasyonları listele (key'ler **dönmez**, sadece metadata).
+Kullanıcının entegrasyonlarını listele (key'ler **dönmez**, sadece metadata — `IntegrationOut`).
 ```json
 [{
   "id":             "uuid",
   "provider":       "binance",
   "is_active":      true,
-  "last_synced_at": "2026-04-29T...",
-  "has_extra":      false
+  "last_synced_at": "2026-04-29T..."
 }]
 ```
 
 ### `POST /integrations`
-Yeni exchange API key ekle. Body Fernet ile şifrelenir, plaintext DB'ye yazılmaz.
+Yeni exchange API key ekle veya mevcut provider'ı **upsert** et. Body Fernet ile şifrelenir, plaintext DB'ye yazılmaz. Aynı provider zaten varsa key/secret güncellenir (`is_active=True`).
 ```json
+// Request — IntegrationCreate
 {
-  "provider":    "binance",
-  "api_key":     "...",
-  "api_secret":  "...",
-  "extra_token": "..."   // Opsiyonel — Binance TR cid cookie
+  "provider":   "binance",     // 'binance'|'binancetr'|'icrypex'|'tefas'|'bes' (EXCHANGE_PROVIDERS) — dışı 422
+  "api_key":    "...",
+  "api_secret": "..."          // Opsiyonel
 }
+// 201 Created — IntegrationOut
 ```
 
 ### `DELETE /integrations/{provider}`
-Entegrasyonu pasifleştirir (`is_active = false`); kalıcı silmek için `?hard=true`.
+Entegrasyonu **fiziksel siler** (DB'den `db.delete`). Audit'lenir (`integration.delete`).
+```
+204 No Content
+404: { "detail": "Entegrasyon bulunamadı" }
+```
+
+### `POST /integrations/export`
+Borsa API anahtarlarını **açık (decrypt) Excel** olarak indir — kullanıcı **şifresi doğrulanır**. Rate limit: 5/dk. Şifre yanlış/eksikse 403 ve anahtarlar VERILMEZ. Audit'lenir (`integration.export`). xpub export (wallets) ile aynı güvenlik modeli.
+```json
+// Request — IntegrationExportRequest
+{ "password": "kullanici-sifresi" }
+
+// 200 OK — application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// Content-Disposition: attachment; filename=kripto-api-anahtarlari.xlsx
+
+// 403 Forbidden — şifre hatalı
+{ "detail": "Şifre hatalı — API anahtarları verilmedi." }
+```
+
+### `POST /integrations/import`
+Excel'den API anahtarlarını içe aktar — **provider bazında upsert** (replace-all DEĞİL; dosyada olmayan entegrasyonlara dokunulmaz, kimlik bilgisi kaybı önlenir). Dosya `_build_integrations_xlsx` formatında (Borsa / API Key / API Secret).
+```
+multipart/form-data: file=kripto-api-anahtarlari.xlsx
+200 OK — kaydedilen liste (IntegrationOut[])
+422: { "detail": "Geçerli API anahtarı bulunamadı" }
+```
+
+### `POST /integrations/sync`
+Senkronizasyon görevi başlatır (henüz placeholder — TODO).
+```
+202 Accepted
+{ "detail": "Senkronizasyon başlatıldı" }
+```
 
 ---
 
@@ -587,9 +749,41 @@ Tüm aktif cüzdan adresleri.
 | `litecoin` | `ltc1...` / `L...` / `M...` | `ltc1q...` |
 
 ### `DELETE /wallets/{id}`
+Cüzdanı siler. Audit'lenir (`wallet.delete`). IDOR korumalı (`user_id` filtresi).
+```
+204 No Content
+404: { "detail": "Cüzdan bulunamadı" }
+```
 
-### `GET /wallets/export` / `POST /wallets/import`
-xlsx indir/yükle (TEFAS pattern'i ile aynı).
+### `GET /wallets/export` — Maskeli adresli Excel (şifresiz)
+Cüzdanları **maskeli adresli** (`xpub6C...4D4D`) Excel olarak indir (COMP-024). Şifre gerektirmez; Excel sızmasında blockchain bakiye geçmişi açığı önlenir. Audit'lenir (`wallet.export`, `include_full_address=false`).
+```
+200 OK — Content-Disposition: attachment; filename=blockchain-cuzdanlari.xlsx
+```
+
+### `POST /wallets/export` — Tam (maskesiz) adresli Excel (şifreli)
+Tam (maskesiz) adresli Excel — **kullanıcı şifresi doğrulanır**. Rate limit: 5/dk. Şifre yanlış/eksikse 403 ve tam adres VERILMEZ. Tam xpub indirimi audit'lenir (`full=true`, KVKK m.12 forensic).
+```json
+// Request — WalletExportRequest
+{ "password": "kullanici-sifresi" }
+
+// 200 OK — tam adresli xlsx
+// 403 Forbidden
+{ "detail": "Şifre hatalı — tam adres verilmedi." }
+```
+
+### `POST /wallets/import`
+Excel'den cüzdan içe aktar (**replace-all** — mevcut cüzdanlar silinir, yeniler eklenir).
+
+> **Maskeli-adres koruması:** Dosyada maskeli adres (`"..."` içeren) varsa import **tamamen reddedilir** (422) ve mevcut cüzdanlara DOKUNULMAZ — maskeli export'un geri import edilip gerçek adresleri ezmesi (veri kaybı) önlenir. Tam adresli dosya için `POST /wallets/export` (şifreli) kullanın.
+```
+multipart/form-data: file=blockchain-cuzdanlari.xlsx
+200 OK — kaydedilen liste (WalletOut[], adresler maskeli döner)
+422: { "detail": "Geçerli cüzdan bulunamadı" }
+422: { "detail": "Bu dosya maskeli adresler ... içeriyor; içe aktarılamaz ..." }
+```
+
+> **JSON response'ta adres maskeli:** `WalletOut.address` Pydantic `field_serializer` ile maskelenir (BACK-013); JSON'da tam xpub sızmaz. Tam adres yalnızca şifreli `POST /wallets/export` ile.
 
 ---
 
@@ -694,35 +888,48 @@ multipart/form-data: file=manuel-kripto.xlsx
 
 ---
 
-## 9. AI Tavsiye (`/api/v1/advice`) — Faz 3'te Kredi Tüketir
+## 9. AI Tavsiye (`/api/v1/advice`) — Kredi Tüketir
 
 ### `POST /advice/generate`
-```json
-{ "horizon": "medium" }   // 'medium' (5 kredi) | 'long' (10 kredi)
+Status: **201 Created**. Rate limit: 5/saat. **Çağrı sırası (önemli):** (1) `anthropic_consent_at IS NULL` → 403 (KVKK m.9), (2) `credit_balance < ADVICE_COST` → 402, (3) son snapshot yoksa 404, (4) Anthropic çağrısı, (5) atomik kredi düşümü (`credit_balance -= 1`, `advice.credits_used = 1`) + audit (`advice.generate`).
 
-// 200 OK
+> **Kredi maliyeti:** `ADVICE_COST = 1` — `medium` ve `long` horizon **aynı** 1 kredi tüketir (horizon yalnızca prompt içeriğini değiştirir, maliyeti değil).
+
+```json
+// Request — AdviceGenerateRequest
+{ "horizon": "medium" }   // 'medium' | 'long' (validator — başka değer 422)
+
+// 201 Created — AdviceOut
 {
   "id":                "uuid",
   "horizon":           "medium",
   "content":           "## Öneriler\n- ...",
-  "credits_used":      5,
   "prompt_tokens":     250,
   "completion_tokens": 800,
+  "credits_used":      1,
   "generated_at":      "2026-04-29T..."
 }
 
-// 402 Payment Required (Faz 3)
-{ "detail": "Yetersiz kredi. Bakiye: 2, gerekli: 5" }
+// 403 Forbidden — Anthropic açık rıza yok (KVKK m.9)
+{ "detail": "Anthropic API'ye veri aktarimi icin acik riza gerekli (KVKK m.9). ..." }
+
+// 402 Payment Required — yetersiz kredi
+{ "detail": "Yetersiz kredi. Tavsiye basina 1 kredi gerekir; mevcut: 0." }
+
+// 404 Not Found — portföy verisi yok
+{ "detail": "Tavsiye üretmek için önce portföy verisi gerekiyor" }
 ```
 
-### `GET /advice`
-Kullanıcının tüm tavsiye geçmişi.
+### `GET /advice?limit=10`
+Kullanıcının tavsiye geçmişi (en yeniden eskiye, default limit=10).
 
 > Detaylı prompt tasarımı, model seçimi, token bütçesi: [ai-ve-finans.md](./ai-ve-finans.md)
 
 ---
 
-## 10. Krediler (`/api/v1/credits`) — Faz 3
+## 10. Krediler (`/api/v1/credits`) — Faz 3 (HENÜZ IMPLEMENTE EDİLMEDİ)
+
+> ⚠️ Bu bölüm **planlanan** kredi/ödeme akışıdır; `credits.py` router'ı ve iyzico entegrasyonu henüz kodda **yok** (backlog). `users.credit_balance` kolonu mevcut ve `/advice/generate` tarafından okunup düşülür, ancak kredi satın alma akışı eklenmemiştir. Aşağıdaki sözleşme referans/taslaktır.
 
 ### `GET /credits`
 Bakiye + son işlemler.
@@ -1007,14 +1214,50 @@ Mevcut şifre doğrulamalı şifre değiştirme.
 { "detail": "Mevcut şifre hatalı" }
 ```
 
+> **Not (PUT /user/password):** Yeni şifre register ile aynı politikaya (zxcvbn + HIBP) tabidir; zayıf/sızmış şifre 422 döner. Audit'lenir (`auth.password_change`).
+
 ### `DELETE /user/me`
-Hesabı **soft-delete** eder (`users.deleted_at = now()`). Hard-delete cron job (Faz 3 TODO) `deleted_at + 30 gün` sonra fiziksel silme yapacak.
+Hesabı **soft-delete** eder (`users.deleted_at = now()`). Audit'lenir (`account.soft_delete`). `_hard_delete_expired_users_job` cron'u (her gün 04:00 Europe/Istanbul, COMP-004) `deleted_at + 30 gün` sonra fiziksel siler (FK CASCADE + audit_logs SET NULL).
 ```json
 200 OK
 { "detail": "Hesap silindi" }
 ```
 
-> KVKK uyumu için `/me/data-export` (kullanıcı verisi indirme) ayrı endpoint olarak Faz 3'te eklenecek.
+### `POST /user/email/request` (COMP-029)
+E-posta değiştirme isteği. Rate limit: 3/dk. Yeni adrese onay token'ı (`secrets.token_urlsafe(32)`) üretir; tıklanmadan eski e-posta aktif kalır. Audit'lenir (`user.email_change_request`).
+```json
+// Request — EmailChangeRequest
+{ "new_email": "yeni@example.com" }
+
+// 202 Accepted
+{ "detail": "Yeni e-posta adresine onay baglantisi gonderildi" }
+
+// 400 — yeni e-posta mevcut ile aynı; 409 — e-posta kullanılamaz (anti-enumeration)
+```
+
+### `GET /user/email/confirm?token=...`
+Token ile e-posta swap'ini tamamlar (tek kullanımlık). Audit'lenir (`user.email_change_complete`). Query param `token` `min_length=10, max_length=128`.
+```json
+// 200 OK — başarılı; 400 — token geçersiz/expired
+```
+
+### `DELETE /user/consent/{consent_type}`
+Açık rızayı geri çeker (COMP-006). Audit'lenir (`user.consent_revoke`, `extra.consent_type`).
+```
+200 OK
+```
+
+### `GET /user/data-export` (COMP-003, KVKK m.11/d)
+Kullanıcının tüm verisini JSON olarak indirir (snapshot, audit log, wallet vb.). Rate limit: 5/saat (büyük JSON DoS koruma). Audit'lenir (`user.data_export`).
+```
+200 OK — JSON veri paketi
+```
+
+### `POST /user/anthropic-consent` / `DELETE /user/anthropic-consent` (AI-005, KVKK m.9)
+Anthropic API'ye veri aktarımı açık rızasını verir/geri çeker. Rate limit: 10/saat. `anthropic_consent_at` timestamp'i set/NULL edilir; `/advice/generate` bu rıza yoksa 403 döner. Audit'lenir (`kvkk.anthropic_consent_grant` / `kvkk.anthropic_consent_revoke`).
+```
+200 OK
+```
 
 ---
 
@@ -1077,13 +1320,14 @@ GET /cash-flow/report.pdf?year=2026      → PDF rapor (DejaVu Sans, TR karakter
 
 **Kart CRUD:**
 ```
-GET    /credit-cards                        → kullanıcının kartları (liste)
-POST   /credit-cards                        → yeni kart
-GET    /credit-cards/{id}                   → detay (statements + installments tek seferde)
+GET    /credit-cards                        → kartlar + özet (CreditCardSummaryOut: cards + total_period_debt + total_debt) — ayrı /summary endpoint'i YOK
+POST   /credit-cards                        → yeni kart (201)
+GET    /credit-cards/{id}                   → detay (CardDetailOut: statements + installments tek seferde)
 PUT    /credit-cards/{id}                   → güncelle
-DELETE /credit-cards/{id}                   → sil (CASCADE statements + installments)
-GET    /credit-cards/summary                → özet (toplam limit, kullanılan, kalan)
+DELETE /credit-cards/{id}                   → sil (204, CASCADE statements + installments)
 ```
+
+> `GET /credit-cards` kart listesi **ve** özeti (toplam dönem borcu + toplam borç) tek response'ta döndürür; her kart `_enrich_card` ile `unpaid_statement_total`, `future_installment_total`, `period_debt`, `total_debt` alanlarıyla zenginleştirilir.
 
 **Card alanları:** `name, bank_name, last_4, credit_limit, statement_day, payment_due_day, current_period_debt`.
 
@@ -1179,8 +1423,9 @@ History sayfasında her snapshot satırında 📊 xlsx + 📄 pdf butonları.
 ## 16. Geliştirme İpuçları
 
 ### OpenAPI Dokümantasyonu
-Otomatik Swagger UI: `http://localhost:8000/docs`
-OpenAPI JSON: `http://localhost:8000/openapi.json`
+Swagger UI: `http://localhost:8000/docs` · OpenAPI JSON: `http://localhost:8000/openapi.json`
+
+> ⚠️ **Prod'da varsayılan KAPALI** (P0 #7 güvenlik): `/docs`, `/redoc`, `/openapi.json` yalnızca `settings.expose_swagger=True` (env/.env) iken açıktır. Kapalıyken endpoint enumeration / schema sızması engellenir.
 
 ### Test Etmek
 ```bash
@@ -1234,11 +1479,20 @@ Kullanıcının kendi audit log kayıtlarını döner (en yeniden eskiye). IDOR 
 | `wallet.add` | `POST /wallets` | `extra.chain`, `extra.label`, `resource: wallet:{uuid}` |
 | `wallet.delete` | `DELETE /wallets/{id}` | `extra.chain`, `resource: wallet:{uuid}` |
 | `wallet.export` | `GET /wallets/export` (COMP-024) | `extra.wallet_count`, `extra.include_full_address` |
-| `integration.add` | `POST /integrations` | `extra.updated`, `resource: integration:{provider}` |
+| `integration.add` | `POST /integrations` (+ `/import`) | `extra.updated`, `resource: integration:{provider}` |
 | `integration.delete` | `DELETE /integrations/{provider}` | `resource: integration:{provider}` |
+| `integration.export` | `POST /integrations/export` (şifreli) | `extra.count` veya `extra.result=wrong_password` |
 | `snapshot.delete` | `DELETE /portfolio/snapshot/{date}` | `resource: snapshot:{date}` |
 | `account.soft_delete` | `DELETE /user/me` | `resource: user:{uuid}` |
 | `advice.generate` | `POST /advice/generate` (AI-004) | `extra.horizon`, `extra.model`, `extra.prompt_tokens`, `extra.credits_used` |
+| `auth.email_verified` | `GET /auth/verify-email` | – |
+| `auth.login_mfa_required` | MFA aktif kullanıcı login adım 1 | – |
+| `auth.mfa.setup` | `POST /mfa/setup` | – |
+| `auth.mfa.enabled` | `POST /mfa/enable` | – |
+| `auth.mfa.disabled` | `POST /mfa/disable` | `extra.via_recovery` |
+| `auth.mfa.verify_success` | `POST /mfa/verify` başarılı | – |
+| `auth.mfa.verify_failed` | TOTP/recovery doğrulama başarısız (enable/disable/login) | `extra.phase` |
+| `auth.mfa.recovery_used` | `/mfa/verify` recovery code ile | – |
 
 ```json
 // 200 OK — PaginatedResponse[AuditLogOut]
@@ -1297,7 +1551,8 @@ curl "https://kfinans.app/api/v1/audit-logs?action_prefix=wallet.&limit=20" \
 - [x] `GET /auth/verify-email`, `POST /auth/resend-verification` endpoint'leri
 - [x] `POST /portfolio/snapshot` manuel tetikleme endpoint'i
 - [x] `POST /auth/logout` (JWT blacklist) + `POST /auth/refresh` revoked token kontrolü
-- [ ] `POST /auth/forgot-password` / `POST /auth/reset-password` — Faz 2 sonraki adım
+- [x] `POST /auth/forgot-password` / `POST /auth/reset-password` (SEC-001) — token + zxcvbn/HIBP politika
+- [x] MFA TOTP endpoint'leri (`/mfa/setup|enable|verify|disable`) — audit #5
 - [x] BES manuel giriş endpoint'leri (`/portfolio/bes/*` — GET, PUT, export, import)
 - [ ] Kredi endpoint'leri (`/credits/*`) — Faz 3
 - [x] Harcama endpoint'leri (`/expenses/*`) — Faz 3 MVP (5 endpoint: list/create/update/delete/summary + Excel export/import)
@@ -1309,6 +1564,8 @@ curl "https://kfinans.app/api/v1/audit-logs?action_prefix=wallet.&limit=20" \
 - [x] MKK e-Yatırımcı Excel import (`/portfolio/tefas/import-mkk` + `/portfolio/stocks/import-mkk`) — Faz 3
 - [x] Manuel kripto endpoint'leri (`/manual-crypto/*`) — Faz 3 (API'siz borsalar için CRUD + Excel + anlık fiyat)
 - [ ] Harcama analizi AI (`/expenses/analysis/generate`) — Faz 3 (3 kredi)
-- [ ] `/user/data-export` (KVKK) — Faz 3
+- [x] `GET /user/data-export` (KVKK m.11/d, COMP-003) — Faz 3
+- [x] E-posta değiştirme (`POST /user/email/request` + `GET /user/email/confirm`) — COMP-029
+- [x] Anthropic consent (`POST`/`DELETE /user/anthropic-consent`) + integrations/wallets şifreli export/import — FAZ H
 - [ ] Pagination (cursor-based) `/portfolio/history` ve `/advice` için
 - [ ] Server-Sent Events `/portfolio/stream` (anlık fiyat) — Faz 4

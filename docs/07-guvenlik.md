@@ -10,15 +10,26 @@
 | Koruma | Uygulama | Durum |
 |--------|----------|-------|
 | Şifre hash | bcrypt | ✅ Aktif |
+| **Şifre politikası** (audit #5) | `core/password_policy.py` — zxcvbn (offline strength score) + HIBP k-anonymity (sızmış parola red); `hibp_check_enabled` env; register + reset akışında uygulanır | ✅ Aktif |
+| **Hesap kilitleme (account lockout)** (SEC-002) | 10 ardışık başarısız login → 15 dk kilit (423 + `Retry-After`); `users.failed_login_count` + `users.locked_until`; başarılı login / şifre sıfırlama sayacı sıfırlar | ✅ Aktif |
 | JWT imza | HS256 | ✅ Aktif |
-| Token tipi ayrımı | `access` / `refresh` | ✅ Aktif |
+| Token tipi ayrımı | `access` (type claim YOK) / `refresh` / `pre_mfa` | ✅ Aktif |
+| **MFA — TOTP** (audit #5) | `api/v1/mfa.py` (pyotp, RFC 6238); `user.totp_secret` Fernet ciphertext + `totp_enabled` + `totp_recovery_codes` (bcrypt-hash, JSON list, tek kullanımlık); login 2-adımlı (`pre_mfa_token` 15 dk → `/mfa/verify`); `valid_window=1` (±30 sn) | ✅ Aktif |
 | Exchange API key encryption | Fernet (AES-128-CBC) | ✅ Aktif |
+| **Fernet key rotation** (SEC-012) | `core/security.py::_build_fernet` MultiFernet — encrypt primary (`FERNET_KEY`) ile, decrypt primary + `FERNET_KEYS_SECONDARY` (decrypt-only) listesini dolaşır; zero-downtime rotation | ✅ Aktif |
+| **Şifre sıfırlama akışı** (SEC-001) | `POST /auth/forgot-password` + `/auth/reset-password`; `secrets.token_urlsafe(32)` reset token (1 saat TTL); anti-enumeration (generic 202); tek kullanımlık | ✅ Aktif |
 | **Wallet adresi (xpub) encryption** (FAZ C1) | Fernet ciphertext + SHA-256 fingerprint lookup; `WalletAddress.address` hybrid_property transparent encrypt/decrypt | ✅ Aktif |
 | CORS allowlist | `settings.cors_origins` (env'den) | ✅ Aktif |
 | **TrustedHostMiddleware** (FAZ C3) | `settings.allowed_hosts` env'den; prod'da `["kfinans.app","www.kfinans.app","api.kfinans.app"]`; Host header injection koruması | ✅ Aktif |
 | **SecurityHeadersMiddleware** (FAZ C2) | HSTS (1 yıl + preload) + X-Frame-Options DENY + X-Content-Type-Options + Referrer-Policy + CSP (default-src 'none') + Permissions-Policy + COOP + CORP + Server maskeleme | ✅ Aktif |
 | **Frontend güvenlik header'ları** (FAZ C2) | `next.config.ts` async `headers()`; HSTS + CSP + X-Frame + Permissions-Policy + COOP HTML response'larında | ✅ Aktif |
-| Rate limiting (auth endpoint'leri) | slowapi (in-memory) | ✅ Aktif |
+| Rate limiting (auth endpoint'leri) | slowapi — `settings.redis_url` set ise Redis backend (multi-replica güvenli), yoksa MemoryStorage (`replicas=1`) | ✅ Aktif |
+| **PII log filter** (SEC-010) | `core/log_filter.py::PIIFilter` root logger handler'larına eklenir (`install_pii_filter`, `main.py` import-time); email / IPv4 / JWT / Bearer token / kredi kartı PAN → maskelenir (3. parti kütüphane log sızıntısı defence-in-depth) | ✅ Aktif |
+| **Request timing middleware** (PERF-004) | `core/middleware.py::RequestTimingMiddleware` — `X-Response-Time` header + slow request WARNING log + per-route p50/p95/p99 metrics; `/metrics/performance` `X-Metrics-Token` korumalı (token boş → 404) | ✅ Aktif |
+| **File upload validation** (SEC-009) | `core/upload_validation.py::validate_excel_upload` 10 Excel import endpoint'inde; uzantı + boyut (`max_upload_size_mb`, default 5MB → 413) + magic byte (xlsx `PK\x03\x04` / xls OLE2 → polyglot 422) | ✅ Aktif |
+| **Adres maskeleme (JSON response)** (BACK-013) | `core/masking.py::mask_address` Pydantic `field_serializer`; `WalletOut.address` / `WalletPositionOut.address` ilk 6 + son 4; full xpub yalnız audit'li opt-in Excel export | ✅ Aktif |
+| **Exception sanitization** (SEC-007 + BACK-008) | `main.py` generic handler'lar (IntegrityError→409, SQLAlchemyError→500, Exception→500) `{detail, code, request_id}`; SEC-007 yakalanan 5 noktada `detail=f"...{e}"` kaldırıldı → `logger.exception` + generic mesaj | ✅ Aktif |
+| **Swagger UI / OpenAPI prod'da kapalı** (P0 #7) | `settings.expose_swagger=False` default → `/docs`, `/redoc`, `/openapi.json` 404; endpoint enumeration vektörü kapatıldı | ✅ Aktif |
 | **E-posta doğrulama zorunluluğu** | `email_verified=False` ise login 403 hard block | ✅ Aktif |
 | **Doğrulama token'ı (TTL'li)** | `secrets.token_urlsafe(32)`, `verify_token_expires_at` (24 saat) | ✅ Aktif |
 | **Account enumeration koruması** | `POST /auth/resend-verification` her zaman 202 döner | ✅ Aktif |
@@ -26,7 +37,7 @@
 | **`jti` claim** | `create_access_token` ve `create_refresh_token` her token'a `uuid4.hex` jti ekler | ✅ Aktif |
 | **Refresh token rotation** (FAZ C4) | `/auth/refresh` her çağrıda eski refresh `jti`'sini blacklist'e atar + yeni refresh üretir; sızan token ikinci kez kullanılamaz | ✅ Aktif |
 | **`revoked_tokens` cleanup cron** (FAZ C5) | APScheduler her gün 03:00 Europe/Istanbul; `expires_at < now` kayıtları siler; DB sonsuz şişme koruması | ✅ Aktif |
-| **Audit log** (FAZ C6) | `audit_logs` tablosu (user_id, action, resource, ip_address, user_agent, extra JSONB); 8 kritik eylem hook'lu (auth.login, .login_failed, .logout, .register, .password_change, wallet.add/delete, integration.add/delete, snapshot.delete, account.soft_delete); `GET /api/v1/audit-logs` endpoint | ✅ Aktif |
+| **Audit log** (FAZ C6) | `audit_logs` tablosu (user_id, action, resource, ip_address, user_agent, extra JSONB); kritik eylemler hook'lu (auth login/logout/register/password_reset, MFA, wallet/integration add/delete/export, snapshot.delete, account.soft_delete, consent, data_export — tam liste `AuditAction` enum); `GET /api/v1/audit-logs` endpoint (paginated, IDOR korumalı). IP kaynağı SEC-004 ile `request.client.host` | ✅ Aktif |
 | **JWT TTL prod env override** (FAZ C4) | `ACCESS_TOKEN_EXPIRE_MINUTES=30` prod'da; dev=480 (8 saat) | ✅ Aktif |
 | Health endpoint (auth gerektirmez) | `/health` | ✅ Aktif |
 | Auth gerektiren endpoint'ler | `Depends(get_current_user)` | ✅ Aktif |
@@ -105,20 +116,32 @@ POST /auth/resend-verification {email}
   ↓ HER ZAMAN 202 (account enumeration koruması)
 
 POST /auth/login
-  ↓ verify_password(password, hash)
+  ↓ _raise_if_locked() — locked_until > now → 423 Locked (Retry-After) (SEC-002)
+  ↓ verify_password(password, hash) → fail: failed_login_count++ (10'da kilit) + 401
   ↓ user.email_verified == False → 403 hard block
-  ↓ create_access_token(user.id, exp=480 dk)
+  ↓ failed_login_count / locked_until sıfırla
+  ↓ user.totp_enabled == True → {mfa_required, pre_mfa_token (15 dk), expires_in_seconds} (MFA adım 1)
+  ↓ aksi halde:
+  ↓ create_access_token(user.id, exp=480 dk dev / 30 dk prod)
   ↓ create_refresh_token(user.id, exp=7 gün)
+
+POST /mfa/verify {pre_mfa_token, totp_code | recovery_code}   (MFA adım 2)
+  ↓ decode pre_mfa_token (type=pre_mfa kontrol)
+  ↓ pyotp.TOTP(secret).verify(valid_window=1)  veya  recovery code (tek kullanımlık)
+  ↓ create_access_token + create_refresh_token
 
 GET /portfolio/*
   ↓ Authorization: Bearer {access}
-  ↓ decode_token() — type kontrol (access)
-  ↓ get_current_user() — DB lookup
+  ↓ decode_token() — type kontrolü YOK (access type claim taşımaz)
+  ↓ jti varsa revoked_tokens blacklist kontrolü
+  ↓ get_current_user() — DB lookup + user.deleted_at IS NULL kontrolü
   ↓ endpoint çalışır
 
 POST /auth/refresh (access expired)
-  ↓ decode_token() — type kontrol (refresh)
+  ↓ decode_token() — type == "refresh" kontrolü
+  ↓ jti revoked_tokens blacklist kontrolü → varsa 401 "Token iptal edilmiş"
   ↓ DB lookup (user hala var mı?)
+  ↓ eski refresh jti'sini blacklist'e at (rotation, FAZ C4)
   ↓ yeni access + refresh
 ```
 
@@ -140,12 +163,10 @@ POST /auth/refresh (access expired)
 # Header (HS256)
 { "alg": "HS256", "typ": "JWT" }
 
-# Payload (access)
+# Payload (access)  — DİKKAT: access token'da "type" ve "iat" claim YOK
 {
   "sub":  "user-uuid",
   "exp":  unix_timestamp,
-  "iat":  unix_timestamp,
-  "type": "access",
   "jti":  "uuid4.hex"   # selective revocation için (Faz 2 — eklendi)
 }
 
@@ -153,19 +174,31 @@ POST /auth/refresh (access expired)
 {
   "sub":  "user-uuid",
   "exp":  unix_timestamp,
-  "iat":  unix_timestamp,
   "type": "refresh",
   "jti":  "uuid4.hex"
 }
+
+# Payload (pre_mfa)  — login adım 1 sonrası, sadece /mfa/verify'da geçerli (15 dk)
+{
+  "sub":  "user-uuid",
+  "exp":  unix_timestamp,
+  "type": "pre_mfa",
+  "jti":  "uuid4.hex"   # kısa ömürlü; blacklist'e atılmaz, exp ile doğal expire
+}
 ```
+
+> **Not (kod gerçeği):** `create_access_token` yalnızca `sub` + `exp` + `jti` yazar — access token'da `type` claim **yoktur**. Token tipi ayrımı yalnızca refresh (`type=refresh`) ve pre_mfa (`type=pre_mfa`) için yapılır; access, type alanının yokluğuyla ayırt edilir. `iat` claim de set edilmiyor (`exp` yeterli). 
 
 > Eski (jti'siz) tokenlar için geriye dönük uyumluluk: `get_current_user` ve `/auth/refresh` payload'da `jti` yoksa blacklist kontrolünü atlar. Bu, deploy anında elinde geçerli token olan kullanıcıların 401 almamasını sağlar. Tüm yeni tokenlar jti ile üretilir.
 
 ### 3.3 Token Süreleri
-| Token | Süre (Dev) | Süre (Prod, Hedef) |
-|-------|-----------|---------------------|
-| Access | 480 dk (8 saat) | 15 dk |
+| Token | Süre (Dev, default) | Süre (Prod) |
+|-------|---------------------|-------------|
+| Access | 480 dk (8 saat) | 30 dk (`ACCESS_TOKEN_EXPIRE_MINUTES=30` env) |
 | Refresh | 7 gün | 7 gün |
+| pre_mfa | 15 dk | 15 dk (sabit, `PRE_MFA_TOKEN_TTL_SECONDS`) |
+
+> `config.py` default'u **480 dk**; prod'da env ile 30 dk'ya çekilir. OWASP ASVS ≤15 dk önerir — security-notes #3 default'un 30 dk yapılmasını öneriyor (backlog). Refresh rotation aktif olduğu için kısa access penceresi acil değil.
 
 ### 3.4 Logout / Token İptali (Faz 2 — Tamamlandı)
 
@@ -245,15 +278,21 @@ async def list_users(_: User = Depends(require_role(UserRole.ADMIN))):
 # config.py
 fernet_key: str  # .env'den, openssl-üretimli 32 byte URL-safe base64
 
-# core/security.py
-from cryptography.fernet import Fernet
-_fernet = Fernet(settings.fernet_key.encode())
+# core/security.py — MultiFernet (SEC-012): primary encrypt + decrypt, secondary decrypt-only
+from cryptography.fernet import Fernet, MultiFernet
+
+def _build_fernet() -> MultiFernet:
+    primary = Fernet(settings.fernet_key.encode())
+    secondaries = [Fernet(k.encode()) for k in settings.fernet_keys_secondary if k]
+    return MultiFernet([primary, *secondaries])
+
+_fernet = _build_fernet()
 
 def encrypt_secret(plaintext: str) -> str:
-    return _fernet.encrypt(plaintext.encode()).decode()
+    return _fernet.encrypt(plaintext.encode()).decode()   # her zaman primary key ile
 
 def decrypt_secret(ciphertext: str) -> str:
-    return _fernet.decrypt(ciphertext.encode()).decode()
+    return _fernet.decrypt(ciphertext.encode()).decode()  # primary + secondary listesini dolaşır
 ```
 
 ### 5.2 Kullanım
@@ -261,10 +300,16 @@ def decrypt_secret(ciphertext: str) -> str:
 - Pozisyon çekimi sırasında `decrypt_secret()` ile açar → exchange'e gönderir
 - API yanıtlarında **asla** decrypt edilmiş key dönülmez
 
-### 5.3 Kritik: Master Key Yönetimi
-- `FERNET_KEY` değişirse, **tüm mevcut encrypted_key'ler okunamaz hale gelir**
+### 5.3 Kritik: Master Key Yönetimi + Rotation (SEC-012)
+- `FERNET_KEY` tek başına değişirse, **eski ciphertext'ler okunamaz hale gelir** — bu yüzden MultiFernet rotation kullanılır
 - Production'da **SealedSecrets** ile GitOps uyumlu secret yönetimi aktif (bkz. §5.4)
-- Key rotasyonu: yeni key + dual-decrypt + re-encrypt migration (kritik operasyon, runbook'u devops alanında)
+- **Zero-downtime rotation (MultiFernet, kod içi aktif):**
+  1. Yeni anahtar üret: `Fernet.generate_key().decode()`
+  2. `FERNET_KEYS_SECONDARY=["<eski-primary>"]` env'e ekle, restart (decrypt-only)
+  3. `FERNET_KEY=<yeni>` güncelle, restart → yeni encrypt yeni key ile, eski ciphertext secondary ile hâlâ decrypt edilir
+  4. Re-encrypt background job tüm row'ları yeni primary'e taşıyana kadar bekle
+  5. Tamamlanınca secondary'leri kaldır
+- `FERNET_KEYS_SECONDARY` boş (default) → eski tek-key davranışı (backward compat). Rotation runbook'u devops alanında dokümante edilir.
 
 ### 5.4 K8s Secrets Yerleşimi (Mevcut — SealedSecrets, GitOps-safe)
 - Tüm hassas env (`DATABASE_URL`, `SECRET_KEY`, `FERNET_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `POSTGRES_PASSWORD`) `kfinans-secrets` adlı Kubernetes Secret'ında
@@ -281,25 +326,26 @@ def decrypt_secret(ciphertext: str) -> str:
 
 ## 6. Rate Limiting
 
-### 6.1 Mevcut Limitler (slowapi, in-memory)
+### 6.1 Backend (slowapi — Redis veya MemoryStorage)
+`core/limiter.py::_build_limiter`: `settings.redis_url` set ise Redis backend (tüm replica'lar tek key üzerinde sayar), yoksa MemoryStorage (her pod ayrı sayar → `replicas=1` zorunlu) — SEC-003.
+
 | Endpoint | Limit | Gerekçe |
 |----------|-------|---------|
-| `POST /auth/login` | 10/dk | Brute force koruması |
+| `POST /auth/login` | 10/dk | Brute force koruması (+ SEC-002 account lockout) |
 | `POST /auth/register` | 5/dk | Spam kayıt önleme |
 | `POST /auth/refresh` | 30/dk | Normal kullanım toleransı |
+| `GET /auth/verify-email` | 20/dk | Token brute force toleransı |
+| `POST /auth/resend-verification` | 3/dk | Mail spam önleme |
+| `POST /auth/forgot-password` | 3/dk | Mail spam + enumeration |
+| `POST /auth/reset-password` | 5/dk | Token brute force |
+| `POST /mfa/setup` · `POST /mfa/disable` | 3/dk | TOTP brute force koruması |
+| `POST /mfa/enable` · `POST /mfa/verify` | 5/dk | TOTP brute force koruması |
 
-### 6.2 Eklenecek Limitler (Faz 3)
-| Endpoint | Limit |
-|----------|-------|
-| `POST /advice/generate` | 5/dk (kredi varsa bile) |
-| `POST /portfolio/tefas/preview` | 30/dk (TEFAS API'sini koru) |
-| `POST /portfolio/stocks/preview` | 30/dk (Yahoo Finance) |
-| `POST /credits/checkout` | 3/dk (ödeme spam) |
-| `POST /credits/webhook` | 100/dk (idempotency yine kontrol et) |
+> Diğer pahalı/spam'a açık endpoint'lerin limitleri (advice generate 5/saat, snapshot 6/saat, stocks/tefas preview 30/dk, data export 5/saat, email change 3/dk, anthropic consent 10/saat) `docs/03-api-referansi.md §1.4`'te tablolanır.
 
-### 6.3 Production'a Geçişte
-- In-memory store → **Redis** (multi-replica için zorunlu)
-- IP bazlı + user bazlı kombinasyon (giriş yapmış user için daha cömert limit)
+### 6.2 Production'a Geçişte
+- MemoryStorage → **Redis** (multi-replica için zorunlu; env zinciri hazır)
+- IP bazlı + user bazlı kombinasyon (giriş yapmış user için daha cömert limit) — gelecek iyileştirme
 
 ---
 
@@ -352,9 +398,9 @@ Frontend (`frontend/next.config.ts` async `headers()`) HTML response'larında ek
 - HTTP → HTTPS redirect (`force-ssl-redirect: true` ingress annotation, mevcut)
 - HSTS preload: `.app` TLD zaten preload listesinde (otomatik)
 
-### 8.4 Request Size Limit (Yapılacak)
-- nginx-ingress: `proxy-body-size: "10m"` annotation eklendi (`k8s/ingress.yaml`)
-- FastAPI: file upload endpoint'lerde Pydantic + content-length kontrol
+### 8.4 Request Size / Upload Validation ✅ TAMAMLANDI (SEC-009)
+- nginx-ingress: `proxy-body-size` annotation (`k8s/ingress.yaml`)
+- `core/upload_validation.py::validate_excel_upload` — 10 Excel import endpoint'inde 3 katmanlı: (1) uzantı `.xlsx|.xls`, (2) boyut `settings.max_upload_size_mb` (default 5MB → 413), (3) magic byte (xlsx ZIP `PK\x03\x04`, xls OLE2 `\xD0\xCF\x11\xE0...`; yanlış → 422 polyglot koruması)
 
 ### 8.5 SQL Injection
 - ✅ Tüm sorgular SQLAlchemy ORM/parametrize — güvende
@@ -467,17 +513,27 @@ audit_logs
 | `integration.delete` | `integrations.py::remove_integration` | resource=integration:{provider} |
 | `snapshot.delete` | `portfolio.py::delete_snapshot` | resource=snapshot:{date} |
 | `account.soft_delete` | `user.py::delete_me` | resource=user:{id} |
+| `auth.password_reset_request` / `auth.password_reset_complete` | `auth.py::forgot_password` / `reset_password` | SEC-001 reset akışı (success flag + reason) |
+| `auth.mfa.setup` / `.enabled` / `.disabled` / `.verify_success` / `.verify_failed` / `.recovery_used` / `auth.login_mfa_required` | `mfa.py` + `auth.py::login` | MFA TOTP akışı (audit #5) |
+| `user.email_change_request` / `.email_change_complete` | `user.py` | COMP-029 e-posta değiştirme |
+| `user.consent_revoke` | `user.py` | COMP-006 açık rıza geri çekme |
+| `kvkk.anthropic_consent_grant` / `.revoke` | advice akışı | AI-005 KVKK m.9 özel rıza |
+| `user.data_export` | KVKK veri taşınabilirliği | COMP-003 |
+| `wallet.export` / `integration.export` | xpub / API key plaintext dışa aktarımı (şifre doğrulamalı, forensic) | COMP-024 |
+| `advice.generate` | `advisor` akışı | AI-004 kredi tüketimli |
 
-**Endpoint:** `GET /api/v1/audit-logs?action_prefix=&limit=` — kullanıcı sadece kendi log'larını görür (IDOR korumalı).
+> Tam liste `services/audit.py::AuditAction` enum'unda.
 
-**Servis:** `app/services/audit.py::log_audit()` — best-effort (try/except yutar, ana endpoint bozulmaz). X-Forwarded-For desteği proxy/ingress arkası için.
+**Endpoint:** `GET /api/v1/audit-logs?action_prefix=&limit=&offset=` — kullanıcı sadece kendi log'larını görür (IDOR korumalı); `PaginatedResponse[T]` (PERF-001).
+
+**Servis:** `app/services/audit.py::log_audit()` — best-effort (try/except yutar, ana endpoint bozulmaz). **IP kaynağı (SEC-004):** yalnızca `request.client.host` okunur — ham `X-Forwarded-For` artık güvenilmiyor (spoofing riski). Gerçek istemci IP'si için uvicorn `--proxy-headers --forwarded-allow-ips=...` ile trusted-proxy zincirinden normalize edilen değer kullanılır.
 
 **Test:** `tests/integration/test_audit_logs.py` — 9 test: 5 hook regression + 4 endpoint (IDOR + filter + auth).
 
 **Kalan loglanacak eylemler (gelecek):**
-- `kvkk.data_export` — KVKK Madde 11 veri taşıma talebi (FAZ E1 ile birlikte endpoint açılınca)
-- `auth.email_verified` — explicit hook (zaten log seviyesinde info kaydı var)
-- AI tavsiye üretimi (Faz 3 — kredi tüketimli)
+- `auth.email_verified` — enum'da tanımlı; explicit hook eklenebilir (zaten log seviyesinde info kaydı var)
+
+> **Not (backlog):** SEC-004 sonrası `_client_ip` sadece `request.client.host` okur; ingress'te uvicorn `--forwarded-allow-ips` set edilmemişse audit log'ta gerçek kullanıcı IP'si yerine ingress IP'si görünür (security-notes #8, devops backlog). Audit yazma silent fail'i Sentry'ye forward edilmiyor (security-notes #12, backlog).
 
 ---
 
@@ -486,12 +542,12 @@ audit_logs
 | OWASP 2021 | Durum | Not |
 |------------|-------|-----|
 | A01: Broken Access Control | ✅ | User izolasyonu (5 IDOR test); audit log endpoint de IDOR korumalı |
-| A02: Cryptographic Failures | ✅ | bcrypt (şifre) + Fernet (API key + xpub FAZ C1) + HTTPS (Oracle ingress + cert-manager) + .app TLD HSTS preload |
+| A02: Cryptographic Failures | ✅ | bcrypt (şifre) + Fernet (API key + xpub FAZ C1, MultiFernet rotation SEC-012) + DB TLS require (§14) + HTTPS (Oracle ingress + cert-manager) + .app TLD HSTS preload |
 | A03: Injection | ✅ | ORM only; raw SQL yok; migration'da `text()` parametrize |
 | A04: Insecure Design | ✅ | Logout + JWT blacklist + refresh rotation (FAZ C4) |
 | A05: Security Misconfiguration | ✅ | SecurityHeaders + TrustedHost (FAZ C2/C3); env'den allowed_hosts override |
 | A06: Vulnerable Components | ✅ | pip-audit + npm-audit + Trivy fs + Trivy image + Dependabot + CodeQL (FAZ A4 + B3 + B4) |
-| A07: Identification & Auth Failures | ✅ | Logout + blacklist + refresh rotation (FAZ C4) + email verify hard block |
+| A07: Identification & Auth Failures | ✅ | Logout + blacklist + refresh rotation (FAZ C4) + email verify hard block + MFA TOTP (audit #5) + account lockout (SEC-002) + şifre politikası zxcvbn/HIBP |
 | A08: Software & Data Integrity | ⚠️ | Image signing (cosign) yok — Faz 3 |
 | A09: Security Logging & Monitoring | ✅ | audit_logs tablosu + 8 hook + endpoint (FAZ C6) |
 | A10: Server-Side Request Forgery | ✅ | Dış URL kullanıcı girişiyle oluşmuyor; Ethplorer/CoinGecko sabit URL'ler |

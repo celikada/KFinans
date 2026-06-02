@@ -20,7 +20,7 @@ KFinans uygulamasında **kişisel veri ihlali** sayılan olaylara müdahale eder
 - API key/secret sızıntısı (Fernet master key, JWT secret, Anthropic API key)
 - Auth bypass / yetkisiz erişim
 - Saldırı sonucu kullanıcı verisi şifrelenmesi (ransomware)
-- Üçüncü taraf hizmet (Anthropic, Resend, Oracle, GitHub, SonarCloud) ihlali
+- Üçüncü taraf hizmet (Anthropic, Resend, Oracle, GitLab/GitHub, self-hosted SonarQube) ihlali
 
 **Kapsam dışı:** Bireysel kullanıcı hesabının kendi sosyal mühendislik ile
 ele geçirilmesi (kullanıcı sorumluluğu).
@@ -48,7 +48,7 @@ süreç eklenmesi Faz I item).
 İhlal şüphesi şu kanallardan gelebilir:
 
 1. **Otomatik:** Sentry alert (500 spike), audit_logs anormal pattern (login_failed >100/dk),
-   CodeQL/Trivy CVE kritik, gitleaks pre-commit/CI fail, SonarCloud hotspot
+   CodeQL/Trivy CVE kritik, gitleaks pre-commit/CI fail, self-hosted SonarQube hotspot
 2. **Manuel:** Kullanıcı raporu (security@kfinans.app — Faz F SECURITY.md),
    GitHub Discussions, sosyal medya
 3. **Üçüncü taraf:** Anthropic/Resend/GitHub/Oracle güvenlik bildirimi
@@ -131,7 +131,7 @@ key'leriniz (Fernet ile DB'de şifreli).
 
 **Sizden ricamız:**
 - Şifrenizi değiştirin: https://kfinans.app/dashboard/settings
-- Hesabınızı 2FA ile koruyun (yakında eklenecek)
+- Hesabınızı 2FA (TOTP) ile koruyun: https://kfinans.app/dashboard/settings
 - Şüpheli bir aktivite gözlemlerseniz security@kfinans.app'e bildirin
 
 KVKK Kurulu'na bu olayı KVKK m.12/5 uyarınca bildirdik. Tam olay raporu:

@@ -1,6 +1,6 @@
-# Production Deploy Checklist (v0.1.0)
+# Production Deploy Checklist (v0.1.0 → v1.0.0 GA)
 
-> Faz F çıkış kriterleri. Tüm satırlar ✓ olunca `git tag v0.1.0` ile ilk prod deploy.
+> **Durum (2026-06-02):** Production **canlı** — release candidate `v0.1.0-rc16` Oracle K3s'te çalışıyor (`/health` ok). Bu checklist'in teknik/altyapı satırları (§2-§9) tamamlandı. Kalan ✗ satırları **v1.0.0 GA** için zorunlu **kullanıcı aksiyonları** (§1 KVKK) — kod ile çözülemez.
 
 ## 1. Yasal / KVKK (kullanıcı aksiyonu)
 
@@ -22,7 +22,7 @@
 | [x] | GitLab `SONAR_TOKEN` Protected variable eklendi | ✅ CI/CD → Variables (protected) |
 | [x] | `sonarqube-scan` job `qualitygate.wait=true` + `allow_failure` kaldırıldı | ✅ 2026-06-01 (BLOCKING) |
 | [x] | Coverage fix: `concurrency=["greenlet","thread"]` (async handler ölçümü) | ✅ new_coverage %48→%96 |
-| [x] | Develop'a MR → GitLab pipeline `quality` stage yeşil | ✅ v0.1.0-rc10 |
+| [x] | Develop'a MR → GitLab pipeline `quality` stage yeşil | ✅ v0.1.0-rc16 |
 | [x] | Gate koşulları: new_violations=0 + hotspots_reviewed=100% + new_coverage>=80% | ✅ tanımlı |
 
 ## 3. Repository Settings (GitLab primary + GitHub mirror)
@@ -70,7 +70,7 @@
 | [ ] | Oracle VM `141.144.243.54` çalışıyor (Always Free Tier) | SSH login test |
 | [ ] | K3s kurulu, `kubectl get nodes` yeşil | SSH'da kontrol |
 | [ ] | `kfinans` namespace var | `kubectl get ns kfinans` |
-| [ ] | nginx-ingress kurulu | `kubectl get pods -n ingress-nginx` |
+| [ ] | Traefik ingress kurulu (K3s default) | `kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik` |
 | [ ] | cert-manager + Let's Encrypt ClusterIssuer | `kubectl get clusterissuer` |
 | [ ] | Postgres StorageClass tanımlı (`local-path` veya `oci-bv`) | DEVOPS-027 #56 ile çözüldü |
 | [ ] | K8s Secrets oluşturuldu (DATABASE_URL, SECRET_KEY, FERNET_KEY, vs.) | `kubectl get secret kfinans-secrets -n kfinans` |
@@ -78,7 +78,7 @@
 | [ ] | NetworkPolicy aktif | DEVOPS-008 #54 ile çözüldü |
 | [ ] | Pod Security Standards (restricted) | DEVOPS-003 #51 ile çözüldü |
 
-## 7. İlk deploy senaryosu (GitLab — son: v0.1.0-rc10)
+## 7. İlk deploy senaryosu (GitLab — son: v0.1.0-rc16)
 
 ```bash
 # 1. Develop'taki her şey hazır + main'e merge (GitLab MR ile)
@@ -92,6 +92,7 @@ git push origin main --tags   # GitHub mirror
 # 3. GitLab pipeline otomatik tetiklenir (tag):
 #    - lint → test → quality (SonarQube BLOCKING gate, geçmeli)
 #    - build (backend + frontend) → Kaniko → Docker Hub :{tag}+:latest
+#    - scan (trivy-image-scan): HIGH/CRITICAL --ignore-unfixed → açık varsa DURUR
 #    - deploy-production: when: manual — OTOMATIK BAŞLAMAZ
 
 # 4. Deploy job'unu manuel tetikle (GitLab UI "play" VEYA API):
@@ -99,7 +100,9 @@ curl -s --request POST --header "PRIVATE-TOKEN: $GITLAB_PAT" \
   "http://gitlab.192.168.3.191.nip.io/api/v4/projects/<PID>/jobs/<JOB_ID>/play"
 #    → SSH Oracle K3s: kubectl set image + rollout status --timeout=5m
 
-# 5. Smoke verify (manuel — pipeline'da otomatik smoke job henüz yok):
+# 5. smoke-test job otomatik çalışır (needs: deploy-production):
+#    frontend HTTPS + /health {status:ok} + bogus login 401 + HSTS header
+#    Fail ise pipeline kırmızı (alarm). Ek manuel doğrulama:
 curl -fsS https://kfinans.app/health        # {"status":"ok"}
 curl -I https://kfinans.app                  # HSTS + X-Frame + CSP
 # veya: cd frontend && npm run smoke
@@ -147,3 +150,4 @@ git push origin :refs/tags/v0.1.0
 | 2026-05-10 | İlk versiyon (8d751c0) |
 | 2026-05-14 | DNS (A `@` + CNAME `www` + Resend DKIM/SPF/MX/DMARC) eklendi → ✅. Runbook'a referans eklendi. |
 | 2026-06-01 | §2 SonarCloud→self-hosted SonarQube (blocking gate + coverage fix). §3 GitLab/GitHub branch hijyeni. §4 GitHub Secrets→GitLab CI/CD Variables. §7 deploy GitLab manuel tetikleme (v0.1.0-rc10). §8 rollback iki-remote tag silme. |
+| 2026-06-02 | Doğruluk denetimi: son deploy v0.1.0-rc10→**rc16**. §7 pipeline'a `scan` (Trivy) + otomatik `smoke-test` stage'leri eklendi (önceki "smoke henüz yok" notu düzeltildi). Başlığa "production canlı / v1.0.0 GA için kalan = KVKK kullanıcı aksiyonları" durum notu. |

@@ -1,14 +1,48 @@
 # Kredi Sistemi ve Ödeme Akışı
 
 **Sahip ajanlar:** `architect`, `finance-expert`
-**Faz:** 3 (henüz implement edilmedi)
+**Faz:** 3 (kısmen uygulandı — aşağıdaki durum tablosuna bakın)
 **İlgili:** [api-referansi.md](./api-referansi.md), [uyumluluk-kvkk.md](./uyumluluk-kvkk.md)
+
+---
+
+## 0. Uygulama Durumu (Önemli — Uygulanan vs Planlanan)
+
+Bu doküman **hem mevcut kredi defteri (ledger) hem de planlanan ödeme akışını** kapsar.
+Karışmaması için net ayrım:
+
+| Bileşen | Durum |
+| ------- | ----- |
+| `users.credit_balance` (INT, default 0) | ✅ **Uygulandı** — migration `d4e5f6a7b8c9` |
+| `CHECK (credit_balance >= 0)` constraint | ✅ **Uygulandı** — `ck_users_credit_balance_nonnegative` |
+| `users.anthropic_consent_at` + `anthropic_consent_version` | ✅ **Uygulandı** — KVKK m.9 rıza |
+| `investment_advice.credits_used` (INT) | ✅ **Uygulandı** — AI-007 |
+| Kredi **tüketim** akışı (`/advice/generate`, tavsiye başına 1 kredi atomik düşüm) | ✅ **Uygulandı** — AI-007, bkz. §4.2 |
+| Yetersiz bakiye → 402 Payment Required | ✅ **Uygulandı** |
+| `credit_transactions` tablosu (ledger/audit trail) | ❌ **Planlanan** — kod yok |
+| `GET /credits`, `POST /credits/checkout`, `POST /credits/webhook` endpoint'leri | ❌ **Planlanan** — router yok |
+| iyzico ödeme entegrasyonu (checkout, webhook, HMAC, idempotency) | ❌ **Planlanan** — kod yok |
+| `core/credits.py` `deduct_credits()` helper | ❌ **Planlanan** — düşüm şu an doğrudan `advice.py`'de |
+| Kredi paketleri / fiyatlandırma | ❌ **Planlanan** — tasarım |
+| Frontend: bakiye göstergesi, satın alma, geçmiş, modal | ❌ **Planlanan** |
+| e-Arşiv fatura, cayma hakkı, refund | ❌ **Planlanan** |
+
+> **Özet:** Bakiye düşürülebiliyor ama bakiye **yüklenemiyor** (ödeme yok). Şu an krediler
+> yalnızca manuel/seed yoluyla artar. §1–§3 ve §5.2 sonrası ile §6–§11 **tasarım**'dır;
+> mevcut tüketim mantığı §4.2 ile §5.1'de anlatılır.
+>
+> **Mevcut tüketim maliyeti farkı:** Aşağıdaki tasarım tablolarında AI tavsiye 5–10 kredi
+> olarak planlanmıştır; **uygulanan** kod `advice.py::ADVICE_COST = 1` (tavsiye başına 1
+> kredi, vade ayrımı yok). Fiyatlandırma kesinleşince hizalanacak.
 
 ---
 
 ## 1. Genel Konsept
 
-KFinans **kredi tabanlı SaaS** modelinde çalışır. Temel takip ücretsiz; AI tavsiye, kripto/blockchain otomatik senkronizasyon ve gelişmiş analiz **kredi tüketir**. Kullanıcı kredi paketi satın alır; her ücretli işlem bakiyeden düşer.
+KFinans **kredi tabanlı SaaS** modeli hedefler (kısmen uygulandı — bkz. §0). Temel takip
+ücretsiz; AI tavsiye, kripto/blockchain otomatik senkronizasyon ve gelişmiş analiz **kredi
+tüketir**. Hedef akışta kullanıcı kredi paketi satın alır; her ücretli işlem bakiyeden düşer.
+Şu an yalnızca AI tavsiye tüketimi (1 kredi/tavsiye) uygulanmıştır; satın alma akışı planlıdır.
 
 ### 1.1 Avantajlar (vs Abonelik)
 - **Düşük giriş bariyeri** — 29₺'lik başlangıç paketi
@@ -90,25 +124,44 @@ Frontend (callback URL'den geri döndüğünde)
   ↓ GET /credits → güncel bakiye
 ```
 
-### 4.2 Tüketim (AI Tavsiye Örneği)
+### 4.2 Tüketim (AI Tavsiye) ✅ Uygulanan akış
 
+`api/v1/advice.py::generate_advice` — şu an **uygulanan** mantık (AI-007):
 ```
-Frontend POST /advice/generate { horizon: "medium" }
+Frontend POST /advice/generate { horizon: "medium" }   (slowapi 5/saat)
 
-Backend (transactional)
-  ↓ BEGIN
-  ↓ SELECT credit_balance FROM users WHERE id=X FOR UPDATE
-  ↓ if balance < 5 → ROLLBACK + 402 Payment Required
-  ↓ AI çağrısı (Anthropic API)
-  ↓ if AI başarısız → ROLLBACK + 503
-  ↓ INSERT investment_advice
-  ↓ INSERT credit_transactions (amount: -5, reason: "ai_advice_medium")
-  ↓ UPDATE users SET credit_balance = credit_balance - 5
-  ↓ COMMIT
+Backend
+  ↓ 1) anthropic_consent_at IS NULL → 403 (KVKK m.9)
+  ↓ 2) credit_balance < ADVICE_COST (=1) → 402 Payment Required   (LLM çağrısından ÖNCE)
+  ↓ 3) son snapshot çek (yoksa 404)
+  ↓ AdvisorService.generate(...) → Anthropic API
+  ↓    AI başarısız → advisor.generate() HTTPException fırlatır, aşağı gelinmez (kredi düşmez)
+  ↓ advice.credits_used = 1
+  ↓ user.credit_balance -= 1
+  ↓ db.add(advice) + audit log (ADVICE_GENERATE)
+  ↓ db.commit()   (tek transaction — advice + bakiye birlikte)
   ↓ return advice
 ```
 
-**Kritik:** AI çağrısı başarısız olursa kredi düşmez (transaction rollback).
+**Uygulanan ile tasarım arasındaki farklar (kasıtlı / Faz 3 backlog):**
+- Maliyet sabiti `ADVICE_COST = 1` (vade ayrımı yok); tasarım 5/10 kredi öneriyordu.
+- `credit_transactions` ledger insert'i **yok** — düşüm yalnızca `users.credit_balance` ve
+  `investment_advice.credits_used` üzerinden izleniyor. Ledger tablosu planlı (§5.2).
+- `SELECT ... FOR UPDATE` satır kilidi **yok**; tek kullanıcı (sahip) senaryosunda yarış
+  durumu pratik risk değil. Multi-user satın alma akışı geldiğinde §8.3'teki kilit eklenmeli.
+
+> **Tasarım (hedef ledger akışı):** `credit_transactions` insert + `SELECT FOR UPDATE`
+> ile aşağıdaki desen hedeflenir (henüz uygulanmadı):
+> ```
+> SELECT credit_balance FROM users WHERE id=X FOR UPDATE
+> if balance < cost → ROLLBACK + 402
+> AI çağrısı → fail ise ROLLBACK + 503
+> INSERT investment_advice + INSERT credit_transactions (amount: -cost)
+> UPDATE users SET credit_balance = credit_balance - cost
+> COMMIT
+> ```
+
+**Kritik:** AI çağrısı başarısız olursa kredi düşmez (exception commit'ten önce fırlar).
 
 ---
 
@@ -116,8 +169,10 @@ Backend (transactional)
 
 ### 5.1 `users` Tablosu (Mevcut)
 ✅ `credit_balance INT NOT NULL DEFAULT 0` — migration `d4e5f6a7b8c9` ile eklendi.
-✅ `CHECK (credit_balance >= 0)` constraint — DB seviyesinde negatif bakiye koruması.
-⚠️ `anthropic_consent_at TIMESTAMPTZ` — Faz 3'te eklenecek (Anthropic için açık rıza).
+✅ `CHECK (credit_balance >= 0)` constraint (`ck_users_credit_balance_nonnegative`) — DB seviyesinde negatif bakiye koruması.
+✅ `anthropic_consent_at TIMESTAMPTZ` + `anthropic_consent_version VARCHAR(10)` — eklendi (Anthropic için açık rıza, KVKK m.9; bkz. doc 05 §A.6).
+
+Ayrıca `investment_advice.credits_used INT NOT NULL DEFAULT 0` — her tavsiyenin tükettiği kredi (AI-007).
 
 ### 5.2 Yeni Tablo: `credit_transactions`
 ```sql
@@ -143,6 +198,11 @@ CREATE INDEX ix_credit_transactions_created_at ON credit_transactions(created_at
 ---
 
 ## 6. API Endpoint'leri
+
+> ⚠️ **Planlanan (henüz uygulanmadı).** Aşağıdaki `/credits*` endpoint'lerinin hiçbiri kodda
+> yoktur (`app/api/v1/credits.py` mevcut değil — sadece `credit_cards.py` var, o ayrı bir
+> özellik). Tüketim akışı `/advice/generate` üzerinden çalışır (bkz. §4.2). Bu bölüm Faz 3
+> ödeme entegrasyonu tasarımıdır.
 
 ### 6.1 `GET /api/v1/credits`
 ```json
@@ -392,14 +452,16 @@ GROUP BY reason;
 ## 12. Eksik / Eklenecek (TODO)
 
 ### Faz 3 (Implement Edilecek)
-- [ ] `users.credit_balance` migration
-- [ ] `credit_transactions` migration
-- [ ] `core/credits.py` — `deduct_credits(user_id, amount, reason, ref_id)` helper
+- [x] `users.credit_balance` migration — `d4e5f6a7b8c9`
+- [x] `users.anthropic_consent_at` + `anthropic_consent_version` (KVKK m.9 rıza)
+- [x] `investment_advice.credits_used` kolonu
+- [x] `POST /api/v1/advice/generate` — kredi düşme akışı (AI-007, tavsiye başına 1 kredi)
+- [ ] `credit_transactions` migration (ledger / audit trail)
+- [ ] `core/credits.py` — `deduct_credits(user_id, amount, reason, ref_id)` helper (şu an düşüm doğrudan `advice.py`'de)
 - [ ] iyzico SDK / HTTPx wrapper
 - [ ] `GET /api/v1/credits` endpoint
 - [ ] `POST /api/v1/credits/checkout` endpoint
 - [ ] `POST /api/v1/credits/webhook` endpoint
-- [ ] `POST /api/v1/advice/generate` — kredi düşme akışı
 - [ ] Frontend: kredi bakiye header componenti
 - [ ] Frontend: kredi geçmişi sayfası
 - [ ] Frontend: paket satın alma sayfası

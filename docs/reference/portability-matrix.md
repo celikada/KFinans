@@ -27,18 +27,18 @@
 |-------|-------|--------|
 | `k8s/networkpolicies/02-backend-ingress.yaml` | ipBlock | Probe traffic source |
 | `k8s/networkpolicies/04-frontend-ingress.yaml` | ipBlock | Probe traffic source |
-| `.gitlab-ci.yml` | ORACLE_VM_HOST | Deploy job |
-| `.github/workflows/release.yml` (SİLİNDİ) | — | — |
-| ~3 doc dosyası | — | Referans |
+| `.gitlab-ci.yml` | satır 26 `ORACLE_VM_HOST: "141.144.243.54"` | Deploy job — CI variable (default hard-code) |
+| `.github/workflows/release.yml` | SİLİNDİ | Dosya artık yok (workflows: ci-backend, ci-frontend, e2e, security, sonar) |
+| ~8 doc dosyası | — | Referans (operations-playbook, infrastructure-runbook, production-deploy-checklist, 01-tasarim, audit'ler) |
 
-**Önerilen fix:** GitLab CI variable `ORACLE_VM_HOST`; NetworkPolicy node IP yerine namespace label selector (multi-node K8s'de auto-discovery).
+**Önerilen fix:** `ORACLE_VM_HOST` zaten GitLab CI variable; default hard-code'u CI/CD project variable'a taşı. NetworkPolicy node IP yerine namespace label selector (multi-node K8s'de auto-discovery).
 
 ### 2.2 Domain (`kfinans.app`)
 
 | Dosya | Satır | Bağlam |
 |-------|-------|--------|
 | `frontend/next.config.ts` | CSP connect-src | Production domain |
-| `frontend/proxy.ts` | (mevcut hâli okunmadı — kontrol et) | |
+| `frontend/proxy.ts` | — | Domain hard-code YOK (env/relative path; kontrol edildi 2026-06) |
 | `frontend/app/legal/cookies/page.tsx` | mailto + body | iletisim@ + privacy@ |
 | `frontend/app/legal/kvkk/page.tsx` | mailto + body | Aynı |
 | `frontend/playwright/*.spec.ts` | BASE_URL | E2E test |

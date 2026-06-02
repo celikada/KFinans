@@ -8,10 +8,10 @@
 [![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](./CODE_OF_CONDUCT.md)
 
 > **Türkiye'ye özel kişisel yatırım ve finans takip uygulaması**
-> 🌐 Production: [https://kfinans.app](https://kfinans.app) *(yakında)*
+> 🌐 Production: [https://kfinans.app](https://kfinans.app) *(canlı — v0.1.0-rc16, Oracle K3s)*
 
 KFinans, dağınık yatırım hesaplarınızı ve günlük finansal yaşamınızı tek ekranda toplar:
-**TEFAS yatırım fonları**, **kripto borsaları** (Binance, iCrypex), **blockchain cüzdanlar** (Sonic, Avalanche, Ethereum, Bitcoin, Solana, +5 zincir), **BES birikimleri**, **hisse senetleri** (BIST + ABD + UK, Yahoo Finance), **kıymetli madenler** (gram/BiGA/sikke), **harcama-gelir-bütçe takibi** ve **AI destekli yatırım tavsiyeleri** (Claude API).
+**TEFAS yatırım fonları**, **kripto borsaları** (Binance, iCrypex), **manuel kripto** (API'siz borsalar — BinanceTR, BTCTurk, Paribu vb.), **blockchain cüzdanlar** (10 zincir: Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin), **BES birikimleri**, **hisse senetleri** (BIST + ABD + UK, Yahoo Finance), **kıymetli madenler** (gram/BiGA/sikke), **nakit/banka hesapları**, **kredi kartı (ekstre + taksit)**, **harcama-gelir-bütçe-nakit akış takibi** ve **AI destekli yatırım tavsiyeleri** (Claude API).
 
 Bir [Mayotek](https://mayotek.com) ürünüdür.
 
@@ -48,18 +48,19 @@ open http://localhost:3000
 | **Backend** | Python 3.12 + FastAPI + SQLAlchemy (async) + Alembic |
 | **Frontend** | Next.js 16 (App Router) + TypeScript + Tailwind CSS |
 | **Veritabanı** | PostgreSQL 16 |
-| **Borsa** | CCXT (Binance, iCrypex) |
-| **Blockchain** | web3.py (Sonic SFC, Avalanche C-Chain + P-Chain, Ethereum) |
-| **TEFAS** | Resmi TEFAS export API |
+| **Borsa** | CCXT (Binance, iCrypex, BinanceTR) |
+| **Blockchain** | web3.py (Ethereum, Sonic SFC, Avalanche C-Chain) + httpx public API (Avalanche P-Chain, Bitcoin, Solana, Cardano, Algorand, Litecoin) + substrate-interface (Polkadot) — 10 zincir |
+| **TEFAS** | httpx + resmi TEFAS JSON API |
 | **Hisse senedi** | Yahoo Finance Chart API + TCMB USD/TRY |
 | **Kıymetli maden** | Yahoo Finance (XAU=X / GC=F, XAG=X / SI=F) + TCMB |
-| **MKK e-Yatırımcı** | xlrd ile "Tüm Kıymetler" .xls direkt import |
-| **AI tavsiye** | Anthropic Claude (Sonnet 4.6) |
+| **MKK e-Yatırımcı** | xlrd 1.2.0 ile "Tüm Kıymetler" .xls direkt import |
+| **AI tavsiye** | Anthropic Claude (advisor.py — kredi tüketimli) |
 | **E-posta** | Resend SDK |
-| **Auth** | JWT (python-jose) + JWT blacklist + e-posta doğrulama |
-| **Zamanlayıcı** | APScheduler (Pazar 23:00 haftalık snapshot) |
-| **Şifreleme** | Fernet (API key'ler DB'de şifreli) |
-| **Container** | Docker Compose (dev) + Kubernetes (prod) |
+| **Auth** | JWT (python-jose) + refresh rotation + JWT blacklist + MFA (TOTP) + e-posta doğrulama |
+| **Zamanlayıcı** | APScheduler (4 cron job: Pazar 23:00 snapshot, 03:00 token cleanup, 04:00 hard-delete, 04:30 audit purge) |
+| **Şifreleme** | Fernet/MultiFernet (API key + wallet xpub DB'de şifreli) + bcrypt (şifre + recovery code) |
+| **Observability** | Sentry + OpenTelemetry (opt-in) |
+| **Container** | Docker Compose (dev) + Kubernetes / K3s (prod) |
 
 ---
 
@@ -69,17 +70,18 @@ open http://localhost:3000
 KFinans/
 ├── backend/             # FastAPI uygulaması — bkz: backend/README.md
 │   ├── app/
-│   │   ├── api/v1/      # Endpoint router'ları
-│   │   ├── services/    # Borsa, blockchain, TEFAS, snapshot, advisor
+│   │   ├── api/v1/      # 23 endpoint router'ı (auth, mfa, user, portfolio, ...)
+│   │   ├── services/    # Borsa, blockchain (10 zincir), TEFAS, snapshot, advisor, audit
 │   │   ├── models/      # SQLAlchemy
 │   │   ├── schemas/     # Pydantic
-│   │   └── scheduler.py # APScheduler haftalık snapshot
-│   ├── alembic/         # DB migrations
+│   │   └── scheduler.py # APScheduler — 4 cron job (snapshot + token cleanup + hard-delete + audit purge)
+│   ├── alembic/         # DB migrations (39 migration, head: e2f3a4b5c6d7)
 │   └── tests/           # ~1180 test (pytest + respx mocks), coverage %95+
 ├── frontend/            # Next.js — bkz: frontend/README.md
 │   ├── app/
-│   │   ├── dashboard/   # 11 dashboard kartı + alt sayfalar
-│   │   ├── _components/ # KFinansLogo, MayotekLogo, MkkHint, PageHeader
+│   │   ├── dashboard/   # 17 alt sayfa (tefas, stocks, wallets, crypto, manual-crypto, bes, ...)
+│   │   ├── _components/ # Logos, MkkHint, PageHeader, ConfirmDialog, ...
+│   │   ├── _i18n/       # TR/EN dil desteği (cookie tabanlı, I18nProvider)
 │   │   └── legal/       # KVKK, gizlilik, şartlar, çerezler
 │   └── lib/
 ├── docs/                # Tasarım, mimari, API, güvenlik, KVKK — bkz: docs/README.md
@@ -92,7 +94,7 @@ KFinans/
 
 ## Özellikler
 
-- **11 yatırım/finans kartı** dashboard'da: TEFAS, kripto, hisse, cüzdan, BES, harcama, planlı ödeme, gelir, hedef, kıymetli maden, bütçe
+- **17 yatırım/finans modülü** dashboard'da: TEFAS, kripto, manuel kripto, hisse, cüzdan, BES, kıymetli maden, nakit, kredi kartı, harcama, planlı ödeme, gelir, bütçe, hedef, nakit akış, geçmiş, ayarlar
 - **Kart gizleme** — kullanıcı kendi dashboard'ını özelleştirir
 - **MKK Excel import** — "Tüm Kıymetler" .xls dosyasından TEFAS + hisse senetleri tek tıkla yüklenir, kurum bilgisi otomatik dolar
 - **Maliyet bazı + Kâr/Zarar** — her holding için ortalama maliyet, otomatik gain/loss hesabı
@@ -136,6 +138,7 @@ Detaylı teknik dokümanlar için → [`docs/`](./docs/README.md):
 7. Güvenlik Mimarisi
 8. KVKK Uyumluluğu
 9. Altyapı, Deployment, Test
+10. Yol Haritası 2026 (rekabet analizi + ürün stratejisi)
 
 **Sürüm geçmişi:** [CHANGELOG.md](./CHANGELOG.md) — Faz bazli tarihsel
 ozet (Added / Changed / Fixed / Security).

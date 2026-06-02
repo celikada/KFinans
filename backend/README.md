@@ -36,22 +36,30 @@ API dokümantasyonu: http://localhost:8000/docs (Swagger UI) · http://localhost
 ```
 backend/
 ├── app/
-│   ├── api/v1/          # FastAPI router'ları
-│   │   ├── auth.py      # /auth/login, /register, /verify-email, /logout
-│   │   ├── user.py      # /user/me, profile, password, account
-│   │   ├── portfolio.py # /portfolio/snapshot
+│   ├── api/v1/          # FastAPI router'ları (23 router) + main.py'de /health
+│   │   ├── auth.py      # /auth/login (MFA union), register, verify-email, logout, refresh, forgot/reset-password
+│   │   ├── mfa.py       # /mfa/setup, enable, verify, disable (TOTP)
+│   │   ├── user.py      # /user/me, profile, password, account, email change, data-export, anthropic-consent
+│   │   ├── portfolio.py # /portfolio snapshot, history, changes, breakdown, crypto, wallets, staking
 │   │   ├── tefas.py     # TEFAS holdings + MKK import
 │   │   ├── stocks.py    # Hisse senedi + MKK import
-│   │   ├── crypto.py    # Binance, iCrypex
-│   │   ├── wallets.py   # Blockchain cüzdanlar
+│   │   ├── wallets.py   # Blockchain cüzdanlar + maskeli/şifreli export
+│   │   ├── integrations.py # Exchange API key (Fernet) + şifreli export/import
+│   │   ├── manual_crypto.py # API'siz borsalar için manuel kripto
 │   │   ├── bes.py       # Bireysel emeklilik
 │   │   ├── commodity.py # Altın & gümüş (gram/BiGA/sikke)
 │   │   ├── expenses.py  # Harcamalar + Excel I/O
-│   │   ├── income.py    # Gelirler + Excel I/O
-│   │   ├── planned.py   # Planlı ödemeler + nakit akışı
+│   │   ├── income.py    # Gelirler + periyodik gelir realize
+│   │   ├── planned_expenses.py # Planlı ödemeler
+│   │   ├── cash.py      # Nakit / banka hesabı
+│   │   ├── cash_flow.py # 12 aylık nakit akış projeksiyonu + rapor
+│   │   ├── credit_cards.py # Kredi kartı + ekstre + taksit (nested)
 │   │   ├── budget.py    # Bütçe limitleri + karşılaştırma
 │   │   ├── goal.py      # Finansal özgürlük hedefi
-│   │   ├── advisor.py   # Claude AI tavsiye
+│   │   ├── asset_catalog.py # Manuel kripto autocomplete
+│   │   ├── advice.py    # Claude AI tavsiye (kredi tüketir)
+│   │   ├── audit_logs.py # Audit log (pagination)
+│   │   ├── metrics.py   # Performans metrikleri (token korumalı)
 │   │   └── router.py    # Tüm router'ları birleştirir
 │   ├── services/
 │   │   ├── exchange/    # CCXT — Binance, iCrypex
@@ -65,8 +73,9 @@ backend/
 │   │   └── email.py     # Resend SDK
 │   ├── models/          # SQLAlchemy
 │   ├── schemas/         # Pydantic v2
-│   ├── core/            # deps (auth, db), security (Fernet, JWT)
-│   ├── scheduler.py     # APScheduler — Pazar 23:00 snapshot
+│   ├── core/            # deps (get_db, get_current_user), security (Fernet, JWT, bcrypt), limiter, middleware, masking
+│   ├── database.py      # async engine + AsyncSessionLocal (session factory)
+│   ├── scheduler.py     # APScheduler — 4 cron (Pazar 23:00 snapshot, 03:00 token cleanup, 04:00 hard-delete, 04:30 audit purge)
 │   ├── config.py        # pydantic-settings
 │   └── main.py          # FastAPI app + middleware + CORS
 ├── alembic/versions/    # Migration zinciri
@@ -90,7 +99,7 @@ pytest --cov=app --cov-report=html           # coverage raporu
 Test mantığı:
 - **Unit:** `services/`, `schemas/`, hesaplama mantığı (mock'lanmış HTTP çağrıları)
 - **Integration:** Endpoint testleri (gerçek DB + httpx test client + respx ile dış API mock)
-- Coverage hedef: %50+ (CI threshold)
+- Coverage: backend ~%95.8 gerçekleşen; SonarQube `new_coverage` gate eşiği %80 (BLOCKING)
 
 ---
 
@@ -124,9 +133,9 @@ ruff format .
 docker compose exec backend python -c "
 import asyncio
 from app.services.snapshot import compute_and_save_snapshot
-from app.core.db import async_session
+from app.database import AsyncSessionLocal
 async def run(uid):
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         await compute_and_save_snapshot(uid, db)
 asyncio.run(run('USER-UUID-HERE'))
 "

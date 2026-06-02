@@ -47,8 +47,8 @@ curl -s --request POST --header "PRIVATE-TOKEN: $GITLAB_PAT" \
 - ✅ Semver tag push (`v*.*.*`) → build (Kaniko → Docker Hub) → **manuel onaylı** deploy-production
 - ✅ Docker Hub `celikada/kfinans-backend:{tag}` + `kfinans-frontend:{tag}` (+ `:{short-sha}` + `:{ref-slug}` + tag'de `:latest`)
 - ✅ kubectl set image + rollout status (5 dk timeout)
-- ✅ Son production deploy: **`v0.1.0-rc10`** — rollout + smoke yeşil (backend `/health` ok, frontend up, security header'lar mevcut)
-- ⚠️ Container image Trivy scan + Playwright @smoke şu an GitLab pipeline'ında **otomatik değil** (GitHub release.yml'de tanımlı ama çalışmıyor). Smoke manuel/curl ile doğrulanıyor (`frontend/scripts/smoke.sh`). GitLab'a image scan + smoke job eklemesi açık TODO.
+- ✅ Son production deploy: **`v0.1.0-rc16`** — rollout + smoke yeşil (backend `/health` ok, frontend up, security header'lar mevcut)
+- ✅ Container image Trivy scan (`trivy-image-scan`, scan stage, HIGH/CRITICAL `--ignore-unfixed`, deploy ÖNCESİ gate) + curl smoke gate (`smoke-test`, smoke stage, deploy SONRASI) GitLab pipeline'ına eklendi (2026-06-01). Playwright @smoke şu an GitLab pipeline'ında otomatik değil; lokal `frontend/scripts/smoke.sh` ile doğrulanabilir.
 
 ### 1.4 GitHub Hesap Flag Durumu (#4360519)
 - `celikada` hesabı **hâlâ flag'li** (2026-06-01). Workflow'lar "active" + Actions "enabled" görünür ama **0 run** üretir.
@@ -59,7 +59,7 @@ curl -s --request POST --header "PRIVATE-TOKEN: $GITLAB_PAT" \
 - ✅ Kubernetes manifestleri (`k8s/` klasörü — kustomize, tek komutla deploy) — bkz. §3
 - ✅ Production deployment (GitLab semver tag → manuel deploy-production)
 - ✅ Branch hijyeni (GitLab MR-only develop/main + GitHub mirror protected) — bkz. §6
-- ⚠️ Container image vulnerability scan (Trivy) — GitLab pipeline'ına eklenecek (GitHub workflow'da var ama çalışmıyor)
+- ✅ Container image vulnerability scan (Trivy) — GitLab `scan` stage `trivy-image-scan` (HIGH/CRITICAL `--ignore-unfixed`, deploy öncesi gate, sadece semver tag)
 - ⚠️ Dependency scan (pip-audit + npm-audit + Dependabot) — GitHub workflow'da var ama çalışmıyor; GitLab'a taşınacak
 - ❌ Tilt/Skaffold dev loop (Docker Compose'tan geçiş — bilinçli teknik borç)
 - ❌ Monitoring (Prometheus + Grafana) — Faz 3
@@ -146,17 +146,32 @@ mevcut (k8s/ klasöründe):
   ✅ namespace.yaml            — kfinans namespace
   ✅ configmap.yaml            — non-secret env (CORS, EMAIL_FROM, FRONTEND_URL,
                                   RPC URL'leri, CLAUDE_MODEL, NEXT_PUBLIC_API_URL)
-  ✅ secrets.example.yaml      — şablon (gerçek secrets.yaml gitignore'da)
+  ✅ secrets.example.yaml      — şablon
+  ✅ sealed-secrets.yaml       — Bitnami SealedSecret (encryptedData; gerçek değerler
+                                  master key ile cluster-içi decrypt; repoya commit edilir)
   ✅ postgres.yaml             — PostgreSQL 16 StatefulSet (replicas: 1, 50Gi PVC,
                                   headless Service, pg_isready probes)
-  ✅ backend.yaml              — FastAPI Deployment (replicas: 2,
+  ✅ postgres-cert.yaml        — cert-manager SelfSigned Certificate (DB TLS, asyncpg
+                                  ssl require — audit 2026-05-22 P0 #6)
+  ✅ backend.yaml              — FastAPI Deployment (replicas: 1 — SEC-003 slowapi
+                                  MemoryStorage tek-replica; Redis sonrası 2+'ya çıkar,
                                   RollingUpdate maxUnavailable: 0,
-                                  initContainer alembic upgrade head,
+                                  initContainer wait-for-dns + alembic upgrade head,
                                   /health liveness + readiness + startup probes,
+                                  PSS restricted securityContext, readOnlyRootFilesystem,
+                                  resources limits cpu 500m / memory 1Gi (256→512→1Gi OOM fix),
                                   envFrom configmap+secret, ClusterIP)
-  ✅ frontend.yaml             — Next.js standalone Deployment (replicas: 2, ClusterIP)
-  ✅ ingress.yaml              — nginx-ingress + cert-manager TLS
-                                  (api.kfinans.app → backend, app.kfinans.app → frontend)
+  ✅ frontend.yaml             — Next.js standalone Deployment (ClusterIP)
+  ✅ ingress.yaml              — Traefik (K3s default) + cert-manager TLS, TEK host
+                                  kfinans.app path-based: /api + /health → backend,
+                                  / → frontend; www.kfinans.app → frontend.
+                                  HTTP→HTTPS redirect + 10MB body-size Traefik Middleware.
+  ✅ networkpolicies/          — 7 policy: default-deny, allow-dns (CoreDNS + pod/service
+                                  CIDR 53 fallback, a8496ca DNS egress fix),
+                                  backend ingress/egress, frontend-ingress,
+                                  postgres-ingress, backup-egress (zero-trust)
+  ✅ backup-cronjob.yaml       — günlük 02:00 (Europe/Istanbul) pg_dump | gzip | age
+                                  asimetrik encrypt → postgres-backups PVC, 30 gün retention
   ✅ kustomization.yaml        — kustomize index (tek komutla deploy)
   ✅ README.md                 — kapsamlı deploy rehberi
 
@@ -165,26 +180,29 @@ output: "standalone"). Backend Dockerfile production target da mevcut.
 ```
 
 ### 3.2 Önkoşullar
-- Kubernetes cluster (1.27+) + `kubectl` yapılandırılmış
-- nginx-ingress controller kurulu
+- Kubernetes cluster (K3s, 1.27+) + `kubectl` yapılandırılmış
+- Traefik ingress controller (K3s default — ayrıca kurulum gerekmez)
 - cert-manager kurulu + ClusterIssuer (`letsencrypt-prod`) tanımlı
-- DNS: `api.kfinans.app` ve `app.kfinans.app` cluster ingress IP'sine bağlı
+- sealed-secrets controller kurulu (master key restore edilmiş)
+- DNS: `kfinans.app` (apex A) + `www.kfinans.app` (CNAME) cluster ingress IP'sine bağlı (tek host path-based; subdomain split YOK)
 - Docker Hub'a push edilmiş image'lar: `celikada/kfinans-backend:{tag}`, `celikada/kfinans-frontend:{tag}` (GitLab Kaniko build üretir)
 
 ### 3.3 Tek Komut Deploy
 ```bash
-# 1) Secret hazırlığı (sadece ilk seferinde):
-cp k8s/secrets.example.yaml k8s/secrets.yaml
-# secrets.yaml'i base64 değerlerle doldur (DATABASE_URL, SECRET_KEY, FERNET_KEY,
-# ANTHROPIC_API_KEY, RESEND_API_KEY, POSTGRES_PASSWORD vb.)
-# Alternatif: kubectl create secret generic kfinans-secrets --from-literal=... -n kfinans
+# 1) Secret: k8s/sealed-secrets.yaml repoda (encryptedData). sealed-secrets
+#    controller master key cluster'da yüklü olmalı (DR durumunda Bitwarden/USB'den
+#    restore — bkz. disaster-recovery.md §3.5). Yeni key eklemek için:
+#      echo -n '<deger>' | kubeseal --raw --scope strict \
+#        --namespace kfinans --name kfinans-secrets --cert <controller-pub.pem>
+#    → çıktıyı sealed-secrets.yaml spec.encryptedData.<KEY>'e yaz.
 
 # 2) Image tag güncelle (kustomization.yaml içindeki images: bloğu)
 
-# 3) Deploy
+# 3) Deploy (namespace, configmap, sealed-secrets, postgres, ingress,
+#    networkpolicies, backup-cronjob — hepsi kustomize ile)
 kubectl apply -k k8s/
 
-# 4) Migration init container otomatik çalışır; durumu izle
+# 4) init container (wait-for-dns + alembic upgrade head) otomatik çalışır; izle
 kubectl -n kfinans rollout status deploy/backend
 kubectl -n kfinans rollout status deploy/frontend
 ```
@@ -192,7 +210,8 @@ kubectl -n kfinans rollout status deploy/frontend
 > Ayrıntılı rehber (önkoşullar, secret oluşturma, image push, migration akışı, ölçeklendirme, yedekleme, Faz 3 TODO'ları): [`k8s/README.md`](../k8s/README.md)
 
 ### 3.4 Faz 3 TODO'ları (manifest seti dışında)
-HPA (HorizontalPodAutoscaler), NetworkPolicy, PodDisruptionBudget, Prometheus + Grafana, PgBouncer, `revoked_tokens` cleanup CronJob, external-secrets/SealedSecrets, `pg_dump` CronJob.
+Eklendi (FAZ H / audit 2026-05-22): NetworkPolicy (7 policy zero-trust), SealedSecrets, `pg_dump` CronJob (age encrypted), DB TLS (postgres-cert), Pod Security Standards restricted. `revoked_tokens` cleanup APScheduler içinde (CronJob değil).
+Kalan TODO: HPA (HorizontalPodAutoscaler), PodDisruptionBudget, Prometheus + Grafana, PgBouncer, Redis (slowapi multi-replica için), off-site backup (rclone + Object Storage — DR P0, bkz. disaster-recovery.md).
 
 ### 3.5 Image Tagging Stratejisi (Docker Hub — GitLab Kaniko)
 ```
@@ -205,7 +224,7 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
 
 ---
 
-## 4. CI/CD Pipeline (GitLab — 5 stage)
+## 4. CI/CD Pipeline (GitLab — 7 stage)
 
 ```
                           ┌──────────────────────────┐
@@ -246,20 +265,34 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
                           ┌─────────────┴────────────┐
                           │  semver tag (v*.*.*)?    │
                           └─────────────┬────────────┘
-                                        │ evet
+                                        │ evet (scan/deploy/smoke sadece tag)
         ┌───────────────────────────────────────────────────────────────┐
-        │  STAGE 5: deploy-production   (when: manual — onay gerekir)    │
+        │  STAGE 5: scan  →  Trivy image (trivy-image-scan)             │
+        │  trivy image --severity HIGH,CRITICAL --exit-code 1           │
+        │              --ignore-unfixed  (backend + frontend tag image) │
+        │  Açık varsa pipeline DURUR — deploy ÖNCESİ gate               │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
+        ┌───────────────────────────────────────────────────────────────┐
+        │  STAGE 6: deploy-production   (when: manual — onay gerekir)    │
         │  SSH → Oracle K3s                                             │
         │    kubectl set image deployment/{backend,frontend}=:{tag}     │
         │    rollout status --timeout=5m (her ikisi)                    │
         │  ⚠ set image YALNIZCA — configmap/secret APPLY ETMEZ          │
         └───────────────────────────────────────────────────────────────┘
                                         │
+        ┌───────────────────────────────────────────────────────────────┐
+        │  STAGE 7: smoke  →  smoke-test (needs: deploy-production)      │
+        │  curl gate: frontend HTTPS + /health {status:ok}              │
+        │             + bogus login 401 + HSTS header                   │
+        │  Deploy bozuksa pipeline KIRMIZI (alarm)                      │
+        └───────────────────────────────────────────────────────────────┘
+                                        │
                                         ▼
                           ┌──────────────────────────┐
                           │ https://kfinans.app      │
                           │ (Oracle Cloud K3s)       │
-                          │ son deploy: v0.1.0-rc10  │
+                          │ son deploy: v0.1.0-rc16  │
                           └──────────────────────────┘
 ```
 
@@ -274,7 +307,9 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
 | `frontend-test` | test | push, MR, tag | vitest coverage → lcov.info; threshold %15 |
 | `sonarqube-scan` | quality | develop/main + MR + tag | **BLOCKING** quality gate (wait=true) |
 | `backend-build` / `frontend-build` | build | main, develop, tag | Kaniko → Docker Hub |
+| `trivy-image-scan` | scan | semver tag (`/^v\d+\.\d+\.\d+/`) | Trivy HIGH/CRITICAL `--ignore-unfixed`; deploy öncesi gate |
 | `deploy-production` | deploy | semver tag (`/^v\d+\.\d+\.\d+/`) | **`when: manual`** — UI play veya API |
+| `smoke-test` | smoke | semver tag (`/^v\d+\.\d+\.\d+/`) | `needs: deploy-production`; 4-adım curl gate |
 
 ### 4.2 Coverage Ölçüm Fix (2026-06-01)
 `backend/pyproject.toml [tool.coverage.run]`'a `concurrency = ["greenlet", "thread"]` eklendi. Async FastAPI handler'ları greenlet/thread içinde çalıştığı için coverage.py varsayılan ölçümde bunları **saymıyordu** → `new_coverage` yapay düşüktü. Fix sonrası CI `coverage.xml` doğru, SonarQube `new_coverage` **%48 → %96**. Frontend vitest LCOV de gate'e dahil (iki dilin coverage'ı birleşik değerlendiriliyor).
@@ -297,8 +332,8 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
 - GitHub Actions workflow'ları repoda durur ama **flag nedeniyle 0 run** — CI tamamen GitLab'da
 
 ### 4.5 Eklenecek (Faz 3)
-- [ ] GitLab pipeline'ına container image Trivy scan job (build sonrası, deploy öncesi gate)
-- [ ] GitLab pipeline'ına Playwright @smoke job (deploy sonrası)
+- [x] GitLab pipeline'ına container image Trivy scan job (build sonrası, deploy öncesi gate) — `trivy-image-scan` (2026-06-01)
+- [x] GitLab pipeline'ına curl smoke gate (deploy sonrası) — `smoke-test` (2026-06-01). Playwright @smoke hâlâ lokal/manuel.
 - [ ] gitleaks + pip-audit + npm-audit GitLab'a taşı (GitHub workflow'da var ama çalışmıyor)
 - [ ] Slack/Discord deploy bildirimi
 - [ ] Image signing (cosign)
@@ -321,18 +356,21 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
             (en geniş taban)
 ```
 
-### 5.2 Backend Test Yapısı (Mevcut — 159 test geçiyor)
+### 5.2 Backend Test Yapısı (Mevcut — ~1196 test geçiyor: ~519 unit + ~677 integration)
+
+> **Not:** Aşağıdaki dosya ağacı erken (Faz 1) durumunun illüstratif bir kesitidir; gerçek suite çok daha geniş (SonarQube gate sertleştirme oturumunda ~800 test eklendi — blockchain/exchange/servisler/API endpoint'leri). Güncel toplam ve coverage için §5.5 + CI `junit.xml`/`coverage.xml` esas alınır. Backend coverage **%95.83** (greenlet concurrency fix sonrası).
+
 ```
-backend/tests/
+backend/tests/   (Faz 1 kesiti — illüstratif)
 ├── conftest.py                  # ✅ NullPool + per-request session + slowapi disable
-├── unit/                        # 72 test
+├── unit/                        # (Faz 1: 72 test → güncel ~519)
 │   ├── test_security.py         # ✅ JWT, Fernet, bcrypt — 22 test
 │   ├── test_aggregator.py       # ✅ WoW/MoM/breakdown/weight/staking — 22 test
 │   ├── test_exchange_rates.py   # ✅ TCMB XML parse + fallback chain + cache — 9 test
 │   ├── test_stocks_currency.py  # ✅ GBp/USD/TRY dönüşüm zinciri — 7 test
 │   ├── test_tefas.py            # ✅ TefasService fiyat hesaplama (respx) — 6 test
 │   └── test_advisor.py          # ✅ Anthropic SDK AsyncMock + token sayımı + prompt caching — 6 test
-├── integration/                 # 88 test
+├── integration/                 # (Faz 1: 88 test → güncel ~677)
 │   ├── test_auth.py             # ✅ Register/login/refresh + verify-email + resend + 403 hard block — 21 test
 │   ├── test_portfolio.py        # ✅ TEFAS holdings CRUD — 8 test
 │   ├── test_idor.py             # ✅ Cross-user erişim koruma (BES dahil) — 8 test
@@ -407,16 +445,19 @@ async def test_tefas_fetch():
 | `services/aggregator.py` (formüller) | **%100** | ~%85 ✅ |
 | `api/v1/auth.py` | %95 | ~%80 ✅ |
 | `services/advisor.py` (Anthropic SDK) | %80 | ~%85 ✅ |
-| `services/exchange/*` | %70 | ~%5 (sadece logger import) |
-| `services/blockchain/*` | %70 | ~%5 |
-| Genel CI gate (faz bazlı) | Faz 1: %30 ✅ → Faz 2.5: %50 ✅ → Faz 3: %70 | ~%52.21 |
+| `services/exchange/*` | %70 | ✅ (SonarQube turunda kapsandı) |
+| `services/blockchain/*` | %70 | ✅ (SonarQube turunda kapsandı) |
+| Genel backend coverage | %70 | **%95.83** ✅ (greenlet concurrency fix sonrası) |
 
-CI'da coverage threshold `ci-backend.yml::coverage-gate` ile uygulanır — düşüşte merge bloke.
+> **Coverage gate gerçeği:** Coverage düşüşü, GitLab `quality` stage'inde **self-hosted SonarQube** BLOCKING gate'i ile yakalanır (`new_coverage >= %80`, gerçekleşen ≈%96.3). GitHub `ci-backend.yml::coverage-gate` job'u dormant (Actions çalışmıyor). `pyproject.toml [tool.coverage.run] concurrency = ["greenlet","thread"]` async handler ölçümünü doğru sayar (yapay %48 → gerçek %96).
 
-### 5.6 Frontend Testleri (Kuruldu)
+### 5.6 Frontend Testleri (Kuruldu — vitest ~396 test geçiyor + ~23 Playwright @smoke/e2e)
+
+> CI vitest coverage threshold şu an **%15** (`frontend-test` job; test artırımı sonrası tekrar %30+'a çıkarılacak). Aşağıdaki ağaç erken kesittir.
+
 ```
-frontend/
-├── vitest.config.ts            # ✅ jsdom + V8 coverage + %30 threshold
+frontend/   (erken kesit — illüstratif)
+├── vitest.config.ts            # ✅ jsdom + V8 coverage (CI threshold %15)
 ├── vitest.setup.ts             # ✅ @testing-library/jest-dom + cleanup
 ├── playwright.config.ts        # ✅ Chromium + retry x2 (CI)
 ├── __tests__/
@@ -532,16 +573,20 @@ git push --tags
 
 ---
 
-## 8. Backup ve Disaster Recovery (Faz 3)
+## 8. Backup ve Disaster Recovery
+
+> Detaylı prosedür: [`operations/disaster-recovery.md`](operations/disaster-recovery.md).
 
 ### 8.1 Veritabanı
-- **PITR (Point-in-Time Recovery):** WAL archiving + S3 (AWS Backup veya Restic)
-- **Snapshot:** Günlük (gece 03:00), 30 gün retention
-- **Test:** Aylık restore drill (staging'de)
+- **Logical backup (aktif):** `k8s/backup-cronjob.yaml` — günlük 02:00 Europe/Istanbul `pg_dump | gzip | age` (asimetrik encryption, private key cluster dışında), `postgres-backups` PVC, 30 gün retention.
+- **Off-site sync (BEKLİYOR — DR P0):** rclone + Oracle Object Storage. Şu an tüm backup'lar tek lokasyonda (Oracle VM disk) → 3-2-1 ihlal. Backlog (master audit 2026-05-22).
+- **PITR (planlı — Sprint 4):** WAL-G ile RPO 24 saat → 15 dk.
+- **Restore drill (BEKLİYOR — DR P0):** production'da hiç test edilmedi; ilk drill cutover öncesi zorunlu.
 
 ### 8.2 Secrets
-- Kubernetes Secrets → External Secrets Operator → AWS Secrets Manager / HashiCorp Vault
-- Fernet master key (`FERNET_KEY`) **DEĞİŞTİRİLEMEZ** — değişirse tüm encrypted_key'ler okunamaz
+- **Mevcut:** Kubernetes Secrets + Bitnami **SealedSecrets** (`k8s/sealed-secrets.yaml`, encryptedData repoya commit edilir; master key cluster içinde decrypt eder, offline yedeklenir).
+- **Planlı:** External Secrets Operator → cloud secret manager (Faz 3+).
+- Fernet master key (`FERNET_KEY`) `MultiFernet` ile **rotate edilebilir** (primary + secondary key) — bkz. [`operations/infrastructure-runbook.md`](operations/infrastructure-runbook.md) §2.5.
 
 ---
 

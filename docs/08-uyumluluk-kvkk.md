@@ -1,7 +1,7 @@
 # KVKK ve Regülasyon Uyumluluğu
 
 **Sahip ajan:** `compliance-expert`
-**İlgili:** [guvenlik.md](./guvenlik.md), [kredi-sistemi.md](./kredi-sistemi.md)
+**İlgili:** [07-guvenlik.md](./07-guvenlik.md), [06-kredi-sistemi.md](./06-kredi-sistemi.md), [legal/incident-response-plan.md](./legal/incident-response-plan.md)
 
 ---
 
@@ -58,8 +58,8 @@ KFinans **şifrelenmiş kişisel veri** içermez (sağlık, etnik köken, biyome
 
 ### 3.2 Operasyonel Belgeler (İç Kullanım)
 - [ ] Kişisel Veri İşleme Envanteri (VERBİS kaydı için — şu an eşik altı, gerekli değil)
-- [ ] Veri saklama ve imha politikası — KVKK metni Bölüm 5'te kullanıcı görünür özet var
-- [x] Veri ihlali müdahale planı (72 saat bildirim) — KVKK metni Bölüm 8 ve gizlilik politikası taahhüt ediyor; iç süreç dokümanı Faz 3
+- [x] Veri saklama ve imha politikası — KVKK metni Bölüm 5 + bu doküman §2 saklama tablosu + COMP-004/COMP-022 otomatik imha cron'ları operasyonel
+- [x] Veri ihlali müdahale planı (72 saat bildirim) — operasyonel iç süreç dokümanı: [`legal/incident-response-plan.md`](./legal/incident-response-plan.md) (COMP-021, ISO 27035 esinli)
 - [ ] Personel gizlilik taahhütnameleri (şirket büyüdüğünde)
 - [ ] Üçüncü taraf veri işleme sözleşmeleri (Anthropic, iyzico, AWS) — SCC imzalanmalı
 
@@ -75,13 +75,15 @@ KFinans bu eşikleri aşmasa da, **kullanıcı sayısı 1000+ olunca gönüllü 
 
 ## 4. Kullanıcı Hakları (KVKK m.11)
 
-Backend'de implement edilmesi gereken endpoint'ler:
+Backend endpoint'leri:
 
-### 4.1 Veri Erişim ve Taşınabilirlik (Yapılacak)
+### 4.1 Veri Erişim ve Taşınabilirlik ✅ (COMP-003)
 ```
-GET /api/v1/me/data-export
+GET /api/v1/user/data-export    (rate limit 5/saat)
 ```
-Kullanıcının tüm kişisel verisini JSON olarak indirmesi:
+✅ **Aktif:** `app/api/v1/user.py::data_export` kullanıcının tüm kişisel verisini tek JSON dump olarak döndürür (KVKK m.11/d + GDPR Art.20, makine-okunabilir). `_meta.format = "kfinans-data-export-v1"`, slowapi `5/hour`. Wallet adresleri **decrypt edilmiş plaintext**, integrations'tan `encrypted_key`/`encrypted_secret` **hariç**. Kapsanan: profile (rıza timestamp'leri dahil), integrations, wallets, snapshots + asset_positions, tefas/stock/bes/commodity/manual_crypto/cash holdings, expenses/planned/incomes/recurring/budgets, credit_cards + statements + installments, investment_advice, audit_logs (kullanıcının kendi).
+
+Örnek üst-seviye yapı:
 ```json
 {
   "user":         { "email": "...", "created_at": "...", "risk_profile": "..." },
@@ -96,51 +98,63 @@ Kullanıcının tüm kişisel verisini JSON olarak indirmesi:
 ```
 **Encrypted_key alanları DAHİL EDİLMEZ** — şifrelenmiş içerik kullanıcıya yarar sağlamaz, ifşa riski oluşturur.
 
-### 4.2 Düzeltme (Yapılacak)
+> **Not (compliance-notes #12):** Excel format (`?format=xlsx`) henüz yok; JSON KVKK m.11/d taşınabilirlik için yeterli. "Raporlar her zaman iki formatta" tercihine göre ek format backlog'da.
+
+### 4.2 Düzeltme ✅ (COMP-029)
 ```
-PATCH /api/v1/me
-{ "email": "yeni@x.com", "risk_profile": "balanced" }
+PATCH /api/v1/user            (risk_profile, goal vb.)
+POST  /api/v1/user/email/request    (rate limit 3/dk — token rotation ile e-posta değiştirme)
 ```
+✅ E-posta değiştirme token-onaylı akışla (`email_change_token`, COMP-029); risk profili/hedef PATCH ile güncellenir.
 
-### 4.3 Silme — "Unutulma Hakkı" (Kısmen Aktif)
+### 4.3 Silme — "Unutulma Hakkı" ✅ (FAZ C6 + COMP-004)
 
-✅ **Soft-delete altyapısı aktif (FAZ C6):** `DELETE /api/v1/user/me` `users.deleted_at = now()` set eder + audit log (`account.soft_delete`) yazar.
+✅ **Soft-delete:** `DELETE /api/v1/user/me` (`app/api/v1/user.py::delete_me`) `users.deleted_at = now()` set eder + audit log (`account.soft_delete`) yazar.
 
-⏳ **30 gün cayma süresi + hard-delete cron:** Faz 3'te eklenecek.
+✅ **30 gün cayma süresi + hard-delete cron:** `app/scheduler.py::_hard_delete_expired_users_job` her gün **04:00 Europe/Istanbul** çalışır; `deleted_at < now - 30 gün` satırları `DELETE FROM users` ile fiziksel siler (COMP-004, KVKK m.7). FK CASCADE ile integrations/wallets/snapshots/holdings/advice silinir; `audit_logs.user_id` ON DELETE SET NULL ile anonimleşir.
 
 **Yumuşak silme akışı (30 gün cayma süresi):**
 ```
 1. soft delete: users.deleted_at = now()                        ✅ FAZ C6
    audit log: account.soft_delete (kim, ne zaman, IP)           ✅ FAZ C6
-2. tüm aktif session'lar iptal (revoked_tokens blacklist)       ⏳ user logout endpoint'i çağırılırsa OK; otomatik bulk iptal Faz 3
-3. integrations.is_active = false (API key'leri kullanma)       ⏳ Faz 3
-4. 30 gün sonra (cron job): hard delete                         ⏳ Faz 3
-   - PII alanları anonimleştir veya SİL
-   - email → '<deleted-{uuid}>'
-   - encrypted_key, encrypted_secret → NULL
+2. tüm aktif session'lar iptal (revoked_tokens blacklist)       ⏳ logout endpoint'i çağırılırsa OK; otomatik bulk iptal backlog
+3. integrations.is_active = false (API key'leri kullanma)       ⏳ backlog (soft-delete user zaten snapshot job'tan dışlanır)
+4. 30 gün sonra (cron job): hard delete                         ✅ COMP-004 (_hard_delete_expired_users_job, 04:00)
+   - users satırı fiziksel DELETE (email, password_hash, totp_secret dahil tümü gider)
+   - encrypted_key, encrypted_secret → CASCADE ile integrations silinir
    - wallet_addresses (address_encrypted, address_fingerprint) CASCADE silinir
    - holdings, integrations CASCADE silinir
-   - portfolio_snapshots, asset_positions, advice → KORUNUR (anonim) — istatistik için
-   - audit_logs → user_id NULL set (ON DELETE SET NULL ile otomatik) — forensic için
-   - credit_transactions → KORUNUR (TTK m.82, 10 yıl)
+   - portfolio_snapshots, asset_positions, advice → CASCADE silinir
+   - audit_logs → user_id NULL set (ON DELETE SET NULL ile otomatik) — forensic için anonim korunur
+   - credit_transactions → TTK m.82 10 yıl arşiv riski (compliance-notes #14 — backlog: ON DELETE SET NULL + legacy_email_hash)
 ```
 
 **Kritik:** `audit_logs.user_id` ON DELETE **SET NULL** (CASCADE değil) — kullanıcı silinse bile log kayıtları **anonimleştirilerek** korunur. Sebep: KVKK m.12 forensic incident tracing + meşru menfaat.
 
-### 4.4 İşleme İtiraz / Kısıtlama (Yapılacak)
+### 4.4 Açık Rıza Yönetimi (Anthropic AI) ✅ (AI-005)
+```
+POST   /api/v1/user/anthropic-consent     → users.anthropic_consent_at = now()
+DELETE /api/v1/user/anthropic-consent     → consent NULL (geri çekme)
+POST   /api/v1/user/consent/{consent_type} + DELETE /api/v1/user/consent/{consent_type}
+```
+✅ Anthropic'e yurt dışı veri aktarımı için **spesifik açık rıza** (KVKK m.9): `users.anthropic_consent_at` + `anthropic_consent_version`. `/advice/generate` çağrısında `anthropic_consent_at IS NULL` → **403** (`app/api/v1/advice.py:52`). Rıza geri çekme audit log atar.
+
+> **Not (compliance-notes #8):** Rıza geri çekilince geçmiş `investment_advice` kayıtları şu an silinmiyor — KVKK m.7/2 yorumuna göre veri silme seçeneği eklenmesi backlog'da.
+
+### 4.5 İşleme İtiraz / Kısıtlama (Backlog — Faz 4)
 ```
 POST /api/v1/me/data-processing/object
 { "purpose": "marketing" }
 ```
-Pazarlama, AI eğitim verisi gibi opsiyonel kullanımları durdurur (Faz 4).
+Pazarlama, AI eğitim verisi gibi opsiyonel kullanımları durdurur (henüz pazarlama/analytics işleme yok — gerek doğduğunda).
 
-### 4.5 Açık Rıza Geri Çekme (Yapılacak)
+### 4.6 Açık Rıza ile Alınan Verinin Silinmesi ✅
 Exchange API key, blockchain adres gibi **açık rıza ile alınan** verilerin silinmesi:
 ```
 DELETE /api/v1/integrations/{id}
 DELETE /api/v1/wallets/{id}
 ```
-✅ Bu endpoint'ler zaten mevcut. KVKK uyumlu.
+✅ Bu endpoint'ler mevcut. KVKK uyumlu.
 
 ---
 
@@ -271,7 +285,13 @@ KVKK m.12 — veri sorumlusunun (KFinans/Mayotek) kişisel verilerin **hukuka ay
 | User izolasyonu (IDOR koruması) | Tüm endpoint'lerde `user_id == current_user.id` filtresi | Tüm fazlar |
 | E-posta doğrulama zorunlu | Login öncesi `email_verified=True` hard block; doğrulama token TTL 24 saat | Faz 2 |
 | Account enumeration koruması | `/auth/resend-verification` her zaman 202 döner | Faz 2 |
-| **Soft-delete altyapısı** | `users.deleted_at` + audit log `account.soft_delete` | **FAZ C6** |
+| **Soft-delete altyapısı** | `users.deleted_at` + audit log `account.soft_delete` (`DELETE /user/me`) | **FAZ C6** |
+| **30 gün hard-delete cron** | `_hard_delete_expired_users_job` günlük 04:00 Europe/Istanbul — `deleted_at < now-30g` fiziksel siler (FK CASCADE) | **COMP-004** |
+| **audit_logs retention purge** | `_purge_old_audit_logs_job` günlük 04:30 — 365 günden eski PII'li audit kayıtları siler (KVKK m.7) | **COMP-022** |
+| **Veri taşınabilirliği (data-export)** | `GET /user/data-export` tek JSON (rate limit 5/saat), encrypted_key hariç | **COMP-003** |
+| **18+ yaş doğrulama** | register `age_confirmed` zorunlu (KVKK 2018/482, TMK m.16); eksik → 422 | **COMP-010** |
+| **MFA — TOTP** | RFC 6238, opsiyonel; `users.totp_*`, 4 endpoint, recovery code | audit #5 |
+| **Anthropic açık rıza (KVKK m.9)** | `users.anthropic_consent_at` + `/advice/generate` 403 fallback | **AI-005** |
 | **Bağımlılık güvenlik tarama** | gitleaks + Trivy fs + pip-audit (osv strict) + npm-audit + CodeQL (Python+TS) — her PR/push + haftalık | **FAZ B4** |
 | **Container image vulnerability scan** | Trivy image scan release pipeline'ında (HIGH/CRITICAL → fail) | **FAZ B3** |
 | **Dependabot otomatik güncelleme** | pip + npm + actions + docker, haftalık gruplandırılmış PR | **FAZ A4** |
@@ -394,11 +414,11 @@ Production'a çıktıktan sonra yıllık penetration testing önerilir (TÜBİTA
 - [x] `users.deleted_at` kolonu + soft delete migration ✅ (Faz 1+2)
 - [x] `audit_logs` tablosu + 8+ sensitive eylem kayıt ✅ (FAZ C6)
 - [x] Soft-delete endpoint (`DELETE /user/me`) + audit log ✅ (FAZ C6)
-- [ ] `GET /user/data-export` endpoint (KVKK m.11/1.b — kullanıcı kendi verisini JSON+Excel olarak alır)
-- [ ] 30 gün cayma süresi sonrası hard-delete cron job
-- [ ] Anthropic için açık rıza akışı (AI tavsiye'ye ilk girişte modal — `users.anthropic_consent_at`)
-- [ ] Veri İhlali Müdahale Planı operasyonel doküman (PDF — KVKK Kurulu denetimi için)
-- [ ] DPA (Data Processing Agreement) — Anthropic, Resend, Oracle Cloud ile imzalanmalı
+- [x] `GET /user/data-export` endpoint (KVKK m.11/d — JSON, rate limit 5/saat) ✅ (COMP-003) — Excel format opsiyonel, backlog
+- [x] 30 gün cayma süresi sonrası hard-delete cron job ✅ (COMP-004, _hard_delete_expired_users_job 04:00)
+- [x] Anthropic için açık rıza akışı (`users.anthropic_consent_at` + `/advice/generate` 403) ✅ (AI-005)
+- [x] Veri İhlali Müdahale Planı operasyonel doküman ✅ ([`legal/incident-response-plan.md`](./legal/incident-response-plan.md), COMP-021)
+- [ ] DPA (Data Processing Agreement) — Anthropic, Resend, Oracle Cloud ile imzalanmalı (**backlog — compliance-notes #6**)
 
 ### Faz 4 (Uluslararası)
 - [ ] GDPR uyum (AB kullanıcıları)

@@ -17,6 +17,7 @@ Bu klasör KFinans'ın tüm teknik tasarım belgelerini içerir. Numara önekler
 | 07 | [Güvenlik Mimarisi](07-guvenlik.md) | OWASP, JWT, Fernet şifreleme, rate limiting, secrets | security-expert |
 | 08 | [KVKK ve Regülasyon Uyumluluğu](08-uyumluluk-kvkk.md) | KVKK aydınlatma, açık rıza, veri saklama, hesap silme | compliance-expert |
 | 09 | [Altyapı, Deployment ve Test](09-altyapi-test.md) | Docker Compose dev, Kubernetes prod, CI/CD, test stratejisi | devops, test-expert |
+| 10 | [Yol Haritası 2026](10-yol-haritasi-2026.md) | Rekabet analizi + ürün stratejisi + teknik yol haritası (3 kova: parite, iyileştirme, farklılaştırma) | architect |
 
 ---
 

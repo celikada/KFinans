@@ -1,6 +1,6 @@
 # KFinans Frontend
 
-Next.js 16 (App Router) + TypeScript + Tailwind CSS. Dashboard + 11 alt sayfa, MKK Excel direkt import, SVG ikonlu modern UI.
+Next.js 16 (App Router) + TypeScript + Tailwind CSS. Dashboard + 20 alt sayfa, MKK Excel direkt import, SVG ikonlu modern UI, TR/EN çok dillilik (cookie tabanlı).
 
 → Genel proje açıklaması için [üst seviye README](../README.md).
 → Detaylı frontend mimarisi için [`docs/04-frontend.md`](../docs/04-frontend.md).
@@ -29,39 +29,47 @@ Tarayıcı: http://localhost:3000
 ```
 frontend/
 ├── app/                     # Next.js App Router
-│   ├── layout.tsx           # Root layout + favicon
-│   ├── page.tsx             # Landing → /login redirect
-│   ├── login/               # Giriş sayfası
-│   ├── register/            # Kayıt + KVKK 3'lü onay
+│   ├── layout.tsx           # Root layout + I18nProvider + ConfirmDialogProvider
+│   ├── page.tsx             # Boş — proxy.ts /login veya /dashboard'a yönlendirir
+│   ├── login/               # Giriş + MFA 2. adım
+│   ├── register/            # Kayıt + KVKK onayları
 │   ├── verify-email/        # E-posta doğrulama landing
-│   ├── dashboard/           # Ana dashboard + 11 kart
+│   ├── dashboard/           # Ana dashboard + 14 kart (Portföy/Finans iki grup)
 │   │   ├── page.tsx         # Dashboard ana sayfa
+│   │   ├── layout.tsx       # Skip-link + LanguageSwitcher + nav
 │   │   ├── tefas/           # TEFAS fon portföyü + MKK import
 │   │   ├── stocks/          # Hisse senedi + MKK import
-│   │   ├── crypto/          # Kripto borsa pozisyonları
-│   │   ├── wallets/         # Blockchain cüzdan CRUD + bakiye
+│   │   ├── crypto/          # Kripto borsa pozisyonları + entegrasyon CRUD
+│   │   ├── manual-crypto/   # Manuel kripto (API'siz borsalar + asset catalog)
+│   │   ├── wallets/         # Blockchain cüzdan CRUD + şifre korumalı tam-adres export
 │   │   ├── bes/             # Bireysel emeklilik
 │   │   ├── commodities/     # Altın & gümüş (gram/BiGA/sikke)
+│   │   ├── cash/            # Nakit / banka (TRY/USD/EUR/GBP)
+│   │   ├── cash-flow/       # 12 aylık nakit akış projeksiyonu + rapor
+│   │   ├── credit-cards/    # Kredi kartları + [id] detay (ekstre/taksit)
 │   │   ├── expenses/        # Harcamalar + Excel I/O
-│   │   ├── income/          # Gelirler + Excel I/O
+│   │   ├── income/          # Gelirler + recurring + realize + Excel I/O
 │   │   ├── planned/         # Planlı ödemeler + 12 ay tahmin
 │   │   ├── budget/          # Bütçe limit + karşılaştırma
 │   │   ├── goal/            # Finansal özgürlük hedefi
-│   │   ├── history/         # Snapshot geçmişi grafikleri
-│   │   └── settings/        # Hesap, profil, şifre, kart gizleme
+│   │   ├── history/         # Snapshot geçmişi grafikleri + rapor indirme
+│   │   ├── settings/        # Hesap, USD tercih, profil, şifre, kart gizleme
+│   │   │   └── security/    # MFA / TOTP kurulum + recovery code
+│   │   └── _components/     # DashboardCard, icons, SnapshotIssuesModal
 │   ├── legal/               # KVKK, gizlilik, şartlar, çerezler
-│   └── _components/         # Paylaşılan: KFinansLogo, MayotekLogo, MkkHint, PageHeader
+│   ├── _components/         # Logos, MkkHint, PageHeader, TLValue, ConfirmDialog
+│   ├── _hooks/              # useFocusTrap
+│   └── _i18n/               # I18nProvider, LanguageSwitcher, dictionaries/{tr,en}.json
 ├── lib/
-│   ├── api.ts               # Tüm backend istek/DTO katmanı
-│   └── format.ts            # fmtTL, fmtNum, fmtDate + DASHBOARD_CARDS
+│   ├── api.ts               # Geriye-uyumlu re-export (api namespace)
+│   ├── api/                 # Domain bazlı istemci (_client + 19 domain + types)
+│   └── format.ts            # fmtTL, fmtNum, fmtDate + DASHBOARD_CARDS/GROUPS
 ├── proxy.ts                 # Next middleware (auth gate)
-├── public/
-│   ├── images/              # KFinans + Mayotek PNG (eski, SVG'ye geçildi)
-│   └── icons/               # Favicon
-├── playwright/              # E2E test'leri
-├── __tests__/               # Vitest unit
+├── public/images/           # KFinans + Mayotek PNG (eski, SVG'ye geçildi)
+├── playwright/              # E2E @smoke test'leri
+├── __tests__/               # Vitest unit + component test'leri
 ├── package.json
-└── next.config.ts
+└── next.config.ts           # output: standalone + güvenlik header'ları (HSTS/CSP)
 ```
 
 ---
@@ -74,7 +82,8 @@ npm run build            # Production build
 npm run start            # Production server
 npm run lint             # ESLint
 npm test                 # Vitest unit
-npm run test:e2e         # Playwright E2E
+npm run e2e              # Playwright E2E (npm run e2e:ui — UI mode)
+npm run smoke            # Production smoke (scripts/smoke.sh)
 npx tsc --noEmit         # Type check
 ```
 
@@ -91,9 +100,17 @@ npx tsc --noEmit         # Type check
 - **`MayotekLogo`** — Footer için kompakt versiyon
 
 ### Dashboard Kartları
-- 11 kart, hepsi inline SVG ikonlu (emoji yok)
+- 14 kart (Portföy 8 + Finans 6), hepsi inline SVG ikonlu (emoji yok)
 - Kullanıcı `/dashboard/settings` üzerinden istediği kartı gizleyebilir (localStorage `kfinans_hidden_cards`)
 - Her kart kendi backend endpoint'inden veri çeker, paralel yüklenir
+
+### Çok Dillilik (i18n)
+- `app/_i18n/` — cookie tabanlı (`kfinans-locale`) TR/EN; `useTranslation()` + `LanguageSwitcher`
+- `dictionaries/{tr,en}.json` iki dosya da senkron; sayfaların tamamı çevrilidir (reload yok)
+
+### Güvenlik (MFA)
+- `/dashboard/settings/security` — TOTP kurulum (QR + recovery code), devre dışı bırakma
+- Login MFA etkin kullanıcıda ikinci adım doğrulaması ister (`pre_mfa_token`)
 
 ### MKK Excel Import
 - **`MkkHint`** bileşeni: Bilgi notu + opsiyonel "MKK Excel'i Yükle" butonu
