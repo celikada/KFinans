@@ -3,14 +3,14 @@
 > **Amaç:** Günlük operasyon, on-call, alerting ve troubleshooting referansı.
 > **İlgili:** [`infrastructure-runbook.md`](infrastructure-runbook.md) (kurulum), [`disaster-recovery.md`](disaster-recovery.md) (DR), [`../audits/2026-05-22-master-audit.md`](../audits/2026-05-22-master-audit.md) (bekleyen iyileştirmeler)
 
-**Durum:** Aktif — `v0.1.0-rc10` Oracle K3s'e deploy edildi (rollout + smoke yeşil). Alerting (§3) hâlâ TODO.
-**Son güncelleme:** 2026-06-01 (GitLab CI/SonarQube gerçeği + §4.4 secret fix runbook)
+**Durum:** Aktif — `v0.1.0-rc16` Oracle K3s'e deploy edildi (rollout + smoke yeşil). Alerting (§3) hâlâ TODO.
+**Son güncelleme:** 2026-06-02 (son deploy rc16 + CI 7 stage scan/smoke)
 
 ## 1. Üretim Mimarisi Hızlı Bakış
 
 - **Domain:** `kfinans.app` (Namecheap, `.app` TLD HSTS preload)
 - **Cluster:** Oracle Cloud Always Free K3s `141.144.243.54` (single-node)
-- **CI/CD:** GitLab self-hosted `gitlab.192.168.3.191.nip.io` — 5 stage (lint→test→quality→build→deploy). Kaniko build → Docker Hub `celikada/kfinans-{backend,frontend}`. Deploy `when: manual` + semver tag. Son: **v0.1.0-rc10**.
+- **CI/CD:** GitLab self-hosted `gitlab.192.168.3.191.nip.io` — 7 stage (lint→test→quality→build→scan→deploy→smoke). Kaniko build → Docker Hub `celikada/kfinans-{backend,frontend}`. Trivy image gate (HIGH/CRITICAL) + curl smoke gate (semver tag). Deploy `when: manual` + semver tag. Son: **v0.1.0-rc16**.
 - **Quality gate:** self-hosted SonarQube `sonar.192.168.3.191.nip.io` (BLOCKING — `qualitygate.wait=true`)
 - **GitHub:** salt-mirror (develop/main/tags); Actions flag #4360519 nedeniyle 0 run
 - **Monitoring:** Sentry + OTel opt-in (DSN/endpoint env)

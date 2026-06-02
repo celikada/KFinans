@@ -88,7 +88,7 @@ curl -sk https://kfinans.app/health
 3. **Cluster state'i Git'ten apply et:** `kubectl apply -k k8s/` — namespace, configmap, **sealed-secrets.yaml**, postgres, ingress vb. hepsi repodadır. (Not: GitLab `deploy-production` job'u sadece `set image` yapar, ilk bootstrap'i değil — full cluster'ı **manuel `apply -k`** ile kur.)
 4. SealedSecret controller master key'i Bitwarden/USB'den restore et → `sealed-secrets.yaml` decrypt olur (bkz. §3.5)
 5. Object Storage'dan backup indir + age decrypt + restore (§3.3 adımları)
-6. Doğru image tag'ini canlıya al: `kubectl set image ...=:vX.Y.Z` (son: `v0.1.0-rc10`)
+6. Doğru image tag'ini canlıya al: `kubectl set image ...=:vX.Y.Z` (son: `v0.1.0-rc16`)
 7. DNS A kaydı yeni VM IP'sine güncelle (infrastructure-runbook §1.4)
 8. Verify (HEALTH 200 + login + DB count)
 

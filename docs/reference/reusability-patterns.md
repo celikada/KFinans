@@ -3,7 +3,7 @@
 > **Amaç:** Yeni geliştiriciler ve yeni feature için kullanılabilir kod pattern'leri kataloğu.
 > **İlgili:** [`../audits/2026-05-22-master-audit.md`](../audits/2026-05-22-master-audit.md) §2 Yeniden Kullanılabilirlik
 
-**Durum:** Taslak — pattern listesi mevcut + eksik abstraction backlog. Sprint 3'te genişler.
+**Durum:** Taslak — pattern listesi mevcut + eksik abstraction backlog. §2.1 (AsyncTTLCache) ve §2.7 (lib/api split) tamamlandı; geri kalan backlog Sprint 3'te genişler.
 
 ## 1. Mevcut Reusable Pattern'ler
 
@@ -42,7 +42,7 @@ class AssetData:
 from app.core.masking import mask_email, hash_email, mask_address
 mask_email("celikada@gmail.com")  # → "c******a@gmail.com"
 hash_email("celikada@gmail.com")  # → "a1b2c3d4" (SHA-256 first 8)
-mask_address("0xABC...XYZ")       # → "0xABCD...WXYZ" (ilk 6 + son 4)
+mask_address("xpub6CUGRUonZSQ4TWtTMmz")  # → "xpub6C...tTMm" (ilk 6 + "..." + son 4)
 ```
 
 **Kullanım:** Logger PII filter, audit log extra, JSON response serializer.
@@ -119,24 +119,28 @@ const { t } = useTranslation();
 return <h1>{t("auth.loginTitle")}</h1>;
 ```
 
-Cookie-based, sayfa reload yok.
+Cookie-based, sayfa reload yok. EN çeviri tamamlandı (`tr.json` = `en.json` 953 anahtar, 53 bileşen).
+
+### 1.11 `AsyncTTLCache` single-flight cache (eski backlog → tamamlandı)
+
+`app/core/cache.py::AsyncTTLCache[V]` — TTL + single-flight dedup. 5 blockchain servisi
+(`avalanche`, `bitcoin`, `litecoin`, `polkadot`, `solana`) kullanır; eski kopyala-yapıştır
+`_BALANCE_CACHE` + `_INFLIGHT` global'leri kaldırıldı.
+
+```python
+from app.core.cache import AsyncTTLCache
+_pchain_cache: AsyncTTLCache[dict] = AsyncTTLCache(ttl_sec=600)
+data = await _pchain_cache.get_or_compute(address, self._fetch_balances)
+```
 
 ---
 
 ## 2. Eksik Abstraction'lar (Backlog — Sprint 3+)
 
-### 2.1 `AsyncTTLCache` (~200 satır dedup)
+### 2.1 ~~`AsyncTTLCache`~~ — TAMAMLANDI (bkz. §1.11)
 
-5 blockchain servisinde (`bitcoin`, `solana`, `polkadot`, `litecoin`, `avalanche`) `_BALANCE_CACHE` + `_INFLIGHT` + `_cache_lock` global'leri birebir kopyalanmış.
-
-**Önerilen:**
-```python
-# app/core/cache.py
-class AsyncTTLCache:
-    def __init__(self, ttl_seconds: int): ...
-    async def get_or_fetch(self, key: str, fetcher: Callable) -> Any:
-        """Single-flight pattern + TTL cache"""
-```
+`app/core/cache.py::AsyncTTLCache[V]` eklendi; 5 blockchain servisi adapte edildi. Bu backlog
+maddesi kapandı.
 
 ### 2.2 `EVMService` + `BinanceCompatibleService` base'leri
 
@@ -181,18 +185,12 @@ Tailwind class duplikasyonu 68 yerde:
 <EmptyState icon="..." message="..." />
 ```
 
-### 2.7 `lib/api.ts` modüler split (1511 satır → ~150 satır × 10)
+### 2.7 ~~`lib/api.ts` modüler split~~ — TAMAMLANDI
 
-```
-lib/api/
-├── client.ts        # request() + auth + 401 redirect
-├── auth.ts          # login, register, mfa
-├── portfolio.ts     # snapshot, breakdown, wallets
-├── tefas.ts
-├── stocks.ts
-├── expenses.ts
-├── ...
-```
+`lib/api/` artık 21 modüle bölündü (`_client.ts` + `auth.ts` + `portfolio.ts` + `tefas.ts` +
+`stocks.ts` + `expenses.ts` + `wallets.ts` + `manualCrypto.ts` + `creditCards.ts` + `cashFlow.ts`
++ `reports.ts` + `types.ts` vb.). Eski `lib/api.ts` re-export shim olarak korunur (geriye dönük
+import uyumu). Bu backlog maddesi kapandı.
 
 ### 2.8 `tests/_mocks/external.py` factory'ler
 

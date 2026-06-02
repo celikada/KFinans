@@ -2,7 +2,7 @@
 
 > **Amaç:** Production altyapısının (DNS, email, K3s, sertifika) kurulum kayıtları, periyodik bakım işleri ve acil durum komutları. Onboarding ve operasyonel referans olarak korunur.
 
-**Son güncelleme:** 2026-05-14
+**Son güncelleme:** 2026-06-02
 
 ---
 
@@ -378,10 +378,12 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 ## 6. Bağlantılı Dosyalar
 
 - `.credentials.local.md` — gerçek secret değerleri (gitignore'da, asla commit edilmez)
-- `docs/production-deploy-checklist.md` — ilk prod deploy checklist
-- `docs/09-altyapi-test.md` — altyapı + CI/CD stratejisi
+- [`production-deploy-checklist.md`](production-deploy-checklist.md) — ilk prod deploy checklist
+- [`operations-playbook.md`](operations-playbook.md) — günlük operasyon + troubleshooting
+- [`disaster-recovery.md`](disaster-recovery.md) — DR prosedürü + backup inventory
+- `../09-altyapi-test.md` — altyapı + CI/CD stratejisi
 - `k8s/` — Kubernetes manifest'leri (namespace, configmap, secrets.example, **sealed-secrets.yaml**, postgres, postgres-cert, backend, frontend, ingress, backup-cronjob, kustomization)
-- `.gitlab-ci.yml` — **primary CI/CD**: lint → test → quality (blocking SonarQube) → build (Kaniko → Docker Hub) → deploy-production (semver tag, `when: manual`)
+- `.gitlab-ci.yml` — **primary CI/CD** (7 stage): lint → test → quality (blocking SonarQube) → build (Kaniko → Docker Hub) → scan (Trivy image HIGH/CRITICAL) → deploy-production (semver tag, `when: manual`) → smoke (curl gate)
 - `.github/workflows/release.yml` — **çalışmıyor** (GitHub flag #4360519); repoda kalıyor ama 0 run
 
 ---
@@ -392,3 +394,4 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 |-------|-----------|
 | 2026-05-14 | İlk versiyon: DNS (A `@` + CNAME `www` + Resend 4 TXT/MX), Resend domain doğrulama, bakım periyodikleri, acil durum komutları |
 | 2026-06-01 | §2.4 yeniden yazıldı: secret fix `kubectl patch --type=merge` (tek key ezme dersi) + SealedSecret kalıcılık (`kubeseal --raw --scope strict`) iki aşamalı runbook. §2.5 Fernet rotation step 3 patch-merge'e çevrildi. §6 GitLab CI referansları. RESEND_API_KEY canlı fix retrospektifi. |
+| 2026-06-02 | Doğruluk denetimi: §6 bağlantılı dosya yolları operations/ klasörüne düzeltildi (playbook + DR eklendi); GitLab CI 7 stage (scan + smoke) yansıtıldı. Header "Son güncelleme" tarihi düzeltildi. |

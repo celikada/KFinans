@@ -1,8 +1,8 @@
 # KFinans — Sistem Tasarım Dokümanı
 
-**Versiyon:** 4.3
-**Tarih:** 2026-05-10
-**Durum:** Aktif geliştirme — Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme + **kredi kartları (kart + ekstre + taksit) + nakit/banka + yıllık nakit akış projeksiyonu (xlsx/pdf rapor) + manuel kripto (linked_source) + recurring income realize + snapshot health/usd_try_rate + audit_logs (FAZ C6)** tamamlandı. **FAZ H devam ediyor**: 0 critical, 21 high açık (SEC-001 ✓, SEC-002 ✓, SEC-004 ✓, DBA-001 ✓, DBA-003 ✓, DBA-004 ✓, FIN-004 ✓ kapatildi). AI tavsiye motoru aktif (AI-003 + AI-008 SPK uyumlu), kredi sistemi + iyzico, KVKK endpoint'leri hâlâ açık.
+**Versiyon:** 4.4
+**Tarih:** 2026-06-02
+**Durum:** **Production canlı** (`v0.1.0-rc16`, Oracle K3s, `https://kfinans.app`). Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme + **kredi kartları (kart + ekstre + taksit) + nakit/banka + yıllık nakit akış projeksiyonu (xlsx/pdf rapor) + manuel kripto (linked_source) + recurring income realize + snapshot health/usd_try_rate + audit_logs (FAZ C6) + AI tavsiye motoru aktif (advisor.py — AI-003 + AI-008 SPK uyumlu, kredi tüketimli) + 10 zincir blockchain (Bitcoin/Solana/Cardano/Algorand/Polkadot/Litecoin eklendi) + ERC-20 token discovery + MFA TOTP + i18n (TR/EN)** tamamlandı. Faz I güvenlik audit'i (11/11 kritik fix) kapatıldı. **Hâlâ açık (backlog):** kredi sistemi tam implementasyonu (`credit_transactions` tablosu) + iyzico ödeme entegrasyonu, bazı KVKK placeholder metinleri.
 **Üretici:** Mayotek
 
 ---
@@ -85,14 +85,16 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 ### 3.1 Backend
 - Python 3.12 + FastAPI (async-first)
 - PostgreSQL 16 + SQLAlchemy 2.0 (asyncpg driver) + Alembic
-- APScheduler (Pazar 23:00 haftalık snapshot)
-- Anthropic Python SDK (Claude API tavsiye motoru)
-- CCXT (Binance, iCrypex), web3.py (Sonic, Avalanche, Ethereum), httpx (TEFAS, Yahoo Finance)
-- slowapi (rate limiting), Fernet (API key encryption), bcrypt (şifre hash), python-jose (JWT)
+- APScheduler (4 cron job, Europe/Istanbul): Pazar 23:00 haftalık snapshot, 03:00 revoked_tokens cleanup, 04:00 hard-delete (KVKK), 04:30 audit_logs purge — multi-replica'da `pg_try_advisory_lock` leader election
+- Anthropic Python SDK (Claude API tavsiye motoru — aktif, kredi tüketimli)
+- CCXT (Binance, iCrypex, BinanceTR), web3.py (Ethereum, Sonic, Avalanche C), httpx (Avalanche P, Bitcoin, Solana, Cardano, Algorand, Litecoin, TEFAS, Yahoo Finance), substrate-interface (Polkadot), bip-utils (xpub HD)
+- slowapi (rate limiting), Fernet/MultiFernet (API key + xpub encryption + rotation), bcrypt (şifre hash + TOTP recovery code), python-jose (JWT + refresh rotation), pyotp + qrcode (MFA TOTP), zxcvbn (parola gücü)
+- Sentry + OpenTelemetry (opt-in observability)
 
 ### 3.2 Frontend
-- Next.js 16.2.4 (App Router, Turbopack), React 19, TypeScript (strict mode), Tailwind CSS v4
+- Next.js 16.2.6 (App Router, Turbopack), React 19, TypeScript (strict mode), Tailwind CSS v4
 - `proxy.ts` (Next.js 16 yeni adlandırma — `middleware.ts` deprecated)
+- i18n: cookie tabanlı TR/EN dil desteği (`_i18n/I18nProvider`, `useTranslation()`)
 
 ### 3.3 Mobile (Faz 4)
 - Flutter, http, flutter_secure_storage, riverpod
@@ -108,10 +110,10 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 
 ### 3.4 Altyapı
 - Docker + Docker Compose (geliştirme — bilinçli teknik borç)
-- Kubernetes (production hedef; namespace: `kfinans`)
-- Tilt veya Skaffold (production'a geçişte dev loop için)
-- GitHub Actions (CI/CD), GHCR (container registry)
-- Helm (bitnami/postgresql), nginx-ingress, cert-manager
+- Kubernetes / K3s (production canlı — Oracle Cloud Always Free VM, namespace: `kfinans`)
+- **CI/CD primary = GitLab CI** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test → quality (self-hosted SonarQube BLOCKING gate) → build (Docker Hub `celikada/kfinans-*`) → scan (Trivy) → deploy → smoke. `.github/workflows/*` dormant (GitHub hesabı flagged — Actions çalışmaz)
+- Kalite: self-hosted SonarQube (`projectKey=KFinans`), SonarCloud DEĞİL
+- Helm (bitnami/postgresql), nginx-ingress, cert-manager (Let's Encrypt)
 
 ---
 
@@ -123,11 +125,17 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 | Hisse (BIST/ABD/UK) | Yahoo Finance | httpx (`v8/finance/chart/{ticker}`) — auth gerekmez |
 | Kripto Spot | Binance, iCrypex | CCXT |
 | Kripto TR Earn | Binance TR | session token (cid cookie) — geçici çözüm |
+| Manuel kripto (API'siz borsalar) | Kullanıcı girişi | `manual_crypto_holdings`; anlık fiyat Binance USDT + CoinGecko fallback |
 | Sonic | EVM (RPC) | web3.py + SFC staking contract (Semaphore(20)) |
-| Avalanche P-Chain | platform.getStake | httpx (REST API) |
-| Avalanche C-Chain | EVM (RPC) | web3.py |
-| Ethereum | EVM (RPC) | web3.py + Etherscan |
-| BES | Manuel giriş ✅ (Faz 2) | Kullanıcı plan adı + toplam ₺ girer; idempotent PUT + Excel import/export |
+| Avalanche P-Chain | Glacier REST → platform.getBalance/getStake | httpx (10 dk cache + single-flight) |
+| Avalanche C-Chain | EVM (RPC) | web3.py (multi-RPC fallback) + curated ERC-20 |
+| Ethereum | EVM (RPC) | web3.py (multi-RPC fallback) + Ethplorer ERC-20 discovery |
+| Bitcoin | mempool.space public API | httpx + bip-utils (xpub HD) + 10 dk cache |
+| Solana | JSON-RPC | httpx (`getBalance` + `getProgramAccounts` Stake filter) |
+| Cardano / Algorand / Polkadot / Litecoin | Public REST API | httpx / substrate-interface |
+| Kıymetli madenler | TCMB + Yahoo Finance | TCMB USD/TRY + XAU=X/XAG=X (GC=F/SI=F fallback) |
+| BES | Manuel giriş ✅ (Faz 2) | Kullanıcı plan adı + 4 metric girer; idempotent PUT + Excel import/export |
+| Nakit / banka | Manuel giriş ✅ (Faz 3) | `cash_holdings`; TCMB döviz kuruyla TL'ye çevrilir |
 
 > Blockchain entegrasyonlarında **özel anahtar asla sisteme girmez** — yalnızca public adres saklanır.
 > Detaylı entegrasyon mantığı: [mimari.md](./mimari.md#7-veri-kaynaklari-ve-servisler)
@@ -165,14 +173,16 @@ Kubernetes Ingress (nginx)
 - **Kod dili:** İngilizce (identifier, comment, log)
 - **Secrets:** Asla koda yazılmaz; `.env` üzerinden `pydantic-settings` ile okunur
 - **Migration:** Tüm DB değişiklikleri Alembic üzerinden
-- **PR akışı:** `feature/*` → `develop` → `release/*` → `main` (korumalı)
-- **CI:** Test + lint geçmeden merge yapılamaz
+- **PR akışı:** `feature/*` → `develop` → `release/*` → `main` (korumalı; GitLab MR primary, sadece squash merge)
+- **CI:** GitLab CI (`.gitlab-ci.yml`) — lint + test + SonarQube quality gate geçmeden merge yapılamaz (BLOCKING)
 
 > Git Flow detayları: [altyapi-test.md](./altyapi-test.md#git-flow)
 
 ---
 
-## 7. Güncel Durum (2026-05-10)
+## 7. Güncel Durum (2026-06-02)
+
+> **Özet (2026-06-02):** Production **canlı** — `v0.1.0-rc16` Oracle K3s'te, `https://kfinans.app` sağlıklı (`/health` → `{"status":"ok"}`). CI/CD primary GitLab CI'ya taşındı (self-hosted SonarQube BLOCKING gate); GitHub Actions dormant kaldı (hesap flagged). Faz I güvenlik audit'i 11/11 kritik fix ile kapatıldı (MFA TOTP, MultiFernet rotation, DB TLS, NetworkPolicy, SealedSecrets, zxcvbn+HIBP, PII mask, age backup, etcd encryption). Aşağıdaki FAZ A-F notları tarihsel kayıt; GitHub Actions / SonarCloud / "deploy bekliyor" ifadeleri bayat — güncel CI/deploy mimarisi için CLAUDE.md ve `docs/09-altyapi-test.md`'ye bakın.
 
 ### ✅ FAZ A — OSS Hijyeni + Public Repo Hazırlığı (2026-05-06)
 - Repo public yapıldı (https://github.com/celikada/KFinans)
@@ -214,18 +224,14 @@ Branch protection: `main` PR şart + lineer history + force-push kapalı; `devel
 - README.md "Geri Bildirim" bölümü (6 kategori tablosu)
 - Frontend `/dashboard/settings` "Geri Bildirim" bölümü (3 kart link: Bug, Feature, Discussion + private vulnerability link)
 
-### 🔴 Bekleyen — GitHub Hesap Flag (Ticket #4360519)
-2026-05-06 yoğun aktivite (repo public + branch protection + 8 commit) GitHub anti-spam'i tetikledi. Sophia (GitHub Support) yanıtına manuel inceleme cevabı gönderildi (2026-05-06). Yanıt bekleniyor.
+### 🟡 GitHub Hesap Flag (Ticket #4360519) — çözüm GitLab'a geçişle aşıldı
+2026-05-06 yoğun aktivite GitHub anti-spam'i tetikledi (hesap flagged). Çözüm beklenmek yerine **CI/CD ve VCS primary self-hosted GitLab'a taşındı** (`http://gitlab.192.168.3.191.nip.io/root/KFinans`); GitHub yalnızca public mirror. SonarCloud yerine **self-hosted SonarQube** (`projectKey=KFinans`) kullanılıyor. GitHub Actions dormant.
 
-**Etkilenen:**
-- SonarCloud OAuth login bloklu → workflow'lar `ENABLE_SONAR=false` ile skip ediliyor
-- Anonim git protokol erişimi 401/404 → Oracle VM'den `git clone` engelli → FAZ D1 (production deploy) bloke
-
-### ⏳ Sıradaki — Production Deploy (FAZ D1-D3)
-Flag çözülünce:
-1. **D1:** Oracle VM (141.144.243.54) selektif temizlik — portföy namespace sil, K3s + Traefik + cert-manager olduğu gibi koru, ClusterIssuer'ı düzelt (admin@example.com → celikada@gmail.com), kfinans namespace + secret'lar oluştur
-2. **D2:** İlk release tag (`v1.0.0`) → release.yml otomatik build + push + deploy + smoke test
-3. **D3:** Namecheap 2FA + Whois Privacy aktif et (production canlı olduktan sonra)
+### ✅ Production Deploy (tamamlandı)
+- Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + nginx-ingress + cert-manager (Let's Encrypt) canlı
+- GitLab CI pipeline: build (Kaniko → Docker Hub `celikada/kfinans-*`) → Trivy image scan → manuel deploy → post-deploy smoke gate
+- Güncel production tag: **`v0.1.0-rc16`** (`/health` → `{"status":"ok"}`)
+- `kfinans.app` (.app TLD HSTS preload listesinde — tarayıcı zorunlu HTTPS)
 
 ### 📚 Sıradaki — Kullanıcı Dokümanları (FAZ E)
 Production deploy bittikten sonra:
@@ -367,30 +373,19 @@ Production deploy bittikten sonra:
 - [x] **Kullanıcı Hesap Yönetimi & Ayarlar** — `GET /user/me`, `PUT /user/profile` (risk profili), `PUT /user/password` (mevcut şifre doğrulamalı), `DELETE /user/me` (soft-delete, `users.deleted_at` set). `/dashboard/settings` sayfası 5 bölüm: hesap özeti, risk profili, şifre değiştir, dashboard kart gizleme (localStorage `kfinans_hidden_cards`), hesap silme.
 - [x] **Modern UI Yenileme** — Emoji ikonlar inline SVG'lere dönüştürüldü; KFinans + Mayotek logoları SVG bileşenleri (`Logos.tsx`); 11 dashboard kartı `DASHBOARD_CARDS` üzerinden render ediliyor; container `max-w-5xl`, satırlar `flex-wrap` ile mobile uyumlu; Stocks + TEFAS form bileşenleri yeniden düzenlendi.
 
-**Açık kalan:**
-- [ ] AI tavsiye motoru aktivasyonu (`/advice/generate` — kredi tüketimli)
+**Tamamlanan (2026-05/06 turlarında — eskiden "açık kalan"):**
+- [x] AI tavsiye motoru aktivasyonu (`/advice/generate` — kredi tüketimli, SPK uyumlu disclaimer; AI-003 + AI-008)
+- [x] KVKK endpoint'leri: `/user/me` DELETE soft-delete + hard-delete cron (04:00, COMP-004) + audit_logs purge cron (04:30, COMP-022) + veri dışa aktarımı
+- [x] `audit_logs` tablosu (FAZ C6) — 8 kritik eyleme hook + IDOR korumalı `GET /audit-logs`
+- [x] Redis cache desteği — `settings.redis_url` set ise slowapi rate limit multi-replica güvenli
+- [x] **Bitcoin xpub Fernet şifreleme** (FAZ C1) — `address_encrypted` + `address_fingerprint`, migration `b3c4d5e6f7a8`
+- [x] Snapshot sağlık uyarıları (`portfolio_snapshots.health_issues` JSONB) + çift para birimi (`usd_try_rate`) + History TL/USD toggle (migration `e4f5a6b7c8d9`)
+
+**Hâlâ açık (backlog — bkz. `docs/audits/2026-05-22-master-audit.md`):**
 - [ ] Harcama AI analizi (`/expenses/analysis/generate` — 3 kredi)
-- [ ] Kredi sistemi tam implementasyonu + iyzico sandbox (`credit_transactions` tablosu, idempotency, webhook)
-- [ ] KVKK endpoint'leri (`/me/data-export` — `/user/me` DELETE soft-delete tarafı tamam, hard-delete cron eksik)
-- [ ] `audit_logs` tablosu
-- [ ] Cache katmanı (Redis) — USD/TRY, TEFAS, Yahoo
+- [ ] Kredi sistemi tam implementasyonu + iyzico sandbox (`credit_transactions` tablosu, idempotency, webhook) — kodda henüz YOK
 - [ ] Background job kuyruğu (Celery/RQ)
-- [ ] **Bitcoin xpub/zpub Fernet şifreleme** — `wallet_addresses.address` kolonu Bitcoin için xpub içerebiliyor. xpub bilen biri kullanıcının tüm işlem geçmişini ve gelecekteki adreslerini görebilir (private key değil ama gizlilik açığı). Production'da `address` kolonunu (ya da Bitcoin chain için ayrı `encrypted_xpub` kolonu) `encrypt_secret`/`decrypt_secret` ile sarmak gerekli — borsa API key'lerinde kullanılan Fernet pattern (`app/core/security.py`).
-
-#### Sonraki Sprint Öncelikleri (2026-05-04)
-
-- [ ] **Snapshot Sağlık Uyarıları + Hata Kayıtları**
-  - Snapshot öncesi her kaynak için ön kontrol; 0 değer veya hata varsa kullanıcıya onay popup'ı
-  - Onaylanırsa snapshot yine alınır + `portfolio_snapshots.health_issues` (JSONB veya TEXT[] nullable) kolonuna problemler kaydedilir
-  - History sayfasında problemli snapshot'lar `⚠` rozetli; hover/tıklayınca popup → mesajlar
-- [ ] **Snapshot Çift Para Birimi Kaydı**
-  - `portfolio_snapshots.usd_try_rate NUMERIC(18,6)` kolonu — snapshot anındaki TCMB USD/TRY kuru kaydedilsin
-  - Geçmiş USD karşılığı = `total_value_tl / snapshot.usd_try_rate` (anlık kur değil, kayıt anındaki kur)
-  - Sebep: TL enflasyonu, USD bazında portföy büyümesi yanıltıcı görünmesin
-- [ ] **History Grafiği TL/USD Toggle**
-  - `/dashboard/history` sayfasına segmented control: `[TL] [USD]`
-  - USD seçilince Y ekseni `$` formatına geçer, her snapshot için `tl / saved_rate` ile dönüştürür
-  - Settings'teki "USD karşılığı göster" toggle'ından bağımsız; history özelinde grafik para birimi seçimi
+- [ ] Bazı KVKK yasal metin placeholder'ları (ticari ünvan, KEP, tebligat adresi)
   - Amaç: TL eğimi enflasyonlu, USD eğimi gerçek satın alma gücü değişimini gösterir
 
 ---

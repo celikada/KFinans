@@ -1,7 +1,7 @@
 # Frontend Mimarisi
 
 **Sahip ajan:** `frontend-expert`
-**Stack:** Next.js 16.2.4 (App Router, Turbopack) + React 19 + TypeScript (strict) + Tailwind CSS v4
+**Stack:** Next.js 16.2.6 (App Router, Turbopack) + React 19 + TypeScript (strict) + Tailwind CSS v4
 
 ---
 
@@ -14,7 +14,7 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Giriş (üzerinde "Kayıt ol" linki) | `/login` | ✅ Aktif |
 | Kayıt (form + risk profili dropdown) | `/register` | ✅ Aktif |
 | E-posta doğrulama (token okuma) | `/verify-email` | ✅ Aktif |
-| Ana Dashboard (15 kart, kullanıcı tarafından gizlenebilir; Finans/Portföy iki grup + üstte Toplam Portföy ve Finans Net Bakiye özet kartları) | `/dashboard` | ✅ Aktif |
+| Ana Dashboard (14 kart, kullanıcı tarafından gizlenebilir; Finans/Portföy iki grup + üstte Toplam Portföy ve Finans Net Bakiye özet kartları) | `/dashboard` | ✅ Aktif |
 | Snapshot geçmişi (recharts line chart x2) | `/dashboard/history` | ✅ Aktif |
 | Kripto pozisyonları (borsa filtresi + sıralama) | `/dashboard/crypto` | ✅ Aktif |
 | Manuel kripto (API'siz borsalar — BinanceTR/iCrypex/BTCTurk/Paribu vs. + asset catalog autocomplete + 3 fiyat modu: auto/manual/linked) | `/dashboard/manual-crypto` | ✅ Aktif (Faz 3) |
@@ -32,7 +32,8 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 | Kredi kartları (kart + ekstre + taksit nested CRUD; çift sayım kuralı) | `/dashboard/credit-cards` | ✅ Aktif (Faz 3) |
 | Kredi kartı detayı (kart bazlı statement + installment yönetimi) | `/dashboard/credit-cards/[id]` | ✅ Aktif (Faz 3) |
 | Finansal hedef (pasif gelir hedefi + USD/EUR/GBP/TRY) | `/dashboard/goal` | ✅ Aktif (Faz 3) |
-| Ayarlar (hesap özeti + risk + şifre + kart gizleme + hesap silme) | `/dashboard/settings` | ✅ Aktif (Faz 3) |
+| Ayarlar (hesap özeti + risk + şifre + kart gizleme + USD gösterimi + hesap silme) | `/dashboard/settings` | ✅ Aktif (Faz 3) |
+| Güvenlik ayarları (MFA/TOTP kurulum + QR + recovery code + devre dışı bırakma) | `/dashboard/settings/security` | ✅ Aktif |
 
 ### Auth Davranışı (Korunmalı)
 - Token yoksa `/dashboard/*` → `/login`'e redirect
@@ -51,9 +52,11 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Loading state + başarı/hata toast'u; başarıda mevcut özet kartları yeniden çekilir
 
 ### Dashboard Yenileme (Faz 3 ile Genişletildi)
-- **11 kart yapısı** (`DASHBOARD_CARDS` `lib/format.ts` üzerinden render edilir): TEFAS, Kripto, Hisse Senedi, Blockchain Cüzdanlar, BES, Harcamalar (bu ay), Planlı Ödemeler (bu yıl), Gelirler (bu ay), Finansal Hedef, Altın & Gümüş, Bütçe Takibi
+- **14 kart, iki grup yapısı** (`DASHBOARD_CARDS` + `DASHBOARD_GROUPS` `lib/format.ts` üzerinden render edilir):
+  - **Portföy (8):** BES, TEFAS Fonları, Hisse Senedi, Blockchain Cüzdanlar, Kripto, Manuel Kripto (API'siz), Altın & Gümüş, Nakit / Banka
+  - **Finans (6):** Kredi Kartları, Gelirler, Harcamalar, Planlı Harcamalar, Bütçe Takibi, Finansal Hedef
 - Her kartta **top 3 detay** (en yüksek 3 varlık ad + TL) ve özet sayaç (fon sayısı, plan sayısı vb.)
-- Üstte **"Toplam: X ₺"** (yatırım varlık kartlarının toplamı; harcama/gelir/bütçe sayaçları dahil değil)
+- Üstte iki özet kartı: **"Toplam Portföy"** (Portföy grubu varlık kartlarının toplamı) + **"Finans Net Bakiye"**
 - Sağ üstte **"Snapshot al"** + **"Geçmiş"** + **"Ayarlar"** butonları
 - **Modern UI:** emoji ikonlar inline SVG'lere çevrildi; container `max-w-5xl`; satırlar `flex-wrap` ile mobile uyumlu
 - **Logo bileşenleri:** `_components/Logos.tsx` `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo` (PNG dosyaları arşivlik kaldı)
@@ -112,12 +115,20 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - Dashboard kartı: violet tema, bu yıl toplam tutar
 
 **`/dashboard/settings` — Ayarlar**
-- 5 bölüm:
+- Bölümler:
   1. **Hesap özeti:** email, oluşturma tarihi, kredi bakiyesi, doğrulama durumu (`GET /user/me`)
-  2. **Risk profili:** dropdown + kaydet (`PUT /user/profile`)
-  3. **Şifre değiştir:** mevcut + yeni + tekrar (`PUT /user/password`)
-  4. **Dashboard kart gizleme:** 11 kart için checkbox toggle (`localStorage.kfinans_hidden_cards`)
-  5. **Hesap silme:** confirm dialog + `DELETE /user/me` (soft-delete) → `clearAuth()` + `/login` yönlendirme
+  2. **Genel tercihler:** USD karşılığı göster toggle (`localStorage.kfinans_show_usd`)
+  3. **Risk profili:** dropdown + kaydet (`PUT /user/profile`)
+  4. **Şifre değiştir:** mevcut + yeni + tekrar (`PUT /user/password`)
+  5. **Güvenlik:** `/dashboard/settings/security` (MFA/TOTP) sayfasına link
+  6. **Dashboard kart gizleme:** 14 kart için checkbox toggle (`localStorage.kfinans_hidden_cards`)
+  7. **Hesap silme:** confirm dialog + `DELETE /user/me` (soft-delete) → `clearAuth()` + `/login` yönlendirme
+
+**`/dashboard/settings/security` — Güvenlik (MFA / TOTP)**
+- MFA durumu (`GET /mfa/status`) → etkin değilse "Kur" akışı, etkinse "Devre dışı bırak"
+- **Kurulum:** `POST /mfa/setup` (secret + otpauth URI + QR PNG dataURL) → QR gösterimi → ilk TOTP kodla `POST /mfa/enable` → **10 recovery code tek seferlik** gösterilir (kullanıcı kaydeder)
+- **Devre dışı bırakma:** TOTP veya recovery kodu ile `POST /mfa/disable`
+- Login flow: MFA etkin kullanıcı `/login` sonrası `pre_mfa_token` + TOTP kodu ile ikinci adım doğrulaması yapar
 
 ### Wallets Sayfası — 10 Zincir (Yeni)
 
@@ -150,11 +161,24 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 - `Logos.tsx` — `KFinansLogo size={"sm"|"md"|"lg"|"xl"}` + `MayotekLogo` (inline SVG)
 - `MkkHint.tsx` — MKK e-Yatırımcı bilgi kartı + opsiyonel `onUpload?: (file: File) => Promise<void>` prop ile MKK xls upload butonu
 - `PageHeader.tsx` — sayfa başlığı + opsiyonel açıklama
+- `TLValue.tsx` — `<TLValue tl={n} />` TL gösterimi + opsiyonel USD karşılığı (`useUsdRate()` 5 dk localStorage cache; `kfinans-show-usd-changed` event)
+- `ConfirmDialog.tsx` — `ConfirmDialogProvider` (root layout) + `useConfirm()` async hook; `role="alertdialog"` + focus trap + Esc + `destructive` flag (native `window.confirm` yerine)
+
+### Dashboard Bileşenleri (`app/dashboard/_components/`)
+- `DashboardCard.tsx` — tek dashboard kartı (ikon + başlık + top 3 detay + sayaç); `useTranslation` ile i18n
+- `icons.tsx` — kart inline SVG ikon seti
+- `SnapshotIssuesModal.tsx` — snapshot health `issues` popup'ı (`role="dialog"` + focus trap)
+
+### Çok Dillilik Bileşenleri (`app/_i18n/`)
+- `I18nProvider.tsx` — Context + `useTranslation()`; `LanguageSwitcher.tsx` — TR/EN toggle (detay §8.5)
+
+### Hook (`app/_hooks/`)
+- `useFocusTrap.ts` — modal Tab döngüsü + Esc kapatma + focus restore
 
 ### `lib/format.ts` (Genişletildi)
 - `fmtTL`, `fmtNum`, `fmtDate`, `shortAddr` formatlama yardımcıları
 - `INPUT_CLS`, `TOOLBAR_BTN_CLS` paylaşılan Tailwind sınıfları
-- `DASHBOARD_CARDS` (11 kart × `{id, label}`) + `DashboardCardId` type union
+- `DASHBOARD_CARDS` (14 kart × `{id, label, group}`) + `DASHBOARD_GROUPS` (portfolio/finance) + `DashboardCardId`/`DashboardGroup` type union
 - `getHiddenCards()` / `saveHiddenCards()` localStorage helper'ları (`kfinans_hidden_cards` anahtarı)
 
 ---
@@ -164,63 +188,81 @@ Aşağıdaki ekranlar **fonksiyonel gereksinim** olarak kabul edilir — product
 ```
 frontend/
 ├── app/                          # Next.js App Router
-│   ├── layout.tsx                # Root layout (Türkçe locale)
+│   ├── layout.tsx                # Root layout (<html lang>, I18nProvider + ConfirmDialogProvider mount)
+│   ├── page.tsx                  # Boş — proxy.ts /login veya /dashboard'a yönlendirir
 │   ├── globals.css               # Tailwind import + CSS variables
-│   ├── _components/              # Paylaşılan bileşenler (Faz 3)
+│   ├── _components/              # Paylaşılan bileşenler
 │   │   ├── Logos.tsx             # KFinansLogo (4 size) + MayotekLogo (inline SVG)
 │   │   ├── MkkHint.tsx           # MKK e-Yatırımcı info kart + opsiyonel upload butonu
-│   │   └── PageHeader.tsx        # Sayfa başlığı + açıklama
-│   ├── login/page.tsx            # Giriş ("Kayıt ol" linki + 403 doğrulama mesajı)
-│   ├── register/page.tsx         # Kayıt + risk profili + "tekrar gönder"
+│   │   ├── PageHeader.tsx        # Sayfa başlığı + açıklama
+│   │   ├── TLValue.tsx           # <TLValue tl={n} /> — USD karşılığı toggle (useUsdRate hook)
+│   │   └── ConfirmDialog.tsx     # ConfirmDialogProvider + useConfirm() (role="alertdialog" + focus trap)
+│   ├── _hooks/
+│   │   └── useFocusTrap.ts       # Modal Tab döngüsü + Esc + focus restore (A11Y-001)
+│   ├── _i18n/                    # Cookie tabanlı TR/EN dil altyapısı (i18n-001/002)
+│   │   ├── I18nProvider.tsx      # React Context + useTranslation() + cookie kfinans-locale
+│   │   ├── LanguageSwitcher.tsx  # TR/EN segmented toggle (aria-pressed)
+│   │   └── dictionaries/{tr,en}.json  # Tam sözlük (her ikisi de senkron — bkz. §11)
+│   ├── login/page.tsx            # Giriş ("Kayıt ol" linki + 403 doğrulama + MFA 2. adım)
+│   ├── register/page.tsx         # Kayıt + risk profili + KVKK onayları + "tekrar gönder"
 │   ├── verify-email/page.tsx     # Token landing (Suspense + useSearchParams)
-│   ├── legal/                    # KVKK / gizlilik / kullanım şartları / çerez
+│   ├── legal/                    # kvkk / privacy / terms / cookies
 │   └── dashboard/
-│       ├── page.tsx              # Ana dashboard (11 kart + grand total + Snapshot al + Geçmiş + Ayarlar)
-│       ├── history/page.tsx      # Snapshot geçmişi (recharts 2 line chart)
-│       ├── crypto/page.tsx
+│       ├── layout.tsx            # Skip-link + LanguageSwitcher + nav
+│       ├── page.tsx              # Ana dashboard (14 kart, 2 grup + özet kartlar + Snapshot al + Geçmiş + Ayarlar)
+│       ├── _components/          # DashboardCard.tsx + icons.tsx + SnapshotIssuesModal.tsx
+│       ├── history/page.tsx      # Snapshot geçmişi (recharts 2 line chart + xlsx/pdf indirme)
+│       ├── crypto/               # Kripto borsa pozisyonları + entegrasyon CRUD
+│       │   ├── page.tsx
+│       │   └── _components/{ProviderSummaryCards,PositionsTable,IntegrationList,IntegrationForm}.tsx
+│       ├── manual-crypto/page.tsx  # Manuel kripto (API'siz borsalar + asset catalog + 3 fiyat modu)
 │       ├── stocks/               # Hisse senedi (Yahoo + Excel + MKK + maliyet/kâr-zarar + kurum)
 │       │   ├── page.tsx
-│       │   └── _components/
-│       │       ├── HoldingsForm.tsx
-│       │       └── StockPositionsTable.tsx
+│       │   └── _components/{HoldingsForm,StockPositionsTable,Toolbar}.tsx
 │       ├── tefas/page.tsx        # TEFAS (Excel + MKK + maliyet/kâr-zarar + kurum)
-│       ├── wallets/                # 10 zincir cüzdan formu (Faz A)
+│       ├── wallets/                # 10 zincir cüzdan formu + şifre korumalı tam-adres export
 │       │   ├── page.tsx
-│       │   └── _components/
-│       │       ├── WalletForm.tsx  # 10 dropdown + (i) info paneli + dinamik placeholder/hint
-│       │       └── constants.ts    # Chain, CHAIN_LABELS, CHAIN_SYMBOLS, CHAIN_PLACEHOLDERS, CHAIN_ADDRESS_HINTS
+│       │   └── _components/{WalletForm,WalletList,WalletPositionsTable}.tsx + constants.ts
 │       ├── bes/page.tsx
+│       ├── commodities/          # Altın & Gümüş
+│       │   ├── page.tsx
+│       │   └── _components/{CommodityForm,CommodityList}.tsx
+│       ├── cash/page.tsx         # Nakit / Banka (TRY/USD/EUR/GBP → TL normalize)
+│       ├── cash-flow/page.tsx    # 12 aylık nakit akış projeksiyonu (ComposedChart + xlsx/pdf)
+│       ├── credit-cards/         # Kredi kartları (kart listesi + summary)
+│       │   ├── page.tsx
+│       │   └── [id]/page.tsx     # Kart detayı (statement + installment nested CRUD)
 │       ├── expenses/             # Harcama (4 component + Excel)
 │       │   ├── page.tsx
 │       │   └── _components/{ExpenseForm,ExpenseTable,CategoryPieChart,MonthSelector}.tsx
-│       ├── planned/              # Planlı ödemeler (Faz 3)
+│       ├── income/               # Gelir takibi + recurring + realize
+│       │   ├── page.tsx
+│       │   └── _components/{IncomeForm,IncomeTable,RecurringIncomeForm,RecurringIncomeTable}.tsx
+│       ├── planned/              # Planlı ödemeler
 │       │   ├── page.tsx
 │       │   └── _components/{PlannedForm,PlannedList,YearlyForecast}.tsx
-│       ├── income/               # Gelir takibi (Faz 3)
-│       │   ├── page.tsx
-│       │   └── _components/...
-│       ├── budget/               # Bütçe takibi (Faz 3)
+│       ├── budget/               # Bütçe takibi
 │       │   ├── page.tsx
 │       │   └── _components/{BudgetForm,ComparisonTable}.tsx
-│       ├── commodities/          # Altın & Gümüş (Faz 3)
-│       │   ├── page.tsx
-│       │   └── _components/{CommodityForm,CommodityList}.tsx
-│       ├── goal/page.tsx         # Finansal hedef (Faz 3)
-│       └── settings/page.tsx     # Hesap + risk + şifre + kart gizleme + hesap silme (Faz 3)
+│       ├── goal/page.tsx         # Finansal hedef
+│       └── settings/
+│           ├── page.tsx          # Hesap + USD tercih + risk + şifre + kart gizleme + hesap silme
+│           └── security/page.tsx # MFA / TOTP kurulum + recovery code
 │
 ├── lib/
-│   ├── api.ts                    # Tüm API çağrıları + TypeScript DTO'ları
-│   └── format.ts                 # fmtTL/fmtNum/fmtDate + INPUT_CLS + DASHBOARD_CARDS + getHiddenCards/saveHiddenCards
+│   ├── api.ts                    # Geriye-uyumlu re-export yüzeyi (api namespace)
+│   ├── api/                      # Domain bazlı bölünmüş istemci (_client.ts + 19 domain dosyası + types.ts)
+│   └── format.ts                 # fmtTL/fmtNum/fmtDate + INPUT_CLS + DASHBOARD_CARDS/GROUPS + getHiddenCards/saveHiddenCards
 │
 ├── proxy.ts                      # Auth yönlendirme (Next.js 16: middleware → proxy)
 │
-├── public/images/
-│   ├── kfinans-logo.png          # Arşivlik (UI artık inline SVG kullanıyor)
-│   └── mayotek-logo.png          # Arşivlik
+├── public/images/                # kfinans-logo.png + mayotek-logo.png (arşivlik — UI inline SVG)
 │
-├── next.config.ts                # output: "standalone", watchOptions
+├── next.config.ts                # output: "standalone" + async headers() (HSTS/CSP/X-Frame/Permissions-Policy)
 ├── tsconfig.json                 # strict: true
 ├── eslint.config.mjs
+├── vitest.config.ts / vitest.setup.ts
+├── playwright.config.ts
 └── package.json
 ```
 
@@ -231,7 +273,9 @@ frontend/
 
 ---
 
-## 3. API İstemcisi (`lib/api.ts`)
+## 3. API İstemcisi (`lib/api/`)
+
+> **Not:** İstemci tek `lib/api.ts`'ten **domain bazlı `lib/api/` paketine** bölündü (`_client.ts` ortak `request<T>()` + `auth/portfolio/wallets/stocks/tefas/...` 19 domain dosyası + `types.ts` DTO'lar). `lib/api.ts` geriye-uyumlu re-export yüzeyi olarak `api` namespace'ini sürdürür; çağıranlar değişmedi.
 
 ### Konfigürasyon
 ```typescript
@@ -322,21 +366,20 @@ export interface CryptoResponse {
 ## 4. Component Sınırları
 
 ### Kural: Sayfa Component'leri ≤ 150 Satır
-Mevcut `crypto/page.tsx`, `stocks/page.tsx`, `wallets/page.tsx` 250-370 satır arasında. Bu **teknik borç**; component ayrımı + custom hook'lara taşıma yapılmalı.
+`crypto/stocks/wallets/expenses/income/planned/budget/commodities/credit-cards` sayfaları **`_components/` alt klasörüne bölündü** (composition pattern uygulandı): page.tsx 185–239 satır, alt-bileşenler ayrı dosyalarda. `_components/` Next.js App Router private folder convention'u — route oluşturmaz.
 
-### Önerilen Component Yapısı
+**Kalan teknik borç:** `dashboard/page.tsx` ~727 satır (14 kart + 2 grup render + özet hesaplama + fetch). İç state/fetch mantığı hâlâ hook'a taşınmadı — sayfa parçalamanın açık kalan büyük örneği.
+
+### Uygulanan Component Yapısı (örnek: crypto)
 ```
 app/dashboard/crypto/
-├── page.tsx                      # ≤ 100 satır, sadece composition
-├── _components/
-│   ├── CryptoExchangeCards.tsx   # Borsa toplamı kartları
-│   ├── CryptoPositionTable.tsx   # Sıralanabilir tablo
-│   └── CryptoFilter.tsx          # Filtre/sıralama UI
-└── _hooks/
-    └── useCryptoPositions.ts     # API çağrısı + state + sort
+├── page.tsx                       # composition
+└── _components/
+    ├── ProviderSummaryCards.tsx   # Borsa toplamı kartları
+    ├── PositionsTable.tsx         # Sıralanabilir tablo
+    ├── IntegrationList.tsx        # Bağlı borsa listesi
+    └── IntegrationForm.tsx        # API key ekleme formu
 ```
-
-`_components/` ve `_hooks/` Next.js App Router private folder convention'u — route oluşturmaz.
 
 ---
 
@@ -398,19 +441,34 @@ Sayfalar arası paylaşım yok; her sayfa kendi API'sini çağırıyor.
 
 ---
 
-## 8. Erişilebilirlik (a11y)
+## 8. Erişilebilirlik (a11y) — A11Y-001 temel set uygulandı
 
-### Mevcut Durum: ⚠️ Eksik
-- ARIA label'lar çoğu butonu kapsamıyor
-- Klavye navigasyonu test edilmedi
-- Renk kontrastı henüz audit edilmedi
+### Mevcut Durum
+- `<html lang="tr">` + dil değişiminde runtime güncelleme (ekran okuyucu duyurur)
+- Dashboard layout'ta "Ana içeriğe atla" skip-link (`#main-content`)
+- `app/_hooks/useFocusTrap.ts` — modal Tab döngüsü + Esc + focus restore
+- `ConfirmDialog` (`role="alertdialog"`) + `SnapshotIssuesModal` (`role="dialog"`) focus trap kullanır
+- Login formu `htmlFor` + `autoComplete` + hata mesajı `role="alert" aria-live`
+- Icon-only butonlarda `aria-label` + `focus-visible:ring-2`
 
-### Kontrol Listesi (Production'a Kadar)
-- [ ] Tüm interaktif elementlerde focus ring (`focus:ring-2`)
-- [ ] Form input'ları `<label>` ile bağlı
+### Kalan (Production'a Kadar — backlog)
 - [ ] Tablo sıralama butonları `aria-sort` ile annotated
-- [ ] Modal/dialog'lar `role="dialog"` + focus trap
-- [ ] Renk kontrastı WCAG AA (4.5:1 normal, 3:1 büyük metin)
+- [ ] Renk kontrastı WCAG AA audit (4.5:1 normal, 3:1 büyük metin)
+- [ ] Axe-core otomatik entegrasyonu (şu an manuel + 4 Playwright @smoke a11y testi)
+
+---
+
+## 8.5. Çok Dillilik (i18n — TR/EN, cookie tabanlı)
+
+Mevcut altyapı **`next-intl` DEĞİL**, hafif kendi çözümü (i18n-001 foundation + i18n-002 tam çeviri):
+
+- `app/_i18n/I18nProvider.tsx` — React Context, `useTranslation()` hook → `t("auth.login")` dot-notation lookup. Cookie `kfinans-locale=tr|en` (`samesite=lax`, 1 yıl). Dil değişiminde **reload yok** — Context push + `<html lang>` güncellemesi
+- `app/_i18n/LanguageSwitcher.tsx` — TR/EN segmented toggle (`aria-pressed`); dashboard layout sağ üst + login sayfası
+- `app/_i18n/dictionaries/{tr,en}.json` — **iki sözlük de senkron (953 satır)**. Top-level namespace'ler: `auth, common, dashboard, table, form, empty, pages, months, categories, legal, footer, mfa, content`. Sayfa-spesifik metinler `content.<sayfa>.*` altında
+- **Kapsam:** Login + register + dashboard layout + **20 dashboard sayfasının tamamı** + paylaşılan bileşenler (`ConfirmDialog`, `PageHeader`, `TLValue`, wallet/crypto/stocks alt-bileşenleri) çevrilidir. Toplam **53 dosya** `useTranslation` kullanır. Eksik anahtarlar key'i geri döner (sessiz fallback)
+- Yeni sayfa çevirisi: `"use client"` + `const { t } = useTranslation()` + her iki dictionary JSON'a anahtar ekle
+
+> **Backlog (i18n notları):** `lib/format.ts::DASHBOARD_CARDS` `label` alanları hâlâ TR hard-coded; `labelKey`'e taşınması küçük bir iyileştirme olarak açık (audit FE not #17). ESLint custom rule ile bare TR string yakalama planlanan.
 
 ---
 
@@ -428,12 +486,13 @@ frontend/
 ├── vitest.config.ts             # ✅ jsdom + coverage gate
 ├── vitest.setup.ts              # ✅ jest-dom + cleanup
 ├── playwright.config.ts         # ✅ Chromium projects
-├── __tests__/
-│   └── api.test.ts              # ✅ setAuth/clearAuth — 3 test
-└── playwright/
-    ├── login.spec.ts            # ✅ Token redirect — 3 senaryo
-    └── dashboard.spec.ts        # ✅ Register + login akışı — 2 senaryo
+├── __tests__/                   # 17 vitest dosyası: api/api_auth/api_client/api_wrappers +
+│   │                            #   bes/cashflow/commodities/creditcards(+detail)/crypto/goal/
+│   │                            #   history/login/manualcrypto/settings(+security)/wallets page testleri
+└── playwright/                  # 5 @smoke spec: login, dashboard, a11y, mfa, user-flows
 ```
+
+> Frontend test sayısı SonarQube temizliği turlarında ~200'den ~387'ye çıktı (vitest pass).
 
 ### npm Scripts
 ```bash
@@ -487,13 +546,13 @@ npm run e2e:ui        # Playwright UI mode
 
 ### Uzun Vade (Faz 4)
 - [ ] PWA (offline mode, service worker)
-- [ ] Çoklu dil desteği (i18n — `next-intl`)
+- [x] Çoklu dil desteği (i18n — TR/EN cookie tabanlı, `next-intl` değil — bkz. §8.5; tam çeviri uygulandı)
 - [ ] Dark mode toggle (mevcut: sadece system preference)
 - [ ] Native widget (Flutter ile shared component'ler)
 
 ### Teknik Borç
 - [ ] `crypto/page.tsx`, `stocks/page.tsx`, `wallets/page.tsx` 300+ satır → component'lere böl
-- [ ] Dashboard `page.tsx` 30+ satır büyüdü (5 kart + grand total + Geçmiş butonu); reusable `Card` component çıkarıldı — sayfa parçalamanın başlangıcı, kalan iç state/fetch hook'lara taşınmalı
-- [ ] `lib/api.ts` çok dosyaya böl (`lib/api/auth.ts`, `lib/api/portfolio.ts` vb.)
+- [ ] Dashboard `page.tsx` ~727 satıra büyüdü (14 kart + 2 grup + özet hesap + fetch); `DashboardCard` bileşeni çıkarıldı ama iç state/fetch mantığı hâlâ custom hook'a taşınmadı
+- [x] `lib/api.ts` çok dosyaya böl (`lib/api/auth.ts`, `lib/api/portfolio.ts` vb. — 19 domain dosyası + `_client.ts`)
 - [ ] React Query veya SWR ile cache'leme
 - [ ] httpOnly cookie + CSRF token'a geçiş (XSS savunması)

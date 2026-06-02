@@ -11,15 +11,20 @@
 
 | Bileşen                                                               | Durum                                 |
 | --------------------------------------------------------------------- | ------------------------------------- |
-| Anthropic SDK entegrasyonu (`AsyncAnthropic`)                         | ✅ Aktif                               |
-| `claude-sonnet-4-6` model kullanımı                                   | ✅ Aktif                               |
-| System prompt + prompt caching (`cache_control: ephemeral`)           | ✅ Aktif                               |
+| Anthropic SDK entegrasyonu (`AsyncAnthropic`, 60 sn timeout)          | ✅ Aktif                               |
+| `claude-sonnet-4-6` model kullanımı (config'den)                      | ✅ Aktif                               |
+| System prompt + prompt caching (`cache_control: ephemeral`)           | ✅ Aktif (1024+ token, SPK uyumlu)     |
 | Token sayımı `investment_advice` tablosuna kayıt                      | ✅ Aktif                               |
+| Cache metrikleri DB'ye kayıt (`cache_read_tokens`, `cache_creation_tokens`) | ✅ Aktif (AI-002)               |
 | Türkçe Markdown çıktı                                                 | ✅ Aktif                               |
 | Risk profili + portföy dağılımı + staking pozisyonları prompt'a dahil | ✅ Aktif                               |
 | Vade etiketi (`medium` / `long`)                                      | ✅ Aktif                               |
-| Kredi tüketimi                                                        | ❌ Eksik (Faz 3)                       |
-| Endpoint aktif (`POST /advice/generate`)                              | ⚠️ Kodda var ama frontend kullanmıyor |
+| SPK disclaimer post-processing (`_ensure_disclaimer`)                 | ✅ Aktif (AI-008)                       |
+| Anthropic SDK exception → HTTP status mapping (timeout/rate limit/5xx) | ✅ Aktif (AI-001)                      |
+| Anthropic için açık rıza kontrolü (`anthropic_consent_at` → 403)      | ✅ Aktif (AI-005, KVKK m.9)             |
+| Kredi tüketimi (`credit_balance`, `credits_used`, atomik düşüm)       | ✅ Aktif (AI-007, tavsiye başına 1 kredi) |
+| Audit log (`AuditAction.ADVICE_GENERATE`)                             | ✅ Aktif (AI-004)                       |
+| Endpoint aktif (`POST /advice/generate`)                              | ⚠️ Kodda var; frontend kullanımı sınırlı |
 
 **Bu davranışlar regresyon kabul etmez.**
 
@@ -30,20 +35,30 @@
 ```
 Frontend
   ↓ POST /api/v1/advice/generate { horizon: "medium" }
-api/v1/advice.py
-  ↓ kredi kontrolü (Faz 3)
-  ↓ son snapshot'ı çek
+api/v1/advice.py (slowapi 5/saat rate limit)
+  ↓ 1) anthropic_consent_at IS NULL → 403 (AI-005, KVKK m.9)
+  ↓ 2) credit_balance < ADVICE_COST (=1) → 402 Payment Required (AI-007)
+  ↓ 3) son snapshot'ı çek (yoksa 404)
 services/advisor.py: AdvisorService.generate(user, snapshot, horizon)
   ↓ calculate_breakdown(snapshot) — yüzde hesabı
   ↓ user prompt formatla
-  ↓ AsyncAnthropic.messages.create(...)
+  ↓ AsyncAnthropic.messages.create(...)  (60 sn timeout, AI-001)
     ↓ system prompt (cached, ephemeral)
     ↓ user prompt (per-call)
-  ↓ InvestmentAdvice modelini oluştur (token sayımı dahil)
-  ↓ DB'ye kaydet
-  ↓ kredi düş (Faz 3)
+    ↓ Anthropic exception → HTTP 429/503/504/500 mapping (AI-001)
+  ↓ _ensure_disclaimer(content) — SPK footer garanti (AI-008)
+  ↓ InvestmentAdvice modelini oluştur (token + cache metrikleri)
+api/v1/advice.py (devam, transactional)
+  ↓ advice.credits_used = 1; user.credit_balance -= 1 (AI-007 atomik düşüm)
+  ↓ audit log: AuditAction.ADVICE_GENERATE (AI-004)
+  ↓ db.commit()  → AI fail durumunda buraya gelinmez, kredi düşmez
   ↓ JSON response
 ```
+
+> **Not (kredi sistemi kapsamı):** Buradaki kredi düşümü uygulandı (`credit_balance`
+> sütunu + `credits_used` + atomik düşüm). Kredi **satın alma / ödeme** akışı (iyzico,
+> `credit_transactions` tablosu, checkout/webhook) henüz uygulanmadı — bkz.
+> [kredi-sistemi.md](./kredi-sistemi.md) (Faz 3 tasarımı).
 
 ## A.3 Model Seçimi
 
@@ -64,15 +79,23 @@ claude_max_tokens: int = 1024
 ## A.4 Prompt Tasarımı
 
 ### A.4.1 System Prompt (Cache'li)
-```
-Deneyimli bir portföy danışmanısın.
-Türk yatırımcısı için gerçekçi, uygulanabilir tavsiyeler üretiyorsun.
-Yanıtını Türkçe, Markdown formatında ver: başlıklar ve madde listeleri kullan.
-Tavsiyelerini net, somut ve pratik tut.
-```
-- ~80 token
+`advisor.py::_SYSTEM_PROMPT` artık **1024+ token** uzunluğunda, SPK uyumlu, yapılandırılmış
+bir prompt'tur (AI-003 + AI-008). İçeriği (özet):
+- **Rol ve Konum** — "bilgilendirme asistanı", yatırım danışmanı DEĞİL
+- **Yasal Sınırlar — SPK Uyumluluğu** — Sermaye Piyasası Kanunu m.40 atfı + 5 istisnasız kural
+  (imperatif tavsiye yok, mutlak ifade yok, koşullu/eğitsel dil, ürün adı önermeme, zorunlu disclaimer)
+- **Çıktı Formatı** — sabit Markdown başlık yapısı (Genel Bakış / Dağılım Analizi / Risk Profili
+  Penceresinden Değerlendirme / Düşünülecek Sorular / Disclaimer)
+- **Risk Profili Tanımları** — conservative / balanced / aggressive yorum referansları
+- **Türk Vergi Rejimi (2026)** — eğitsel hatırlatma (kesin oran verme, GİB/YMM teyit mesajı)
+- **Tavsiye Yerine Eğitsel Çerçeve** + **Yasaklı Çıktılar** + **Dil ve Ton** + **Kalite Kontrol Listesi**
+
+Detay: `_REQUIRED_DISCLAIMER` sabiti SPK uyumlu uyarı metnini tutar; prompt'a injekte edilir.
+
+- **Neden 1024+ token?** Anthropic Sonnet/Opus prompt cache **minimum eşiği** 1024 token;
+  daha kısa system prompt cache'lenemez. Eski ~80 token'lık prompt cache hit alamıyordu.
 - Her çağrıda aynı → `cache_control: ephemeral` (5 dk TTL)
-- Tasarruf: input token'ın %95'i cache'den okunur
+- Tasarruf: cache hit'te input token'ın büyük kısmı cache'den okunur (`cache_read_input_tokens`)
 
 ### A.4.2 User Prompt (Dinamik)
 ```
@@ -91,39 +114,50 @@ Portföy özeti:
 - ~150-300 token (portföy büyüklüğüne göre)
 
 ### A.4.3 Token Bütçesi
-| Bileşen                   | Token            |
-| ------------------------- | ---------------- |
-| System prompt (cache hit) | ~5 (cache okuma) |
-| User prompt               | ~200             |
-| Output (max)              | 1024             |
-| **Toplam (cache hit)**    | ~1230            |
-| **Toplam (cache miss)**   | ~1305            |
+System prompt artık 1024+ token (cache eşiği). Cache hit'te input maliyeti `cache_read`
+indirimli okunur; cache miss'te `cache_creation` orta bedelli yazılır.
+
+| Bileşen                   | Token (yaklaşık)        |
+| ------------------------- | ----------------------- |
+| System prompt             | ~1024+ (cache hit'te indirimli `cache_read`) |
+| User prompt               | ~200                    |
+| Output (max)              | `settings.claude_max_tokens` (default 1024) |
+
+Gerçek değerler `investment_advice` tablosunda kayıtlıdır:
+`prompt_tokens`, `completion_tokens`, `cache_read_tokens`, `cache_creation_tokens`.
 
 ## A.5 Eklenecek İyileştirmeler
 
-### A.5.1 Hata Yönetimi (Yapılacak)
+### A.5.1 Hata Yönetimi ✅ (Uygulandı — AI-001)
+`advisor.py::generate()` Anthropic SDK'nın exception taksonomisini HTTP status'a maplar:
 ```python
-try:
-    message = await self._client.messages.create(...)
-except anthropic.APITimeoutError:
-    raise HTTPException(503, "AI servisi yanıt vermiyor, tekrar deneyin")
-except anthropic.RateLimitError:
-    raise HTTPException(429, "AI rate limit; lütfen bekleyin")
-except anthropic.APIError as e:
-    logger.error("Anthropic API hatası: %s", e)
-    raise HTTPException(500, "AI servis hatası")
+except anthropic.RateLimitError:      # → 429 + Retry-After: 30
+except anthropic.APITimeoutError:     # → 504 (60 sn timeout)
+except anthropic.APIConnectionError:  # → 503
+except anthropic.AuthenticationError: # → 500 (ops/dev problemi, logger.critical)
+except anthropic.BadRequestError:     # → 500 (format hatası)
+except anthropic.APIStatusError:      # → 503 (5xx / OverloadedError 529)
+except anthropic.AnthropicError:      # → 503 (generic fallback)
 ```
 
-### A.5.2 Cache Hit Oranı İzleme
+### A.5.2 Cache Hit Oranı İzleme ✅ (Kısmen — AI-002)
+Cache metrikleri DB'ye yazılıyor (`investment_advice.cache_read_tokens` +
+`cache_creation_tokens`, nullable — eski SDK geri uyumlu). Değer varsa `logger.info` ile
+loglanır:
 ```python
+cache_read = getattr(message.usage, "cache_read_input_tokens", None)
+cache_creation = getattr(message.usage, "cache_creation_input_tokens", None)
+...
 return InvestmentAdvice(
     ...,
     prompt_tokens=message.usage.input_tokens,
     completion_tokens=message.usage.output_tokens,
-    cache_read_tokens=message.usage.cache_read_input_tokens or 0,  # YENİ
+    cache_read_tokens=cache_read,
+    cache_creation_tokens=cache_creation,
 )
 ```
-Maliyet optimizasyonu için cache hit oranı dashboard'da izlenmeli.
+**Hâlâ eksik:** Cache hit oranı dashboard/alert (`GET /metrics/ai` endpoint) — backlog,
+bkz. `docs/audit-2026-05-22/ai-notes.md` #2.
 
 ### A.5.3 Prompt Versiyonlama (Faz 3)
 ```python
@@ -160,14 +194,17 @@ Anthropic'e gönderilen veri:
 - ❌ Cüzdan adresi GÖNDERİLMEZ
 - ❌ Exchange API key GÖNDERİLMEZ
 
-### Açık Rıza (Yapılacak — Faz 3)
-İlk tavsiye talebinde modal:
+### Açık Rıza ✅ (Uygulandı — AI-005, KVKK m.9)
+`anthropic_consent_at` (TIMESTAMPTZ) + `anthropic_consent_version` (String 10) kolonları
+`users` tablosunda mevcut. `POST /advice/generate` ilk adımı:
+```python
+if current_user.anthropic_consent_at is None:
+    raise HTTPException(403, "Anthropic API'ye veri aktarimi icin acik riza gerekli (KVKK m.9). ...")
 ```
-KFinans, AI tavsiyenizi üretebilmek için anonimleştirilmiş
-portföy bilgilerinizi (yüzdeler, sembollar) Anthropic ABD'ye
-göndermek zorundadır. Onaylıyor musunuz?
-```
-Onay zaman damgası `users.anthropic_consent_at` kolonuna kayıt.
+Onay genel yurt dışı rıza (`overseas_consent_at`) ile ayrıdır — bu kolon spesifik olarak
+Anthropic aktarımı içindir; metin güncellenince `anthropic_consent_version` ile re-accept
+zorlanabilir. Her üretim ayrıca `AuditAction.ADVICE_GENERATE` ile audit'lenir (AI-004,
+KVKK m.12 üçüncü taraf aktarım izleme).
 
 ---
 
@@ -177,8 +214,9 @@ Onay zaman damgası `users.anthropic_consent_at` kolonuna kayıt.
 
 | Hesaplama                                       | Durum   |
 | ----------------------------------------------- | ------- |
-| USD/TRY kuru çekme (Binance USDTTRY)            | ✅ Aktif |
-| Spot fiyat çekme (Binance)                      | ✅ Aktif |
+| USD/TRY kuru çekme (TCMB → exchangerate-api fallback) | ✅ Aktif |
+| GBP/USD kuru çekme (TCMB derive → exchangerate-api)   | ✅ Aktif |
+| Spot fiyat çekme (Binance → CoinGecko fallback) | ✅ Aktif |
 | Kripto pozisyonu TL değer hesabı                | ✅ Aktif |
 | Staking + pending rewards ayrımı                | ✅ Aktif |
 | TEFAS fon fiyatı (sonPortfoyDegeri/sonPayAdedi) | ✅ Aktif |
@@ -203,18 +241,18 @@ async def fetch_usd_to_tl() -> Decimal:
 TCMB XML'i 5 dk in-memory cache'lenir; aynı snapshot içinde tek HTTP çağrısı.
 GBP/USD için aynı zincir: TCMB'den derive (`GBP/TRY ÷ USD/TRY`) → exchangerate-api → RuntimeError.
 
-### B.2.3 GBp (Pence) Dönüşümü
-**Mevcut hata:**
+### B.2.3 GBp (Pence) Dönüşümü ✅ (Düzeltildi — 2026-04-30)
+`api/v1/stocks.py::convert_to_tl` GBP/USD kuru (`aggregator.fetch_gbp_to_usd`) kullanır.
+Eski "1 GBP = 1 USD" varsayımı kaldırıldı.
 ```python
-price_tl = (price_gbp / 100 * usd_tl)  # ❌ YANLIŞ
+# stocks.py::convert_to_tl — GBp dalı
+if currency == "GBp":
+    gbp = price / Decimal("100")          # pence → GBP
+    usd = gbp * gbp_usd                    # GBP → USD
+    return (usd * usd_tl).quantize(Decimal("0.0001"))  # USD → TL
 ```
-GBp → GBP → USD → TL dönüşümü için **GBP/USD kuru** gerekli. Şu an 1 GBP = 1 USD varsayılıyor.
-
-**Doğru hesap:**
-```python
-gbp_usd = await fetch_gbp_usd()   # ~1.27 (2026 nisan)
-price_tl = (price_gbp / 100) * gbp_usd * usd_tl
-```
+`fetch_gbp_to_usd()` önceliği: TCMB (GBP/TRY ÷ USD/TRY oranı) → exchangerate-api → RuntimeError.
+Test koruması: `test_stocks_currency.py`. (Detay: §B.10 #1.)
 
 ### B.2.4 Diğer Para Birimleri (Faz 3)
 EUR, JPY, CHF gibi para birimleri için ECB veya TCMB ana kur tablosu entegre edilmeli.
@@ -298,19 +336,23 @@ APScheduler her **Pazar 23:00** (Europe/Istanbul) çalışır:
 
 ### B.6.2 Hesaplama
 ```python
-def calculate_changes(snapshots: list[PortfolioSnapshot]):
+# aggregator.py::calculate_changes — snapshots[0] en güncel (DESC sıralı)
+def calculate_changes(snapshots: list[PortfolioSnapshot]) -> PortfolioChanges:
     current = snapshots[0]
-    last_week = snapshots[1] if len(snapshots) > 1 else None
-    month_ago = snapshots[4] if len(snapshots) > 4 else None
+    wow_change_tl = wow_change_pct = mom_change_tl = mom_change_pct = Decimal(0)
 
-    wow_change_tl  = current.total - last_week.total if last_week else Decimal(0)
-    wow_change_pct = (wow_change_tl / last_week.total * 100) if last_week else Decimal(0)
+    if len(snapshots) >= 2:                      # WoW: 1 önceki snapshot
+        prev_week = snapshots[1]
+        wow_change_tl = current.total_value_tl - prev_week.total_value_tl
+        wow_change_pct = (wow_change_tl / prev_week.total_value_tl * 100) if prev_week.total_value_tl else Decimal(0)
 
-    mom_change_tl  = current.total - month_ago.total if month_ago else Decimal(0)
-    mom_change_pct = (mom_change_tl / month_ago.total * 100) if month_ago else Decimal(0)
+    if len(snapshots) >= 5:                       # MoM: 4 önceki snapshot (~4 hafta)
+        prev_month = snapshots[4]
+        mom_change_tl = current.total_value_tl - prev_month.total_value_tl
+        mom_change_pct = (mom_change_tl / prev_month.total_value_tl * 100) if prev_month.total_value_tl else Decimal(0)
 
     return PortfolioChanges(
-        current_value_tl=current.total,
+        current_value_tl=current.total_value_tl,
         wow_change_tl=wow_change_tl,
         wow_change_pct=wow_change_pct.quantize(Decimal("0.01")),
         mom_change_tl=mom_change_tl,
@@ -397,11 +439,13 @@ quantity = NUMERIC(20, 8)  # 8 ondalık (kesirli pay desteği)
 
 ### AI Tavsiye
 - [x] Model adı config'den (advisor.py — 2026-05-01)
-- [ ] Hata yönetimi (timeout, rate limit)
-- [ ] Cache hit oranı izleme
-- [ ] Prompt versiyonlama
+- [x] Hata yönetimi (timeout, rate limit) — AI-001, exception→HTTP mapping
+- [x] Cache metrikleri DB'ye kayıt — AI-002 (`cache_read_tokens` / `cache_creation_tokens`)
+- [ ] Cache hit oranı dashboard/alert (`GET /metrics/ai`) — backlog (ai-notes #2)
+- [ ] Prompt versiyonlama (`investment_advice.prompt_version`) — backlog (ai-notes #4)
 - [ ] Streaming yanıt (Faz 4)
-- [ ] Anthropic için açık rıza akışı (Faz 3)
+- [x] Anthropic için açık rıza akışı — AI-005 (`anthropic_consent_at` → 403)
+- [x] Kredi tüketimi — AI-007 (`credit_balance` / `credits_used` atomik düşüm)
 - [ ] AI çıktısı sanitization (XSS riski — `rehype-sanitize`)
 
 ### Finansal Hesaplama

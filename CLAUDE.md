@@ -7,13 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > Bu proje **GitHub'da değil, self-hosted GitLab'da** çalışır. Hatırlatma beklemeden uygula:
 >
 > - **VCS/CI primary = GitLab** (`http://gitlab.192.168.3.191.nip.io/root/KFinans`). GitHub (`celikada/KFinans`) yalnızca mirror; hesap flagged olduğu için **GitHub Actions çalışmaz**.
-> - **CI/CD pipeline = [`.gitlab-ci.yml`](.gitlab-ci.yml)**. Repo'daki `.github/workflows/*.yml` (ci-backend, ci-frontend, e2e, security, **sonar.yml**, release.yml) **dormant/referans** — pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a bak**, GitHub workflow'larına değil.
+> - **CI/CD pipeline = [`.gitlab-ci.yml`](.gitlab-ci.yml)**. Repo'daki `.github/workflows/*.yml` (5 workflow: ci-backend, ci-frontend, e2e, security, **sonar.yml**; `release.yml` silindi) **dormant/referans** — pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a bak**, GitHub workflow'larına değil.
 > - **Kod kalitesi = self-hosted SonarQube**, **SonarCloud.io DEĞİL**. Host `http://sonar.192.168.3.191.nip.io`, **projectKey=`KFinans`** (organization yok). `sonar-project.properties`'teki `celikada_KFinans` + `organization=celikada` SonarCloud değerleri kullanılmıyor — GitLab CI bunları CLI ile override eder (`-Dsonar.projectKey=KFinans -Dsonar.organization=`). API erişimi için `.credentials.local.md` içindeki `SONAR_TOKEN` (`curl -u "$TOKEN:" .../api/...`).
 > - **Push:** her iki remote'a (`git push gitlab <branch>` + `git push origin <branch>`); `develop` GitLab'da protected → MR akışı. Detay: memory `[[gitlab-primary]]`.
 
 ## Proje Hakkında
 
-KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve **10 zincir blockchain cüzdanları** (Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri (Faz 3) sunulacaktır.
+KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır. Binance ve iCrypex kripto hesapları, TEFAS yatırım fonları, hisse senedi (Yahoo Finance), kıymetli madenler (altın/gümüş), BES birikimleri ve **10 zincir blockchain cüzdanları** (Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin) tek ekranda toplanır. Manuel harcama, gelir, planlı ödeme ve bütçe takibi modülleri Faz 3 ile eklendi. Haftalık snapshot servisi değişimleri hesaplar; Claude API aracılığıyla orta/uzun vadeli yatırım tavsiyeleri **aktif** olarak sunulur (AI-003/005/007). Production canlı (v0.1.0-rc16, Oracle K3s → kfinans.app).
 
 ## Tech Stack
 
@@ -36,10 +36,10 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 | Veritabanı | PostgreSQL + SQLAlchemy (async) + Alembic |
 | AI tavsiye | Anthropic Python SDK (Claude API) |
 | Frontend | Next.js 16 (App Router, Turbopack) + React 19 + Tailwind CSS v4 |
-| Auth | JWT (python-jose) + slowapi rate limiting + refresh token rotation |
-| Güvenlik | Fernet (API key + wallet xpub) + bcrypt (şifre) + JWT blacklist (revoked_tokens) + SecurityHeadersMiddleware (HSTS, CSP, X-Frame, COOP) + TrustedHostMiddleware + audit_logs |
+| Auth | JWT (python-jose) + slowapi rate limiting + refresh token rotation + MFA (TOTP/pyotp + recovery codes) + hesap kilitleme (SEC-002) |
+| Güvenlik | MultiFernet key rotation (API key + wallet xpub) + bcrypt (şifre, zxcvbn+HIBP politika) + JWT blacklist (revoked_tokens) + SecurityHeadersMiddleware (HSTS, CSP, X-Frame, COOP) + TrustedHostMiddleware + upload magic-byte validation (SEC-009) + PII log filter (SEC-010) + audit_logs |
 | CI/CD | **GitLab CI primary** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test (coverage) → quality (self-hosted SonarQube **BLOCKING** gate) → build (Docker Hub `celikada/kfinans-*`) → **scan (Trivy image HIGH/CRITICAL gate, tag)** → deploy (Oracle K3s, sadece tag, manuel) → **smoke (post-deploy curl gate)**. `.github/workflows/*` (5 workflow) dormant/referans — GitHub flag #4360519 nedeniyle Actions çalışmaz. |
-| Hosting | Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + nginx-ingress + cert-manager (Let's Encrypt) |
+| Hosting | Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + **Traefik** (K3s default ingress, path-based tek host) + cert-manager (Let's Encrypt) |
 | Domain | `kfinans.app` (Namecheap, .app TLD HSTS preload listesinde — tarayıcı zorunlu HTTPS) |
 
 ## Proje Yapısı
@@ -48,11 +48,11 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 KFinans/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/                # FastAPI 21 router'ı: auth, user, portfolio, tefas,
+│   │   ├── api/v1/                # FastAPI 23 router'ı: auth, mfa, user, portfolio, tefas,
 │   │   │                          # stocks, bes, commodity, wallets, integrations,
 │   │   │                          # expenses, planned_expenses, income, budget, goal,
 │   │   │                          # cash, cash_flow, credit_cards, manual_crypto,
-│   │   │                          # asset_catalog, audit_logs, advice
+│   │   │                          # asset_catalog, audit_logs, advice, metrics
 │   │   ├── services/
 │   │   │   ├── exchange/          # CCXT tabanlı (Binance, iCrypex, BinanceTR)
 │   │   │   ├── blockchain/        # Sonic SFC, Avalanche P/C (getBalance + getStake),
@@ -65,13 +65,13 @@ KFinans/
 │   │   │   ├── snapshot.py        # compute_and_save_snapshot() — paralel toplama (manuel kripto dahil)
 │   │   │   ├── email.py           # Resend SDK — verify_email
 │   │   │   ├── audit.py           # FAZ C6: log_audit() + AuditAction Enum (best-effort)
-│   │   │   └── advisor.py         # Claude API (Faz 3'te aktive olacak)
+│   │   │   └── advisor.py         # Claude API (AI-003/005/007 — AKTİF)
 │   │   ├── models/                # SQLAlchemy ORM (audit_log.py dahil)
 │   │   ├── schemas/               # Pydantic (manual_crypto.py dahil)
 │   │   ├── core/                  # security (fernet+jwt+bcrypt+address_fingerprint), deps, limiter, middleware (SecurityHeadersMiddleware)
-│   │   ├── scheduler.py           # APScheduler — Pazar 23:00 snapshot + günlük 03:00 revoked_tokens cleanup
+│   │   ├── scheduler.py           # APScheduler — 4 cron: Pazar 23:00 snapshot, 03:00 token cleanup, 04:00 hard-delete, 04:30 audit purge
 │   │   └── main.py                # SecurityHeaders + TrustedHost + CORS middleware sırası
-│   ├── alembic/versions/          # 31 migration. Faz 3 ana ekleme'ler:
+│   ├── alembic/versions/          # 39 migration (head e2f3a4b5c6d7). Faz 3 ana ekleme'ler:
 │   │                              # - e0f1a2b3c4d5: credit_cards
 │   │                              # - f1a2b3c4d5e6: credit_card_statements + installments
 │   │                              # - f5a6b7c8d9e0: manual_crypto_holdings
@@ -83,20 +83,21 @@ KFinans/
 │   │                              # - e4f5a6b7c8d9: snapshot health_issues + usd_try_rate
 │   │                              # - b3c4d5e6f7a8: wallet xpub Fernet (FAZ C1)
 │   │                              # - c4d5e6f7a8b9: audit_logs (FAZ C6)
-│   ├── tests/{unit,integration}/  # 293 test (FAZ C: +33 test — xpub encrypt, security headers, refresh rotation, cleanup, audit log)
+│   ├── tests/{unit,integration}/  # ~1196 test (unit + integration, %95.83 coverage)
 │   ├── pyproject.toml
 │   └── .env.example
 ├── frontend/                      # Next.js 16 (App Router, proxy.ts auth yönlendirme)
 │   ├── app/_components/{Logos,MkkHint,PageHeader}.tsx
 │   ├── app/dashboard/{tefas,stocks,wallets,crypto,manual-crypto,bes,expenses,planned,
-│   │                  income,budget,commodities,goal,settings,history,
-│   │                  cash,cash-flow,credit-cards}/  # 17 alt sayfa
+│   │                  income,budget,commodities,goal,settings,settings/security,history,
+│   │                  cash,cash-flow,credit-cards,credit-cards/[id]}/  # 20 alt sayfa
+│   ├── app/_i18n/                  # TR/EN dil desteği (tr.json/en.json 953 satır, useTranslation)
 │   ├── next.config.ts             # FAZ C2: async headers() — HSTS, CSP, X-Frame, Permissions-Policy
 │   └── lib/{api,format}.ts
-├── docs/                          # 9 sıralı belge (01-tasarim ... 09-altyapi-test)
+├── docs/                          # 10 sıralı belge (01-tasarim ... 10-yol-haritasi-2026)
 ├── .gitlab-ci.yml                 # PRIMARY CI: lint→test→quality(SonarQube BLOCKING)→build→scan(Trivy)→deploy→smoke
 ├── .github/
-│   ├── workflows/                 # 5 workflow: ci-backend, ci-frontend, e2e, security, sonar, release (DORMANT — GitHub Actions çalışmıyor)
+│   ├── workflows/                 # 5 workflow: ci-backend, ci-frontend, e2e, security, sonar (DORMANT — GitHub Actions çalışmıyor; release.yml silindi)
 │   ├── dependabot.yml             # FAZ A4: pip + npm + actions + docker, haftalık
 │   └── pull_request_template.md   # FAZ A6: güvenlik checklist genişletilmiş
 ├── .gitleaks.toml                 # FAZ A1: test fixture allowlist
@@ -152,7 +153,7 @@ cd frontend && npm install && npm run dev
 
 **Wallet pricing tutarlılığı:** `GET /portfolio/wallets` `total_value_tl` hesaplarken `liquid + staked + pending_rewards` toplar (snapshot servisiyle aynı formül). Sonic SFC validator rewards ve Avalanche P-Chain pending rewards her zaman dahildir; dashboard "Toplam Portföy" ile snapshot tutarı arasında fark oluşmaz.
 
-**API key güvenliği:** Binance/iCrypex anahtarları DB'de `cryptography` kütüphanesi ile Fernet şifrelemeli saklanır, `.env`'deki master key ile açılır.
+**API key güvenliği:** Binance/iCrypex/BinanceTR borsa anahtarları DB'de `cryptography` kütüphanesi ile (Multi)Fernet şifrelemeli saklanır, `.env`'deki master key ile açılır. `POST /integrations/export` şifre doğrulamasıyla açık key/secret xlsx döner (yanlış şifre → 403); `POST /integrations/import` provider-bazlı upsert (rc16).
 
 **Wallet adresi (xpub) Fernet şifrelemesi (FAZ C1):** `wallet_addresses.address` artık plaintext değil. `address_encrypted` (Fernet ciphertext) + `address_fingerprint` (SHA-256 hex of lowercase address) iki kolon. `WalletAddress.address` Python `@hybrid_property` — getter decrypt eder, setter encrypt + fingerprint hesaplar. Service ve API kodu hiç değişmedi (`wallet.address` transparent çalışır). Unique constraint `(user_id, chain, address_fingerprint)` — case-insensitive (EVM checksum varyasyonları aynı sayılır). Migration `b3c4d5e6f7a8`. Sebep: BIP-32 xpub'tan tüm child pub key'ler türetilebilir; DB sızıntısında saldırgan BTC bakiye geçmişini izleyebilirdi.
 
@@ -164,7 +165,7 @@ cd frontend && npm install && npm run dev
 
 **revoked_tokens cleanup cron (FAZ C5):** APScheduler her gün 03:00 Europe/Istanbul `_cleanup_revoked_tokens_job` çağırır — `expires_at < now` kayıtlar silinir. `session_factory` parametresi enjekte edilebilir (test'te `TestSession`, prod'da `AsyncSessionLocal`).
 
-**Audit Log altyapısı (FAZ C6):** `audit_logs` tablosu (id, user_id ON DELETE SET NULL, action VARCHAR(64), resource VARCHAR(128), ip_address, user_agent, extra JSONB, created_at). 8 kritik eyleme hook'lanmış: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.register`, `auth.password_change`, `wallet.add/delete`, `integration.add/delete`, `snapshot.delete`, `account.soft_delete`. `app/services/audit.py::log_audit()` best-effort (try/except yutar — ana endpoint bozulmaz). X-Forwarded-For destekli (proxy/ingress arkası). `GET /api/v1/audit-logs?action_prefix=&limit=` IDOR korumalı (user kendi log'larını görür).
+**Audit Log altyapısı (FAZ C6):** `audit_logs` tablosu (id, user_id ON DELETE SET NULL, action VARCHAR(64), resource VARCHAR(128), ip_address, user_agent, extra JSONB, created_at). `AuditAction` enum'unda **25+ eylem** hook'lanmış: `auth.login/login_failed/logout/register/password_change`, password reset, email change, `auth.mfa.*` (7 MFA eylemi) + `auth.login_mfa_required`, `wallet.add/delete/export`, `integration.add/delete/export`, `snapshot.delete`, `advice.generate`, `account.soft_delete`, consent, data_export. `app/services/audit.py::log_audit()` best-effort (try/except yutar — ana endpoint bozulmaz). Client IP `request.client.host` (SEC-004: spoofing'e karşı X-Forwarded-For header'ına **güvenmez**). `GET /api/v1/audit-logs?action_prefix=&limit=` IDOR korumalı (user kendi log'larını görür).
 
 **.app TLD HSTS preload:** `kfinans.app` Chromium/Firefox/Safari HSTS preload listesinde — tarayıcı DNS sorgusu yapmadan zorla HTTPS kullanır. Manuel HSTS header (FAZ C2) defence-in-depth için yine eklendi. Bu nedenle ilk deploy öncesi `https://kfinans.app` "ERR_CERT_AUTHORITY_INVALID" verir (sertifika yok); cert-manager Let's Encrypt'i çekince düzelir.
 
@@ -174,13 +175,13 @@ cd frontend && npm install && npm run dev
 
 **Coverage greenlet config (2026-06-01, kök neden fix):** `pyproject.toml [tool.coverage.run] concurrency = ["greenlet", "thread"]` eklendi. Async FastAPI handler gövdeleri SQLAlchemy async (greenlet) bağlamında çalışır; greenlet izlemesi olmadan coverage.py API katmanını "çalışmadı" sayıyordu → ölçülen kapsam yapay %57.89'du. Fix + ~800 yeni test ile backend coverage **%95.83**'e çıktı.
 
-**`.github/workflows/*` (5 workflow, dormant):** `ci-backend`, `ci-frontend`, `e2e`, `security` (gitleaks + Trivy fs + pip-audit + npm-audit + CodeQL), `sonar`, `release`. GitHub hesabı flagged (#4360519) → Actions çalışmaz; referans olarak repoda durur. Pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a** bak.
+**`.github/workflows/*` (5 workflow, dormant):** `ci-backend`, `ci-frontend`, `e2e`, `security` (gitleaks + Trivy fs + pip-audit + npm-audit + CodeQL), `sonar`. (`release.yml` **silindi** — smoke-test + GIT_SHA injection artık `.gitlab-ci.yml` `smoke`/`build` aşamalarında.) GitHub hesabı flagged (#4360519) → Actions çalışmaz; referans olarak repoda durur. Pipeline/CI sorununa bakarken **önce `.gitlab-ci.yml`'a** bak.
 
 **Branch stratejisi (FAZ B6):** `main` PR şart + lineer history + force-push kapalı + branch silme kapalı + conversation resolution zorunlu (review opsiyonel — tek dev için, ekip büyüdükçe count=1 yapılır). `develop` doğrudan push'a izin (siz lokal), force-push kapalı, branch silme kapalı. Default branch `develop`. Sadece **squash merge** (lineer history). Merge sonrası branch otomatik silme.
 
 **GitHub mirror hijyeni (2026-06-01):** GitHub (`celikada/KFinans`) salt-okunur **mirror** — yalnızca `develop` + `main` + tag'ler push edilir; feature branch'ler **sadece GitLab'a** gider (yarım iş public mirror'a sızmaz). GitHub'da `develop` + `main` protected. GitLab zaten protected + merge sonrası auto-delete. Tüm MR'lar GitLab'da (#12/#13/#14 merged, #15 sealed-secret+gitleaks pending).
 
-**Deploy durumu (2026-06-02):** Production tag **`v0.1.0-rc12`** Oracle K3s'e çıkıldı (pipeline #94: build → trivy → manuel deploy → smoke, hepsi yeşil); production sağlıklı (`/health` → `{"status":"ok"}`). rc12 = SonarQube legacy bulgu temizliği (455→13) + frontend image HIGH/CRITICAL CVE fix (bkz. aşağı). Önceki: rc10 (2026-06-01). v1.0.0 hâlâ KVKK kullanıcı aksiyonlarına (COMP) bağlı.
+**Deploy durumu (2026-06-02):** Production tag **`v0.1.0-rc16`** Oracle K3s'e çıkıldı (build → trivy → manuel deploy → smoke, hepsi yeşil); production sağlıklı (`/health` → `{"status":"ok"}`). Sürüm zinciri: rc12 (SonarQube legacy temizliği 455→~9 + frontend CVE fix), **rc13** (wallet/crypto şifreli tam-adres export + prod backend OOMKilled fix: memory limit 512Mi→1Gi), **rc14** (saveBlob indirme sertleştirme), **rc15** (authedFetch 401→refresh→retry), **rc16** (borsa API key şifreli export/import). v1.0.0 hâlâ KVKK kullanıcı aksiyonlarına (COMP placeholder + off-site backup) bağlı.
 
 **Frontend image CVE hardening (2026-06-02, rc12):** `frontend/Dockerfile` runner stage'inden global `npm`/`npx` kaldırıldı (`rm -rf /usr/local/lib/node_modules/npm`) — base `node:20-alpine`'in npm CLI bundle'ı (cross-spawn/glob/minimatch/tar) HIGH/CRITICAL CVE taşıyordu ve runtime `node server.js` için npm gereksiz (saldırı yüzeyi ↓). `next` 16.2.4 → **16.2.6** (CVE-2026-44573/44574/44575/44578/44579 Middleware/Proxy bypass + SSRF + DoS, CVE-2026-45109, GHSA-8h8q). Standalone çıktıda yalnız next@16.2.6 var; diğerleri npm-bundle kaynaklıydı. Trivy image gate (`--severity HIGH,CRITICAL --ignore-unfixed`) bu nedenle rc11'de kırmızıydı, rc12'de yeşil.
 
@@ -228,7 +229,7 @@ cd frontend && npm install && npm run dev
 
 **audit_logs retention (COMP-022):** Tablo 365 gün retention; `_purge_old_audit_logs_job` her gün 04:30 eski PII'yi siler (KVKK m.7). Kullanıcı tarafından sayfalı erişim: `GET /audit-logs?limit=50&offset=0` (PERF-001 PaginatedResponse[T]).
 
-**Tavsiye motoru (AI-003 + AI-005 + AI-007 + AI-008):** `advisor.py` portföy dağılımını, haftalık/aylık değişimleri ve risk profilini Claude API'ye gönderir. System prompt 1500-2000 token (Anthropic prompt cache aktif), SPK uyumlu disclaimer hem prompt'a injekte hem post-processing footer (`_ensure_disclaimer`). `/advice/generate` çağrı sırası: (1) `anthropic_consent_at IS NULL` → 403 KVKK m.9, (2) `credit_balance < 1` → 402 yetersiz kredi, (3) slowapi 5/saat, (4) Anthropic çağrısı, (5) atomik `credits_used += 1` düşüm.
+**Tavsiye motoru (AI-003 + AI-005 + AI-007 + AI-008):** `advisor.py` portföy dağılımını, haftalık/aylık değişimleri ve risk profilini Claude API'ye gönderir. System prompt ~1024+ token (Anthropic prompt cache eşiği), SPK uyumlu disclaimer hem prompt'a injekte hem post-processing footer (`_ensure_disclaimer`). `/advice/generate` çağrı sırası: (1) `anthropic_consent_at IS NULL` → 403 KVKK m.9, (2) `credit_balance < 1` → 402 yetersiz kredi, (3) slowapi 5/saat, (4) Anthropic çağrısı, (5) atomik `credits_used += 1` düşüm.
 
 **Pagination pattern (PERF-001):** Yeni list endpoint'leri `app/schemas/pagination.py::PaginatedResponse[T]` döner: `items + total_count + has_next + limit + offset`. Default limit=50, max 500. Şu an `/audit-logs` kullanıyor; `/expenses /incomes /wallets /planned-expenses` pagination Faz 4 TODO.
 
@@ -242,11 +243,11 @@ cd frontend && npm install && npm run dev
 
 **Exception detail sanitization (SEC-007):** `try/except` ile yakalanmış 5 yerde `detail=f"...{e}"` interpolation kaldırıldı → `logger.exception(...)` (full trace) + generic Türkçe kullanıcı mesajı. Etkilenen: `manual_crypto._fetch_prices_safe` (price + USD/TL), `manual_crypto.import_excel` (openpyxl), `portfolio.snapshot_preview`, `portfolio.create_snapshot`. `tefas.py:88` ValueError korundu (user-input echo "TEFAS'ta fon bulunamadı: <code>"; servisin tek raise noktası dokümante). Saldırgan DB URL/secret/SQL/stack trace görmemeli. BACK-008 generic handler tamamlayıcı (yakalanmayan'lar için son safety net).
 
-**Production smoke test (DEPLOY-001):** `release.yml::smoke-test` job Playwright'tan ÖNCE 4-step curl gate çalıştırır (~5 sn): (1) frontend HTTPS up + cert validity, (2) `/health` JSON `{"status":"ok"}` (NOT `/api/v1/health` — health endpoint root'ta, prefix yok), (3) `POST /api/v1/auth/login` bogus creds → 401 (DB+endpoint+slowapi chain canlı), (4) HSTS + X-Frame + CSP + X-Content-Type-Options header'lar mevcut. Curl fail ise Playwright çalışmaz, deploy gate olur. Lokal smoke runner: `frontend/scripts/smoke.sh` + `npm run smoke` (BASE/API_BASE env override). 11 @smoke Playwright test (login + register + logout + a11y + i18n + security headers). Frontend Sentry browser SDK (`@sentry/nextjs`) ileride.
+**Production smoke test (DEPLOY-001):** `.gitlab-ci.yml` `smoke` stage'i (manuel deploy sonrası) 4-step curl gate çalıştırır (~5 sn): (1) frontend HTTPS up + cert validity, (2) `/health` JSON `{"status":"ok"}` (NOT `/api/v1/health` — health endpoint root'ta, prefix yok), (3) `POST /api/v1/auth/login` bogus creds → 401 (DB+endpoint+slowapi chain canlı), (4) HSTS + X-Frame + CSP + X-Content-Type-Options header'lar mevcut. Curl fail ise Playwright çalışmaz, deploy gate olur. Lokal smoke runner: `frontend/scripts/smoke.sh` + `npm run smoke` (BASE/API_BASE env override). 11 @smoke Playwright test (login + register + logout + a11y + i18n + security headers). Frontend Sentry browser SDK (`@sentry/nextjs`) ileride.
 
-**i18n foundation (i18n-001):** Client-side cookie tabanlı TR/EN dil desteği. `app/_i18n/dictionaries/{tr,en}.json` (auth + common + legal + footer anahtarları), `app/_i18n/I18nProvider.tsx` React Context (cookie `kfinans-locale=tr|en`, `samesite=lax`, 1 yıl), `useTranslation()` hook → `t("auth.login")` → "Giriş Yap" / "Sign In", `LanguageSwitcher` toggle (dashboard layout top-right + login sayfası top-right; `aria-pressed` segmented). Eksik anahtarlar key'i geri döner (sessiz fallback). Dil değişiminde sayfa reload yok — Context push + `<html lang>` attribute güncellemesi (ekran okuyucu duyurur). **Sayfa bazlı `app/[lang]/...` routing kullanılmadı** — mevcut 17 dashboard sayfasını taşımayı gerektirir; cookie tabanlı yaklaşım foundation için yeterli. Yeni sayfa çevirisi: `"use client"` + `const { t } = useTranslation()` + dictionary JSON'a anahtar ekle. Şu an çevrili: login + dashboard layout. Geri kalan sayfalar TR-only (incremental).
+**i18n foundation (i18n-001):** Client-side cookie tabanlı TR/EN dil desteği. `app/_i18n/dictionaries/{tr,en}.json` (auth + common + legal + footer anahtarları), `app/_i18n/I18nProvider.tsx` React Context (cookie `kfinans-locale=tr|en`, `samesite=lax`, 1 yıl), `useTranslation()` hook → `t("auth.login")` → "Giriş Yap" / "Sign In", `LanguageSwitcher` toggle (dashboard layout top-right + login sayfası top-right; `aria-pressed` segmented). Eksik anahtarlar key'i geri döner (sessiz fallback). Dil değişiminde sayfa reload yok — Context push + `<html lang>` attribute güncellemesi (ekran okuyucu duyurur). **Sayfa bazlı `app/[lang]/...` routing kullanılmadı** — mevcut 17 dashboard sayfasını taşımayı gerektirir; cookie tabanlı yaklaşım foundation için yeterli. Yeni sayfa çevirisi: `"use client"` + `const { t } = useTranslation()` + dictionary JSON'a anahtar ekle. **i18n-002 TAMAMLANDI:** tüm 20 dashboard sayfası + login + register çevrildi; `tr.json`/`en.json` ikisi de 953 satır (EN, TR'yi tam yansıtır), 53 bileşen `useTranslation` kullanır. Eksik anahtarlar key'i geri döner (sessiz fallback).
 
-**Observability — Sentry + OpenTelemetry (OBS-001):** `app/observability.py::init_sentry/init_otel` `main.py` lifespan startup'inda çağrılır. **Hepsi opt-in:** `settings.sentry_dsn` boş ise no-op, `settings.otel_endpoint` boş ise no-op (dev'de pasif). Sentry SDK FastAPI + SQLAlchemy integration'ları (exception capture + breadcrumb + perf monitoring); `send_default_pii=False` default (KVKK güvenli). OTel instrumentation: FastAPI handler + SQLAlchemy + asyncpg + httpx — `OTLPSpanExporter` Tempo/Jaeger/Honeycomb endpoint'ine HTTP POST. `traces_sample_rate` default %10. Release tagi `GIT_SHA` env (release.yml CMD'da injekte edilir). Production env: `SENTRY_DSN`, `SENTRY_ENV=production`, `OTEL_ENDPOINT=http://tempo:4318/v1/traces`. PERF-004 in-memory tracker hala çalışır; OTel ileride yerini alabilir.
+**Observability — Sentry + OpenTelemetry (OBS-001):** `app/observability.py::init_sentry/init_otel` `main.py` lifespan startup'inda çağrılır. **Hepsi opt-in:** `settings.sentry_dsn` boş ise no-op, `settings.otel_endpoint` boş ise no-op (dev'de pasif). Sentry SDK FastAPI + SQLAlchemy integration'ları (exception capture + breadcrumb + perf monitoring); `send_default_pii=False` default (KVKK güvenli). OTel instrumentation: FastAPI handler + SQLAlchemy + asyncpg + httpx — `OTLPSpanExporter` Tempo/Jaeger/Honeycomb endpoint'ine HTTP POST. `traces_sample_rate` default %10. Release tagi `GIT_SHA` env (GitLab CI `build`/`deploy` aşamasında injekte edilir). Production env: `SENTRY_DSN`, `SENTRY_ENV=production`, `OTEL_ENDPOINT=http://tempo:4318/v1/traces`. PERF-004 in-memory tracker hala çalışır; OTel ileride yerini alabilir.
 
 **Confirm dialog — i18n + a11y (FE-013):** Native `window.confirm()` 13 yerde kaldırıldı → `app/_components/ConfirmDialog.tsx::ConfirmDialogProvider` (root layout'ta mount) + `useConfirm()` async hook. Çağrı pattern: `if (!(await confirm("Silinsin mi?", { destructive: true })))`. Dialog `role="alertdialog"` + `aria-modal` + `aria-labelledby/describedby` + `useFocusTrap` (A11Y-001 hook reuse) + Esc kapatma + initial focus confirm butonuna (`autoFocus`). `destructive` flag kırmızı/mavi buton seçer. i18n: `common.confirm/yes/cancel` dictionary'den. @smoke test: hesap silme akışı dialog açılır, Esc iptal eder.
 
@@ -262,7 +263,7 @@ cd frontend && npm install && npm run dev
 - **Pydantic v2 modern stiller (DEPS-001):** `model_config = ConfigDict(...)` (NOT `class Config:`); validation için `@field_validator + classmethod` (NOT `model_post_init`). Yeni schema'lar v1 stillerini kullanmamalıdır.
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
-- **Test sayıları:** ~1188 backend pass (unit + integration) + 387 frontend (vitest) pass (i18n-002 + SonarQube temizliği turlarında frontend testleri 202→387'ye çıktı). SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
+- **Test sayıları:** ~1196 backend pass (unit + integration) + ~396 frontend (vitest) pass (i18n-002 + SonarQube temizliği turlarında frontend testleri 202→~396'ya çıktı). SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
 - **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
 
 ## Son Audit — 2026-05-22 (Faz I post-fix)

@@ -3,7 +3,7 @@
 > **Amaç:** Son kullanıcılar için KFinans dashboard sayfalarının feature-bazlı kullanım rehberi.
 > **Hedef kitle:** Kişisel yatırım/portföy takibi yapan kullanıcılar.
 
-**Durum:** Taslak — ekran görüntüleri + video link Sprint 3'te eklenir.
+**Durum:** Taslak — 20 dashboard sayfası kapsanır (EN çeviri tamamlandı). Ekran görüntüleri + video link Sprint 3'te eklenir.
 
 ## 1. Hesap Yönetimi
 
@@ -17,14 +17,17 @@
 - Şifre 5 başarısız deneme → 15 dk hesap kilidi
 - MFA TOTP aktifse: 6 haneli kod veya kurtarma kodu
 
-### 1.3 MFA (İki Adımlı Doğrulama)
-- Kurulum: `/dashboard/settings/security` → "MFA Kur" → QR kod tara (Google Authenticator) → 6 hane doğrula → 10 kurtarma kodu kaydet
-- Devre dışı: aynı sayfada → 6 hane doğrula
+### 1.3 MFA (İki Adımlı Doğrulama) — `/dashboard/settings/security`
+- Kurulum: `/dashboard/settings/security` → "MFA Kur" → QR kod tara (Google Authenticator / Authy / 1Password) → 6 hane doğrula → 10 kurtarma kodu **tek seferlik** gösterilir, kaydet
+- Devre dışı: aynı sayfada → 6 haneli TOTP veya kurtarma kodu ile doğrula
+- Login akışı: MFA aktifse `/login` sonrası 6 haneli kod ekranı (pre_mfa_token 15 dk geçerli)
+- Bu sayfa, Ayarlar (`/dashboard/settings`) altındaki ayrı bir güvenlik alt-sayfasıdır
 
 ### 1.4 KVKK Hakları
 - `/dashboard/settings` → "Veri Dışa Aktar" → JSON formatında tüm veri
 - Hesap silme: 30 gün geri alma süresi, sonra fiziksel silinme
 - Açık rıza geri çekme: Anthropic AI tavsiyesi için ayrı toggle
+- Tüm silme/kritik işlemler erişilebilir onay dialog'u (ConfirmDialog, `role="alertdialog"` + Esc ile iptal) gösterir — yanlışlıkla silme önlenir
 
 ## 2. Dashboard Sayfaları
 
@@ -47,11 +50,13 @@
 ### 2.4 Kripto Borsalar `/dashboard/crypto`
 - Binance / iCrypex API key ile otomatik
 - Manuel kripto: `/dashboard/manual-crypto` (BinanceTR, BTCTurk, vs.)
+- API anahtarlarını dışa aktarma: tam (açık) key'ler hassas olduğu için **şifre doğrulaması** arkasındadır (yanlış şifre → 403, key verilmez)
 
 ### 2.5 Blockchain Cüzdanlar `/dashboard/wallets`
 - 10 zincir: Bitcoin (xpub), Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin
-- Adres + xpub Fernet ile şifreli saklanır (DB'de plaintext yok)
+- Adres + xpub Fernet ile şifreli saklanır (DB'de plaintext yok); JSON response'ta maskeli
 - ERC-20 token discovery (Ethplorer)
+- **Excel dışa aktarma — iki mod:** (1) varsayılan maskeli adres export (şifresiz), (2) **şifre korumalı tam-adres export** — xpub sızması riski nedeniyle tam adres her zaman şifre doğrulaması arkasındadır (yanlış şifre → 403). İçe aktarmada maskeli satırlar replace-all ile gerçek adresleri **ezmez** (veri kaybı koruması)
 
 ### 2.6 BES `/dashboard/bes`
 - Manuel giriş veya Excel import
@@ -129,8 +134,8 @@
 ## 5. Dil Desteği
 
 - TR (Türkçe) varsayılan
-- EN (English) — login + dashboard layout partial; tam çeviri Sprint 3+
-- Üst sağ köşede dil değiştirici (cookie tabanlı)
+- EN (English) — tüm dashboard sayfaları çevrildi (`tr.json` = `en.json`, 953 anahtar; 53 bileşen `useTranslation` kullanır). Eksik anahtar olursa key sessizce geri döner
+- Üst sağ köşede dil değiştirici (cookie tabanlı, `kfinans-locale=tr|en`, sayfa reload yok)
 
 ## 6. Mobil Uyumluluk
 
