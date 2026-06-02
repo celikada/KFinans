@@ -1,5 +1,5 @@
 import type { IntegrationDTO } from "./types";
-import { request } from "./_client";
+import { downloadBlobPost, request, uploadForm } from "./_client";
 
 export const integrationsApi = {
   getIntegrations: () => request<IntegrationDTO[]>("/integrations"),
@@ -11,4 +11,9 @@ export const integrationsApi = {
     }),
 
   removeIntegration: (provider: string) => request<void>(`/integrations/${provider}`, { method: "DELETE" }),
+
+  // Tam (açık) API anahtarlarını şifre doğrulamalı dışa aktar; yanlış şifre → 403, anahtar verilmez.
+  exportIntegrationsFull: (password: string) =>
+    downloadBlobPost("/integrations/export", { password }, "kripto-api-anahtarlari.xlsx"),
+  importIntegrations: (file: File) => uploadForm<IntegrationDTO[]>("/integrations/import", file),
 };

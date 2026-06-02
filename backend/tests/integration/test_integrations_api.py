@@ -4,10 +4,15 @@ Integration endpoint'leri — exchange API key encrypt/decrypt akışı.
 Kritik: API key'ler asla plaintext dönmemeli; DB'de Fernet ile şifreli.
 """
 
+import io
+
+import openpyxl
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import make_user
+
+_XLSX_CT = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 @pytest.fixture(autouse=True)
@@ -213,3 +218,73 @@ async def test_sync_returns_202(client: AsyncClient):
 async def test_sync_without_auth_returns_401(client: AsyncClient):
     resp = await client.post("/api/v1/integrations/sync")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_export_integrations_full_correct_password(client: AsyncClient):
+    """Doğru şifre → 200 xlsx; içerik DECRYPT edilmiş (açık) API key/secret içerir."""
+    headers = await make_user(client, "intg_export@example.com")
+    await client.post(
+        "/api/v1/integrations",
+        json={"provider": "binance", "api_key": "PLAINKEY-123", "api_secret": "PLAINSECRET-456"},
+        headers=headers,
+    )
+    resp = await client.post(
+        "/api/v1/integrations/export",
+        json={"password": "guclu-sifre-123"},  # make_user sabit sifresi
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/vnd.openxmlformats")
+    wb = openpyxl.load_workbook(io.BytesIO(resp.content), data_only=True)
+    flat = [str(c.value) for row in wb.active.iter_rows() for c in row]
+    assert "PLAINKEY-123" in flat  # decrypt dogru
+    assert "PLAINSECRET-456" in flat
+
+
+@pytest.mark.asyncio
+async def test_export_integrations_wrong_password_403(client: AsyncClient):
+    headers = await make_user(client, "intg_export_wrong@example.com")
+    await client.post(
+        "/api/v1/integrations",
+        json={"provider": "binance", "api_key": "k", "api_secret": "s"},
+        headers=headers,
+    )
+    resp = await client.post(
+        "/api/v1/integrations/export",
+        json={"password": "yanlis-sifre"},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_import_integrations_upsert(client: AsyncClient):
+    """Excel'den API key import → provider upsert; key decrypt edilebilir olmali."""
+    headers = await make_user(client, "intg_import@example.com")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Borsa", "API Key", "API Secret"])
+    ws.append(["binance", "IMPORTED-KEY", "IMPORTED-SECRET"])
+    ws.append(["fakeexchange", "x", "y"])  # gecersiz provider → atlanir
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    resp = await client.post(
+        "/api/v1/integrations/import",
+        files={"file": ("k.xlsx", buf, _XLSX_CT)},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert any(i["provider"] == "binance" for i in resp.json())
+    # Round-trip: import edilen key dogru sifreyle export'ta acik gelmeli
+    exp = await client.post(
+        "/api/v1/integrations/export",
+        json={"password": "guclu-sifre-123"},
+        headers=headers,
+    )
+    wb2 = openpyxl.load_workbook(io.BytesIO(exp.content), data_only=True)
+    flat = [str(c.value) for row in wb2.active.iter_rows() for c in row]
+    assert "IMPORTED-KEY" in flat
