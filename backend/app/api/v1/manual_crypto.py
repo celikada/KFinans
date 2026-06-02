@@ -282,6 +282,29 @@ async def create_manual_crypto(
     return holding
 
 
+def _apply_price_source_update(holding: ManualCryptoHolding, payload: ManualCryptoUpdate) -> None:
+    """price_source moduna gore manual/linked alanlarini gunceller + ilgisizleri temizler.
+
+    Davranis update_manual_crypto'dan birebir tasinmistir (S3776 complexity dusurmek icin).
+    """
+    if payload.price_source is not None:
+        holding.price_source = payload.price_source
+        # mod değişince ilgisiz alanları temizle
+        if payload.price_source != "manual":
+            holding.manual_unit_price_tl = None
+        if payload.price_source != "linked":
+            holding.linked_source = None
+            holding.linked_id = None
+
+    if payload.manual_unit_price_tl is not None and holding.price_source == "manual":
+        holding.manual_unit_price_tl = payload.manual_unit_price_tl
+    if holding.price_source == "linked":
+        if payload.linked_source is not None:
+            holding.linked_source = payload.linked_source
+        if payload.linked_id is not None:
+            holding.linked_id = payload.linked_id
+
+
 @router.put(
     "/{holding_id}",
     response_model=ManualCryptoOut,
@@ -310,22 +333,7 @@ async def update_manual_crypto(
         if value is not None:
             setattr(holding, attr, value)
 
-    if payload.price_source is not None:
-        holding.price_source = payload.price_source
-        # mod değişince ilgisiz alanları temizle
-        if payload.price_source != "manual":
-            holding.manual_unit_price_tl = None
-        if payload.price_source != "linked":
-            holding.linked_source = None
-            holding.linked_id = None
-
-    if payload.manual_unit_price_tl is not None and holding.price_source == "manual":
-        holding.manual_unit_price_tl = payload.manual_unit_price_tl
-    if holding.price_source == "linked":
-        if payload.linked_source is not None:
-            holding.linked_source = payload.linked_source
-        if payload.linked_id is not None:
-            holding.linked_id = payload.linked_id
+    _apply_price_source_update(holding, payload)
 
     await db.commit()
     await db.refresh(holding)

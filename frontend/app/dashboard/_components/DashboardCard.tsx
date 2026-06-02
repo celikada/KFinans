@@ -10,6 +10,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import { TLValue } from "@/app/_components/TLValue";
+import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { COLOR_MAP, ICONS, type IconName } from "./icons";
 
 
@@ -92,6 +93,7 @@ export function Card({
 
 export function GoalCard({ href, pct, passive }: { readonly href: string; readonly pct: number | null; readonly passive: number | null }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const hasData = pct !== null;
 
   return (
@@ -109,7 +111,7 @@ export function GoalCard({ href, pct, passive }: { readonly href: string; readon
           </span>
         )}
       </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">Finansal Hedef</h3>
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">{t("content.dashboard.goalTitle")}</h3>
 
       {hasData ? (
         <>
@@ -121,12 +123,12 @@ export function GoalCard({ href, pct, passive }: { readonly href: string; readon
           </div>
           {passive !== null && (
             <p className="text-xs text-gray-400">
-              Pasif gelir: <span className="font-medium text-gray-600">{fmtTL(passive)} ₺/ay</span>
+              {t("content.dashboard.goalPassiveIncome")} <span className="font-medium text-gray-600">{fmtTL(passive)} {t("content.dashboard.perMonthSuffix")}</span>
             </p>
           )}
         </>
       ) : (
-        <p className="text-xs text-gray-400">Aylık ihtiyacını gir, hedefini hesapla</p>
+        <p className="text-xs text-gray-400">{t("content.dashboard.goalEmptyHint")}</p>
       )}
     </button>
   );
@@ -135,13 +137,14 @@ export function GoalCard({ href, pct, passive }: { readonly href: string; readon
 
 export function BudgetCard({ href, overCount }: { readonly href: string; readonly overCount: number | null }) {
   const router = useRouter();
+  const { t } = useTranslation();
   let status: React.ReactNode;
   if (overCount === null) {
-    status = <p className="text-xs text-gray-400">Kategori bazında limit belirle</p>;
+    status = <p className="text-xs text-gray-400">{t("content.dashboard.budgetEmptyHint")}</p>;
   } else if (overCount === 0) {
-    status = <p className="text-xs text-emerald-600">Tüm kategoriler bütçe dahilinde</p>;
+    status = <p className="text-xs text-emerald-600">{t("content.dashboard.budgetAllWithin")}</p>;
   } else {
-    status = <p className="text-xs text-red-500">{overCount} kategori bütçeyi aştı</p>;
+    status = <p className="text-xs text-red-500">{t("content.dashboard.budgetOverCount").replace("{count}", String(overCount))}</p>;
   }
   return (
     <button
@@ -154,16 +157,16 @@ export function BudgetCard({ href, overCount }: { readonly href: string; readonl
         </div>
         {overCount !== null && overCount > 0 && (
           <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-            {overCount} aşım
+            {t("content.dashboard.budgetOverBadge").replace("{count}", String(overCount))}
           </span>
         )}
         {overCount !== null && overCount === 0 && (
           <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-            Dahilinde
+            {t("content.dashboard.budgetWithinBadge")}
           </span>
         )}
       </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">Bütçe Takibi</h3>
+      <h3 className="text-sm font-semibold text-gray-800 mb-1">{t("content.dashboard.budgetTitle")}</h3>
       {status}
     </button>
   );

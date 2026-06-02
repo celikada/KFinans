@@ -259,7 +259,7 @@ def _build_month_row(
 async def get_cash_flow(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    year: int = Query(..., ge=2020, le=2100),
+    year: Annotated[int, Query(ge=2020, le=2100)],
 ):
     """Yıllık nakit akış projeksiyonu (12 ay)."""
     today = datetime.now(_ISTANBUL).date()
@@ -333,7 +333,7 @@ async def _build_cash_flow_data(year: int, current_user: User, db: AsyncSession)
 async def download_cash_flow_xlsx(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    year: int = Query(..., ge=2020, le=2100),
+    year: Annotated[int, Query(ge=2020, le=2100)],
 ):
     """Yıllık nakit akış Excel raporu."""
     from app.services.reports import cash_flow_to_xlsx
@@ -351,7 +351,7 @@ async def download_cash_flow_xlsx(
 async def download_cash_flow_pdf(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    year: int = Query(..., ge=2020, le=2100),
+    year: Annotated[int, Query(ge=2020, le=2100)],
 ):
     """Yıllık nakit akış PDF raporu."""
     from app.services.reports import cash_flow_to_pdf
