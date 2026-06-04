@@ -59,12 +59,21 @@ export const authApi = {
     risk_profile: string,
     age_confirmed: boolean,
     release_notes_opt_in = false,
+    default_currency?: string,
   ) =>
     request<RegisterResponseDTO>("/auth/register", {
       method: "POST",
       // COMP-010 (FAZ H): age_confirmed zorunlu — backend False ise 422 doner.
       // release_notes_opt_in opsiyonel KVKK acik riza (varsayilan kapali).
-      body: JSON.stringify({ email, password, risk_profile, age_confirmed, release_notes_opt_in }),
+      // v0.3.0: default_currency opsiyonel — verilmezse backend "TRY" varsayar.
+      body: JSON.stringify({
+        email,
+        password,
+        risk_profile,
+        age_confirmed,
+        release_notes_opt_in,
+        ...(default_currency ? { default_currency } : {}),
+      }),
     }),
 
   verifyEmail: (token: string) =>

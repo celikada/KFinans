@@ -25,6 +25,7 @@ vi.mock("@/lib/api", () => ({
     updateInstallment: (...a: unknown[]) => updateInstallment(...a),
     deleteInstallment: (...a: unknown[]) => deleteInstallment(...a),
   },
+  CURRENCIES: ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"],
 }));
 
 const routerReplace = vi.fn();

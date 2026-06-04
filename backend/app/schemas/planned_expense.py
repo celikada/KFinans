@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.services.currency import CurrencyType
+
 PlannedCategory = Literal["loan", "tax", "insurance", "subscription", "rent", "utility", "other"]
 PlannedRecurrence = Literal["one_time", "monthly", "quarterly", "biannual", "yearly", "custom"]
 
@@ -44,6 +46,8 @@ class PlannedExpenseCreate(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=500)
     credit_card_id: Optional[int] = None
     is_paid: bool = False
+    # Çoklu para birimi (v0.3.0) — tahmin; güncel kurla TL'ye çevrilir.
+    currency: Optional[CurrencyType] = None
 
 
 class PlannedExpenseUpdate(BaseModel):
@@ -60,6 +64,7 @@ class PlannedExpenseUpdate(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=500)
     credit_card_id: Optional[int] = None
     is_paid: Optional[bool] = None
+    currency: Optional[CurrencyType] = None
 
 
 class PlannedExpenseOut(BaseModel):
@@ -77,6 +82,7 @@ class PlannedExpenseOut(BaseModel):
     notes: Optional[str] = None
     credit_card_id: Optional[int] = None
     is_paid: bool = False
+    currency: str = "TRY"
 
     model_config = {"from_attributes": True}
 

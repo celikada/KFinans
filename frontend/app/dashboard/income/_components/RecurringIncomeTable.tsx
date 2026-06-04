@@ -146,7 +146,7 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Re
                     {it.end_date ? `→ ${it.end_date}` : `→ ${t("content.income.indefinite")}`}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-emerald-600 tabular-nums">
-                    {fmtTL(Number.parseFloat(it.amount))} ₺
+                    {fmtTL(Number.parseFloat(it.amount))} {it.currency ?? "TRY"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">

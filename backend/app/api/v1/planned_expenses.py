@@ -22,6 +22,7 @@ from app.schemas.planned_expense import (
     PlannedExpenseUpdate,
 )
 from app.schemas.recurring import RealizeMonthRequest, RealizeResult
+from app.services import currency as currency_svc
 from app.services import recurrence
 
 _ISTANBUL = ZoneInfo("Europe/Istanbul")
@@ -66,6 +67,7 @@ async def create_planned_expense(
         user_id=current_user.id,
         title=payload.title.strip(),
         amount=payload.amount,
+        currency=payload.currency or current_user.default_currency or "TRY",
         is_estimated=payload.is_estimated,
         category=payload.category,
         recurrence=payload.recurrence,
@@ -104,6 +106,7 @@ async def update_planned_expense(
     for field in (
         "title",
         "amount",
+        "currency",
         "is_estimated",
         "category",
         "recurrence",
@@ -163,6 +166,10 @@ async def get_forecast(
     # Filtre: kart + odendi olanlari at
     eligible = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
 
+    # v0.3.0: tahmin → GÜNCEL kurla TL'ye çevrilir (hibrit kur). Kur haritası
+    # tek sefer çekilir; ForecastItem.amount TL karşılığı döner (total TL bazlı).
+    rates = await currency_svc.fetch_rates() if eligible else {}
+
     months_out: list[ForecastMonth] = []
     year_total = Decimal("0")
 
@@ -170,11 +177,12 @@ async def get_forecast(
         items: list[ForecastItem] = []
         for pe in eligible:
             if _applies_in_month(pe, year, m):
+                amount_tl = currency_svc.convert_to_tl(Decimal(pe.amount), pe.currency or "TRY", rates)
                 items.append(
                     ForecastItem(
                         id=pe.id,
                         title=pe.title,
-                        amount=pe.amount,
+                        amount=amount_tl,
                         category=pe.category,
                         is_estimated=pe.is_estimated,
                     )
@@ -226,9 +234,20 @@ async def _realize_one_expense(
     )
     if existing_q.scalar_one_or_none() is not None:
         return None
+    # Para birimini planned'dan taşı; realize anı kuruyla amount_tl SABİTLE.
+    pe_currency = pe.currency or "TRY"
+    if pe_currency.upper() == "TRY":
+        amount_tl, exchange_rate = Decimal(pe.amount), Decimal("1")
+    else:
+        rates = await currency_svc.fetch_rates()
+        amount_tl = currency_svc.convert_to_tl(Decimal(pe.amount), pe_currency, rates)
+        exchange_rate = rates.get(pe_currency.upper())
     exp = Expense(
         user_id=user_id,
         amount=pe.amount,
+        currency=pe_currency,
+        amount_tl=amount_tl,
+        exchange_rate=exchange_rate,
         category=pe.category,
         date=target_date,
         description=pe.title,

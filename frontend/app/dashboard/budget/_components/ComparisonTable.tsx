@@ -46,7 +46,7 @@ export function ComparisonTable({ rows, onDelete }: Props) {
               </div>
               <div className="flex items-center gap-3 text-sm">
                 {budget !== null && (
-                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {fmtTL(budget)} ₺</span>
+                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {fmtTL(budget)} {row.currency ?? "TRY"}</span>
                 )}
                 <TLValue
                   tl={actual}

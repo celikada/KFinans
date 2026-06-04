@@ -362,6 +362,7 @@ verify_token_expires_at  TIMESTAMPTZ                       -- token ömrü (defa
 deleted_at               TIMESTAMPTZ                       -- soft delete (DELETE /user/me); 30 gün sonra hard-delete cron siler
 goal_amount              NUMERIC(18, 2)                   -- finansal hedef (pasif gelir hedefi)
 goal_currency            VARCHAR(3) NOT NULL DEFAULT 'TRY' -- 'TRY'|'USD'|'EUR'|'GBP'
+default_currency         VARCHAR(3) NOT NULL DEFAULT 'TRY' -- v0.3.0 kayıt formu varsayılan para birimi (6 birim)
 anthropic_consent_at     TIMESTAMPTZ                       -- KVKK m.9 açık rıza (AI tavsiye için zorunlu)
 anthropic_consent_version VARCHAR(10)                      -- rıza metni sürümü
 totp_secret              TEXT                              -- MFA: Fernet ciphertext (plaintext base32)
@@ -461,7 +462,10 @@ INDEX ix_bes_holdings_user_id (user_id)
 ```sql
 id           UUID PK
 user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)  -- orijinal para birimi
+currency     VARCHAR(3) NOT NULL DEFAULT 'TRY'     -- TRY|USD|EUR|GBP|CHF|JPY (v0.3.0)
+amount_tl    NUMERIC(18, 2) NOT NULL DEFAULT 0     -- işlem-anı kuruyla SABİT TL karşılığı
+exchange_rate NUMERIC(18, 6)                       -- kayıt anı 1 birim = X TL (audit)
 category     TEXT NOT NULL                        -- ExpenseCategory enum (10 sabit kategori)
 date         DATE NOT NULL
 description  VARCHAR(500)
@@ -470,7 +474,7 @@ created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 INDEX ix_expenses_user_date (user_id, date)       -- aylık liste/summary sorguları için
 ```
 
-> 10 sabit kategori: `food`, `groceries`, `transport`, `bills`, `health`, `entertainment`, `clothing`, `home`, `tax`, `other`. Schema'da `Literal` tipi ile zorlanır; kategori dışı değer 422 döner. `User.expenses` ilişkisi cascade all, delete-orphan.
+> 10 sabit kategori: `food`, `groceries`, `transport`, `bills`, `health`, `entertainment`, `clothing`, `home`, `tax`, `other`. Schema'da `Literal` tipi ile zorlanır; kategori dışı değer 422 döner. `User.expenses` ilişkisi cascade all, delete-orphan. **Çoklu para birimi (v0.3.0, migration `c9d0e1f2a3b4`):** gerçekleşmiş gider → kayıt anında `amount_tl` + `exchange_rate` sabitlenir (kur değişse de değişmez); summary `sum(amount_tl)` toplar. `incomes` ile birebir aynı yapı.
 
 #### `planned_expenses` (Faz 3 — planlı ödemeler & nakit akışı tahmini)
 ```sql
@@ -478,6 +482,7 @@ id              UUID PK
 user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 title           TEXT NOT NULL                         -- ödeme başlığı
 amount          NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+currency        VARCHAR(3) NOT NULL DEFAULT 'TRY'      -- v0.3.0; forecast güncel kurla TL'ye çevrilir (amount_tl YOK)
 is_estimated    BOOLEAN NOT NULL DEFAULT FALSE        -- tahmini tutar bayrağı
 category        TEXT NOT NULL                         -- PlannedCategory enum (7 kategori)
 recurrence      TEXT NOT NULL                         -- PlannedRecurrence enum (6 tekrar tipi)
@@ -498,7 +503,10 @@ INDEX ix_planned_expenses_user_id (user_id)
 ```sql
 id           BIGSERIAL PK
 user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
-amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)
+amount       NUMERIC(18, 2) NOT NULL CHECK (amount > 0)  -- orijinal para birimi
+currency     VARCHAR(3) NOT NULL DEFAULT 'TRY'     -- TRY|USD|EUR|GBP|CHF|JPY (v0.3.0)
+amount_tl    NUMERIC(18, 2) NOT NULL DEFAULT 0     -- işlem-anı kuruyla SABİT TL karşılığı
+exchange_rate NUMERIC(18, 6)                       -- kayıt anı 1 birim = X TL (audit)
 category     VARCHAR(20) NOT NULL                    -- IncomeCategory enum (7 sabit kategori)
 date         DATE NOT NULL
 description  TEXT
@@ -515,6 +523,7 @@ id          BIGSERIAL PK
 user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE
 category    VARCHAR(20) NOT NULL                     -- ExpenseCategory enum (10 kategori)
 amount      NUMERIC(18, 2) NOT NULL
+currency    VARCHAR(3) NOT NULL DEFAULT 'TRY'        -- v0.3.0; comparison'da güncel kurla TL'ye çevrilir
 updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()       -- onupdate=now()
 
 UNIQUE (user_id, category) -- uq_budget_user_category
@@ -636,7 +645,7 @@ credit_card_installments
   INDEX ix_credit_card_installments_card_id (card_id)
 ```
 
-> Migration'lar `e0f1a2b3c4d5` (credit_cards) + `f1a2b3c4d5e6` (statements + installments). **Çift sayım kuralı:** Kredi kartından ödenen ve gerçekleşmiş bir `expenses` kaydı (`credit_card_id IS NOT NULL AND is_paid = true`) zaten kart borcu/ekstresiyle sayıldığı için **`/expenses/summary`, `/budgets/comparison`, `/planned-expenses/forecast`** toplamlarından hariç tutulur (filtre: `or_(credit_card_id IS NULL, is_paid = false)`). Liste endpoint'leri (`/expenses`, `/planned-expenses`) tüm kayıtları gösterir; frontend rozetlerle (`💳 kart`, `✓ ödendi`) durumu belirtir. **Cash flow projeksiyonu:** Aylık gider tahmininde her aktif `installments_remaining > 0` olan installment için `monthly_amount` katkı düşülür; statement `due_date < ay sonu` ve `paid_at IS NULL` ise gerçekleşmiş gider hesabına alınır.
+> Migration'lar `e0f1a2b3c4d5` (credit_cards) + `f1a2b3c4d5e6` (statements + installments). **Çift sayım kuralı:** Kredi kartından ödenen ve gerçekleşmiş bir `expenses` kaydı (`credit_card_id IS NOT NULL AND is_paid = true`) zaten kart borcu/ekstresiyle sayıldığı için **`/expenses/summary`, `/budgets/comparison`, `/planned-expenses/forecast`** toplamlarından hariç tutulur (filtre: `or_(credit_card_id IS NULL, is_paid = false)`). Liste endpoint'leri (`/expenses`, `/planned-expenses`) tüm kayıtları gösterir; frontend rozetlerle (`💳 kart`, `✓ ödendi`) durumu belirtir. **Cash flow projeksiyonu:** Aylık gider tahmininde her aktif `installments_remaining > 0` olan installment için `monthly_amount` katkı düşülür; statement `due_date < ay sonu` ve `paid_at IS NULL` ise gerçekleşmiş gider hesabına alınır. **Çoklu para birimi (v0.3.0, migration `c9d0e1f2a3b4`):** `credit_cards`, `credit_card_statements`, `credit_card_installments` üçüne de `currency VARCHAR(3) DEFAULT 'TRY'` eklendi; cash_flow forecast'ta ekstre/taksit tutarları güncel kurla TL'ye çevrilir.
 
 #### `revoked_tokens` (JWT blacklist)
 ```sql

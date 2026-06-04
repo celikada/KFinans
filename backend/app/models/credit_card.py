@@ -26,6 +26,9 @@ class CreditCard(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     bank_name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     last_4: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    # Çoklu para birimi (v0.3.0) — kartın para birimi; ekstre/taksit miras alır,
+    # toplamlar güncel kurla TL'ye çevrilir.
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     statement_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     payment_due_day: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default="10")
@@ -73,6 +76,8 @@ class CreditCardStatement(Base):
     )
     period_year: Mapped[int] = mapped_column(Integer, nullable=False)
     period_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Çoklu para birimi (v0.3.0) — karttan miras; toplamda güncel kurla TL'ye çevrilir.
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     statement_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     statement_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
@@ -107,6 +112,8 @@ class CreditCardInstallment(Base):
         index=True,
     )
     description: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Çoklu para birimi (v0.3.0) — karttan miras; toplamda güncel kurla TL'ye çevrilir.
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     monthly_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     installments_total: Mapped[int] = mapped_column(Integer, nullable=False)

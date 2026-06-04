@@ -14,13 +14,14 @@ from decimal import InvalidOperation
 from ._utils import clamp_day, parse_amount, parse_date
 from .base import ParsedStatement
 
+# ReDoS-safe: bounded quantifiers (SonarQube S5852)
 # "Kart numarası 5269 11** **** 1104" — satır kalanındaki son 4 hane.
-_CARD_RE = re.compile(r"Kart numarası\s*:?\s*([0-9*\s]+)")
+_CARD_RE = re.compile(r"Kart numarası\s{0,4}:?\s{0,4}([0-9*\s]{1,40})")
 # Büyük K: "Kart limiti" (küçük k'li "Kullanılabilir kart limiti" hariç).
-_LIMIT_RE = re.compile(r"(?<!labilir )Kart limiti\s*:?\s*([\d.,]+)\s*TL")
-_STMT_DATE_RE = re.compile(r"Ekstre tarihi\s*:?\s*(\d{2}/\d{2}/\d{4})")
-_DUE_DATE_RE = re.compile(r"Son ödeme tarihi\s*:?\s*(\d{2}/\d{2}/\d{4})")
-_DEBT_RE = re.compile(r"Ekstre borcu\s*:?\s*([\d.,]+)\s*TL")
+_LIMIT_RE = re.compile(r"(?<!labilir )Kart limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
+_STMT_DATE_RE = re.compile(r"Ekstre tarihi\s{0,4}:?\s{0,4}(\d{2}/\d{2}/\d{4})")
+_DUE_DATE_RE = re.compile(r"Son ödeme tarihi\s{0,4}:?\s{0,4}(\d{2}/\d{2}/\d{4})")
+_DEBT_RE = re.compile(r"Ekstre borcu\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 
 
 class EnparaParser:

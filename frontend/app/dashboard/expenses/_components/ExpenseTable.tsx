@@ -38,7 +38,8 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
     );
   }
 
-  const total = expenses.reduce((s, e) => s + Number.parseFloat(e.amount), 0);
+  // Toplam TL bazında (işlem-anı kuruyla sabitlenmiş amount_tl; eski/TRY kayıtlarda yoksa amount).
+  const total = expenses.reduce((s, e) => s + Number.parseFloat(e.amount_tl ?? e.amount), 0);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -78,7 +79,12 @@ export function ExpenseTable({ expenses, onDeleted, onEdit }: Readonly<Props>) {
                 </span>
               </td>
               <td className="px-6 py-3 text-right font-semibold text-gray-900">
-                {fmtTL(exp.amount)} ₺
+                {fmtTL(exp.amount)} {exp.currency ?? "TRY"}
+                {exp.currency && exp.currency !== "TRY" && exp.amount_tl && (
+                  <span className="block text-[10px] text-gray-400 font-normal tabular-nums">
+                    ≈ {fmtTL(exp.amount_tl)} ₺
+                  </span>
+                )}
               </td>
               <td className="px-6 py-3 text-right">
                 <div className="flex items-center justify-end gap-3">

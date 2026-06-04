@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, FormEvent, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   api, CreditCardDetailDTO, StatementDTO, InstallmentDTO,
-  StatementInput, InstallmentInput,
+  StatementInput, InstallmentInput, CurrencyType, CURRENCIES,
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
@@ -128,6 +128,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
         {/* Ekstreler */}
         <StatementsSection
           cardId={cardId}
+          cardCurrency={c.currency ?? "TRY"}
           items={detail.statements}
           onChange={refresh}
         />
@@ -135,6 +136,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
         {/* Taksitler */}
         <InstallmentsSection
           cardId={cardId}
+          cardCurrency={c.currency ?? "TRY"}
           items={detail.installments}
           onChange={refresh}
         />
@@ -146,8 +148,9 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
 // ---------------------------------------------------------------------------
 // Ekstreler bölümü
 // ---------------------------------------------------------------------------
-function StatementsSection({ cardId, items, onChange }: Readonly<{
+function StatementsSection({ cardId, cardCurrency, items, onChange }: Readonly<{
   cardId: number;
+  cardCurrency: CurrencyType;
   items: StatementDTO[];
   onChange: () => void;
 }>) {
@@ -158,6 +161,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
   const [year, setYear] = useState(now.getFullYear().toString());
   const [month, setMonth] = useState((now.getMonth() + 1).toString());
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(cardCurrency);
   const [stmtDate, setStmtDate] = useState(TODAY);
   const [dueDate, setDueDate] = useState(TODAY);
   const [paid, setPaid] = useState(false);
@@ -169,7 +173,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
     setEditing(null);
     setYear(now.getFullYear().toString());
     setMonth((now.getMonth() + 1).toString());
-    setAmount(""); setStmtDate(TODAY); setDueDate(TODAY); setPaid(false); setNotes("");
+    setAmount(""); setCurrency(cardCurrency); setStmtDate(TODAY); setDueDate(TODAY); setPaid(false); setNotes("");
     setErr("");
   }
 
@@ -178,6 +182,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
     setYear(s.period_year.toString());
     setMonth(s.period_month.toString());
     setAmount(s.statement_amount);
+    setCurrency(s.currency ?? cardCurrency);
     setStmtDate(s.statement_date);
     setDueDate(s.due_date);
     setPaid(!!s.paid_at);
@@ -197,6 +202,7 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
         due_date: dueDate,
         paid_at: paid ? new Date().toISOString() : null,
         notes: notes.trim() || null,
+        currency,
       };
       if (editing) {
         await api.updateStatement(cardId, editing.id, payload);
@@ -241,7 +247,10 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
           <select value={month} onChange={(e) => setMonth(e.target.value)} className={INPUT_CLS}>
             {MONTH_KEYS.map((k, i) => <option key={i + 1} value={i + 1}>{t("content.creditCards." + k)}</option>)}
           </select>
-          <input type="number" placeholder={t("content.creditCards.amountTlPlaceholder")} value={amount} onChange={(e) => setAmount(e.target.value)} step="0.01" min="0" className={`sm:col-span-2 ${INPUT_CLS}`} />
+          <input type="number" placeholder={t("content.creditCards.amountTlPlaceholder")} value={amount} onChange={(e) => setAmount(e.target.value)} step="0.01" min="0" className={INPUT_CLS} />
+          <select aria-label={t("form.currencyLabel")} value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyType)} className={INPUT_CLS}>
+            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <input type="date" value={stmtDate} onChange={(e) => setStmtDate(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.statementDateTitle")} />
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.dueDateTitle")} />
         </div>
@@ -289,8 +298,9 @@ function StatementsSection({ cardId, items, onChange }: Readonly<{
 // ---------------------------------------------------------------------------
 // Taksitler bölümü
 // ---------------------------------------------------------------------------
-function InstallmentsSection({ cardId, items, onChange }: Readonly<{
+function InstallmentsSection({ cardId, cardCurrency, items, onChange }: Readonly<{
   cardId: number;
+  cardCurrency: CurrencyType;
   items: InstallmentDTO[];
   onChange: () => void;
 }>) {
@@ -302,13 +312,14 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
   const [total, setTotal] = useState("12");
   const [firstDue, setFirstDue] = useState(TODAY);
   const [notes, setNotes] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(cardCurrency);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   function reset() {
     setEditing(null);
     setDescription(""); setMonthlyAmount(""); setTotal("12");
-    setFirstDue(TODAY); setNotes(""); setErr("");
+    setFirstDue(TODAY); setNotes(""); setCurrency(cardCurrency); setErr("");
   }
 
   function startEdit(i: InstallmentDTO) {
@@ -318,6 +329,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
     setTotal(i.installments_total.toString());
     setFirstDue(i.first_due_date);
     setNotes(i.notes ?? "");
+    setCurrency(i.currency ?? cardCurrency);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -331,6 +343,7 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
         installments_total: Number.parseInt(total),
         first_due_date: firstDue,
         notes: notes.trim() || null,
+        currency,
       };
       if (editing) {
         await api.updateInstallment(cardId, editing.id, payload);
@@ -381,8 +394,11 @@ function InstallmentsSection({ cardId, items, onChange }: Readonly<{
           onChange={(e) => setDescription(e.target.value)} maxLength={200}
           className={INPUT_CLS}
         />
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <input type="number" placeholder={t("content.creditCards.monthlyInstallmentPlaceholder")} value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} step="0.01" min="0.01" className={INPUT_CLS} />
+          <select aria-label={t("form.currencyLabel")} value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyType)} className={INPUT_CLS}>
+            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <input type="number" placeholder={t("content.creditCards.installmentCountPlaceholder")} value={total} onChange={(e) => setTotal(e.target.value)} min="1" max="120" className={INPUT_CLS} />
           <input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} className={INPUT_CLS} title={t("content.creditCards.firstDueTitle")} />
         </div>

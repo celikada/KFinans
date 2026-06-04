@@ -18,16 +18,17 @@ from decimal import Decimal, InvalidOperation
 from ._utils import clamp_day, months_back, parse_amount
 from .base import ParsedInstallment, ParsedStatement
 
+# ReDoS-safe: bounded quantifiers (SonarQube S5852)
 # Maskeli kart numarasi: "5309-####-####-7316" -> son 4 hane (7316).
 _CARD_RE = re.compile(r"\d{4}-[\d#*]{4}-[\d#*]{4}-(\d{4})")
-_LIMIT_RE = re.compile(r"Kart Limiti\s*:?\s*([\d.,]+)\s*TL", re.IGNORECASE)
+_LIMIT_RE = re.compile(r"Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
 # "Hesap Kesim Tarihi : 26.05.2026" — "Sonraki Hesap Kesim Tarihi" haric tutulur.
-_STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s*:?\s*(\d{2})\.(\d{2})\.(\d{4})")
-_DUE_DATE_RE = re.compile(r"(?<!Sonraki )Son Ödeme Tarihi\s*:?\s*(\d{2})\.(\d{2})\.(\d{4})")
-_DEBT_RE = re.compile(r"Dönem Borcu TL\s*:?\s*([\d.,]+)\s*TL", re.IGNORECASE)
+_STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
+_DUE_DATE_RE = re.compile(r"(?<!Sonraki )Son Ödeme Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
+_DEBT_RE = re.compile(r"Dönem Borcu TL\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
 # Taksit satiri: "... (100000.00 TL İşlemin 4/4 Taksidi) ..." + onundeki aciklama.
 _INSTALLMENT_RE = re.compile(
-    r"\(([\d.]+)\s*TL\s*İşlemin\s*(\d+)\s*/\s*(\d+)\s*Taksidi\)",
+    r"\(([\d.]{1,20})\s{0,4}TL\s{0,4}İşlemin\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}Taksidi\)",
     re.IGNORECASE,
 )
 
@@ -131,8 +132,8 @@ class ZiraatParser:
             # Açıklama: parantezden önceki kısımdan tarih ve "Sonradan Taksit"
             # etiketini temizle; kalan işlem adı (ör. "S/ANADOLU HAY").
             prefix = line[: m.start()].strip()
-            prefix = re.sub(r"^\d{2}\.\d{2}\.\d{4}\s*", "", prefix)
-            prefix = re.sub(r"Sonradan Taksit\s*", "", prefix, flags=re.IGNORECASE).strip()
+            prefix = re.sub(r"^\d{2}\.\d{2}\.\d{4}\s{0,4}", "", prefix)
+            prefix = re.sub(r"Sonradan Taksit\s{0,4}", "", prefix, flags=re.IGNORECASE).strip()
             desc = prefix or "Taksitli işlem"
             description = f"{desc} ({installments_paid}/{installments_total})"[:200]
 

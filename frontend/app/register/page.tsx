@@ -1,7 +1,7 @@
 "use client";
 import { useState, FormEvent } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, CurrencyType, CURRENCIES } from "@/lib/api";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [riskProfile, setRiskProfile] = useState<RiskProfile>("balanced");
+  const [defaultCurrency, setDefaultCurrency] = useState<CurrencyType>("TRY");
   const [showPassword, setShowPassword] = useState(false);
   const [kvkkRead, setKvkkRead] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -65,7 +66,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const data = await api.register(email, password, riskProfile, ageConfirmed, releaseNotesOptIn);
+      const data = await api.register(email, password, riskProfile, ageConfirmed, releaseNotesOptIn, defaultCurrency);
       setSuccess(true);
       setEmailSent(data.verification_email_sent);
     } catch (err) {
@@ -209,6 +210,18 @@ export default function RegisterPage() {
               {riskOptions.map((opt) => (
                 <option key={opt.key} value={opt.key}>{t(opt.labelKey)}</option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="register-currency" className="block text-sm font-medium text-gray-700 mb-1">{t("auth.defaultCurrency")}</label>
+            <select
+              id="register-currency"
+              value={defaultCurrency}
+              onChange={(e) => setDefaultCurrency(e.target.value as CurrencyType)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 

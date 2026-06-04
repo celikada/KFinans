@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
-import { api, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { api, CurrencyType, CURRENCIES, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -11,6 +13,7 @@ export function BudgetForm({ onSaved }: Props) {
   const { t } = useTranslation();
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(getDefaultCurrency());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -21,7 +24,7 @@ export function BudgetForm({ onSaved }: Props) {
     setSaving(true);
     setError("");
     try {
-      await api.upsertBudget(category, val);
+      await api.upsertBudget(category, val, currency);
       setAmount("");
       onSaved();
     } catch (err) {
@@ -54,8 +57,15 @@ export function BudgetForm({ onSaved }: Props) {
             onChange={(e) => setAmount(e.target.value)}
             className="flex-1 text-sm text-gray-900 focus:outline-none placeholder:text-gray-400"
           />
-          <span className="text-gray-400 text-sm ml-1">₺</span>
         </div>
+        <select
+          aria-label={t("form.currencyLabel")}
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+          className={`w-20 ${INPUT_CLS}`}
+        >
+          {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
         <button
           type="submit"
           disabled={saving}

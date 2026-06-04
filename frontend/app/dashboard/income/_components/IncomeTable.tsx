@@ -22,7 +22,9 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
     );
   }
 
-  const runningTotal = incomes.reduce((s, i) => s + Number.parseFloat(i.amount), 0);
+  // Toplam TL bazında (her kaydın işlem-anı kuruyla sabitlenmiş amount_tl'i;
+  // eski/TRY kayıtlarda amount_tl yoksa amount = TL varsayılır).
+  const runningTotal = incomes.reduce((s, i) => s + Number.parseFloat(i.amount_tl ?? i.amount), 0);
 
   async function handleDelete(id: number) {
     if (!(await confirm(t("content.income.confirmDelete")))) return;
@@ -59,8 +61,15 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
               )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm font-semibold text-gray-900 tabular-nums">
-                +{fmtTL(Number.parseFloat(inc.amount))} ₺
+              <span className="text-right">
+                <span className="block text-sm font-semibold text-gray-900 tabular-nums">
+                  +{fmtTL(Number.parseFloat(inc.amount))} {inc.currency ?? "TRY"}
+                </span>
+                {inc.currency && inc.currency !== "TRY" && inc.amount_tl && (
+                  <span className="block text-[10px] text-gray-400 tabular-nums">
+                    ≈ {fmtTL(Number.parseFloat(inc.amount_tl))} ₺
+                  </span>
+                )}
               </span>
               {onEdit && (
                 <button

@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.services.currency import CurrencyType
+
 IncomeCategory = Literal["salary", "freelance", "rental", "dividend", "bonus", "sale", "other"]
 
 INCOME_CATEGORIES: tuple[str, ...] = (
@@ -32,6 +34,8 @@ class IncomeCreate(BaseModel):
     category: IncomeCategory
     date: date_type
     description: Optional[str] = Field(default=None, max_length=500)
+    # Çoklu para birimi (v0.3.0). None → kullanıcının default_currency / "TRY".
+    currency: Optional[CurrencyType] = None
 
 
 class IncomeUpdate(BaseModel):
@@ -39,6 +43,7 @@ class IncomeUpdate(BaseModel):
     category: Optional[IncomeCategory] = None
     date: Optional[date_type] = None
     description: Optional[str] = Field(default=None, max_length=500)
+    currency: Optional[CurrencyType] = None
 
 
 class IncomeOut(BaseModel):
@@ -48,6 +53,10 @@ class IncomeOut(BaseModel):
     date: date_type
     description: Optional[str] = None
     recurring_income_id: Optional[int] = None
+    # Çoklu para birimi (v0.3.0): orijinal para birimi + işlem-anı kuruyla
+    # sabitlenmiş TL karşılığı.
+    currency: str = "TRY"
+    amount_tl: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -115,6 +124,8 @@ class RecurringIncomeCreate(BaseModel):
     start_date: date_type
     end_date: Optional[date_type] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Çoklu para birimi (v0.3.0) — tahmin; güncel kurla TL'ye çevrilir.
+    currency: Optional[CurrencyType] = None
 
 
 class RecurringIncomeUpdate(BaseModel):
@@ -127,6 +138,7 @@ class RecurringIncomeUpdate(BaseModel):
     start_date: Optional[date_type] = None
     end_date: Optional[date_type] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    currency: Optional[CurrencyType] = None
 
 
 class RecurringIncomeOut(BaseModel):
@@ -140,6 +152,7 @@ class RecurringIncomeOut(BaseModel):
     start_date: date_type
     end_date: Optional[date_type] = None
     notes: Optional[str] = None
+    currency: str = "TRY"
 
     model_config = {"from_attributes": True}
 

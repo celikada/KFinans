@@ -101,6 +101,7 @@ async def test_cash_flow_actual_income_appears_in_correct_month(client: AsyncCli
             Income(
                 user_id=user_id,
                 amount=Decimal("5000.00"),
+                amount_tl=Decimal("5000.00"),
                 date=date(2026, 3, 15),
                 category="salary",
                 description="test",
@@ -132,6 +133,7 @@ async def test_cash_flow_simple_expense_appears(client: AsyncClient):
             Expense(
                 user_id=user_id,
                 amount=Decimal("100.00"),
+                amount_tl=Decimal("100.00"),
                 date=date(2026, 5, 5),
                 category="other",
                 description="market",
@@ -142,6 +144,7 @@ async def test_cash_flow_simple_expense_appears(client: AsyncClient):
             Expense(
                 user_id=user_id,
                 amount=Decimal("250.50"),
+                amount_tl=Decimal("250.50"),
                 date=date(2026, 5, 20),
                 category="other",
                 description="benzin",
@@ -234,6 +237,7 @@ async def test_cash_flow_net_equals_income_minus_expense(client: AsyncClient):
             Income(
                 user_id=user_id,
                 amount=Decimal("1000"),
+                amount_tl=Decimal("1000"),
                 date=date(2026, 6, 1),
                 category="other",
                 description="x",
@@ -243,6 +247,7 @@ async def test_cash_flow_net_equals_income_minus_expense(client: AsyncClient):
             Expense(
                 user_id=user_id,
                 amount=Decimal("400"),
+                amount_tl=Decimal("400"),
                 date=date(2026, 6, 1),
                 category="other",
                 description="y",
@@ -286,6 +291,7 @@ async def test_cash_flow_paid_card_expense_excluded_from_actual(client: AsyncCli
             Expense(
                 user_id=user_id,
                 amount=Decimal("1000.00"),
+                amount_tl=Decimal("1000.00"),
                 date=date(2026, 4, 10),
                 category="other",
                 description="paid card",
@@ -298,6 +304,7 @@ async def test_cash_flow_paid_card_expense_excluded_from_actual(client: AsyncCli
             Expense(
                 user_id=user_id,
                 amount=Decimal("150.00"),
+                amount_tl=Decimal("150.00"),
                 date=date(2026, 4, 11),
                 category="other",
                 description="unpaid card",
@@ -792,3 +799,96 @@ async def test_cash_flow_installment_wraps_year_boundary(client: AsyncClient):
     assert Decimal(months[0]["expense_forecast"]) >= Decimal("100")  # Ocak
     assert Decimal(months[3]["expense_forecast"]) >= Decimal("100")  # Nisan
     assert Decimal(months[4]["expense_forecast"]) < Decimal("100")  # Mayis: taksit bitti
+
+
+# ─── Çoklu para birimi (v0.3.0) ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_usd_actual_uses_fixed_amount_tl(client: AsyncClient, monkeypatch):
+    """USD gerçekleşmiş gelir/gider → işlem-anı kuruyla sabit amount_tl kullanılır.
+
+    Kur sonradan değişse bile (mock 35) actual değer amount_tl ile sabittir;
+    cash_flow forecast kuru bu kayıtları etkilemez.
+    """
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(
+        "app.services.currency.fetch_rates",
+        AsyncMock(return_value={"TRY": Decimal("1"), "USD": Decimal("35")}),
+    )
+    session = await _make_user(client, "cf_usd_actual@example.com")
+    user_id = await _get_user_id(session["email"])
+
+    async with TestSession() as db:
+        # 100 USD gelir, işlem-anı kuru 30 → amount_tl 3000 (SABİT, mock 35 değil)
+        db.add(
+            Income(
+                user_id=user_id,
+                amount=Decimal("100.00"),
+                currency="USD",
+                amount_tl=Decimal("3000.00"),
+                exchange_rate=Decimal("30"),
+                date=date(2026, 7, 10),
+                category="salary",
+                description="usd gelir",
+            )
+        )
+        # 50 USD gider, işlem-anı kuru 30 → amount_tl 1500 (SABİT)
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("50.00"),
+                currency="USD",
+                amount_tl=Decimal("1500.00"),
+                exchange_rate=Decimal("30"),
+                date=date(2026, 7, 15),
+                category="other",
+                description="usd gider",
+                is_paid=False,
+            )
+        )
+        await db.commit()
+
+    resp = await client.get("/api/v1/cash-flow?year=2026", headers=session["headers"])
+    assert resp.status_code == 200
+    temmuz = resp.json()["months"][6]  # index 6 = Temmuz
+    # Sabit amount_tl (3000 / 1500) — güncel kur 35 ile yeniden çevrilmez
+    assert Decimal(temmuz["income_actual"]) == Decimal("3000.00")
+    assert Decimal(temmuz["expense_actual"]) == Decimal("1500.00")
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_usd_forecast_uses_current_rate(client: AsyncClient, monkeypatch):
+    """USD periyodik gelir (forecast) → güncel kurla TL'ye çevrilir (200 USD × 35 = 7000)."""
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(
+        "app.services.currency.fetch_rates",
+        AsyncMock(return_value={"TRY": Decimal("1"), "USD": Decimal("35")}),
+    )
+    session = await _make_user(client, "cf_usd_forecast@example.com")
+    user_id = await _get_user_id(session["email"])
+    today = datetime.now().date()
+
+    async with TestSession() as db:
+        db.add(
+            RecurringIncome(
+                user_id=user_id,
+                title="USD Maaş",
+                amount=Decimal("200.00"),
+                currency="USD",
+                category="salary",
+                recurrence="monthly",
+                day_of_month=1,
+                start_date=date(today.year - 1, 1, 1),
+            )
+        )
+        await db.commit()
+
+    resp = await client.get(f"/api/v1/cash-flow?year={today.year}", headers=session["headers"])
+    assert resp.status_code == 200
+    months = resp.json()["months"]
+    # Gelecek aylarda forecast = 200 USD × 35 = 7000 TL
+    future = [m for m in months if not m["is_past"] and Decimal(m["income_forecast"]) >= Decimal("7000.00")]
+    assert len(future) >= 1, f"USD recurring güncel kurla çevrilmedi. months={months}"

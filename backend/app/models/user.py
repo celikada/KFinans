@@ -74,6 +74,9 @@ class User(Base):
     unsubscribe_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     goal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
+    # Çoklu para birimi (v0.3.0): yeni gelir/gider/planlı kayıt formlarında
+    # varsayılan para birimi tercihi. Kayıtta override edilebilir.
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
 
     integrations: Mapped[list["Integration"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)

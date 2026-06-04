@@ -990,18 +990,21 @@ Yeni harcama ekler.
 ```json
 // Request — ExpenseCreate
 {
-  "amount":      "245.50",       // Decimal, gt=0
+  "amount":      "245.50",       // Decimal, gt=0 (orijinal para birimi)
   "category":    "groceries",     // ExpenseCategory
   "date":        "2026-04-29",    // ISO date
-  "description": "Migros"         // Opsiyonel, max_length=500
+  "description": "Migros",        // Opsiyonel, max_length=500
+  "currency":    "USD"            // v0.3.0; opsiyonel, None → user.default_currency / "TRY"
 }
 
 // 201 Created — ExpenseOut
-{ "id": "uuid", "amount": "245.50", ... }
+{ "id": "uuid", "amount": "245.50", "currency": "USD", "amount_tl": "8592.50", ... }
 
 422: { "detail": "ensure this value is greater than 0" }     // amount <= 0
 422: { "detail": "value is not a valid enumeration member" } // geçersiz kategori
 ```
+
+> **Çoklu para birimi (v0.3.0):** `currency` ∈ TRY/USD/EUR/GBP/CHF/JPY. Gerçekleşmiş gider/gelir → kayıt anında TCMB kuruyla `amount_tl` (TL karşılığı) + `exchange_rate` sabitlenir; `GET /expenses/summary` & `/income/summary` toplamları `sum(amount_tl)` üzerinden döner. `/income`, `/budgets`, `/planned-expenses`, kredi-kartı endpoint'leri de `currency` alanı alır (tahminler güncel kurla çevrilir).
 
 ### `PUT /expenses/{id}`
 Partial update — `ExpenseUpdate` tüm alanları opsiyonel. Body'de gönderilen alanlar değişir, diğerleri korunur.
