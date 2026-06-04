@@ -23,6 +23,9 @@ class PlannedExpense(Base):
     )
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    # Çoklu para birimi (v0.3.0). Tahmin kaydı — amount_tl YOK; hesaplama anında
+    # güncel kurla TL'ye çevrilir (hibrit kur).
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     is_estimated: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     # loan | tax | insurance | subscription | rent | utility | other
     category: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -1,7 +1,8 @@
 "use client";
 import { useState, ChangeEvent } from "react";
-import { api, ParsedStatementDTO, StatementImportCommitInput } from "@/lib/api";
+import { api, CurrencyType, CURRENCIES, ParsedStatementDTO, StatementImportCommitInput } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 /**
@@ -28,6 +29,7 @@ export function StatementImport({ onSuccess }: Readonly<{ onSuccess: () => void 
   const [amount, setAmount] = useState("");
   const [statementDate, setStatementDate] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(getDefaultCurrency());
   const [installments, setInstallments] = useState<ParsedStatementDTO["installments"]>([]);
 
   function reset() {
@@ -36,6 +38,7 @@ export function StatementImport({ onSuccess }: Readonly<{ onSuccess: () => void 
     setName(""); setBankName(""); setLast4(""); setLimit("");
     setStatementDay("1"); setDueDay("1"); setAmount("");
     setStatementDate(""); setDueDate(""); setInstallments([]);
+    setCurrency(getDefaultCurrency());
   }
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
@@ -86,6 +89,7 @@ export function StatementImport({ onSuccess }: Readonly<{ onSuccess: () => void 
         credit_limit: limit.trim() ? Number.parseFloat(limit) : null,
         statement_day: Number.parseInt(statementDay) || 1,
         payment_due_day: Number.parseInt(dueDay) || 1,
+        currency,
         statement: {
           period_year: parsed.period_year,
           period_month: parsed.period_month,
@@ -142,9 +146,17 @@ export function StatementImport({ onSuccess }: Readonly<{ onSuccess: () => void 
           )}
 
           {/* Kart alanları */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("content.creditCards.import.cardName")} className={`sm:col-span-2 ${INPUT_CLS}`} maxLength={100} />
             <input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder={t("content.creditCards.import.bank")} className={INPUT_CLS} maxLength={60} />
+            <select
+              aria-label={t("form.currencyLabel")}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+              className={INPUT_CLS}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input value={last4} onChange={(e) => setLast4(e.target.value)} placeholder={t("content.creditCards.import.last4")} maxLength={4} pattern="\d{4}" className={INPUT_CLS} />

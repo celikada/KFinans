@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.services.currency import CurrencyType
+
 # Sabit kategori listesi — frontend'de label haritasi var.
 # Yeni kategori eklemek istenirse hem buraya hem frontend'e eklenmeli.
 ExpenseCategory = Literal[
@@ -40,6 +42,8 @@ class ExpenseCreate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=500)
     credit_card_id: Optional[int] = None
     is_paid: bool = True
+    # Çoklu para birimi (v0.3.0). None → kullanıcının default_currency / "TRY".
+    currency: Optional[CurrencyType] = None
 
 
 class ExpenseUpdate(BaseModel):
@@ -51,6 +55,7 @@ class ExpenseUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=500)
     credit_card_id: Optional[int] = None
     is_paid: Optional[bool] = None
+    currency: Optional[CurrencyType] = None
 
 
 class ExpenseOut(BaseModel):
@@ -62,6 +67,10 @@ class ExpenseOut(BaseModel):
     credit_card_id: Optional[int] = None
     planned_expense_id: Optional[int] = None
     is_paid: bool = True
+    # Çoklu para birimi (v0.3.0): orijinal para birimi + işlem-anı kuruyla
+    # sabitlenmiş TL karşılığı.
+    currency: str = "TRY"
+    amount_tl: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 

@@ -1,13 +1,14 @@
-import type { BudgetComparisonDTO, BudgetDTO } from "./types";
+import type { BudgetComparisonDTO, BudgetDTO, CurrencyType } from "./types";
 import { request } from "./_client";
 
 export const budgetApi = {
   // Bütçe vs. Gerçekleşen
   listBudgets: () => request<BudgetDTO[]>("/budgets"),
-  upsertBudget: (category: string, amount: number) =>
+  // v0.3.0: currency opsiyonel — verilmezse backend default (TRY).
+  upsertBudget: (category: string, amount: number, currency?: CurrencyType) =>
     request<BudgetDTO>(`/budgets/${category}`, {
       method: "PUT",
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ amount, ...(currency ? { currency } : {}) }),
     }),
   deleteBudget: (category: string) => request<void>(`/budgets/${category}`, { method: "DELETE" }),
   getBudgetComparison: (year: number, month: number) =>

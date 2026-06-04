@@ -15,15 +15,16 @@ from decimal import Decimal, InvalidOperation
 from ._utils import clamp_day, months_back, parse_amount
 from .base import ParsedInstallment, ParsedStatement
 
-_CARD_RE = re.compile(r"Kart No\s*:?\s*([0-9*]+)")
-_LIMIT_RE = re.compile(r"Limitiniz\s*:?\s*([\d.,]+)\s*TL")
-_STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s*:?\s*(\d{2})\.(\d{2})\.(\d{4})")
-_DUE_DATE_RE = re.compile(r"(?<!Sonraki )Son Ödeme Tarihi\s*:?\s*(\d{2})\.(\d{2})\.(\d{4})")
-_DEBT_RE = re.compile(r"Dönem Borcunuz\s*:?\s*([\d.,]+)\s*TL")
+# ReDoS-safe: bounded quantifiers (SonarQube S5852)
+_CARD_RE = re.compile(r"Kart No\s{0,4}:?\s{0,4}([0-9*]{1,40})")
+_LIMIT_RE = re.compile(r"Limitiniz\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
+_STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
+_DUE_DATE_RE = re.compile(r"(?<!Sonraki )Son Ödeme Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
+_DEBT_RE = re.compile(r"Dönem Borcunuz\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # Net taksit deseni: "4x1,084.50" → kalan 4 taksit, aylık 1.084,50.
-_INSTALLMENT_RE = re.compile(r"(\d+)\s*x\s*([\d.,]+)")
+_INSTALLMENT_RE = re.compile(r"(\d{1,3})\s{0,4}x\s{0,4}([\d.,]{1,20})")
 # Açıklamadaki "2. Taksit" → bu işlemin kaçıncı taksiti.
-_PAID_RE = re.compile(r"(\d+)\.\s*Taksit")
+_PAID_RE = re.compile(r"(\d{1,3})\.\s{0,4}Taksit")
 
 
 class VakifBankParser:
@@ -105,10 +106,10 @@ class VakifBankParser:
             paid = int(paid_m.group(1)) if paid_m else 1
             total_count = paid + remaining
 
-            desc = re.sub(r"^\d{2}[./]\d{2}[./]\d{4}\s*", "", line)
+            desc = re.sub(r"^\d{2}[./]\d{2}[./]\d{4}\s{0,4}", "", line)
             desc = _INSTALLMENT_RE.sub("", desc)
             desc = _PAID_RE.sub("", desc)
-            desc = re.sub(r"[\d.,]+\s*$", "", desc).strip() or "Taksitli işlem"
+            desc = re.sub(r"[\d.,]{1,20}\s{0,4}$", "", desc).strip() or "Taksitli işlem"
 
             fy, fm = months_back(statement_date.year, statement_date.month, paid - 1)
             installments.append(

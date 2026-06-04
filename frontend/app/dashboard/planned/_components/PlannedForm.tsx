@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   api,
   CreditCardDTO,
+  CurrencyType,
+  CURRENCIES,
   PlannedExpenseInput,
   PlannedExpenseDTO,
   PLANNED_CATEGORIES,
@@ -12,6 +14,7 @@ import {
   MONTH_NAMES,
 } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -28,6 +31,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
 
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(getDefaultCurrency());
   const [category, setCategory] = useState<PlannedExpenseInput["category"]>("loan");
   const [recurrence, setRecurrence] = useState<PlannedExpenseInput["recurrence"]>("monthly");
   const [isEstimated, setIsEstimated] = useState(false);
@@ -59,6 +63,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
       const payload: PlannedExpenseInput = {
         title: title.trim(),
         amount: Number.parseFloat(amount),
+        currency,
         category,
         recurrence,
         is_estimated: isEstimated,
@@ -76,7 +81,7 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
       // reset
       setTitle(""); setAmount(""); setNotes(""); setEndDate(""); setRemainingCount("");
       setIsEstimated(false); setCustomMonths([]); setOpen(false);
-      setCreditCardId(""); setIsPaid(false);
+      setCreditCardId(""); setIsPaid(false); setCurrency(getDefaultCurrency());
     } catch (err) {
       setError(err instanceof Error ? err.message : t("form.saveFailed"));
     } finally {
@@ -109,17 +114,27 @@ export function PlannedForm({ onAdded }: Readonly<Props>) {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                className={INPUT_CLS}
-                placeholder={t("form.amountPlaceholder")}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
+              <label className="block text-xs text-gray-500 mb-1">{t("form.amountCurrency")}</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  className={`flex-1 min-w-0 ${INPUT_CLS}`}
+                  placeholder={t("form.amountPlaceholder")}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+                <select
+                  aria-label={t("form.currencyLabel")}
+                  className={`w-20 ${INPUT_CLS}`}
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+                >
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
 
             <div>

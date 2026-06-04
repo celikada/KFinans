@@ -15,6 +15,7 @@ from app.models.expense import Expense
 from app.models.user import User
 from app.schemas.budget import BudgetComparison, BudgetOut, BudgetUpsert
 from app.schemas.expense import EXPENSE_CATEGORIES
+from app.services import currency as currency_svc
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/budgets", tags=["budgets"])
@@ -42,12 +43,13 @@ async def upsert_budget(
             detail=f"Geçersiz kategori: {category}",
         )
 
+    currency = payload.currency or current_user.default_currency or "TRY"
     stmt = (
         pg_insert(Budget)
-        .values(user_id=current_user.id, category=category, amount=payload.amount)
+        .values(user_id=current_user.id, category=category, amount=payload.amount, currency=currency)
         .on_conflict_do_update(
             constraint="uq_budget_user_category",
-            set_={"amount": payload.amount, "updated_at": func.now()},
+            set_={"amount": payload.amount, "currency": currency, "updated_at": func.now()},
         )
         .returning(Budget)
     )
@@ -88,7 +90,11 @@ async def get_comparison(
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
 
     budgets_q = await db.execute(select(Budget).where(Budget.user_id == current_user.id))
-    budget_map: dict[str, Decimal] = {b.category: b.amount for b in budgets_q.scalars().all()}
+    budgets = budgets_q.scalars().all()
+    # Bütçe orijinal para birimi + tutar. Karşılaştırma TL bazlı (hibrit kur):
+    # bütçe güncel kurla TL'ye çevrilir, harcama amount_tl (işlem-anı kuru) ile kıyas.
+    budget_map: dict[str, tuple[Decimal, str]] = {b.category: (b.amount, b.currency or "TRY") for b in budgets}
+    rates = await currency_svc.fetch_rates() if budgets else {}
 
     # Cift sayim filtresi: kart + odendi olanlari haric tut (kart borcu sayar)
     not_double_counted = or_(
@@ -96,7 +102,7 @@ async def get_comparison(
         Expense.is_paid.is_(False),
     )
     actuals_q = await db.execute(
-        select(Expense.category, func.coalesce(func.sum(Expense.amount), 0))
+        select(Expense.category, func.coalesce(func.sum(Expense.amount_tl), 0))
         .where(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
@@ -110,13 +116,18 @@ async def get_comparison(
     categories = sorted(set(budget_map.keys()) | set(actual_map.keys()))
     rows: list[BudgetComparison] = []
     for cat in categories:
-        budget_amt = budget_map.get(cat)
-        actual_amt = actual_map.get(cat, Decimal("0"))
-        if budget_amt is not None:
-            remaining = budget_amt - actual_amt
-            pct_used = float(actual_amt / budget_amt * 100) if budget_amt > 0 else None
-            over_budget = actual_amt > budget_amt
+        budget_entry = budget_map.get(cat)
+        actual_amt = actual_map.get(cat, Decimal("0"))  # TL (amount_tl)
+        if budget_entry is not None:
+            budget_amt, budget_currency = budget_entry
+            budget_amt_tl = currency_svc.convert_to_tl(Decimal(budget_amt), budget_currency, rates)
+            remaining = budget_amt_tl - actual_amt
+            pct_used = float(actual_amt / budget_amt_tl * 100) if budget_amt_tl > 0 else None
+            over_budget = actual_amt > budget_amt_tl
         else:
+            budget_amt = None
+            budget_currency = "TRY"
+            budget_amt_tl = None
             remaining = None
             pct_used = None
             over_budget = False
@@ -124,6 +135,8 @@ async def get_comparison(
             BudgetComparison(
                 category=cat,
                 budget_amount=budget_amt,
+                budget_amount_tl=budget_amt_tl,
+                budget_currency=budget_currency,
                 actual_amount=actual_amt,
                 remaining=remaining,
                 pct_used=pct_used,

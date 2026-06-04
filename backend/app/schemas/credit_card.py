@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.currency import CurrencyType
+
 
 class CreditCardCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -17,6 +19,8 @@ class CreditCardCreate(BaseModel):
     payment_due_day: int = Field(default=10, ge=1, le=28)
     current_period_debt: Decimal = Field(default=Decimal(0), ge=0, le=Decimal("999999999999.99"))
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Çoklu para birimi (v0.3.0) — None → "TRY".
+    currency: Optional[CurrencyType] = None
 
     @field_validator("last_4")
     @classmethod
@@ -37,6 +41,7 @@ class CreditCardUpdate(BaseModel):
     payment_due_day: Optional[int] = Field(default=None, ge=1, le=28)
     current_period_debt: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
     notes: Optional[str] = Field(default=None, max_length=500)
+    currency: Optional[CurrencyType] = None
 
 
 class CreditCardOut(BaseModel):
@@ -50,15 +55,19 @@ class CreditCardOut(BaseModel):
     # Kullanıcı manuel girdiği "henüz ekstreye düşmemiş" tutar
     current_period_debt: Decimal
     notes: Optional[str] = None
+    currency: str = "TRY"
     created_at: datetime
     updated_at: datetime
 
-    # Hesaplanmış (server-side, read-only)
+    # Hesaplanmış (server-side, read-only) — tutarlar kart para biriminde (orijinal)
     unpaid_statement_total: Decimal = Decimal(0)  # ödenmemiş ekstrelerin toplamı
     unpaid_statement_count: int = 0  # kaç adet ödenmemiş ekstre (>= 2 ise UI uyarı)
     future_installment_total: Decimal = Decimal(0)  # gelecek taksitlerin remaining × monthly toplamı
     period_debt: Decimal = Decimal(0)  # = unpaid_statement_total + current_period_debt
     total_debt: Decimal = Decimal(0)  # = period_debt + future_installment_total
+    # TL karşılığı (güncel kurla — kart para birimi != TRY ise dolu)
+    total_debt_tl: Decimal = Decimal(0)
+    period_debt_tl: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -67,8 +76,10 @@ class CreditCardSummaryOut(BaseModel):
     """Tüm kartların özet bilgisi (dashboard kartı için)."""
 
     cards: list[CreditCardOut]
-    total_period_debt: Decimal  # tüm kartların dönem içi borç toplamı (ödenmemiş ekstre + dönem içi)
-    total_debt: Decimal  # tüm kartların toplam borcu (dönem içi + gelecek taksit)
+    # NOT: kartlar farklı para birimlerinde olabilir; toplamlar TL bazlıdır
+    # (her kart güncel kurla TL'ye çevrilip toplanır).
+    total_period_debt: Decimal  # tüm kartların dönem içi borç toplamı (TL)
+    total_debt: Decimal  # tüm kartların toplam borcu (TL)
     # Geriye uyumluluk için eski isim — frontend yeni alanları kullanmalı
     total_current_period_debt: Decimal = Decimal(0)
 
@@ -104,6 +115,7 @@ class StatementOut(BaseModel):
     due_date: date_type
     paid_at: Optional[datetime] = None
     notes: Optional[str] = None
+    currency: str = "TRY"
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -139,6 +151,7 @@ class InstallmentOut(BaseModel):
     installments_remaining: int
     first_due_date: date_type
     notes: Optional[str] = None
+    currency: str = "TRY"
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -3,12 +3,15 @@ import { useEffect, useState } from "react";
 import {
   api,
   CreditCardDTO,
+  CurrencyType,
+  CURRENCIES,
   ExpenseCategory,
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
   ExpenseDTO,
 } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -26,6 +29,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   const { t } = useTranslation();
   const isEdit = !!existing;
   const [amount, setAmount] = useState(existing?.amount ?? "");
+  const [currency, setCurrency] = useState<CurrencyType>(existing?.currency ?? getDefaultCurrency());
   const [category, setCategory] = useState<ExpenseCategory>(existing?.category ?? "groceries");
   const [date, setDate] = useState(existing?.date ?? todayIso());
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -43,6 +47,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   useEffect(() => {
     if (existing) {
       setAmount(existing.amount);
+      setCurrency(existing.currency ?? getDefaultCurrency());
       setCategory(existing.category);
       setDate(existing.date);
       setDescription(existing.description ?? "");
@@ -59,6 +64,7 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
     try {
       const payload = {
         amount: value,
+        currency,
         category,
         date,
         description: description.trim() || null,
@@ -86,16 +92,26 @@ export function ExpenseForm({ onSaved, existing, onCancel }: Readonly<Props>) {
       <h2 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? t("form.expenseEdit") : t("form.expenseNew")}</h2>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder={t("form.amountPlaceholder")}
-            className={`w-full text-right ${INPUT_CLS}`}
-          />
+          <label className="block text-xs text-gray-500 mb-1">{t("form.amountCurrency")}</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder={t("form.amountPlaceholder")}
+              className={`flex-1 min-w-0 text-right ${INPUT_CLS}`}
+            />
+            <select
+              aria-label={t("form.currencyLabel")}
+              className={`w-20 ${INPUT_CLS}`}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">{t("table.category")}</label>

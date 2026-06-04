@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { api, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO } from "@/lib/api";
+import { api, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, CurrencyType, CURRENCIES } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { StatementImport } from "./StatementImport";
@@ -27,6 +28,7 @@ export default function CreditCardsPage() {
   const [paymentDueDay, setPaymentDueDay] = useState("10");
   const [currentDebt, setCurrentDebt] = useState("");
   const [notes, setNotes] = useState("");
+  const [currency, setCurrency] = useState<CurrencyType>(getDefaultCurrency());
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -56,13 +58,14 @@ export default function CreditCardsPage() {
     setPaymentDueDay(c.payment_due_day.toString());
     setCurrentDebt(c.current_period_debt);
     setNotes(c.notes ?? "");
+    setCurrency(c.currency ?? getDefaultCurrency());
   }
 
   function cancelEdit() {
     setEditing(null);
     setName(""); setBankName(""); setLast4("");
     setCreditLimit(""); setStatementDay("1"); setPaymentDueDay("10");
-    setCurrentDebt(""); setNotes("");
+    setCurrentDebt(""); setNotes(""); setCurrency(getDefaultCurrency());
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -83,6 +86,7 @@ export default function CreditCardsPage() {
         payment_due_day: Number.parseInt(paymentDueDay) || 10,
         current_period_debt: currentDebt.trim() ? Number.parseFloat(currentDebt) : 0,
         notes: notes.trim() || null,
+        currency,
       };
       if (editing) {
         await api.updateCreditCard(editing.id, payload);
@@ -221,7 +225,7 @@ export default function CreditCardsPage() {
               className={INPUT_CLS}
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input
               type="number"
               placeholder={t("content.creditCards.currentDebtPlaceholder")}
@@ -231,11 +235,19 @@ export default function CreditCardsPage() {
               step="0.01"
               className={INPUT_CLS}
             />
+            <select
+              aria-label={t("form.currencyLabel")}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+              className={INPUT_CLS}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
             <input
               placeholder={t("content.creditCards.notesPlaceholder")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className={INPUT_CLS}
+              className={`sm:col-span-2 ${INPUT_CLS}`}
               maxLength={500}
             />
           </div>
@@ -288,7 +300,14 @@ export default function CreditCardsPage() {
                   return (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{c.name}</p>
+                        <p className="font-medium text-gray-900">
+                          {c.name}
+                          {c.currency && c.currency !== "TRY" && (
+                            <span className="ml-1.5 text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded align-middle">
+                              {c.currency}
+                            </span>
+                          )}
+                        </p>
                         {c.bank_name && <p className="text-xs text-gray-500">{c.bank_name}</p>}
                         {c.last_4 && (
                           <p className="text-xs text-gray-400 font-mono">**** {c.last_4}</p>

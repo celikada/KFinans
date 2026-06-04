@@ -30,6 +30,7 @@
     "riskConservative": "Conservative (low risk)",
     "riskBalanced": "Balanced",
     "riskAggressive": "Aggressive (high risk)",
+    "defaultCurrency": "Default currency",
     "kvkkRequired": "You must confirm you have read the KVKK Privacy Notice",
     "termsRequired": "You must accept the Terms of Use and Privacy Policy",
     "overseasRequired": "Explicit consent is required for overseas data transfer",
@@ -158,6 +159,8 @@
   },
   "form": {
     "amountTL": "Amount (₺)",
+    "amountCurrency": "Amount / Currency",
+    "currencyLabel": "Currency",
     "amountPlaceholder": "0.00",
     "datePlaceholder": "yyyy-mm-dd",
     "optional": "Optional",

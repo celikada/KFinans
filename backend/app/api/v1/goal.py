@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
-from app.services.aggregator import _fetch_tcmb_rates
+from app.services import currency as currency_svc
 
 router = APIRouter(prefix="/user/goal", tags=["goal"])
 
@@ -19,12 +19,19 @@ SUPPORTED_CURRENCIES: tuple[str, ...] = ("TRY", "USD", "EUR", "GBP")
 
 
 async def _rate_to_tl(currency: str) -> Decimal:
-    """Verilen para biriminin TL karsiligi (1 birim = X TL)."""
+    """Verilen para biriminin TL karsiligi (1 birim = X TL).
+
+    v0.3.0: ortak `services/currency.py` util'inden kur haritasi alir (DRY).
+    fetch_rates eksik kur icin USD fallback uygular; yine de bulunamazsa
+    (TRY haricinde) 503 — goal hesabi kur olmadan yanlis olur.
+    """
     if currency == "TRY":
         return Decimal("1")
-    rates = await _fetch_tcmb_rates()
+    # fallback=False: goal hesabi kur olmadan yanlis olacagindan USD yaklasik
+    # cevrim istemiyoruz — TCMB ilgili dovizi vermiyorsa 503 (eski davranis).
+    rates = await currency_svc.fetch_rates(fallback=False)
     rate = rates.get(currency)
-    if not rate:
+    if not rate or rate <= 0:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"{currency}/TRY kuru alınamadı",

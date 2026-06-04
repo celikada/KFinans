@@ -35,6 +35,7 @@ from app.schemas.income import (
     RecurringIncomeOut,
     RecurringIncomeUpdate,
 )
+from app.services import currency as currency_svc
 from app.services import recurrence
 
 logger = logging.getLogger(__name__)
@@ -89,15 +90,34 @@ async def list_incomes(
     return result.scalars().all()
 
 
+async def _resolve_amount_tl(amount: Decimal, currency: str) -> tuple[Decimal, Decimal | None]:
+    """İşlem-anı kuruyla TL karşılığı + 1 birim kuru döner (hibrit kur, SABİT).
+
+    TRY için exchange_rate=1 (audit basit). Diğer dövizlerde güncel kur haritası
+    çekilip convert_to_tl ile amount_tl sabitlenir.
+    """
+    if (currency or "TRY").upper() == "TRY":
+        return Decimal(amount), Decimal("1")
+    rates = await currency_svc.fetch_rates()
+    amount_tl = currency_svc.convert_to_tl(amount, currency, rates)
+    rate = rates.get(currency.upper())
+    return amount_tl, rate
+
+
 @router.post("", response_model=IncomeOut, status_code=status.HTTP_201_CREATED)
 async def create_income(
     payload: IncomeCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    currency = payload.currency or current_user.default_currency or "TRY"
+    amount_tl, exchange_rate = await _resolve_amount_tl(payload.amount, currency)
     inc = Income(
         user_id=current_user.id,
         amount=payload.amount,
+        currency=currency,
+        amount_tl=amount_tl,
+        exchange_rate=exchange_rate,
         category=payload.category,
         date=payload.date,
         description=payload.description.strip() if payload.description else None,
@@ -122,12 +142,18 @@ async def update_income(
 
     if payload.amount is not None:
         inc.amount = payload.amount
+    if payload.currency is not None:
+        inc.currency = payload.currency
     if payload.category is not None:
         inc.category = payload.category
     if payload.date is not None:
         inc.date = payload.date
     if payload.description is not None:
         inc.description = payload.description.strip() or None
+
+    # Tutar veya para birimi değiştiyse amount_tl yeniden sabitlenir (güncel kur).
+    if payload.amount is not None or payload.currency is not None:
+        inc.amount_tl, inc.exchange_rate = await _resolve_amount_tl(inc.amount, inc.currency)
 
     await db.commit()
     await db.refresh(inc)
@@ -158,18 +184,19 @@ async def get_income_summary(
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
 
+    # v0.3.0 çoklu para birimi: toplamlar amount_tl (işlem-anı kuruyla sabit) üzerinden.
     total_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0), func.count(Income.id)).where(
+        select(func.coalesce(func.sum(Income.amount_tl), 0), func.count(Income.id)).where(
             Income.user_id == current_user.id, Income.date >= first_day, Income.date <= last_day
         )
     )
     total, count = total_q.one()
 
     cat_q = await db.execute(
-        select(Income.category, func.sum(Income.amount), func.count(Income.id))
+        select(Income.category, func.sum(Income.amount_tl), func.count(Income.id))
         .where(Income.user_id == current_user.id, Income.date >= first_day, Income.date <= last_day)
         .group_by(Income.category)
-        .order_by(desc(func.sum(Income.amount)))
+        .order_by(desc(func.sum(Income.amount_tl)))
     )
     breakdown = [IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
 
@@ -287,9 +314,13 @@ def _income_from_row(row, user_id) -> Income | None:
         return None
 
     description = str(desc_val).strip() if desc_val else None
+    # Excel import TRY varsayar (sütunda para birimi yok) → amount_tl = amount.
     return Income(
         user_id=user_id,
         amount=amount,
+        currency="TRY",
+        amount_tl=amount,
+        exchange_rate=Decimal("1"),
         category=category,
         date=parsed_date,
         description=description or None,
@@ -374,6 +405,7 @@ async def create_recurring_income(
         user_id=current_user.id,
         title=payload.title,
         amount=payload.amount,
+        currency=payload.currency or current_user.default_currency or "TRY",
         category=payload.category,
         recurrence=payload.recurrence,
         months=payload.months,
@@ -403,6 +435,7 @@ async def update_recurring_income(
     for attr in (
         "title",
         "amount",
+        "currency",
         "category",
         "recurrence",
         "months",
@@ -454,16 +487,16 @@ async def get_income_dashboard(
     first_day_month = date_type(year, month, 1)
     last_day_month = date_type(year, month, calendar.monthrange(year, month)[1])
 
-    # Gerçekleşen
+    # Gerçekleşen — amount_tl (işlem-anı kuruyla sabit) toplamı.
     actual_month_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0)).where(
+        select(func.coalesce(func.sum(Income.amount_tl), 0)).where(
             Income.user_id == current_user.id,
             Income.date >= first_day_month,
             Income.date <= last_day_month,
         )
     )
     actual_ytd_q = await db.execute(
-        select(func.coalesce(func.sum(Income.amount), 0)).where(
+        select(func.coalesce(func.sum(Income.amount_tl), 0)).where(
             Income.user_id == current_user.id,
             Income.date >= first_day_year,
             Income.date <= last_day_month,
@@ -472,9 +505,11 @@ async def get_income_dashboard(
     this_month_actual = Decimal(actual_month_q.scalar_one())
     ytd_actual = Decimal(actual_ytd_q.scalar_one())
 
-    # Periyodik (yıl içi 12 ay tarama)
+    # Periyodik (yıl içi 12 ay tarama). Tahmin → GÜNCEL kurla TL'ye çevrilir
+    # (hibrit kur). Kur haritası tek sefer çekilir (döngüde tekrar TCMB yok).
     rec_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == current_user.id))
     recurring = rec_q.scalars().all()
+    rates = await currency_svc.fetch_rates() if recurring else {}
 
     this_month_recurring = Decimal(0)
     ytd_recurring = Decimal(0)
@@ -483,7 +518,7 @@ async def get_income_dashboard(
         for ri in recurring:
             if not _applies_in_month(ri, year, m):
                 continue
-            amt = Decimal(ri.amount)
+            amt = currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency or "TRY", rates)
             if m == month:
                 this_month_recurring += amt
             if m <= month:
@@ -559,9 +594,15 @@ async def _realize_one(
     )
     if existing_q.scalar_one_or_none() is not None:
         return None
+    # Para birimini recurring'den taşı; realize anı kuruyla amount_tl SABİTLE.
+    ri_currency = ri.currency or "TRY"
+    amount_tl, exchange_rate = await _resolve_amount_tl(ri.amount, ri_currency)
     inc = Income(
         user_id=user_id,
         amount=ri.amount,
+        currency=ri_currency,
+        amount_tl=amount_tl,
+        exchange_rate=exchange_rate,
         category=_RECURRING_TO_INCOME_CAT.get(ri.category, "other"),
         date=target_date,
         description=ri.title,

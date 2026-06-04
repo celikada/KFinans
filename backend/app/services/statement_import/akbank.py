@@ -24,18 +24,19 @@ from .base import ParsedStatement
 # Latin glyph → rakam (cid dışı kalan rakam glyph'leri).
 _LATIN_DIGIT = str.maketrans({"æ": "1", "ı": "5", "ł": "8", "ø": "9"})
 
+# ReDoS-safe: bounded quantifiers (SonarQube S5852)
 # Maskeli kart no: "5218@07**@****@6072" → son grup. (cid-bağımsız format işareti)
-_CARD_RE = re.compile(r"(\d{4})@\d{2}\*+@\*+@(\d{4})")
+_CARD_RE = re.compile(r"(\d{4})@\d{2}\*{1,8}@\*{1,8}@(\d{4})")
 # Ekstre dönemi aralığı: "25/04/2026‘23/05/2026" → 2. tarih = hesap kesim.
 _PERIOD_RE = re.compile(r"(\d{2}/\d{2}/\d{4})[‘'`´’](\d{2}/\d{2}/\d{4})")
 _DATE_RE = re.compile(r"\d{2}/\d{2}/\d{4}")
-_AMOUNT_RE = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}")
+_AMOUNT_RE = re.compile(r"\d{1,3}(?:\.\d{3}){0,6},\d{2}")
 
 
 def _decode(text: str) -> str:
     """pdfplumber garbled metnini yarı-decode et: rakam + finansal sembol + tarih."""
     text = re.sub(
-        r"\(cid:(\d+)\)",
+        r"\(cid:(\d{1,4})\)",
         lambda m: chr(int(m.group(1)) - 192) if 240 <= int(m.group(1)) <= 249 else m.group(0),
         text,
     )

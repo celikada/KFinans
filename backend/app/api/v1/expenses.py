@@ -33,6 +33,7 @@ from app.schemas.expense_analysis import (
     ExpenseAnalysisOut,
     ExpenseAnalysisRequest,
 )
+from app.services import currency as currency_svc
 from app.services.audit import AuditAction, log_audit
 
 logger = logging.getLogger(__name__)
@@ -113,15 +114,29 @@ async def list_expenses(
     return result.scalars().all()
 
 
+async def _resolve_amount_tl(amount: Decimal, currency: str) -> tuple[Decimal, Decimal | None]:
+    """İşlem-anı kuruyla TL karşılığı + 1 birim kuru döner (hibrit kur, SABİT)."""
+    if (currency or "TRY").upper() == "TRY":
+        return Decimal(amount), Decimal("1")
+    rates = await currency_svc.fetch_rates()
+    amount_tl = currency_svc.convert_to_tl(amount, currency, rates)
+    return amount_tl, rates.get(currency.upper())
+
+
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
 async def create_expense(
     payload: ExpenseCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    currency = payload.currency or current_user.default_currency or "TRY"
+    amount_tl, exchange_rate = await _resolve_amount_tl(payload.amount, currency)
     expense = Expense(
         user_id=current_user.id,
         amount=payload.amount,
+        currency=currency,
+        amount_tl=amount_tl,
+        exchange_rate=exchange_rate,
         category=payload.category,
         date=payload.date,
         description=payload.description.strip() if payload.description else None,
@@ -153,6 +168,8 @@ async def update_expense(
 
     if payload.amount is not None:
         expense.amount = payload.amount
+    if payload.currency is not None:
+        expense.currency = payload.currency
     if payload.category is not None:
         expense.category = payload.category
     if payload.date is not None:
@@ -166,6 +183,10 @@ async def update_expense(
         expense.credit_card_id = payload.credit_card_id
     if payload.is_paid is not None:
         expense.is_paid = payload.is_paid
+
+    # Tutar veya para birimi değiştiyse amount_tl yeniden sabitlenir (güncel kur).
+    if payload.amount is not None or payload.currency is not None:
+        expense.amount_tl, expense.exchange_rate = await _resolve_amount_tl(expense.amount, expense.currency)
 
     await db.commit()
     await db.refresh(expense)
@@ -214,9 +235,9 @@ async def get_expense_summary(
         Expense.is_paid.is_(False),
     )
 
-    # Toplam ve adet
+    # Toplam ve adet (v0.3.0: amount_tl — işlem-anı kuruyla sabit)
     total_q = await db.execute(
-        select(func.coalesce(func.sum(Expense.amount), 0), func.count(Expense.id)).where(
+        select(func.coalesce(func.sum(Expense.amount_tl), 0), func.count(Expense.id)).where(
             Expense.user_id == current_user.id,
             Expense.date >= first_day,
             Expense.date <= last_day,
@@ -225,11 +246,11 @@ async def get_expense_summary(
     )
     total, count = total_q.one()
 
-    # Kategori kirilimi (ayni filtre)
+    # Kategori kirilimi (ayni filtre, amount_tl)
     cat_q = await db.execute(
         select(
             Expense.category,
-            func.sum(Expense.amount),
+            func.sum(Expense.amount_tl),
             func.count(Expense.id),
         )
         .where(
@@ -239,7 +260,7 @@ async def get_expense_summary(
             not_double_counted,
         )
         .group_by(Expense.category)
-        .order_by(desc(func.sum(Expense.amount)))
+        .order_by(desc(func.sum(Expense.amount_tl)))
     )
     breakdown = [CategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
 
@@ -360,9 +381,13 @@ def _expense_from_row(row, user_id) -> Expense | None:
         return None
 
     description = str(desc_val).strip() if desc_val else None
+    # Excel import TRY varsayar (sütunda para birimi yok) → amount_tl = amount.
     return Expense(
         user_id=user_id,
         amount=amount,
+        currency="TRY",
+        amount_tl=amount,
+        exchange_rate=Decimal("1"),
         category=category,
         date=parsed_date,
         description=description or None,
@@ -475,14 +500,14 @@ async def _build_expense_data_summary(
         Expense.is_paid.is_(False),
     )
 
-    # Ay × kategori matrisi (year, month, category -> toplam)
+    # Ay × kategori matrisi (year, month, category -> toplam, amount_tl)
     rows = (
         await db.execute(
             select(
                 func.extract("year", Expense.date).label("y"),
                 func.extract("month", Expense.date).label("m"),
                 Expense.category,
-                func.sum(Expense.amount),
+                func.sum(Expense.amount_tl),
             )
             .where(
                 Expense.user_id == user_id,
@@ -539,10 +564,10 @@ async def _build_expense_data_summary(
     lines.append("\n## Aylık kategori dağılımı")
     lines.extend(_monthly_breakdown_lines(matrix, months_seq, _fmt))
 
-    # Gelir ozeti (opsiyonel — gelir-gider dengesi yorumu icin)
+    # Gelir ozeti (opsiyonel — gelir-gider dengesi yorumu icin, amount_tl)
     total_income = (
         await db.execute(
-            select(func.coalesce(func.sum(Income.amount), 0)).where(
+            select(func.coalesce(func.sum(Income.amount_tl), 0)).where(
                 Income.user_id == user_id,
                 Income.date >= start,
                 Income.date <= end,
@@ -555,13 +580,16 @@ async def _build_expense_data_summary(
         net = Decimal(total_income) - total_expense
         lines.append(f"- Net (gelir - gider): {_fmt(net)} TL")
 
-    # Butce hedefleri (opsiyonel — kategori bazli kiyas)
-    budgets = (await db.execute(select(Budget.category, Budget.amount).where(Budget.user_id == user_id))).all()
+    # Butce hedefleri (opsiyonel — kategori bazli kiyas). v0.3.0: bütçe çoklu
+    # para biriminde olabilir → güncel kurla TL'ye çevrilip gösterilir.
+    budgets = (await db.execute(select(Budget.category, Budget.amount, Budget.currency).where(Budget.user_id == user_id))).all()
     if budgets:
         lines.append("\n## Aylık bütçe hedefleri (kategori başına)")
-        for category, amount in budgets:
+        rates = await currency_svc.fetch_rates()
+        for category, amount, b_currency in budgets:
             label = _CATEGORY_TR_LABEL.get(category, category)
-            lines.append(f"- {label} ({category}): aylık {_fmt(Decimal(amount))} TL hedef")
+            amount_tl = currency_svc.convert_to_tl(Decimal(amount), b_currency or "TRY", rates)
+            lines.append(f"- {label} ({category}): aylık {_fmt(amount_tl)} TL hedef")
 
     return "\n".join(lines), total_expense, int(expense_count), month_from, month_to
 

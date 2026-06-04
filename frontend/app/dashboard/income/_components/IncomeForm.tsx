@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, IncomeInput, IncomeDTO, INCOME_CATEGORIES, INCOME_CATEGORY_LABELS } from "@/lib/api";
+import { api, CurrencyType, CURRENCIES, IncomeInput, IncomeDTO, INCOME_CATEGORIES, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -17,6 +18,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   const { t } = useTranslation();
   const isEdit = !!existing;
   const [amount, setAmount] = useState(existing?.amount ?? "");
+  const [currency, setCurrency] = useState<CurrencyType>(existing?.currency ?? getDefaultCurrency());
   const [category, setCategory] = useState<IncomeInput["category"]>(existing?.category ?? "salary");
   const [date, setDate] = useState(existing?.date ?? TODAY);
   const [description, setDescription] = useState(existing?.description ?? "");
@@ -26,6 +28,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
   useEffect(() => {
     if (existing) {
       setAmount(existing.amount);
+      setCurrency(existing.currency ?? getDefaultCurrency());
       setCategory(existing.category);
       setDate(existing.date);
       setDescription(existing.description ?? "");
@@ -39,6 +42,7 @@ export function IncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
     try {
       const payload = {
         amount: Number.parseFloat(amount),
+        currency,
         category,
         date,
         description: description.trim() || null,
@@ -63,17 +67,27 @@ export function IncomeForm({ onSaved, existing, onCancel }: Readonly<Props>) {
       <h3 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? t("form.incomeEdit") : t("form.incomeNew")}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            required
-            className={INPUT_CLS}
-            placeholder={t("form.amountPlaceholder")}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
+          <label className="block text-xs text-gray-500 mb-1">{t("form.amountCurrency")}</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              className={`flex-1 min-w-0 ${INPUT_CLS}`}
+              placeholder={t("form.amountPlaceholder")}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <select
+              aria-label={t("form.currencyLabel")}
+              className={`w-20 ${INPUT_CLS}`}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">{t("table.category")}</label>

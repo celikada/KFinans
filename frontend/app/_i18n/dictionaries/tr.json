@@ -30,6 +30,7 @@
     "riskConservative": "Tutucu (düşük risk)",
     "riskBalanced": "Dengeli",
     "riskAggressive": "Atak (yüksek risk)",
+    "defaultCurrency": "Varsayılan para birimi",
     "kvkkRequired": "KVKK Aydınlatma Metni'ni okuduğunuzu onaylamanız gerekir",
     "termsRequired": "Kullanım Şartları ve Gizlilik Politikası'nı kabul etmeniz gerekir",
     "overseasRequired": "Yurt dışı veri aktarımı için açık rıza vermeniz gerekir",
@@ -158,6 +159,8 @@
   },
   "form": {
     "amountTL": "Tutar (₺)",
+    "amountCurrency": "Tutar / Para Birimi",
+    "currencyLabel": "Para birimi",
     "amountPlaceholder": "0,00",
     "datePlaceholder": "yyyy-aa-gg",
     "optional": "Opsiyonel",

@@ -12,6 +12,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { api } from "@/lib/api";
+import { cacheDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -27,6 +29,11 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
       return;
     }
     setAuthChecked(true);
+    // v0.3.0: kullanıcının varsayılan para birimini formlar için önbelleğe al
+    // (best-effort — başarısız olursa formlar "TRY" varsayar).
+    api.getMe()
+      .then((u) => cacheDefaultCurrency(u.default_currency))
+      .catch(() => {});
   }, [router]);
 
   if (!authChecked) {

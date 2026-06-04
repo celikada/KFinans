@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  CurrencyType,
+  CURRENCIES,
   RecurringIncomeDTO,
   RecurringIncomeInput,
   RecurringIncomeCategory,
@@ -10,6 +12,7 @@ import {
   RECURRING_RECURRENCE_LABELS,
 } from "@/lib/api";
 import { INPUT_CLS } from "@/lib/format";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -28,6 +31,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Readonly<Pr
   const isEdit = !!existing;
   const [title, setTitle] = useState(existing?.title ?? "");
   const [amount, setAmount] = useState(existing?.amount ?? "");
+  const [currency, setCurrency] = useState<CurrencyType>(existing?.currency ?? getDefaultCurrency());
   const [category, setCategory] = useState<RecurringIncomeCategory>(existing?.category ?? "salary");
   const [recurrence, setRecurrence] = useState<RecurringRecurrence>(existing?.recurrence ?? "monthly");
   const [months, setMonths] = useState<number[]>(existing?.months ?? []);
@@ -43,6 +47,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Readonly<Pr
     if (existing) {
       setTitle(existing.title);
       setAmount(existing.amount);
+      setCurrency(existing.currency ?? getDefaultCurrency());
       setCategory(existing.category);
       setRecurrence(existing.recurrence);
       setMonths(existing.months ?? []);
@@ -73,6 +78,7 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Readonly<Pr
       const payload: RecurringIncomeInput = {
         title: title.trim(),
         amount: Number.parseFloat(amount),
+        currency,
         category,
         recurrence,
         months: recurrence === "custom" ? months : null,
@@ -120,17 +126,27 @@ export function RecurringIncomeForm({ onSaved, existing, onCancel }: Readonly<Pr
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">{t("form.amountTL")}</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            required
-            className={INPUT_CLS}
-            placeholder={t("form.amountPlaceholder")}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
+          <label className="block text-xs text-gray-500 mb-1">{t("form.amountCurrency")}</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              className={`flex-1 min-w-0 ${INPUT_CLS}`}
+              placeholder={t("form.amountPlaceholder")}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <select
+              aria-label={t("form.currencyLabel")}
+              className={`w-20 ${INPUT_CLS}`}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value as CurrencyType)}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 

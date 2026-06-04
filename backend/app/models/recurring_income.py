@@ -30,6 +30,9 @@ class RecurringIncome(Base):
     )
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    # Çoklu para birimi (v0.3.0). Tahmin kaydı — amount_tl YOK; hesaplama anında
+    # güncel kurla TL'ye çevrilir (hibrit kur).
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     # salary | rental | dividend | bonus | freelance | other
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     # one_time | monthly | quarterly | biannual | yearly | custom

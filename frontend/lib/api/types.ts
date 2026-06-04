@@ -8,6 +8,22 @@
 // Decimal alanlar: backend Numeric → JSON'da string ya da number; form boşsa null.
 export type DecimalInput = number | string | null;
 
+// ─── Çoklu para birimi (v0.3.0) ─────────────────────────────────
+// income/expense/planned/recurring/budget/credit_card kapsamı için ortak
+// para birimi seti. cash + goal eski 4'lü setleri bunun alt kümesi.
+export type CurrencyType = "TRY" | "USD" | "EUR" | "GBP" | "CHF" | "JPY";
+
+export const CURRENCIES: CurrencyType[] = ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"];
+
+export const CURRENCY_SYMBOLS: Record<CurrencyType, string> = {
+  TRY: "₺",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  CHF: "₣",
+  JPY: "¥",
+};
+
 // ─── Auth + Kullanıcı ────────────────────────────────────────────
 
 export interface UserMeDTO {
@@ -19,6 +35,7 @@ export interface UserMeDTO {
   mfa_enabled?: boolean;
   is_admin?: boolean;
   release_notes_opt_in?: boolean;
+  default_currency?: CurrencyType;
 }
 
 // ─── Sürüm bildirimleri (release notes) ──────────────────────────
@@ -256,6 +273,7 @@ export interface ExpenseInput {
   description?: string | null;
   credit_card_id?: number | null;
   is_paid?: boolean;
+  currency?: CurrencyType; // v0.3.0 — yoksa backend default (TRY)
 }
 
 export interface ExpenseDTO {
@@ -266,6 +284,8 @@ export interface ExpenseDTO {
   description: string | null;
   credit_card_id?: number | null;
   is_paid?: boolean;
+  currency?: CurrencyType; // v0.3.0
+  amount_tl?: string; // v0.3.0 — işlem-anı kuruyla sabitlenmiş TL karşılığı
 }
 
 export interface CategoryBreakdownDTO {
@@ -318,6 +338,7 @@ export interface IncomeInput {
   category: IncomeCategory;
   date: string;
   description?: string | null;
+  currency?: CurrencyType; // v0.3.0 — yoksa backend default (TRY)
 }
 
 export interface IncomeDTO {
@@ -327,6 +348,8 @@ export interface IncomeDTO {
   date: string;
   description: string | null;
   recurring_income_id?: number | null;
+  currency?: CurrencyType; // v0.3.0
+  amount_tl?: string; // v0.3.0 — işlem-anı kuruyla sabitlenmiş TL karşılığı
 }
 
 export interface IncomeCategoryBreakdownDTO {
@@ -387,6 +410,7 @@ export interface RecurringIncomeInput {
   start_date: string; // YYYY-MM-DD
   end_date?: string | null;
   notes?: string | null;
+  currency?: CurrencyType; // v0.3.0 — tahmin; güncel kurla TL'ye çevrilir
 }
 
 export interface RecurringIncomeDTO {
@@ -400,6 +424,7 @@ export interface RecurringIncomeDTO {
   start_date: string;
   end_date: string | null;
   notes: string | null;
+  currency?: CurrencyType; // v0.3.0
 }
 
 export interface IncomeDashboardDTO {
@@ -472,6 +497,7 @@ export interface CreditCardInput {
   payment_due_day: number;
   current_period_debt?: number | string;
   notes?: string | null;
+  currency?: CurrencyType; // v0.3.0 — kart para birimi (ekstre/taksit miras alır)
 }
 
 export interface CreditCardDTO {
@@ -486,6 +512,7 @@ export interface CreditCardDTO {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  currency?: CurrencyType; // v0.3.0
   // Hesaplanmış (server-side)
   unpaid_statement_total: string;
   unpaid_statement_count: number;
@@ -510,6 +537,7 @@ export interface StatementInput {
   due_date: string;
   paid_at?: string | null; // ISO datetime
   notes?: string | null;
+  currency?: CurrencyType; // v0.3.0 — kart para biriminden miras/override
 }
 
 export interface StatementDTO {
@@ -523,6 +551,7 @@ export interface StatementDTO {
   paid_at: string | null;
   notes: string | null;
   created_at: string;
+  currency?: CurrencyType; // v0.3.0
 }
 
 // Taksit
@@ -534,6 +563,7 @@ export interface InstallmentInput {
   installments_total: number;
   first_due_date: string;
   notes?: string | null;
+  currency?: CurrencyType; // v0.3.0 — kart para biriminden miras/override
 }
 
 export interface InstallmentDTO {
@@ -547,6 +577,7 @@ export interface InstallmentDTO {
   first_due_date: string;
   notes: string | null;
   created_at: string;
+  currency?: CurrencyType; // v0.3.0
 }
 
 export interface CreditCardDetailDTO {
@@ -591,6 +622,7 @@ export interface StatementImportCommitInput {
   payment_due_day: number;
   statement: StatementInput;
   installments: InstallmentInput[];
+  currency?: CurrencyType; // v0.3.0 — içe aktarılan kartın para birimi
 }
 
 // ─── Goal ───────────────────────────────────────────────────────
@@ -702,6 +734,7 @@ export interface PlannedExpenseInput {
   notes?: string | null;
   credit_card_id?: number | null;
   is_paid?: boolean;
+  currency?: CurrencyType; // v0.3.0 — tahmin; güncel kurla TL'ye çevrilir
 }
 
 export interface PlannedExpenseDTO {
@@ -719,6 +752,7 @@ export interface PlannedExpenseDTO {
   notes: string | null;
   credit_card_id?: number | null;
   is_paid?: boolean;
+  currency?: CurrencyType; // v0.3.0
 }
 
 export interface ForecastItemDTO {
@@ -910,11 +944,17 @@ export interface ManualCryptoSummaryDTO {
 
 // ─── Budget ─────────────────────────────────────────────────────
 
+export interface BudgetInput {
+  amount: number;
+  currency?: CurrencyType; // v0.3.0 — tahmin; güncel kurla TL'ye çevrilir
+}
+
 export interface BudgetDTO {
   id: number;
   category: string;
   amount: string;
   updated_at: string;
+  currency?: CurrencyType; // v0.3.0
 }
 
 export interface BudgetComparisonDTO {
@@ -924,4 +964,5 @@ export interface BudgetComparisonDTO {
   remaining: string | null;
   pct_used: number | null;
   over_budget: boolean;
+  currency?: CurrencyType; // v0.3.0 — bütçe satırının para birimi
 }

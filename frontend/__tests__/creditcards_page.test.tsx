@@ -20,6 +20,7 @@ vi.mock("@/lib/api", () => ({
     deleteCreditCard: (...a: unknown[]) => deleteCreditCard(...a),
     getUsdRate: (...a: unknown[]) => getUsdRate(...a),
   },
+  CURRENCIES: ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"],
 }));
 
 const routerReplace = vi.fn();

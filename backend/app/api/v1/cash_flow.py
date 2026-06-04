@@ -29,6 +29,7 @@ from app.models.income import Income
 from app.models.planned_expense import PlannedExpense
 from app.models.recurring_income import RecurringIncome
 from app.models.user import User
+from app.services import currency as currency_svc
 
 router = APIRouter(prefix="/cash-flow", tags=["cash-flow"])
 
@@ -132,9 +133,13 @@ def _empty_month_map() -> dict[int, Decimal]:
 
 
 async def _actual_income_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Gerçekleşen gelirler (incomes) — tüm yıl, aya göre toplam."""
+    """Gerçekleşen gelirler (incomes) — tüm yıl, aya göre toplam.
+
+    Çoklu para birimi (v0.3.0): gerçekleşmiş kayıt → işlem-anı kuruyla sabit
+    ``amount_tl`` kullanılır (kur sonradan değişse bile bu tutar değişmez).
+    """
     inc_q = await db.execute(
-        select(Income.date, Income.amount).where(
+        select(Income.date, Income.amount_tl).where(
             Income.user_id == user_id,
             Income.date >= date_type(year, 1, 1),
             Income.date <= date_type(year, 12, 31),
@@ -147,9 +152,12 @@ async def _actual_income_by_month(db: AsyncSession, user_id, year: int) -> dict[
 
 
 async def _actual_expense_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Gerçekleşen giderler (expenses, çift sayım filtresi)."""
+    """Gerçekleşen giderler (expenses, çift sayım filtresi).
+
+    Çoklu para birimi (v0.3.0): işlem-anı kuruyla sabit ``amount_tl`` kullanılır.
+    """
     exp_q = await db.execute(
-        select(Expense.date, Expense.amount).where(
+        select(Expense.date, Expense.amount_tl).where(
             Expense.user_id == user_id,
             Expense.date >= date_type(year, 1, 1),
             Expense.date <= date_type(year, 12, 31),
@@ -162,10 +170,14 @@ async def _actual_expense_by_month(db: AsyncSession, user_id, year: int) -> dict
     return by_month
 
 
-async def _statement_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri)."""
+async def _statement_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
+    """Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri).
+
+    Çoklu para birimi (v0.3.0): forecast → ekstrenin para birimi güncel kurla
+    TL'ye çevrilir.
+    """
     stmt_q = await db.execute(
-        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount)
+        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount, CreditCardStatement.currency)
         .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
         .where(
             CreditCard.user_id == user_id,
@@ -174,47 +186,59 @@ async def _statement_by_month(db: AsyncSession, user_id, year: int) -> dict[int,
         )
     )
     by_month = _empty_month_map()
-    for due_date, amount in stmt_q.all():
-        by_month[due_date.month] += Decimal(amount)
+    for due_date, amount, ccy in stmt_q.all():
+        by_month[due_date.month] += currency_svc.convert_to_tl(Decimal(amount), ccy, rates)
     return by_month
 
 
-async def _installment_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için."""
+async def _installment_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
+    """Kredi kartı taksitleri (her ay monthly_amount) — gelecek aylar için.
+
+    Çoklu para birimi (v0.3.0): taksitin para birimi güncel kurla TL'ye çevrilir.
+    """
     inst_q = await db.execute(
         select(CreditCardInstallment).join(CreditCard, CreditCardInstallment.card_id == CreditCard.id).where(CreditCard.user_id == user_id)
     )
     installments = inst_q.scalars().all()
     by_month = _empty_month_map()
     for inst in installments:
+        monthly_tl = currency_svc.convert_to_tl(Decimal(inst.monthly_amount), inst.currency, rates)
         for m in range(1, 13):
             if _installment_applies_in_month(inst, year, m):
-                by_month[m] += Decimal(inst.monthly_amount)
+                by_month[m] += monthly_tl
     return by_month
 
 
-async def _recurring_income_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Periyodik gelirler (recurring_incomes) — gelecek için forecast."""
+async def _recurring_income_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
+    """Periyodik gelirler (recurring_incomes) — gelecek için forecast.
+
+    Çoklu para birimi (v0.3.0): güncel kurla TL'ye çevrilir.
+    """
     rec_inc_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == user_id))
     recurring_incomes = rec_inc_q.scalars().all()
     by_month = _empty_month_map()
     for ri in recurring_incomes:
+        amount_tl = currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency, rates)
         for m in range(1, 13):
             if _applies_recurring_income_in_month(ri, year, m):
-                by_month[m] += Decimal(ri.amount)
+                by_month[m] += amount_tl
     return by_month
 
 
-async def _planned_by_month(db: AsyncSession, user_id, year: int) -> dict[int, Decimal]:
-    """Planlı giderler (planned_expenses, çift sayım filtresi)."""
+async def _planned_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
+    """Planlı giderler (planned_expenses, çift sayım filtresi).
+
+    Çoklu para birimi (v0.3.0): güncel kurla TL'ye çevrilir.
+    """
     pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == user_id))
     all_planned = pe_q.scalars().all()
     eligible_planned = [pe for pe in all_planned if pe.credit_card_id is None or not pe.is_paid]
     by_month = _empty_month_map()
     for pe in eligible_planned:
+        amount_tl = currency_svc.convert_to_tl(Decimal(pe.amount), pe.currency, rates)
         for m in range(1, 13):
             if _applies_planned_in_month(pe, year, m):
-                by_month[m] += Decimal(pe.amount)
+                by_month[m] += amount_tl
     return by_month
 
 
@@ -267,12 +291,15 @@ async def get_cash_flow(
     current_month = today.month
     uid = current_user.id
 
+    # Forecast hesapları için güncel kurları bir kez çek (TRY=1 dahil).
+    rates = await currency_svc.fetch_rates()
+
     actual_income = await _actual_income_by_month(db, uid, year)
     actual_expense = await _actual_expense_by_month(db, uid, year)
-    statement = await _statement_by_month(db, uid, year)
-    installment = await _installment_by_month(db, uid, year)
-    recurring_income = await _recurring_income_by_month(db, uid, year)
-    planned = await _planned_by_month(db, uid, year)
+    statement = await _statement_by_month(db, uid, year, rates)
+    installment = await _installment_by_month(db, uid, year, rates)
+    recurring_income = await _recurring_income_by_month(db, uid, year, rates)
+    planned = await _planned_by_month(db, uid, year, rates)
 
     # Aylık birleştirme: actual = geçmiş+bu ay; forecast = gelecek aylar.
     months_out: list[CashFlowMonth] = []

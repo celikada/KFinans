@@ -22,6 +22,12 @@ class Income(Base):
         index=True,  # PERF-003 (FAZ H)
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    # Çoklu para birimi (v0.3.0). amount orijinal para biriminde; amount_tl
+    # işlem-anı kuru ile SABİTLENMİŞ TL karşılığı (hibrit kur — gerçekleşmiş
+    # kayıt). exchange_rate kayıt anındaki 1 birim = X TL kuru (audit).
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
+    amount_tl: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default="0")
+    exchange_rate: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6), nullable=True)
     # salary | freelance | rental | dividend | bonus | sale | other
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     date: Mapped[date_type] = mapped_column(Date, nullable=False)
