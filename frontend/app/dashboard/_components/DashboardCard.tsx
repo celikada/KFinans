@@ -31,6 +31,9 @@ export interface CardProps {
   readonly top: TopItem[];
   readonly placeholder: string;
   readonly footer?: React.ReactNode;
+  // Cache hit sonrasi bu kartin verisi yeniden cekiliyor mu? true ise kart
+  // ustunde "guncelleniyor" rozeti gosterilir (hangi kartin guncellendigini belirtir).
+  readonly updating?: boolean;
 }
 
 
@@ -39,8 +42,23 @@ function fmtTL(val: number) {
 }
 
 
+/** Kart ustunde "guncelleniyor" gostergesi (kucuk spinner + metin). */
+export function UpdatingBadge() {
+  const { t } = useTranslation();
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-normal text-blue-600 normal-case tracking-normal"
+      title={t("dashboard.updating")}
+    >
+      <span className="inline-block w-2.5 h-2.5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      {t("dashboard.updating")}
+    </span>
+  );
+}
+
+
 export function Card({
-  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer,
+  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating,
 }: CardProps) {
   const router = useRouter();
   const c = COLOR_MAP[color];
@@ -64,8 +82,11 @@ export function Card({
       onClick={() => router.push(href)}
       className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md ${c.border} transition-all group`}
     >
-      <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} mb-3 group-hover:opacity-80 transition-opacity`}>
-        {ICONS[icon]}
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} group-hover:opacity-80 transition-opacity`}>
+          {ICONS[icon]}
+        </div>
+        {updating && <UpdatingBadge />}
       </div>
       <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
 
@@ -91,7 +112,7 @@ export function Card({
 }
 
 
-export function GoalCard({ href, pct, passive }: { readonly href: string; readonly pct: number | null; readonly passive: number | null }) {
+export function GoalCard({ href, pct, passive, updating }: { readonly href: string; readonly pct: number | null; readonly passive: number | null; readonly updating?: boolean }) {
   const router = useRouter();
   const { t } = useTranslation();
   const hasData = pct !== null;
@@ -105,10 +126,14 @@ export function GoalCard({ href, pct, passive }: { readonly href: string; readon
         <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center text-violet-600 group-hover:bg-violet-100 transition-colors">
           {ICONS.goal}
         </div>
-        {pct !== null && (
-          <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
-            %{pct.toFixed(0)}
-          </span>
+        {updating ? (
+          <UpdatingBadge />
+        ) : (
+          pct !== null && (
+            <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+              %{pct.toFixed(0)}
+            </span>
+          )
         )}
       </div>
       <h3 className="text-sm font-semibold text-gray-800 mb-1">{t("content.dashboard.goalTitle")}</h3>
@@ -135,7 +160,7 @@ export function GoalCard({ href, pct, passive }: { readonly href: string; readon
 }
 
 
-export function BudgetCard({ href, overCount }: { readonly href: string; readonly overCount: number | null }) {
+export function BudgetCard({ href, overCount, updating }: { readonly href: string; readonly overCount: number | null; readonly updating?: boolean }) {
   const router = useRouter();
   const { t } = useTranslation();
   let status: React.ReactNode;
@@ -155,12 +180,13 @@ export function BudgetCard({ href, overCount }: { readonly href: string; readonl
         <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 group-hover:bg-amber-100 transition-colors">
           {ICONS.budget}
         </div>
-        {overCount !== null && overCount > 0 && (
+        {updating && <UpdatingBadge />}
+        {!updating && overCount !== null && overCount > 0 && (
           <span className="text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
             {t("content.dashboard.budgetOverBadge").replace("{count}", String(overCount))}
           </span>
         )}
-        {overCount !== null && overCount === 0 && (
+        {!updating && overCount !== null && overCount === 0 && (
           <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
             {t("content.dashboard.budgetWithinBadge")}
           </span>

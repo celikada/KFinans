@@ -1,13 +1,14 @@
-import type { UserMeDTO } from "./types";
+import type { CurrencyType, UserMeDTO } from "./types";
 import { request } from "./_client";
 
 export const userApi = {
   getMe: () => request<UserMeDTO>("/user/me"),
 
-  updateProfile: (risk_profile: string) =>
+  // v0.3.0: default_currency opsiyonel — verilirse varsayilan para birimi guncellenir.
+  updateProfile: (risk_profile: string, default_currency?: CurrencyType) =>
     request<UserMeDTO>("/user/profile", {
       method: "PUT",
-      body: JSON.stringify({ risk_profile }),
+      body: JSON.stringify({ risk_profile, ...(default_currency ? { default_currency } : {}) }),
     }),
 
   changePassword: (current_password: string, new_password: string) =>

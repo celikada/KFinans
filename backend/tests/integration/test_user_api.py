@@ -46,6 +46,8 @@ async def test_get_me_returns_user_profile(client: AsyncClient):
     assert data["risk_profile"] in ("conservative", "balanced", "aggressive")
     assert "created_at" in data
     assert "credit_balance" in data
+    # v0.3.0: varsayılan para birimi (default TRY)
+    assert data["default_currency"] == "TRY"
     # Sensitive alanlar dönmemeli
     assert "password_hash" not in data
     assert "verify_token" not in data
@@ -68,6 +70,34 @@ async def test_update_profile_changes_risk_profile(client: AsyncClient):
     # Tekrar GET'le doğrula
     me = await client.get("/api/v1/user/me", headers=session["headers"])
     assert me.json()["risk_profile"] == "aggressive"
+
+
+@pytest.mark.asyncio
+async def test_update_profile_changes_default_currency(client: AsyncClient):
+    """v0.3.0: PUT /user/profile default_currency'yi günceller, GET /me yansıtır."""
+    session = await _make_user(client, "user_currency@example.com")
+    resp = await client.put(
+        "/api/v1/user/profile",
+        json={"risk_profile": "balanced", "default_currency": "USD"},
+        headers=session["headers"],
+    )
+    assert resp.status_code == 200
+    assert resp.json()["default_currency"] == "USD"
+
+    me = await client.get("/api/v1/user/me", headers=session["headers"])
+    assert me.json()["default_currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_update_profile_invalid_currency_returns_422(client: AsyncClient):
+    """Desteklenmeyen para birimi → 422 (CurrencyType Literal)."""
+    session = await _make_user(client, "user_currency_bad@example.com")
+    resp = await client.put(
+        "/api/v1/user/profile",
+        json={"risk_profile": "balanced", "default_currency": "XYZ"},
+        headers=session["headers"],
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

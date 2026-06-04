@@ -483,3 +483,109 @@ async def test_forecast_excludes_paid_credit_card(client: AsyncClient):
 async def test_forecast_unauthenticated(client: AsyncClient):
     resp = await client.get("/api/v1/planned-expenses/forecast?year=2026")
     assert resp.status_code == 401
+
+
+# ─── Dönem durumları + realize/skip geri alma ──────────────────────────────
+
+
+async def _create_loan(client: AsyncClient, headers: dict, **kw) -> int:
+    resp = await client.post("/api/v1/planned-expenses", json=_loan(**kw), headers=headers)
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_periods_lists_status(client: AsyncClient):
+    """GET /periods her dönemi pending/realized/skipped olarak döner."""
+    headers = await make_user(client, "pe_periods@example.com")
+    # 2026-01-15 start, aylık → Şubat/Mart 2026 kesinlikle geçmiş (today >= 2026-06).
+    pe_id = await _create_loan(client, headers, start_date="2026-01-15")
+
+    # Başta hepsi pending
+    r = await client.get(f"/api/v1/planned-expenses/{pe_id}/periods", headers=headers)
+    assert r.status_code == 200
+    periods = r.json()["periods"]
+    assert len(periods) >= 2
+    assert all(p["status"] == "pending" for p in periods)
+
+    # Şubat'ı realize et
+    rr = await client.post(
+        f"/api/v1/planned-expenses/{pe_id}/realize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert rr.status_code == 200
+    assert rr.json()["realized"] == 1
+
+    # Mart'ı skip et
+    sk = await client.post(
+        "/api/v1/recurring/skips",
+        json={"kind": "expense", "ref_id": pe_id, "year": 2026, "month": 3},
+        headers=headers,
+    )
+    assert sk.status_code == 201
+
+    r2 = await client.get(f"/api/v1/planned-expenses/{pe_id}/periods", headers=headers)
+    by_month = {(p["year"], p["month"]): p for p in r2.json()["periods"]}
+    assert by_month[(2026, 2)]["status"] == "realized"
+    assert by_month[(2026, 2)]["expense_id"] is not None
+    assert by_month[(2026, 3)]["status"] == "skipped"
+    assert by_month[(2026, 3)]["skip_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_unrealize_removes_expense(client: AsyncClient):
+    """POST /unrealize realize'i geri alir: expense silinir, dönem pending olur."""
+    headers = await make_user(client, "pe_unrealize@example.com")
+    pe_id = await _create_loan(client, headers, start_date="2026-01-15")
+
+    await client.post(
+        f"/api/v1/planned-expenses/{pe_id}/realize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    # Realize sonrası expense var
+    exp_list = await client.get("/api/v1/expenses?year=2026&month=2", headers=headers)
+    assert exp_list.status_code == 200
+    assert len(exp_list.json()) >= 1
+
+    # Geri al
+    un = await client.post(
+        f"/api/v1/planned-expenses/{pe_id}/unrealize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert un.status_code == 200
+    assert un.json()["removed"] == 1
+
+    # Dönem tekrar pending
+    r = await client.get(f"/api/v1/planned-expenses/{pe_id}/periods", headers=headers)
+    by_month = {(p["year"], p["month"]): p for p in r.json()["periods"]}
+    assert by_month[(2026, 2)]["status"] == "pending"
+
+    # İkinci kez geri al → idempotent (removed=0)
+    un2 = await client.post(
+        f"/api/v1/planned-expenses/{pe_id}/unrealize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert un2.json()["removed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_periods_idor_other_user(client: AsyncClient):
+    """Başka kullanıcının planlı gideri için periods 404."""
+    headers_a = await make_user(client, "pe_periods_a@example.com")
+    headers_b = await make_user(client, "pe_periods_b@example.com")
+    pe_id = await _create_loan(client, headers_a, start_date="2026-01-15")
+    r = await client.get(f"/api/v1/planned-expenses/{pe_id}/periods", headers=headers_b)
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unrealize_unauthenticated(client: AsyncClient):
+    resp = await client.post(
+        "/api/v1/planned-expenses/1/unrealize",
+        json={"year": 2026, "month": 2},
+    )
+    assert resp.status_code == 401

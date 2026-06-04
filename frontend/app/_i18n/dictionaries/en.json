@@ -75,6 +75,7 @@
     "totalPortfolio": "Total Portfolio",
     "financeNetBalance": "Finance (Net Balance)",
     "refreshing": "Refreshing values…",
+    "updating": "updating",
     "snapshot": "Take snapshot",
     "snapshotting": "Saving...",
     "history": "History",
@@ -315,16 +316,6 @@
       "insurance": "Insurance",
       "other": "Other"
     },
-    "pending": {
-      "title": "Pending recurring records",
-      "desc": "Past-dated recurring income and expenses not yet marked as realized or skipped. Choose for each.",
-      "realized": "Realized",
-      "skip": "Won't happen",
-      "income": "Income",
-      "expense": "Expense",
-      "close": "Later",
-      "error": "Operation failed"
-    },
     "income": {
       "salary": "Salary",
       "freelance": "Freelance",
@@ -382,6 +373,16 @@
     "sessionExpired": "Verification session expired. Please sign in again."
   },
   "content": {
+    "pending": {
+      "title": "Pending recurring records",
+      "desc": "Past-dated recurring income and expenses not yet marked as realized or skipped. Choose for each.",
+      "realized": "Realized",
+      "skip": "Won't happen",
+      "income": "Income",
+      "expense": "Expense",
+      "close": "Later",
+      "error": "Operation failed"
+    },
     "budget": {
       "loadFailed": "Could not load",
       "deleteFailed": "Could not delete",
@@ -629,6 +630,20 @@
       }
     },
     "planned": {
+      "periods": {
+        "manage": "Periods",
+        "title": "Period statuses",
+        "desc": "Mark each period as realized / won't happen, or undo a wrong mark.",
+        "realized": "Realized",
+        "skipped": "Won't happen",
+        "pending": "Pending",
+        "markRealized": "Realized",
+        "markSkipped": "Won't happen",
+        "undo": "Undo",
+        "empty": "No past periods yet.",
+        "loadFailed": "Failed to load periods",
+        "opFailed": "Operation failed"
+      },
       "loadFailed": "Failed to load",
       "yearlyTotal": "Yearly total",
       "monthlyAverage": "Monthly average",
@@ -818,6 +833,8 @@
       "accountInfo": "Account Information",
       "membershipDate": "Member since",
       "investmentProfile": "Investment Profile",
+      "defaultCurrency": "Default currency",
+      "defaultCurrencyHint": "This currency is pre-selected in new income/expense/planned record forms.",
       "profileUpdated": "Profile updated",
       "profileSaveFailed": "Save failed",
       "changePassword": "Change Password",

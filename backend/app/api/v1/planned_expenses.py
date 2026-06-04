@@ -12,14 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db
 from app.models.expense import Expense
 from app.models.planned_expense import PlannedExpense
+from app.models.recurring_skip import RecurringSkip
 from app.models.user import User
 from app.schemas.planned_expense import (
     ForecastItem,
     ForecastMonth,
     ForecastResult,
+    PeriodsResult,
+    PeriodStatus,
     PlannedExpenseCreate,
     PlannedExpenseOut,
     PlannedExpenseUpdate,
+    UnrealizeResult,
 )
 from app.schemas.recurring import RealizeMonthRequest, RealizeResult
 from app.services import currency as currency_svc
@@ -309,3 +313,93 @@ async def realize_planned_past(
             ids.append(new_id)
     await db.commit()
     return RealizeResult(realized=len(ids), skipped=skipped, ids=ids)
+
+
+@router.get("/{pe_id}/periods", response_model=PeriodsResult)
+async def get_planned_periods(
+    pe_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Periyodik giderin geçmiş+güncel dönemlerini gerçekleşme durumuyla döndürür.
+
+    Kullanıcı yanlış işaretlediği realize/skip'i görüp geri alabilsin diye:
+    her dönem 'pending' | 'realized' (expense_id) | 'skipped' (skip_id)."""
+    pe = await _get_owned_planned(pe_id, current_user, db)
+    today = datetime.now(_ISTANBUL).date()
+
+    # Bu pe'ye bağlı tüm realize'lenmiş expense'leri date→id sözlüğüne al (tek sorgu).
+    exp_rows = (
+        await db.execute(
+            select(Expense.date, Expense.id).where(
+                Expense.user_id == current_user.id,
+                Expense.planned_expense_id == pe.id,
+            )
+        )
+    ).all()
+    realized_by_date = dict(exp_rows)
+
+    # Bu pe'ye ait skip'leri (year, month)→id sözlüğüne al (tek sorgu).
+    skip_rows = (
+        await db.execute(
+            select(RecurringSkip.period_year, RecurringSkip.period_month, RecurringSkip.id).where(
+                RecurringSkip.user_id == current_user.id,
+                RecurringSkip.kind == "expense",
+                RecurringSkip.ref_id == pe.id,
+            )
+        )
+    ).all()
+    skip_by_period = {(y, m): sid for y, m, sid in skip_rows}
+
+    periods: list[PeriodStatus] = []
+    for y, m, target in recurrence.iter_due_periods(pe, today):
+        expense_id = realized_by_date.get(target)
+        skip_id = skip_by_period.get((y, m))
+        if expense_id is not None:
+            stat = "realized"
+        elif skip_id is not None:
+            stat = "skipped"
+        else:
+            stat = "pending"
+        periods.append(
+            PeriodStatus(
+                year=y,
+                month=m,
+                target_date=target,
+                status=stat,
+                expense_id=expense_id,
+                skip_id=skip_id,
+            )
+        )
+    # En yeni dönem üstte
+    periods.reverse()
+    return PeriodsResult(periods=periods)
+
+
+@router.post("/{pe_id}/unrealize", response_model=UnrealizeResult)
+async def unrealize_planned_period(
+    pe_id: int,
+    payload: RealizeMonthRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Bir dönemin realize'ını geri al: o döneme ait gerçek harcama kaydını sil.
+
+    Idempotent: o dönem zaten realize değilse removed=0. Yanlışlıkla 'gerçekleşti'
+    işaretlenen kayıtları düzeltmek için."""
+    pe = await _get_owned_planned(pe_id, current_user, db)
+    target_date = recurrence.date_for_period(pe, payload.year, payload.month)
+    exp = (
+        await db.execute(
+            select(Expense).where(
+                Expense.user_id == current_user.id,
+                Expense.planned_expense_id == pe.id,
+                Expense.date == target_date,
+            )
+        )
+    ).scalar_one_or_none()
+    if exp is None:
+        return UnrealizeResult(removed=0)
+    await db.delete(exp)
+    await db.commit()
+    return UnrealizeResult(removed=1)

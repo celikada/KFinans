@@ -105,3 +105,29 @@ class ForecastResult(BaseModel):
     year: int
     months: list[ForecastMonth]
     year_total: Decimal
+
+
+class PeriodStatus(BaseModel):
+    """Bir periyodik giderin tek bir dönemi (ay-yıl) ve gerçekleşme durumu.
+
+    status: 'pending' (henüz işaretlenmemiş) | 'realized' (gerçek harcama kaydı
+    var, expense_id) | 'skipped' (gerçekleşmeyecek işaretli, skip_id). Geri alma:
+    realized → /unrealize (expense silinir), skipped → DELETE /recurring/skips/{skip_id}.
+    """
+
+    year: int
+    month: int
+    target_date: date_type
+    status: Literal["pending", "realized", "skipped"]
+    expense_id: Optional[int] = None
+    skip_id: Optional[int] = None
+
+
+class PeriodsResult(BaseModel):
+    periods: list["PeriodStatus"] = Field(default_factory=list)
+
+
+class UnrealizeResult(BaseModel):
+    """Realize geri alma sonucu: silinen gerçek harcama kaydı sayısı (0 veya 1)."""
+
+    removed: int

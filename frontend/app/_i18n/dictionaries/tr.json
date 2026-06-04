@@ -75,6 +75,7 @@
     "totalPortfolio": "Toplam Portföy",
     "financeNetBalance": "Finans (Net Bakiye)",
     "refreshing": "Değerler güncelleniyor…",
+    "updating": "güncelleniyor",
     "snapshot": "Snapshot al",
     "snapshotting": "Alınıyor...",
     "history": "Geçmiş",
@@ -315,16 +316,6 @@
       "insurance": "Sigorta",
       "other": "Diğer"
     },
-    "pending": {
-      "title": "Bekleyen periyodik kayıtlar",
-      "desc": "Tarihi geçmiş ama gerçekleşti/gerçekleşmeyecek olarak işaretlenmemiş gelir ve giderler. Her biri için seçim yapın.",
-      "realized": "Gerçekleşti",
-      "skip": "Gerçekleşmeyecek",
-      "income": "Gelir",
-      "expense": "Gider",
-      "close": "Daha sonra",
-      "error": "İşlem başarısız"
-    },
     "income": {
       "salary": "Maaş",
       "freelance": "Serbest",
@@ -382,6 +373,16 @@
     "sessionExpired": "Doğrulama oturumu sonlandı. Lütfen tekrar giriş yapın."
   },
   "content": {
+    "pending": {
+      "title": "Bekleyen periyodik kayıtlar",
+      "desc": "Tarihi geçmiş ama gerçekleşti/gerçekleşmeyecek olarak işaretlenmemiş gelir ve giderler. Her biri için seçim yapın.",
+      "realized": "Gerçekleşti",
+      "skip": "Gerçekleşmeyecek",
+      "income": "Gelir",
+      "expense": "Gider",
+      "close": "Daha sonra",
+      "error": "İşlem başarısız"
+    },
     "budget": {
       "loadFailed": "Yüklenemedi",
       "deleteFailed": "Silinemedi",
@@ -629,6 +630,20 @@
       }
     },
     "planned": {
+      "periods": {
+        "manage": "Dönemler",
+        "title": "Dönem durumları",
+        "desc": "Her dönemi gerçekleşti / gerçekleşmeyecek olarak işaretleyin veya yanlış işareti geri alın.",
+        "realized": "Gerçekleşti",
+        "skipped": "Gerçekleşmeyecek",
+        "pending": "Bekliyor",
+        "markRealized": "Gerçekleşti",
+        "markSkipped": "Gerçekleşmeyecek",
+        "undo": "Geri al",
+        "empty": "Henüz geçmiş dönem yok.",
+        "loadFailed": "Dönemler yüklenemedi",
+        "opFailed": "İşlem başarısız"
+      },
       "loadFailed": "Yüklenemedi",
       "yearlyTotal": "Yıllık toplam",
       "monthlyAverage": "Aylık ortalama",
@@ -818,6 +833,8 @@
       "accountInfo": "Hesap Bilgileri",
       "membershipDate": "Üyelik tarihi",
       "investmentProfile": "Yatırım Profili",
+      "defaultCurrency": "Varsayılan para birimi",
+      "defaultCurrencyHint": "Yeni gelir/gider/planlı kayıt formlarında bu para birimi ön-seçili gelir.",
       "profileUpdated": "Profil güncellendi",
       "profileSaveFailed": "Kaydedilemedi",
       "changePassword": "Şifre Değiştir",

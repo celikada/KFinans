@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from app.services.currency import CurrencyType
 
 
 class UserMeOut(BaseModel):
@@ -12,12 +14,16 @@ class UserMeOut(BaseModel):
     credit_balance: int
     is_admin: bool = False
     release_notes_opt_in: bool = False
+    # v0.3.0 çoklu para birimi: kayıt formu varsayılan para birimi tercihi.
+    default_currency: str = "TRY"
 
     model_config = {"from_attributes": True}
 
 
 class ProfileUpdate(BaseModel):
     risk_profile: Literal["conservative", "balanced", "aggressive"]
+    # v0.3.0: opsiyonel — verilirse kullanıcının varsayılan para birimi güncellenir.
+    default_currency: Optional[CurrencyType] = None
 
 
 class PasswordChange(BaseModel):
