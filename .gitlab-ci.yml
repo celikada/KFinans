@@ -272,10 +272,14 @@ deploy-production:
   script:
     - echo "Deploying $CI_COMMIT_TAG to Oracle K3s..."
     # sudo kubectl: Oracle VM'de /etc/rancher/k3s/k3s.yaml root-only
+    # KRITIK: set image hem ana container (backend) hem alembic-upgrade INIT
+    # container'ini ayni tag'e ceker. Init container guncellenmezse eski image'in
+    # `alembic upgrade head`'i calisir → yeni migration'lar (or. c9d0e1f2a3b4
+    # coklu para birimi) uygulanmaz, yeni kod eksik kolonlara carpar.
     - >
       ssh -i /tmp/oracle.key -o StrictHostKeyChecking=no
       $ORACLE_VM_USER@$ORACLE_VM_HOST
-      "sudo kubectl -n $ORACLE_K8S_NAMESPACE set image deployment/backend backend=$DOCKERHUB_IMAGE_BACKEND:$CI_COMMIT_TAG &&
+      "sudo kubectl -n $ORACLE_K8S_NAMESPACE set image deployment/backend backend=$DOCKERHUB_IMAGE_BACKEND:$CI_COMMIT_TAG alembic-upgrade=$DOCKERHUB_IMAGE_BACKEND:$CI_COMMIT_TAG &&
        sudo kubectl -n $ORACLE_K8S_NAMESPACE set image deployment/frontend frontend=$DOCKERHUB_IMAGE_FRONTEND:$CI_COMMIT_TAG &&
        sudo kubectl -n $ORACLE_K8S_NAMESPACE rollout status deployment/backend --timeout=5m &&
        sudo kubectl -n $ORACLE_K8S_NAMESPACE rollout status deployment/frontend --timeout=5m &&
