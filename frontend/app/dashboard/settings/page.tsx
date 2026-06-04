@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, clearAuth, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
+import { api, clearAuth, CURRENCIES, CurrencyType, RISK_PROFILE_LABELS, UserMeDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId, getHiddenCards, saveHiddenCards } from "@/lib/format";
 import { getShowUsd, setShowUsd as persistShowUsd } from "@/app/_components/TLValue";
@@ -26,6 +26,8 @@ export default function SettingsPage() {
 
   // Risk profili
   const [selectedRisk, setSelectedRisk] = useState<"conservative" | "balanced" | "aggressive">("balanced");
+  // v0.3.0: varsayılan para birimi (kayıt formlarında ön-seçili gelir)
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyType>("TRY");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg]       = useState("");
   const [profileError, setProfileError]   = useState("");
@@ -62,6 +64,7 @@ export default function SettingsPage() {
       .then((data) => {
         setUser(data);
         setSelectedRisk(data.risk_profile);
+        setSelectedCurrency(data.default_currency ?? "TRY");
         setReleaseOptIn(Boolean(data.release_notes_opt_in));
       })
       .catch((err: Error) => {
@@ -75,7 +78,7 @@ export default function SettingsPage() {
     setProfileError("");
     setProfileSaving(true);
     try {
-      const updated = await api.updateProfile(selectedRisk);
+      const updated = await api.updateProfile(selectedRisk, selectedCurrency);
       setUser(updated);
       setProfileMsg(t("content.settings.profileUpdated"));
     } catch (err) {
@@ -203,6 +206,25 @@ export default function SettingsPage() {
                 {label}
               </button>
             ))}
+          </div>
+          {/* v0.3.0: varsayılan para birimi — gelir/gider/planlı kayıt formlarında ön-seçili gelir */}
+          <div className="mb-4">
+            <label htmlFor="default-currency" className="block text-sm font-medium text-gray-700 mb-1.5">
+              {t("content.settings.defaultCurrency")}
+            </label>
+            <select
+              id="default-currency"
+              value={selectedCurrency}
+              onChange={(e) => setSelectedCurrency(e.target.value as CurrencyType)}
+              className={`${INPUT_CLS} w-full`}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">{t("content.settings.defaultCurrencyHint")}</p>
           </div>
           {profileError && (
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg mb-3">{profileError}</p>

@@ -33,6 +33,7 @@ vi.mock("@/lib/api", () => ({
     balanced: "Dengeli",
     aggressive: "Agresif",
   },
+  CURRENCIES: ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"],
 }));
 
 const routerReplace = vi.fn();
@@ -183,7 +184,8 @@ describe("SettingsPage — yatirim profili", () => {
     await user.click(screen.getByRole("button", { name: "common.save" }));
 
     await waitFor(() =>
-      expect(updateProfile).toHaveBeenCalledWith("aggressive"),
+      // v0.3.0: updateProfile artik (risk, default_currency) ile cagrilir
+      expect(updateProfile).toHaveBeenCalledWith("aggressive", expect.any(String)),
     );
     expect(
       await screen.findByText("content.settings.profileUpdated"),

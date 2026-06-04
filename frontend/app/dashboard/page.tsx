@@ -36,6 +36,13 @@ function top3<T>(items: T[], valueFn: (i: T) => number, labelFn: (i: T) => strin
     .map((i) => ({ label: labelFn(i), value: valueFn(i) }));
 }
 
+// Cache hit sonrasi yeniden cekilen (fetch task'i olan) tum kart id'leri.
+// Her kartin verisi gelince markFresh ile setten dusulur.
+const REFRESHABLE_CARDS: DashboardCardId[] = [
+  "tefas", "crypto", "stocks", "wallets", "bes", "manualCrypto", "commodities", "cash",
+  "creditCards", "income", "expenses", "planned", "budget", "goal",
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -113,6 +120,9 @@ export default function DashboardPage() {
   // Cache'ten hidrasyon olduysa (cache hit), kartlar bos degil — "yukleniyor"
   // yerine ust banner'da "Degerler guncelleniyor" gosterilir.
   const [refreshing, setRefreshing] = useState(false);
+  // Hangi kartlarin verisi su an yeniden cekiliyor (cache hit sonrasi). Her kart
+  // kendi verisi gelince setten dusulur → kart ustundeki "guncelleniyor" rozeti kalkar.
+  const [updatingCards, setUpdatingCards] = useState<Set<DashboardCardId>>(() => new Set());
 
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
@@ -182,6 +192,17 @@ export default function DashboardPage() {
       saveCache(scope, patch);
     }
 
+    // Bir kartin verisi geldi → "guncelleniyor" rozetini kaldir (set'ten dus).
+    function markFresh(id: DashboardCardId): void {
+      if (cancelled) return;
+      setUpdatingCards((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+
     // Hidrasyon + ilk setState'ler senkron effect govdesinde DEGIL, microtask'ta
     // calisir (react-hooks/set-state-in-effect uyarisi sadece SENKRON cagrilari
     // isaretler; fetch .then() callback'leri gibi async cagrilar guvenli).
@@ -233,9 +254,12 @@ export default function DashboardPage() {
       set(setNextMonthNet, c.nextMonthNet);
       set(setGoalPct, c.goalPct);
       set(setGoalPassive, c.goalPassive);
-      // Cache degerleri ekranda — spinner yerine ust banner.
+      // Cache degerleri ekranda — spinner yerine ust banner + kart-bazli rozet.
+      // Tum (fetch task'i olan) kartlari "guncelleniyor" isaretle; her task
+      // bitince markFresh ile tek tek dusulur.
       setDashboardLoading(false);
       setRefreshing(true);
+      setUpdatingCards(new Set(REFRESHABLE_CARDS));
     });
 
     const tasks: Promise<unknown>[] = [
@@ -250,7 +274,7 @@ export default function DashboardPage() {
         safeSet(setTefasTotal)(total);
         safeSet(setTefasTop)(tefasTop);
         cachePatch({ tefasTotal: total, tefasFundCount: holdings.length, tefasTop });
-      }),
+      }).finally(() => markFresh("tefas")),
 
       // Kripto (Binance/iCrypex)
       safe("crypto", async () => {
@@ -262,7 +286,7 @@ export default function DashboardPage() {
         safeSet(setCryptoTotal)(total);
         safeSet(setCryptoTop)(cryptoTop);
         cachePatch({ cryptoTotal: total, cryptoTop });
-      }).finally(() => { if (!cancelled) setCryptoLoading(false); }),
+      }).finally(() => { if (!cancelled) { setCryptoLoading(false); markFresh("crypto"); } }),
 
       // Hisse senedi: holdings -> preview chain
       safe("stocks", async () => {
@@ -275,7 +299,7 @@ export default function DashboardPage() {
         safeSet(setStockTotal)(total);
         safeSet(setStockTop)(stockTop);
         cachePatch({ stockTotal: total, stockHoldingCount: holdings.length, stockTop });
-      }),
+      }).finally(() => markFresh("stocks")),
 
       // Blockchain cüzdanlar
       safe("wallets", async () => {
@@ -287,7 +311,7 @@ export default function DashboardPage() {
         safeSet(setWalletTotal)(total);
         safeSet(setWalletTop)(walletTop);
         cachePatch({ walletTotal: total, walletTop });
-      }).finally(() => { if (!cancelled) setWalletLoading(false); }),
+      }).finally(() => { if (!cancelled) { setWalletLoading(false); markFresh("wallets"); } }),
 
       // BES
       safe("bes", async () => {
@@ -307,7 +331,7 @@ export default function DashboardPage() {
         safeSet(setBesTotal)(total);
         safeSet(setBesTop)(besTop);
         cachePatch({ besTotal: total, besPlanCount: holdings.length, besTop });
-      }),
+      }).finally(() => markFresh("bes")),
 
       // Gelir özeti (bu ay)
       safe("income-summary", async () => {
@@ -323,7 +347,7 @@ export default function DashboardPage() {
         safeSet(setIncomeCount)(sum.count);
         safeSet(setIncomeTop)(incomeTop);
         cachePatch({ incomeTotal, incomeCount: sum.count, incomeTop });
-      }),
+      }).finally(() => markFresh("income")),
 
       // Gelir dashboard (yıl sonu beklentisi)
       safe("income-dashboard", async () => {
@@ -367,7 +391,7 @@ export default function DashboardPage() {
         safeSet(setCreditCardPeriod)(creditCardPeriod);
         safeSet(setCreditCardCount)(s.cards.length);
         cachePatch({ creditCardTotal, creditCardPeriod, creditCardCount: s.cards.length });
-      }),
+      }).finally(() => markFresh("creditCards")),
 
       // Kıymetli madenler
       safe("commodities", async () => {
@@ -378,7 +402,7 @@ export default function DashboardPage() {
           safeSet(setCommodityCount)(s.positions.length);
           cachePatch({ commodityTotal: total, commodityCount: s.positions.length });
         }
-      }),
+      }).finally(() => markFresh("commodities")),
 
       // Nakit / Banka
       safe("cash", async () => {
@@ -389,7 +413,7 @@ export default function DashboardPage() {
           safeSet(setCashCount)(s.holdings.length);
           cachePatch({ cashTotal: total, cashCount: s.holdings.length });
         }
-      }),
+      }).finally(() => markFresh("cash")),
 
       // Manuel kripto
       safe("manual-crypto", async () => {
@@ -406,7 +430,7 @@ export default function DashboardPage() {
           safeSet(setManualCryptoTop)(manualCryptoTop);
           cachePatch({ manualCryptoTotal: total, manualCryptoCount: s.positions.length, manualCryptoTop });
         }
-      }),
+      }).finally(() => markFresh("manualCrypto")),
 
       // Bütçe karşılaştırma
       safe("budget", async () => {
@@ -414,7 +438,7 @@ export default function DashboardPage() {
         const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
         safeSet(setBudgetOverCount)(overCount);
         cachePatch({ budgetOverCount: overCount });
-      }),
+      }).finally(() => markFresh("budget")),
 
       // Finansal hedef
       safe("goal", async () => {
@@ -430,7 +454,7 @@ export default function DashboardPage() {
           patch.goalPassive = v;
         }
         cachePatch(patch);
-      }),
+      }).finally(() => markFresh("goal")),
 
       // Planlı ödemeler (yıllık tahmin)
       safe("planned", async () => {
@@ -440,7 +464,7 @@ export default function DashboardPage() {
           safeSet(setPlannedTotal)(total);
           cachePatch({ plannedTotal: total });
         }
-      }),
+      }).finally(() => markFresh("planned")),
 
       // Harcama özeti (bu ay)
       safe("expenses", async () => {
@@ -456,7 +480,7 @@ export default function DashboardPage() {
         safeSet(setExpenseCount)(sum.count);
         safeSet(setExpenseTop)(expenseTop);
         cachePatch({ expenseTotal, expenseCount: sum.count, expenseTop });
-      }),
+      }).finally(() => markFresh("expenses")),
     ];
 
     // Tum fetch'lerin tamamlanmasini bekle (orchestration sonu telemetri + spinner kapat)
@@ -647,6 +671,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("creditCards") && (
               <Card
                 href="/dashboard/credit-cards"
+                updating={updatingCards.has("creditCards")}
                 icon="creditCard"
                 color="red"
                 title={t("dashboard.cards.creditCards")}
@@ -664,6 +689,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("income") && (
               <Card
                 href="/dashboard/income"
+                updating={updatingCards.has("income")}
                 icon="income"
                 color="emerald"
                 title={t("dashboard.cards.income")}
@@ -681,6 +707,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("expenses") && (
               <Card
                 href="/dashboard/expenses"
+                updating={updatingCards.has("expenses")}
                 icon="expenses"
                 color="red"
                 title={t("dashboard.cards.expenses")}
@@ -695,6 +722,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("planned") && (
               <Card
                 href="/dashboard/planned"
+                updating={updatingCards.has("planned")}
                 icon="planned"
                 color="violet"
                 title={t("dashboard.cards.planned")}
@@ -705,11 +733,11 @@ export default function DashboardPage() {
             )}
 
             {!hiddenCards.includes("budget") && (
-              <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} />
+              <BudgetCard href="/dashboard/budget" overCount={budgetOverCount} updating={updatingCards.has("budget")} />
             )}
 
             {!hiddenCards.includes("goal") && (
-              <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} />
+              <GoalCard href="/dashboard/goal" pct={goalPct} passive={goalPassive} updating={updatingCards.has("goal")} />
             )}
           </div>
         </section>
@@ -738,6 +766,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("bes") && (
               <Card
                 href="/dashboard/bes"
+                updating={updatingCards.has("bes")}
                 icon="bes"
                 color="green"
                 title={t("dashboard.cards.bes")}
@@ -752,6 +781,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("tefas") && (
               <Card
                 href="/dashboard/tefas"
+                updating={updatingCards.has("tefas")}
                 icon="tefas"
                 color="blue"
                 title={t("dashboard.cards.tefas")}
@@ -766,6 +796,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("stocks") && (
               <Card
                 href="/dashboard/stocks"
+                updating={updatingCards.has("stocks")}
                 icon="stocks"
                 color="indigo"
                 title={t("dashboard.cards.stocks")}
@@ -780,6 +811,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("wallets") && (
               <Card
                 href="/dashboard/wallets"
+                updating={updatingCards.has("wallets")}
                 icon="wallets"
                 color="purple"
                 title={t("dashboard.cards.wallets")}
@@ -793,6 +825,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("crypto") && (
               <Card
                 href="/dashboard/crypto"
+                updating={updatingCards.has("crypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.crypto")}
@@ -806,6 +839,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("manualCrypto") && (
               <Card
                 href="/dashboard/manual-crypto"
+                updating={updatingCards.has("manualCrypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.manualCrypto")}
@@ -820,6 +854,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("commodities") && (
               <Card
                 href="/dashboard/commodities"
+                updating={updatingCards.has("commodities")}
                 icon="commodities"
                 color="amber"
                 title={t("dashboard.cards.commodities")}
@@ -834,6 +869,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("cash") && (
               <Card
                 href="/dashboard/cash"
+                updating={updatingCards.has("cash")}
                 icon="cash"
                 color="green"
                 title={t("dashboard.cards.cash")}

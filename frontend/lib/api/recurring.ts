@@ -10,4 +10,7 @@ export const recurringApi = {
       method: "POST",
       body: JSON.stringify({ kind, ref_id: refId, year, month }),
     }),
+  // "Gerçekleşmeyecek" işaretini geri al (skip kaydını sil)
+  unskipRecurring: (skipId: number) =>
+    request<void>(`/recurring/skips/${skipId}`, { method: "DELETE" }),
 };

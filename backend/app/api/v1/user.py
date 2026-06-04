@@ -92,6 +92,9 @@ async def get_me(current_user: CurrentUser) -> UserMeOut:
 @router.put("/profile", status_code=status.HTTP_200_OK)
 async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: DB) -> UserMeOut:
     current_user.risk_profile = payload.risk_profile
+    # v0.3.0: varsayılan para birimi tercihi (opsiyonel; verilmezse korunur).
+    if payload.default_currency is not None:
+        current_user.default_currency = payload.default_currency
     await db.commit()
     await db.refresh(current_user)
     logger.info(

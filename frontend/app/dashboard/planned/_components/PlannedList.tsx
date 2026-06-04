@@ -10,6 +10,7 @@ import { TLValue } from "@/app/_components/TLValue";
 import { fmtTL } from "@/lib/format";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { PlannedPeriodsModal } from "./PlannedPeriodsModal";
 
 interface Props {
   readonly items: PlannedExpenseDTO[];
@@ -21,6 +22,8 @@ export function PlannedList({ items, onDeleted }: Props) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  // Dönem yönetim modalı (realize/skip geri alma) — açık olduğu planlı gider
+  const [periodsFor, setPeriodsFor] = useState<PlannedExpenseDTO | null>(null);
 
   if (items.length === 0) {
     return (
@@ -147,6 +150,14 @@ export function PlannedList({ items, onDeleted }: Props) {
                   >
                     {t("content.planned.realizePast")} ✓
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setPeriodsFor(pe)}
+                    className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
+                    title={t("content.planned.periods.manage")}
+                  >
+                    {t("content.planned.periods.manage")}
+                  </button>
                 </div>
                 <button
                   onClick={() => handleDelete(pe.id, pe.title)}
@@ -159,6 +170,9 @@ export function PlannedList({ items, onDeleted }: Props) {
           </li>
         ))}
       </ul>
+      {periodsFor && (
+        <PlannedPeriodsModal pe={periodsFor} onClose={() => setPeriodsFor(null)} />
+      )}
     </div>
   );
 }

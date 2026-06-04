@@ -1,4 +1,4 @@
-import type { ForecastResultDTO, PlannedExpenseDTO, PlannedExpenseInput, RealizeResultDTO } from "./types";
+import type { ForecastResultDTO, PeriodsResultDTO, PlannedExpenseDTO, PlannedExpenseInput, RealizeResultDTO, UnrealizeResultDTO } from "./types";
 import { request } from "./_client";
 
 export const plannedExpensesApi = {
@@ -28,4 +28,14 @@ export const plannedExpensesApi = {
       body: JSON.stringify({ year, month }),
     }),
   realizePlannedPast: (id: number) => request<RealizeResultDTO>(`/planned-expenses/${id}/realize-past`, { method: "POST" }),
+
+  // Dönem durumları (pending/realized/skipped) — realize/skip geri alma ekrani icin
+  getPlannedPeriods: (id: number) => request<PeriodsResultDTO>(`/planned-expenses/${id}/periods`),
+
+  // Realize geri al: o döneme ait gerçek harcama kaydini sil
+  unrealizePlannedPeriod: (id: number, year: number, month: number) =>
+    request<UnrealizeResultDTO>(`/planned-expenses/${id}/unrealize`, {
+      method: "POST",
+      body: JSON.stringify({ year, month }),
+    }),
 };

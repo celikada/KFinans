@@ -463,6 +463,26 @@ export interface PendingResponseDTO {
   items: PendingItemDTO[];
 }
 
+// ─── Planlı gider dönem durumu (realize/skip geri alma) ─────────
+export type PeriodStatusKind = "pending" | "realized" | "skipped";
+
+export interface PeriodStatusDTO {
+  year: number;
+  month: number;
+  target_date: string; // YYYY-MM-DD
+  status: PeriodStatusKind;
+  expense_id?: number | null;
+  skip_id?: number | null;
+}
+
+export interface PeriodsResultDTO {
+  periods: PeriodStatusDTO[];
+}
+
+export interface UnrealizeResultDTO {
+  removed: number;
+}
+
 // ─── Cash Flow (yıllık projeksiyon) ─────────────────────────────
 
 export interface CashFlowMonthDTO {
