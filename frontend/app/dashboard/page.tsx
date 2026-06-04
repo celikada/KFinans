@@ -2,9 +2,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, clearAuth, EXPENSE_CATEGORY_LABELS, INCOME_CATEGORY_LABELS } from "@/lib/api";
-import type { BudgetComparisonDTO } from "@/lib/api";
+import {
+  api,
+  clearAuth,
+  EXPENSE_CATEGORY_LABELS,
+  INCOME_CATEGORY_LABELS,
+  type BudgetComparisonDTO,
+  type PendingItemDTO,
+} from "@/lib/api";
+import { getAccessToken } from "@/lib/api/_client";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
+import { deriveScope, loadCache, saveCache, type DashboardSnapshot } from "@/lib/dashboardCache";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { TLValue, useUsdRate } from "@/app/_components/TLValue";
 import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
@@ -14,6 +22,7 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 // snapshot uyari modal'i ayri _components/ modullerine tasindi.
 import { Card, GoalCard, BudgetCard, type TopItem } from "./_components/DashboardCard";
 import { SnapshotIssuesModal, type PendingIssues } from "./_components/SnapshotIssuesModal";
+import { PendingRealizeModal } from "./_components/PendingRealizeModal";
 
 
 function fmtTL(val: number) {
@@ -101,6 +110,10 @@ export default function DashboardPage() {
   // (kullanici 2026-05-11: TEFAS yuklenirken Toplam Portfoy yaninda spinner gozukmuyor)
   const [dashboardLoading, setDashboardLoading] = useState(true);
 
+  // Cache'ten hidrasyon olduysa (cache hit), kartlar bos degil — "yukleniyor"
+  // yerine ust banner'da "Degerler guncelleniyor" gosterilir.
+  const [refreshing, setRefreshing] = useState(false);
+
   // Dashboard kart görünürlüğü
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
 
@@ -108,6 +121,8 @@ export default function DashboardPage() {
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
   // Snapshot uyarı popup state
   const [pendingIssues, setPendingIssues] = useState<PendingIssues | null>(null);
+  // Periyodik gelir/gider bekleyen dönem popup state
+  const [pendingRealize, setPendingRealize] = useState<PendingItemDTO[]>([]);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -115,6 +130,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setHiddenCards(getHiddenCards());
+  }, []);
+
+  // Girişte: tarihi geçmiş + işaretlenmemiş periyodik gelir/gider varsa popup aç
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPendingRealizations()
+      .then((res) => {
+        if (!cancelled && res.items.length > 0) setPendingRealize(res.items);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -144,8 +173,70 @@ export default function DashboardPage() {
       }
     }
 
-    setCryptoLoading(true);
-    setWalletLoading(true);
+    // Cache scope (kullaniciya ozel) — access token'dan turetilir.
+    const scope = deriveScope(getAccessToken());
+
+    // Bir fetch grubu tamamlaninca: cache'i kismi (merge) guncelle.
+    function cachePatch(patch: Partial<DashboardSnapshot>): void {
+      if (cancelled) return;
+      saveCache(scope, patch);
+    }
+
+    // Hidrasyon + ilk setState'ler senkron effect govdesinde DEGIL, microtask'ta
+    // calisir (react-hooks/set-state-in-effect uyarisi sadece SENKRON cagrilari
+    // isaretler; fetch .then() callback'leri gibi async cagrilar guvenli).
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setCryptoLoading(true);
+      setWalletLoading(true);
+
+      // Cache hit → kartlari ANINDA cache degerleriyle doldur + "guncelleniyor".
+      const cached = loadCache(scope);
+      if (!cached) return;
+      const c = cached;
+      const set = <T,>(setter: (v: T) => void, v: T | null | undefined) => {
+        if (v !== null && v !== undefined) setter(v);
+      };
+      set(setTefasTotal, c.tefasTotal);
+      set(setTefasFundCount, c.tefasFundCount);
+      set(setTefasTop, c.tefasTop);
+      set(setCryptoTotal, c.cryptoTotal);
+      set(setCryptoTop, c.cryptoTop);
+      set(setStockTotal, c.stockTotal);
+      set(setStockHoldingCount, c.stockHoldingCount);
+      set(setStockTop, c.stockTop);
+      set(setWalletTotal, c.walletTotal);
+      set(setWalletTop, c.walletTop);
+      set(setBesTotal, c.besTotal);
+      set(setBesPlanCount, c.besPlanCount);
+      set(setBesTop, c.besTop);
+      set(setExpenseTotal, c.expenseTotal);
+      set(setExpenseCount, c.expenseCount);
+      set(setExpenseTop, c.expenseTop);
+      set(setPlannedTotal, c.plannedTotal);
+      set(setIncomeTotal, c.incomeTotal);
+      set(setIncomeCount, c.incomeCount);
+      set(setIncomeTop, c.incomeTop);
+      set(setIncomeYearEstimate, c.incomeYearEstimate);
+      set(setCreditCardTotal, c.creditCardTotal);
+      set(setCreditCardPeriod, c.creditCardPeriod);
+      set(setCreditCardCount, c.creditCardCount);
+      set(setCommodityTotal, c.commodityTotal);
+      set(setCommodityCount, c.commodityCount);
+      set(setCashTotal, c.cashTotal);
+      set(setCashCount, c.cashCount);
+      set(setManualCryptoTotal, c.manualCryptoTotal);
+      set(setManualCryptoCount, c.manualCryptoCount);
+      set(setManualCryptoTop, c.manualCryptoTop);
+      set(setBudgetOverCount, c.budgetOverCount);
+      set(setCurrentMonthNet, c.currentMonthNet);
+      set(setNextMonthNet, c.nextMonthNet);
+      set(setGoalPct, c.goalPct);
+      set(setGoalPassive, c.goalPassive);
+      // Cache degerleri ekranda — spinner yerine ust banner.
+      setDashboardLoading(false);
+      setRefreshing(true);
+    });
 
     const tasks: Promise<unknown>[] = [
       // TEFAS: holdings -> preview chain
@@ -155,8 +246,10 @@ export default function DashboardPage() {
         safeSet(setTefasFundCount)(holdings.length);
         const positions = await api.tefasPreview(holdings);
         const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
+        const tefasTop = top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.code);
         safeSet(setTefasTotal)(total);
-        safeSet(setTefasTop)(top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.code));
+        safeSet(setTefasTop)(tefasTop);
+        cachePatch({ tefasTotal: total, tefasFundCount: holdings.length, tefasTop });
       }),
 
       // Kripto (Binance/iCrypex)
@@ -165,8 +258,10 @@ export default function DashboardPage() {
         const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
         if (filtered.length === 0) return;
         const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
+        const cryptoTop = top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol);
         safeSet(setCryptoTotal)(total);
-        safeSet(setCryptoTop)(top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol));
+        safeSet(setCryptoTop)(cryptoTop);
+        cachePatch({ cryptoTotal: total, cryptoTop });
       }).finally(() => { if (!cancelled) setCryptoLoading(false); }),
 
       // Hisse senedi: holdings -> preview chain
@@ -176,8 +271,10 @@ export default function DashboardPage() {
         safeSet(setStockHoldingCount)(holdings.length);
         const positions = await api.stockPreview(holdings);
         const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
+        const stockTop = top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.ticker);
         safeSet(setStockTotal)(total);
-        safeSet(setStockTop)(top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.ticker));
+        safeSet(setStockTop)(stockTop);
+        cachePatch({ stockTotal: total, stockHoldingCount: holdings.length, stockTop });
       }),
 
       // Blockchain cüzdanlar
@@ -186,8 +283,10 @@ export default function DashboardPage() {
         const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
         if (filtered.length === 0) return;
         const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
+        const walletTop = top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol);
         safeSet(setWalletTotal)(total);
-        safeSet(setWalletTop)(top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol));
+        safeSet(setWalletTop)(walletTop);
+        cachePatch({ walletTotal: total, walletTop });
       }).finally(() => { if (!cancelled) setWalletLoading(false); }),
 
       // BES
@@ -204,28 +303,36 @@ export default function DashboardPage() {
             (Number.parseFloat(h.govt_returns.toString()) || 0),
         }));
         const total = items.reduce((s, i) => s + i.total, 0);
+        const besTop = top3(items, (i) => i.total, (i) => i.plan_name);
         safeSet(setBesTotal)(total);
-        safeSet(setBesTop)(top3(items, (i) => i.total, (i) => i.plan_name));
+        safeSet(setBesTop)(besTop);
+        cachePatch({ besTotal: total, besPlanCount: holdings.length, besTop });
       }),
 
       // Gelir özeti (bu ay)
       safe("income-summary", async () => {
         const sum = await api.getIncomeSummary(yyyy, mm);
         if (sum.count === 0) return;
-        safeSet(setIncomeTotal)(Number.parseFloat(sum.total));
-        safeSet(setIncomeCount)(sum.count);
-        safeSet(setIncomeTop)(top3(
+        const incomeTotal = Number.parseFloat(sum.total);
+        const incomeTop = top3(
           sum.by_category,
           (b) => Number.parseFloat(b.total),
           (b) => INCOME_CATEGORY_LABELS[b.category] ?? b.category,
-        ));
+        );
+        safeSet(setIncomeTotal)(incomeTotal);
+        safeSet(setIncomeCount)(sum.count);
+        safeSet(setIncomeTop)(incomeTop);
+        cachePatch({ incomeTotal, incomeCount: sum.count, incomeTop });
       }),
 
       // Gelir dashboard (yıl sonu beklentisi)
       safe("income-dashboard", async () => {
         const d = await api.getIncomeDashboard(yyyy, mm);
         const est = Number.parseFloat(d.year_total_estimate);
-        if (est > 0) safeSet(setIncomeYearEstimate)(est);
+        if (est > 0) {
+          safeSet(setIncomeYearEstimate)(est);
+          cachePatch({ incomeYearEstimate: est });
+        }
       }),
 
       // Cash flow (bu ay + gelecek ay net)
@@ -234,19 +341,32 @@ export default function DashboardPage() {
         if (isDecember) fetches.push(api.getCashFlow(yyyy + 1));
         const [thisYear, nextYear] = await Promise.all(fetches);
         const thisMonth = thisYear.months.find((m) => m.month === mm);
-        if (thisMonth) safeSet(setCurrentMonthNet)(Number.parseFloat(thisMonth.net));
         const nextMonthData = isDecember
           ? nextYear?.months.find((m) => m.month === 1)
           : thisYear.months.find((m) => m.month === mm + 1);
-        if (nextMonthData) safeSet(setNextMonthNet)(Number.parseFloat(nextMonthData.net));
+        const patch: Partial<DashboardSnapshot> = {};
+        if (thisMonth) {
+          const v = Number.parseFloat(thisMonth.net);
+          safeSet(setCurrentMonthNet)(v);
+          patch.currentMonthNet = v;
+        }
+        if (nextMonthData) {
+          const v = Number.parseFloat(nextMonthData.net);
+          safeSet(setNextMonthNet)(v);
+          patch.nextMonthNet = v;
+        }
+        cachePatch(patch);
       }),
 
       // Kredi kartları
       safe("credit-cards", async () => {
         const s = await api.listCreditCards();
-        safeSet(setCreditCardTotal)(Number.parseFloat(s.total_debt));
-        safeSet(setCreditCardPeriod)(Number.parseFloat(s.total_period_debt));
+        const creditCardTotal = Number.parseFloat(s.total_debt);
+        const creditCardPeriod = Number.parseFloat(s.total_period_debt);
+        safeSet(setCreditCardTotal)(creditCardTotal);
+        safeSet(setCreditCardPeriod)(creditCardPeriod);
         safeSet(setCreditCardCount)(s.cards.length);
+        cachePatch({ creditCardTotal, creditCardPeriod, creditCardCount: s.cards.length });
       }),
 
       // Kıymetli madenler
@@ -256,6 +376,7 @@ export default function DashboardPage() {
         if (s.positions.length > 0) {
           safeSet(setCommodityTotal)(total);
           safeSet(setCommodityCount)(s.positions.length);
+          cachePatch({ commodityTotal: total, commodityCount: s.positions.length });
         }
       }),
 
@@ -266,6 +387,7 @@ export default function DashboardPage() {
         if (s.holdings.length > 0) {
           safeSet(setCashTotal)(total);
           safeSet(setCashCount)(s.holdings.length);
+          cachePatch({ cashTotal: total, cashCount: s.holdings.length });
         }
       }),
 
@@ -274,13 +396,15 @@ export default function DashboardPage() {
         const s = await api.listManualCrypto();
         const total = Number.parseFloat(s.total_value_tl);
         if (s.positions.length > 0) {
-          safeSet(setManualCryptoTotal)(total);
-          safeSet(setManualCryptoCount)(s.positions.length);
-          safeSet(setManualCryptoTop)(top3(
+          const manualCryptoTop = top3(
             s.positions,
             (p) => Number.parseFloat(p.total_value_tl),
             (p) => p.symbol,
-          ));
+          );
+          safeSet(setManualCryptoTotal)(total);
+          safeSet(setManualCryptoCount)(s.positions.length);
+          safeSet(setManualCryptoTop)(manualCryptoTop);
+          cachePatch({ manualCryptoTotal: total, manualCryptoCount: s.positions.length, manualCryptoTop });
         }
       }),
 
@@ -289,33 +413,49 @@ export default function DashboardPage() {
         const rows = await api.getBudgetComparison(yyyy, mm);
         const overCount = rows.filter((r: BudgetComparisonDTO) => r.over_budget).length;
         safeSet(setBudgetOverCount)(overCount);
+        cachePatch({ budgetOverCount: overCount });
       }),
 
       // Finansal hedef
       safe("goal", async () => {
         const g = await api.getGoal();
-        if (g.progress_pct !== null) safeSet(setGoalPct)(g.progress_pct);
-        if (g.passive_income_tl) safeSet(setGoalPassive)(Number.parseFloat(g.passive_income_tl));
+        const patch: Partial<DashboardSnapshot> = {};
+        if (g.progress_pct !== null) {
+          safeSet(setGoalPct)(g.progress_pct);
+          patch.goalPct = g.progress_pct;
+        }
+        if (g.passive_income_tl) {
+          const v = Number.parseFloat(g.passive_income_tl);
+          safeSet(setGoalPassive)(v);
+          patch.goalPassive = v;
+        }
+        cachePatch(patch);
       }),
 
       // Planlı ödemeler (yıllık tahmin)
       safe("planned", async () => {
         const fc = await api.getForecast(yyyy);
         const total = Number.parseFloat(fc.year_total);
-        if (total > 0) safeSet(setPlannedTotal)(total);
+        if (total > 0) {
+          safeSet(setPlannedTotal)(total);
+          cachePatch({ plannedTotal: total });
+        }
       }),
 
       // Harcama özeti (bu ay)
       safe("expenses", async () => {
         const sum = await api.getExpenseSummary(yyyy, mm);
         if (sum.count === 0) return;
-        safeSet(setExpenseTotal)(Number.parseFloat(sum.total));
-        safeSet(setExpenseCount)(sum.count);
-        safeSet(setExpenseTop)(top3(
+        const expenseTotal = Number.parseFloat(sum.total);
+        const expenseTop = top3(
           sum.by_category,
           (b) => Number.parseFloat(b.total),
           (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
-        ));
+        );
+        safeSet(setExpenseTotal)(expenseTotal);
+        safeSet(setExpenseCount)(sum.count);
+        safeSet(setExpenseTop)(expenseTop);
+        cachePatch({ expenseTotal, expenseCount: sum.count, expenseTop });
       }),
     ];
 
@@ -327,6 +467,7 @@ export default function DashboardPage() {
         console.warn(`[dashboard] ${failed}/${tasks.length} fetch fail`);
       }
       setDashboardLoading(false);
+      setRefreshing(false);
     });
 
     return () => { cancelled = true; };
@@ -433,6 +574,15 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
+        {refreshing && (
+          <output
+            aria-live="polite"
+            className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 px-3 py-2 rounded-lg mb-4"
+          >
+            <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            {t("dashboard.refreshing")}
+          </output>
+        )}
         <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
@@ -706,6 +856,11 @@ export default function DashboardPage() {
           onConfirm={saveConfirmedSnapshot}
           saving={snapshotting}
         />
+      )}
+
+      {/* Periyodik gelir/gider bekleyen dönem popup'ı */}
+      {pendingRealize.length > 0 && (
+        <PendingRealizeModal items={pendingRealize} onClose={() => setPendingRealize([])} />
       )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">

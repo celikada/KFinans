@@ -17,6 +17,21 @@ export interface UserMeDTO {
   email_verified: boolean;
   credit_balance: number;
   mfa_enabled?: boolean;
+  is_admin?: boolean;
+  release_notes_opt_in?: boolean;
+}
+
+// ─── Sürüm bildirimleri (release notes) ──────────────────────────
+
+export interface ReleaseOptInStatusDTO {
+  release_notes_opt_in: boolean;
+}
+
+export interface ReleaseSendResultDTO {
+  version: string;
+  recipients: number;
+  sent: number;
+  failed: number;
 }
 
 // MFA (TOTP) — Audit #5
@@ -401,7 +416,26 @@ export interface IncomeDashboardDTO {
 export interface RealizeResultDTO {
   realized: number;
   skipped: number;
-  income_ids: number[];
+  income_ids?: number[]; // gelir realize (income.py)
+  ids?: number[]; // gider realize (planned_expenses.py)
+}
+
+// ─── Periyodik gerçekleşme (pending / skip) ─────────────────────
+export type RecurringKind = "income" | "expense";
+
+export interface PendingItemDTO {
+  kind: RecurringKind;
+  ref_id: number;
+  title: string;
+  category: string;
+  amount: string;
+  period_year: number;
+  period_month: number;
+  occurrence_date: string; // YYYY-MM-DD
+}
+
+export interface PendingResponseDTO {
+  items: PendingItemDTO[];
 }
 
 // ─── Cash Flow (yıllık projeksiyon) ─────────────────────────────
@@ -519,6 +553,44 @@ export interface CreditCardDetailDTO {
   card: CreditCardDTO;
   statements: StatementDTO[];
   installments: InstallmentDTO[];
+}
+
+// Ekstre (PDF) import — preview çıktısı + commit girdisi
+export interface ParsedInstallmentDTO {
+  description: string;
+  total_amount: string;
+  monthly_amount: string;
+  installments_total: number;
+  installments_paid: number;
+  first_due_date: string;
+}
+
+export interface ParsedStatementDTO {
+  bank_name: string;
+  last_4: string | null;
+  credit_limit: string | null;
+  statement_day: number;
+  payment_due_day: number;
+  period_year: number;
+  period_month: number;
+  statement_amount: string;
+  statement_date: string;
+  due_date: string;
+  installments: ParsedInstallmentDTO[];
+  matched_card_id: number | null;
+  warnings: string[];
+}
+
+export interface StatementImportCommitInput {
+  target_card_id: number | null;
+  name: string;
+  bank_name?: string | null;
+  last_4?: string | null;
+  credit_limit?: number | string | null;
+  statement_day: number;
+  payment_due_day: number;
+  statement: StatementInput;
+  installments: InstallmentInput[];
 }
 
 // ─── Goal ───────────────────────────────────────────────────────

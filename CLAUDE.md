@@ -48,9 +48,9 @@ KFinans, kişisel yatırım portföyünü tek ekranda toplayan bir uygulamadır.
 KFinans/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/                # FastAPI 23 router'ı: auth, mfa, user, portfolio, tefas,
+│   │   ├── api/v1/                # FastAPI 24 router'ı: auth, mfa, user, portfolio, tefas,
 │   │   │                          # stocks, bes, commodity, wallets, integrations,
-│   │   │                          # expenses, planned_expenses, income, budget, goal,
+│   │   │                          # expenses, planned_expenses, income, recurring, budget, goal,
 │   │   │                          # cash, cash_flow, credit_cards, manual_crypto,
 │   │   │                          # asset_catalog, audit_logs, advice, metrics
 │   │   ├── services/
@@ -65,13 +65,15 @@ KFinans/
 │   │   │   ├── snapshot.py        # compute_and_save_snapshot() — paralel toplama (manuel kripto dahil)
 │   │   │   ├── email.py           # Resend SDK — verify_email
 │   │   │   ├── audit.py           # FAZ C6: log_audit() + AuditAction Enum (best-effort)
+│   │   │   ├── statement_import/   # Kredi kartı ekstresi (PDF) parser'ları — pluggable (Ziraat/Enpara/VakıfBank/Akbank) + extract_text + detect_parser
+│   │   │   ├── expense_analyst.py  # Claude API harcama analizi (3 kredi)
 │   │   │   └── advisor.py         # Claude API (AI-003/005/007 — AKTİF)
 │   │   ├── models/                # SQLAlchemy ORM (audit_log.py dahil)
 │   │   ├── schemas/               # Pydantic (manual_crypto.py dahil)
 │   │   ├── core/                  # security (fernet+jwt+bcrypt+address_fingerprint), deps, limiter, middleware (SecurityHeadersMiddleware)
 │   │   ├── scheduler.py           # APScheduler — 4 cron: Pazar 23:00 snapshot, 03:00 token cleanup, 04:00 hard-delete, 04:30 audit purge
 │   │   └── main.py                # SecurityHeaders + TrustedHost + CORS middleware sırası
-│   ├── alembic/versions/          # 39 migration (head e2f3a4b5c6d7). Faz 3 ana ekleme'ler:
+│   ├── alembic/versions/          # 40 migration (head f3a4b5c6d7e8). Faz 3 ana ekleme'ler:
 │   │                              # - e0f1a2b3c4d5: credit_cards
 │   │                              # - f1a2b3c4d5e6: credit_card_statements + installments
 │   │                              # - f5a6b7c8d9e0: manual_crypto_holdings
@@ -199,7 +201,11 @@ cd frontend && npm install && npm run dev
 
 **Kredi kartları (`credit_cards` + `credit_card_statements` + `credit_card_installments`):** Faz 3 finans modülü. **Kart tanımı:** name, bank_name, last_4, credit_limit, statement_day, payment_due_day, **`current_period_debt`** (dönem içi henüz ekstreye düşmemiş tutar — kullanıcı manuel günceller). **Aylık ekstreler:** her kart için `(period_year, period_month)` unique kayıtlar — statement_amount, statement_date, due_date, paid_at (nullable). **Taksitler:** description, total_amount, monthly_amount, installments_total, installments_remaining, first_due_date — gelecek aylar projeksiyonu için. Endpoint'ler: `/credit-cards` CRUD + summary + `/{id}` detail (statements + installments tek seferde) + `/{id}/statements` ve `/{id}/installments` nested CRUD'ları. Frontend: ana sayfa kart listesi + her satırda "Ekstre / Taksit" linki → detay sayfası `/dashboard/credit-cards/[id]` (statement form + tablo + installment form + tablo). Dashboard "Kredi Kartları" kartı **Finans grubunun en üstünde**. Çift sayım kuralı (Expense + Planned'da credit_card_id + is_paid) sonraki adımda devreye girecek.
 
-**Realize akışı (recurring → income):** Periyodik kayıtların belirli bir ay-yılı için `incomes` tablosuna **gerçek kayıt** üretmesi 3 endpoint ile sağlanır: `POST /income/recurring/{id}/realize` (tek dönem, body `{year, month}`), `POST /income/recurring/{id}/realize-past` (start_date'ten bugüne tüm dönemler), `POST /income/recurring/realize-all-past` (tüm recurring'ler). `incomes.recurring_income_id` (FK→recurring_incomes, ON DELETE SET NULL) çift realize'ı engelleyen `(recurring_income_id, date)` unique index ile birlikte. Frontend RecurringIncomeTable'da satır başına "Bu ay ✓" / "Geçmişi ✓" butonları + üstte "Tümünün Geçmişini Gerçekleştir". IncomeTable'da realize'lı kayıtlarda mavi "↻ periyodik" rozeti.
+**Kredi kartı ekstresi (PDF) import (`services/statement_import/`):** Banka ekstresi PDF'i yüklenip kart/ekstre/taksitler otomatik doldurulur. `POST /credit-cards/import-statement/preview` (PDF→`ParsedStatementOut`, DB yazmaz) + `commit` (onaylanan JSON → kart upsert + statement upsert (period unique) + taksit; audit `credit_card.statement_import`). **Pluggable parser:** her banka `StatementParser` Protocol'ü implement eder, `PARSERS` listesine eklenir, `detect_parser` ilk `matches()` true olanı seçer; parser'lar saf-metin (pdfplumber'dan bağımsız, test edilebilir). `_utils.parse_amount` TR (`500.000,00`) + EN (`17,495.87`) formatını otomatik ayırt eder. **Desteklenen 4 banka:** Ziraat, Enpara, VakıfBank (taksit best-effort + uyarı), **Akbank/Axess** — PDF metin katmanı custom-font (pdfplumber `(cid:NNN)` token'ları + dağınık Latin glyph); `akbank.py::_decode` rakam+sembolü çözer (`(cid:240..249)`→0..9 = ASCII+`0xC0`, ayrıca `æ`=1/`ı`=5/`ł`=8/`ø`=9, `k`=binlik/`K`=ondalık/`\`=`*`, `GGaAAaYYYY`→tarih). Harf glyph'leri güvenilmez → **format-bazlı** çıkarım: maskeli kart + "ekstre dönemi" tarih aralığı (cid-bağımsız) ile değer konumlarından (ilk tarih=son ödeme, aralık sonu=hesap kesim, ilk tutar=dönem borcu, en büyük tutar=limit). **Fail-safe (kullanıcı kuralı):** tanınmayan banka → "banka tanınmadı" 422; banka eşleşip alan bulunamazsa (format değişmiş) → ValueError → 422; asla tahmini veri yazılmaz. `validate_pdf_upload` (magic byte `%PDF-`). Frontend `app/dashboard/credit-cards/StatementImport.tsx` (yükle → düzenlenebilir önizleme + silinebilir taksit + uyarı panelleri → onay). Detay: memory `[[project-statement-import]]`. Gelecek: bilinmeyen bankalar için opsiyonel `AIStatementParser` (Claude PDF/vision, OCR'sız).
+
+**Realize akışı (recurring → income):** Periyodik kayıtların belirli bir ay-yılı için `incomes` tablosuna **gerçek kayıt** üretmesi 3 endpoint ile sağlanır: `POST /income/recurring/{id}/realize` (tek dönem, body `{year, month}`), `POST /income/recurring/{id}/realize-past` (start_date'ten bugüne tüm dönemler), `POST /income/recurring/realize-all-past` (tüm recurring'ler). `incomes.recurring_income_id` (FK→recurring_incomes, ON DELETE SET NULL) çift realize'ı engelleyen `(recurring_income_id, date)` unique index ile birlikte. Frontend RecurringIncomeTable'da satır başına "Bu ayı gerçekleştir ✓" / "Geçmişi gerçekleştir ✓" butonları + üstte "Tümünün Geçmişini Gerçekleştir". IncomeTable'da realize'lı kayıtlarda mavi "↻ periyodik" rozeti.
+
+**Periyodik gider realize + skip + giriş popup'ı (2026-06-04):** Gelir realize'ı gidere de simetrik taşındı. **Gider realize:** `planned_expense` → `expenses` tablosuna gerçek gider kaydı (`POST /planned-expenses/{id}/realize` body `{year,month}` + `/realize-past`). `expenses.planned_expense_id` (FK→planned_expenses ON DELETE SET NULL) + partial unique index `(planned_expense_id, date) WHERE planned_expense_id IS NOT NULL` çift realize engeli. Çift sayım: pe kredi kartından ise `credit_card_id + is_paid` taşınır. Frontend PlannedList'te satır başına "Bu ayı gerçekleştir ✓" / "Geçmişi gerçekleştir ✓". **Ortak recurrence util** (`services/recurrence.py`): `applies_in_month` + `date_for_period` + `iter_due_periods` — hem `RecurringIncome` hem `PlannedExpense` için duck-typed; income.py + planned_expenses.py bunu kullanır (DRY). **"Gerçekleşmeyecek" (skip):** `recurring_skips` tablosu (kind income/expense + ref_id + period; polimorfik) — dönem-bazlı atlama. `POST /recurring/skips` (idempotent, IDOR) + `DELETE /recurring/skips/{id}`. **Giriş popup'ı:** `GET /recurring/pending` tarihi geçmiş + ne realize ne skip olan gelir+gider dönemlerini döner; dashboard mount'ta çekilir, varsa `PendingRealizeModal` (gelir+gider birlikte, her satırda "Gerçekleşti"/"Gerçekleşmeyecek", aksiyon sonrası satır düşer, boşalınca kapanır). Sonraki sprint: banka/ekstre hareketlerinden otomatik realize.
 
 **Fault-tolerance pattern:** Dış servisler **kritik** ve **best-effort** olarak ayrılır. TCMB USD/TRY kritik (fail → 503); GBP/USD opsiyonel (fail → 0 + log warning). Yahoo Finance metal sembolleri için fallback chain (XAU=X→GC=F, XAG=X→SI=F); ikisi de fail ise 0 dön + UI uyarı banner. Cache TTL Yahoo fail durumunda 5 dk → 30 sn'ye düşer (geçici 404 hızla telafi edilir).
 
@@ -264,7 +270,7 @@ cd frontend && npm install && npm run dev
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
 - **Test sayıları:** ~1196 backend pass (unit + integration) + ~396 frontend (vitest) pass (i18n-002 + SonarQube temizliği turlarında frontend testleri 202→~396'ya çıktı). SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
-- **Migration head:** `e2f3a4b5c6d7` (MFA TOTP user.totp_* kolonları, 2026-05-21). Yeni migration `down_revision = "e2f3a4b5c6d7"`.
+- **Migration head:** `a7b8c9d0e1f2` (periyodik gerçekleşme: `recurring_skips` tablosu + `expenses.planned_expense_id`, 2026-06-04). Yeni migration `down_revision = "a7b8c9d0e1f2"`.
 
 ## Son Audit — 2026-05-22 (Faz I post-fix)
 

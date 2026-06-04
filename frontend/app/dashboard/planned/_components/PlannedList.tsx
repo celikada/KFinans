@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import {
   api,
   PlannedExpenseDTO,
@@ -17,6 +18,8 @@ interface Props {
 export function PlannedList({ items, onDeleted }: Props) {
   const confirm = useConfirm();
   const { t } = useTranslation();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
 
   if (items.length === 0) {
     return (
@@ -32,11 +35,52 @@ export function PlannedList({ items, onDeleted }: Props) {
     onDeleted(id);
   }
 
+  async function handleRealizeThisMonth(pe: PlannedExpenseDTO) {
+    const now = new Date();
+    setBusy(`r-${pe.id}`);
+    setMsg("");
+    try {
+      const r = await api.realizePlannedPeriod(pe.id, now.getFullYear(), now.getMonth() + 1);
+      setMsg(
+        r.realized > 0
+          ? `✓ "${pe.title}" ${t("content.planned.realizedThisMonth")}`
+          : `"${pe.title}" ${t("content.planned.alreadyRealized")}`,
+      );
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : t("content.planned.opFailed"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleRealizePast(pe: PlannedExpenseDTO) {
+    if (!(await confirm(`"${pe.title}" ${t("content.planned.confirmRealizePast")}`, { destructive: false }))) return;
+    setBusy(`rp-${pe.id}`);
+    setMsg("");
+    try {
+      const r = await api.realizePlannedPast(pe.id);
+      setMsg(`✓ "${pe.title}": ${r.realized} ${t("content.planned.pastResultPrefix")} ${r.skipped} ${t("content.planned.pastResultSuffix")}`);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : t("content.planned.opFailed"));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50">
         <h3 className="text-sm font-semibold text-gray-700">{t("content.planned.listTitle")}</h3>
       </div>
+      {msg && (
+        <p
+          className={`mx-6 mt-3 text-xs px-3 py-2 rounded-lg border ${
+            msg.startsWith("✓") ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-red-50 border-red-100 text-red-700"
+          }`}
+        >
+          {msg}
+        </p>
+      )}
       <ul className="divide-y divide-gray-50">
         {items.map((pe) => (
           <li key={pe.id} className="px-6 py-4 flex items-start justify-between gap-4">
@@ -76,12 +120,34 @@ export function PlannedList({ items, onDeleted }: Props) {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <TLValue tl={pe.amount} className="text-sm font-semibold text-gray-900 tabular-nums" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
-              <button
-                onClick={() => handleDelete(pe.id, pe.title)}
-                className="text-xs text-red-400 hover:text-red-600 transition-colors"
-              >
-                {t("common.delete")}
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleRealizeThisMonth(pe)}
+                    disabled={busy === `r-${pe.id}`}
+                    className="text-xs px-2 py-1 rounded text-rose-700 border border-rose-200 hover:bg-rose-50 disabled:opacity-50"
+                    title={t("content.planned.realizeThisMonth")}
+                  >
+                    {t("content.planned.realizeThisMonth")} ✓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRealizePast(pe)}
+                    disabled={busy === `rp-${pe.id}`}
+                    className="text-xs px-2 py-1 rounded text-blue-700 border border-blue-200 hover:bg-blue-50 disabled:opacity-50"
+                    title={t("content.planned.realizePast")}
+                  >
+                    {t("content.planned.realizePast")} ✓
+                  </button>
+                </div>
+                <button
+                  onClick={() => handleDelete(pe.id, pe.title)}
+                  className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                >
+                  {t("common.delete")}
+                </button>
+              </div>
             </div>
           </li>
         ))}

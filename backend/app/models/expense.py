@@ -41,6 +41,15 @@ class Expense(Base):
         nullable=True,
         index=True,
     )
+    # Periyodik gider tanımından (planned_expense) realize edildiyse kaynak ID.
+    # Boş = doğrudan girilmiş harcama. Çift realize'ı önleyen partial unique
+    # index (planned_expense_id, date) ile birlikte kullanılır.
+    planned_expense_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("planned_expenses.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Harcama gerçekleşti mi? (default=true; planlı kayıttan dönüştürülen
     # nadir senaryolarda false olabilir.)
     is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")

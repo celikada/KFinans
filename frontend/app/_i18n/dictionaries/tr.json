@@ -47,7 +47,8 @@
     "kvkkConsentLabel": "KVKK Aydınlatma Metni'ni okudum, anladım.",
     "termsConsentLabel": "Kullanım Şartları ve Gizlilik Politikası'nı kabul ediyorum.",
     "overseasConsentLong": "Kişisel verilerimin hizmet sağlayıcılar aracılığıyla yurt dışına aktarılmasına KVKK m.9 kapsamında açık rıza veriyorum (detaylar KVKK Aydınlatma Metni'nde).",
-    "ageConfirmLong": "18 yaşımı doldurdum. KFinans finansal bir hizmet sunduğundan kayıt için 18 yaş şartı zorunludur (KVKK Kurul kararı 2018/482, TMK m.16)."
+    "ageConfirmLong": "18 yaşımı doldurdum. KFinans finansal bir hizmet sunduğundan kayıt için 18 yaş şartı zorunludur (KVKK Kurul kararı 2018/482, TMK m.16).",
+    "releaseNotesOptIn": "Yeni sürüm bildirimlerini e-posta ile almak istiyorum (opsiyonel, istediğiniz zaman bırakabilirsiniz)."
   },
   "common": {
     "save": "Kaydet",
@@ -72,6 +73,7 @@
   "dashboard": {
     "totalPortfolio": "Toplam Portföy",
     "financeNetBalance": "Finans (Net Bakiye)",
+    "refreshing": "Değerler güncelleniyor…",
     "snapshot": "Snapshot al",
     "snapshotting": "Alınıyor...",
     "history": "Geçmiş",
@@ -310,6 +312,16 @@
       "insurance": "Sigorta",
       "other": "Diğer"
     },
+    "pending": {
+      "title": "Bekleyen periyodik kayıtlar",
+      "desc": "Tarihi geçmiş ama gerçekleşti/gerçekleşmeyecek olarak işaretlenmemiş gelir ve giderler. Her biri için seçim yapın.",
+      "realized": "Gerçekleşti",
+      "skip": "Gerçekleşmeyecek",
+      "income": "Gelir",
+      "expense": "Gider",
+      "close": "Daha sonra",
+      "error": "İşlem başarısız"
+    },
     "income": {
       "salary": "Maaş",
       "freelance": "Serbest",
@@ -414,6 +426,29 @@
       "yearTotal": "Yıl Toplamı"
     },
     "creditCards": {
+      "import": {
+        "title": "Ekstre İçe Aktar (PDF)",
+        "uploadBtn": "PDF Ekstre Seç",
+        "uploading": "Okunuyor…",
+        "hint": "Banka ekstresi PDF'inizi yükleyin; kart, ekstre ve taksitler otomatik doldurulur. Tanınmayan banka veya değişmiş format için uyarı verilir, kayıt yapılmaz.",
+        "previewTitle": "Önizleme — kaydetmeden önce kontrol edin",
+        "matchedCard": "Bu ekstre mevcut bir kartınızla eşleşti; ekstre o karta eklenecek.",
+        "newCard": "Yeni kart oluşturulacak.",
+        "cardName": "Kart adı",
+        "bank": "Banka",
+        "last4": "Son 4 hane",
+        "limit": "Limit (TL)",
+        "statementDay": "Kesim günü",
+        "dueDay": "Son ödeme günü",
+        "statementSection": "Ekstre dönemi",
+        "amount": "Dönem borcu (TL)",
+        "installments": "Taksitler",
+        "noInstallments": "Bu ekstrede taksitli işlem bulunamadı.",
+        "removeInstallment": "{desc} taksitini çıkar",
+        "save": "İçe Aktar",
+        "previewFailed": "Ekstre okunamadı",
+        "saveFailed": "İçe aktarma başarısız"
+      },
       "loadFailed": "Yüklenemedi",
       "saveFailed": "Kayıt başarısız",
       "deleteFailed": "Silme başarısız",
@@ -571,9 +606,9 @@
       "dayOfMonthSuffix": "gün",
       "indefinite": "süresiz",
       "markThisMonthTitle": "Bu ay'ı gerçekleşti olarak işaretle",
-      "thisMonthBtn": "Bu ay",
+      "thisMonthBtn": "Bu ayı gerçekleştir",
       "realizePastTitle": "Geçmiş tüm dönemleri gerçekleştir",
-      "pastBtn": "Geçmişi",
+      "pastBtn": "Geçmişi gerçekleştir",
       "deleteAriaSuffix": "kaydını sil",
       "monthsShort": {
         "1": "Oca",
@@ -605,7 +640,15 @@
       "endLabel": "bitiş",
       "monthsLabel": "aylar",
       "forecastTitle": "yılı nakit akışı tahmini",
-      "totalLabel": "Toplam"
+      "totalLabel": "Toplam",
+      "realizeThisMonth": "Bu ayı gerçekleştir",
+      "realizePast": "Geçmişi gerçekleştir",
+      "realizedThisMonth": "bu ay gider olarak işaretlendi",
+      "alreadyRealized": "zaten bu ay için gerçekleştirilmiş — atlandı",
+      "confirmRealizePast": "için geçmiş tüm dönemler gider olarak işaretlensin mi?",
+      "pastResultPrefix": "dönem gerçekleştirildi,",
+      "pastResultSuffix": "atlandı",
+      "opFailed": "İşlem başarısız"
     },
     "bes": {
       "headerTitle": "BES — Bireysel Emeklilik",
@@ -791,6 +834,12 @@
       "showUsdHint": "TL değerlerin altında anlık $ karşılığı (TCMB kuru, 5 dk önbellek)",
       "showUsdToggleOff": "USD karşılığını kapat",
       "showUsdToggleOn": "USD karşılığını aç",
+      "releaseNotes": "Sürüm Bildirimleri",
+      "releaseNotesHint": "Yeni bir sürüm yayınlandığında e-posta ile haberdar olun.",
+      "releaseNotesToggle": "Sürüm bildirimleri",
+      "releaseNotesToggleHint": "Yenilik özetleri e-posta ile gönderilir (yalnızca doğrulanmış e-posta).",
+      "releaseNotesToggleOn": "Sürüm bildirimlerini aç",
+      "releaseNotesToggleOff": "Sürüm bildirimlerini kapat",
       "dashboardView": "Dashboard Görünümü",
       "dashboardViewHint": "Görmek istemediğiniz kartları gizleyin.",
       "showCardAria": "göster",
@@ -809,6 +858,15 @@
       "dangerZone": "Tehlike Bölgesi",
       "dangerZoneHint": "Hesabınızı kalıcı olarak silin. Bu işlem geri alınamaz.",
       "deleteAccountBtn": "Hesabı Sil"
+    },
+    "unsubscribe": {
+      "processing": "İşleniyor...",
+      "successTitle": "Aboneliğiniz iptal edildi",
+      "successBody": "Artık KFinans sürüm bildirimi e-postaları almayacaksınız. Dilerseniz Ayarlar sayfasından yeniden açabilirsiniz.",
+      "goSettings": "Ayarlara git",
+      "errorTitle": "Bağlantı geçersiz",
+      "errorBody": "Abonelik iptali yapılamadı. Bağlantı geçersiz veya süresi dolmuş olabilir.",
+      "goLogin": "Giriş sayfasına dön"
     },
     "stocks": {
       "stockHoldings": "Hisse Holdingleri",

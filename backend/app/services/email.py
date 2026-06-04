@@ -113,3 +113,50 @@ async def send_password_reset_email(*, to: str, token: str) -> bool:
     except Exception:
         logger.exception("Sifre sifirlama e-postasi gonderilemedi: %s", to)
         return False
+
+
+# Surum bildirimleri (release notes) — opt-in kullanicilara CHANGELOG'tan
+# turetilen surum notlarini gonderir. verify/reset mail stiliyle uyumlu sablon.
+def _release_notes_html(*, version: str, body_html: str, unsubscribe_url: str) -> str:
+    return f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+      <h2 style="color: #111827; margin-bottom: 4px;">KFinans {version} yayınlandı</h2>
+      <p style="color: #6b7280; font-size: 14px; margin-top: 0;">
+        Bu sürümle gelen değişiklikler:
+      </p>
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 20px; color: #374151; line-height: 1.6; font-size: 14px;">
+        {body_html}
+      </div>
+      <p style="color: #9ca3af; font-size: 13px; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+        Bu e-postayı, KFinans hesabınızda sürüm bildirimlerine abone olduğunuz için
+        aldınız. Aboneliği bırakmak için
+        <a href="{unsubscribe_url}" style="color: #2563eb;">buraya tıklayın</a>
+        veya Ayarlar sayfasından bildirimleri kapatın.
+      </p>
+    </div>
+    """
+
+
+async def send_release_notes_email(*, to: str, version: str, body_html: str, unsubscribe_url: str) -> bool:
+    """Tek bir kullanıcıya sürüm bildirimi (release notes) maili gönderir.
+
+    verify/reset pattern'i ile aynı: hata durumunda False döner, exception fırlatmaz.
+    """
+    if not _configure():
+        logger.warning("RESEND_API_KEY tanımlı değil; sürüm bildirimi gönderilmedi (to=%s)", to)
+        return False
+
+    payload = {
+        "from": settings.email_from,
+        "to": [to],
+        "subject": f"KFinans {version} — Yenilikler",
+        "html": _release_notes_html(version=version, body_html=body_html, unsubscribe_url=unsubscribe_url),
+    }
+
+    try:
+        await asyncio.to_thread(resend.Emails.send, payload)
+        logger.info("Sürüm bildirimi gönderildi: %s (v=%s)", to, version)
+        return True
+    except Exception:
+        logger.exception("Sürüm bildirimi gönderilemedi: %s", to)
+        return False

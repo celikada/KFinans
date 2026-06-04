@@ -39,7 +39,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 |-----|--------|-------|
 | **Faz 1** | Yatırım takibi (TEFAS, kripto, blockchain, hisse senedi), Excel import/export, dashboard | ✅ Tamamlandı |
 | **Faz 2** | Kullanıcı kaydı + e-posta doğrulama ✅, scheduler + snapshot servisi ✅, TCMB fallback ✅, BES manuel giriş ✅, JWT blacklist + logout ✅, Kubernetes manifest'leri ✅ | ✅ Tamamlandı (Faz 2.5: test coverage + frontend parçalama) |
-| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi, çoklu zincir cüzdan desteği (Solana/Cardano/Algorand/Polkadot/Litecoin), ERC-20 token tarama | 🚧 Devam ediyor (harcama/bütçe/emtia/MKK import/Solana/ERC-20 tamam; AI/kredi/iyzico + Cardano/Algorand/Polkadot/Litecoin servisleri açık) |
+| **Faz 3** | Kredi sistemi + iyzico, AI tavsiye motoru aktivasyonu, harcama takibi, çoklu zincir cüzdan desteği (Solana/Cardano/Algorand/Polkadot/Litecoin), ERC-20 token tarama | 🚧 Devam ediyor (harcama/bütçe/emtia/MKK import/Solana/ERC-20 + **AI tavsiye motoru aktif** + **Cardano/Algorand/Polkadot/Litecoin servisleri tamam**; **kalan tek büyük parça: kredi satın alma sistemi — `credit_transactions` ledger + iyzico + frontend** ile harcama AI analizi + background job kuyruğu açık) |
 | **Faz 4** | Flutter mobile app, Play Store yayın, Apple sertifikasyonu | Planlı (web tamamlandıktan sonra) |
 | **Faz 5** | MCP Server — Claude Desktop ve diğer MCP istemcilerinden KFinans verilerine erişim (read-only portföy + manuel kayıt ekleme) | Planlı (mobil tamamlandıktan sonra) |
 
@@ -382,8 +382,9 @@ Production deploy bittikten sonra:
 - [x] Snapshot sağlık uyarıları (`portfolio_snapshots.health_issues` JSONB) + çift para birimi (`usd_try_rate`) + History TL/USD toggle (migration `e4f5a6b7c8d9`)
 
 **Hâlâ açık (backlog — bkz. `docs/audits/2026-05-22-master-audit.md`):**
-- [ ] Harcama AI analizi (`/expenses/analysis/generate` — 3 kredi)
-- [ ] Kredi sistemi tam implementasyonu + iyzico sandbox (`credit_transactions` tablosu, idempotency, webhook) — kodda henüz YOK
+- [x] Harcama AI analizi (`POST /expenses/analysis/generate` — 3 kredi, ephemeral, KVKK m.9 consent + kredi ledger `reason="expense_analysis"`, 2026-06-03)
+- [x] Kredi ledger altyapısı (Aşama 1): `credit_transactions` tablosu (migration `f3a4b5c6d7e8`) + `core/credits.py` (`deduct_credits`/`add_credits`, SELECT FOR UPDATE) + `GET /credits` + `advice.py` refactor
+- [ ] Kredi sistemi Aşama 2: iyzico checkout/webhook + HMAC + idempotency + frontend (satın alma/bakiye/geçmiş) — **iyzico API key bekliyor**
 - [ ] Background job kuyruğu (Celery/RQ)
 - [ ] Bazı KVKK yasal metin placeholder'ları (ticari ünvan, KEP, tebligat adresi)
   - Amaç: TL eğimi enflasyonlu, USD eğimi gerçek satın alma gücü değişimini gösterir

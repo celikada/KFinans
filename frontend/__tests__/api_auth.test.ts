@@ -59,12 +59,19 @@ describe("authApi temel endpoint'ler", () => {
     expect(init.body).toBe('{"totp_code":"123456"}');
   });
 
-  it("register POST + age_confirmed body", async () => {
+  it("register POST + age_confirmed body (opt-in varsayılan false)", async () => {
     await authApi.register("a@b.com", "pw", "balanced", true);
     const { url, init } = lastCall();
     expect(url).toBe(`${BASE}/auth/register`);
     expect(init.body).toBe(
-      '{"email":"a@b.com","password":"pw","risk_profile":"balanced","age_confirmed":true}',
+      '{"email":"a@b.com","password":"pw","risk_profile":"balanced","age_confirmed":true,"release_notes_opt_in":false}',
+    );
+  });
+
+  it("register POST + release_notes_opt_in true geçilebilir", async () => {
+    await authApi.register("a@b.com", "pw", "balanced", true, true);
+    expect(lastCall().init.body).toBe(
+      '{"email":"a@b.com","password":"pw","risk_profile":"balanced","age_confirmed":true,"release_notes_opt_in":true}',
     );
   });
 

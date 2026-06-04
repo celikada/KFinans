@@ -35,6 +35,12 @@ class RegisterRequest(BaseModel):
         default=False,
         description="KVKK Aydinlatma Metni okundu",
     )
+    # Surum bildirimleri (release notes) — KVKK acik riza, varsayilan KAPALI.
+    # Onceden isaretli OLAMAZ; kullanici acikca isaretlemeli.
+    release_notes_opt_in: bool = Field(
+        default=False,
+        description="Yeni surum bildirimlerini e-posta ile almak istiyorum (opsiyonel)",
+    )
 
 
 class ResendVerificationRequest(BaseModel):

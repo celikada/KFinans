@@ -6,6 +6,36 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.2.0] - 2026-06-04
+
+### Eklenenler
+
+- **Sürüm bildirimleri (release notes maili):** Prod'a yeni sürüm çıkınca opt-in
+  kullanıcılara bu CHANGELOG'tan ilgili sürümün notlarını e-posta ile gönderir.
+  Kayıt sırasında açık rıza (varsayılan KAPALI, önceden işaretli değil); mail
+  içindeki bağlantıdan veya Ayarlar sayfasından abonelikten çıkılabilir. Sadece
+  e-postası doğrulanmış ve opt-in olan kullanıcılara gönderilir.
+- **Kredi kartı ekstresi (PDF) içe aktarma:** Banka ekstresi yüklenip kart, ekstre
+  ve taksitler otomatik doldurulur (Ziraat, Enpara, VakıfBank, Akbank/Axess).
+  Tanınmayan veya biçimi değişmiş ekstrelerde tahmini veri yazılmaz, kullanıcı
+  uyarılır.
+- **Periyodik gelir/gider gerçekleşme akışı:** Düzenli kayıtların belirli bir ay
+  için gerçek kayıt üretmesi, giriş popup'ı ile bekleyen dönemlerin onaylanması
+  ve dönem bazlı atlama (skip).
+- **Kredi (ledger) altyapısı:** `credit_transactions` defteri ve harcama AI
+  analizi endpoint'i (3 kredi).
+
+### Değişenler
+
+- **Çift sayım kuralı:** Kredi kartından yapılmış ve ödenmiş harcamalar, kart
+  borcuyla zaten sayıldığı için ham gider toplamlarından hariç tutulur.
+
+### Güvenlik
+
+- `users.is_admin` rol flag'i (sürüm bildirimi gönderme yetkisi için).
+
+---
+
 ## [Unreleased] — develop branch
 
 ### Kod Kalitesi + CI Sertleştirme (2026-06-01)

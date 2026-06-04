@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.credits import deduct_credits
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.models.advice import InvestmentAdvice
@@ -90,8 +91,21 @@ async def generate_advice(
     # commit'te. Anthropic basariyla yanit verdikten sonra dusurulur (fail durumunda
     # advisor.generate() exception firlatir, buraya kadar gelinmez).
     advice.credits_used = ADVICE_COST
-    current_user.credit_balance = (current_user.credit_balance or 0) - ADVICE_COST
     db.add(advice)
+    await db.flush()  # advice.id'yi ledger reference_id icin uret
+
+    # Faz 3 kredi ledger: dusum core/credits.deduct_credits ile (SELECT FOR UPDATE +
+    # ledger insert). On-kontrol (yukarida 402) ile AI cagrisi arasindaki nadir yarisi
+    # ikinci bir 402 kontrolu olarak yakalar (defence-in-depth). Helper flush eder,
+    # commit etmez — advice + ledger + balance + audit tek transaction'da kalir.
+    balance_after = await deduct_credits(
+        db,
+        user_id=current_user.id,
+        amount=ADVICE_COST,
+        reason="ai_advice_medium",
+        reference_id=str(advice.id),
+        extra={"horizon": payload.horizon, "snapshot_date": snapshot.snapshot_date.isoformat()},
+    )
 
     # AI-004 (FAZ H): Audit log — KVKK m.12 uclu taraf veri aktarimi izleme.
     # Anthropic API'ye portfoy ozeti gonderildigi icin her uretim audit'lenmeli.
@@ -108,7 +122,7 @@ async def generate_advice(
             "completion_tokens": advice.completion_tokens,
             "snapshot_date": snapshot.snapshot_date.isoformat(),
             "credits_used": ADVICE_COST,
-            "credit_balance_after": current_user.credit_balance,
+            "credit_balance_after": balance_after,
         },
     )
 

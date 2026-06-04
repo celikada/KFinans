@@ -61,6 +61,17 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     totp_recovery_codes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     credit_balance: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Sürüm bildirimleri (release notes) — opt-in mail.
+    # `is_admin`: sistemde rol yok; sadece bu flag yetkili kullaniciyi belirler
+    # (release notes gonderme endpoint'i icin). Server default False — kimse
+    # otomatik admin olmaz, DB'de elle set edilir.
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # KVKK acik riza: kayitta varsayilan KAPALI (onceden isaretli OLAMAZ).
+    # Sadece email_verified=True VE bu True olan kullanicilara mail gider.
+    release_notes_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Kalici user-ozel unsubscribe token (secrets.token_urlsafe). Mail icindeki
+    # auth'suz unsubscribe linki bu token ile eslesir. Unique index.
+    unsubscribe_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     goal_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     goal_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())

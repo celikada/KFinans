@@ -10,6 +10,8 @@ class UserMeOut(BaseModel):
     created_at: datetime
     email_verified: bool
     credit_balance: int
+    is_admin: bool = False
+    release_notes_opt_in: bool = False
 
     model_config = {"from_attributes": True}
 

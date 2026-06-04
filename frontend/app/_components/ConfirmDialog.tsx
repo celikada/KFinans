@@ -10,14 +10,14 @@
  * Onceki: `if (!window.confirm("..."))` — stil yok, a11y zayif, i18n yok.
  *
  * A11y:
- *   - role="alertdialog" (destrüktif onay icin role=dialog'tan daha uygun)
+ *   - native <dialog showModal()> → implicit aria-modal + focus trap + ESC
+ *   - role="alertdialog" (destrüktif onay icin dialog'tan daha uygun; native
+ *     <dialog> role=dialog verir, alertdialog'a override ediyoruz)
  *   - aria-labelledby + aria-describedby
- *   - useFocusTrap: Tab dongusu + Esc kapatma + initial focus
- *   - aria-modal=true
  */
 import * as React from "react";
 
-import { useFocusTrap } from "@/app/_hooks/useFocusTrap";
+import { Modal } from "@/app/_components/Modal";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface ConfirmOptions {
@@ -87,7 +87,6 @@ function ConfirmDialog({
   readonly onCancel: () => void;
 }) {
   const { t } = useTranslation();
-  const containerRef = useFocusTrap<HTMLDivElement>(true, onCancel);
   const destructive = pending.options.destructive ?? true;
 
   const title = pending.options.title ?? t("common.confirm");
@@ -95,20 +94,14 @@ function ConfirmDialog({
   const cancelLabel = pending.options.cancelLabel ?? t("common.cancel");
 
   return (
-    <div
-      role="presentation"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
-      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]"
+    <Modal
+      open
+      onClose={onCancel}
+      role="alertdialog"
+      labelledById="confirm-dialog-title"
+      describedById="confirm-dialog-message"
     >
-      <div
-        ref={containerRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-message"
-        className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-md w-full"
-      >
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-md w-full">
         <h3 id="confirm-dialog-title" className="text-base font-semibold text-gray-900 mb-2">
           {title}
         </h3>
@@ -137,6 +130,6 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

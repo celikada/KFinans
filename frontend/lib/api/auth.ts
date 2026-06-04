@@ -53,11 +53,18 @@ export const authApi = {
     });
   },
 
-  register: (email: string, password: string, risk_profile: string, age_confirmed: boolean) =>
+  register: (
+    email: string,
+    password: string,
+    risk_profile: string,
+    age_confirmed: boolean,
+    release_notes_opt_in = false,
+  ) =>
     request<RegisterResponseDTO>("/auth/register", {
       method: "POST",
-      // COMP-010 (FAZ H): age_confirmed zorunlu — backend False ise 422 doner
-      body: JSON.stringify({ email, password, risk_profile, age_confirmed }),
+      // COMP-010 (FAZ H): age_confirmed zorunlu — backend False ise 422 doner.
+      // release_notes_opt_in opsiyonel KVKK acik riza (varsayilan kapali).
+      body: JSON.stringify({ email, password, risk_profile, age_confirmed, release_notes_opt_in }),
     }),
 
   verifyEmail: (token: string) =>
