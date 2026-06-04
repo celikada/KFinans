@@ -19,6 +19,8 @@ export default function RegisterPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [overseasConsent, setOverseasConsent] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);  // COMP-010
+  // Sürüm bildirimleri — KVKK açık rıza, opsiyonel, varsayılan KAPALI.
+  const [releaseNotesOptIn, setReleaseNotesOptIn] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -63,7 +65,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const data = await api.register(email, password, riskProfile, ageConfirmed);
+      const data = await api.register(email, password, riskProfile, ageConfirmed, releaseNotesOptIn);
       setSuccess(true);
       setEmailSent(data.verification_email_sent);
     } catch (err) {
@@ -250,6 +252,17 @@ export default function RegisterPage() {
                 className="mt-0.5 accent-blue-600"
               />
               <span>{t("auth.ageConfirmLong")}</span>
+            </label>
+
+            {/* Sürüm bildirimleri — opsiyonel KVKK açık rıza (varsayılan KAPALI) */}
+            <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={releaseNotesOptIn}
+                onChange={(e) => setReleaseNotesOptIn(e.target.checked)}
+                className="mt-0.5 accent-blue-600"
+              />
+              <span>{t("auth.releaseNotesOptIn")}</span>
             </label>
           </div>
 

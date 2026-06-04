@@ -16,9 +16,11 @@ from fastapi import HTTPException, UploadFile
 
 from app.config import settings
 from app.core.upload_validation import (
+    _PDF_MAGIC,
     _XLS_MAGIC,
     _XLSX_MAGIC,
     validate_excel_upload,
+    validate_pdf_upload,
 )
 
 
@@ -132,3 +134,60 @@ async def test_settings_default_used_when_max_size_none():
     assert settings.max_upload_size_mb >= 1
     result = await validate_excel_upload(file)  # max_size_mb belirtilmedi
     assert len(result) == 54
+
+
+# ─── PDF (kredi karti ekstresi import) ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_valid_pdf_returns_content():
+    """%PDF- ile baslayan .pdf kabul edilir."""
+    content = _PDF_MAGIC + b"1.4\n" + b"\x00" * 100
+    file = _make_upload("ekstre.pdf", content)
+    result = await validate_pdf_upload(file)
+    assert result == content
+
+
+@pytest.mark.asyncio
+async def test_pdf_case_insensitive_extension():
+    content = _PDF_MAGIC + b"1.7\n"
+    file = _make_upload("EKSTRE.PDF", content)
+    result = await validate_pdf_upload(file)
+    assert result == content
+
+
+@pytest.mark.asyncio
+async def test_pdf_wrong_extension_rejected():
+    """.xlsx vs. -> 422."""
+    file = _make_upload("ekstre.xlsx", _PDF_MAGIC + b"1.4")
+    with pytest.raises(HTTPException) as exc:
+        await validate_pdf_upload(file)
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_polyglot_xlsx_disguised_as_pdf_rejected():
+    """ZIP (XLSX) magic ama filename .pdf -> 422."""
+    file = _make_upload("evil.pdf", _XLSX_MAGIC + b"\x00" * 50)
+    with pytest.raises(HTTPException) as exc:
+        await validate_pdf_upload(file)
+    assert exc.value.status_code == 422
+    assert "Geçersiz dosya formatı" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_pdf_empty_file_rejected():
+    file = _make_upload("empty.pdf", b"")
+    with pytest.raises(HTTPException) as exc:
+        await validate_pdf_upload(file)
+    assert exc.value.status_code == 422
+    assert "boş" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_pdf_oversize_rejected():
+    big = _PDF_MAGIC + b"\x00" * (2 * 1024 * 1024)
+    file = _make_upload("huge.pdf", big)
+    with pytest.raises(HTTPException) as exc:
+        await validate_pdf_upload(file, max_size_mb=1)
+    assert exc.value.status_code == 413

@@ -52,3 +52,15 @@ async def get_current_user(
     if user.deleted_at is not None:
         raise credentials_exception
     return user
+
+
+def get_current_admin(current_user=Depends(get_current_user)):
+    """Yalnizca `is_admin=True` kullanicilara izin verir (release notes gibi
+    yonetim islemleri icin). Sistemde rol yok; bu tek flag yetki kapisi.
+    """
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu işlem için yönetici yetkisi gerekir",
+        )
+    return current_user

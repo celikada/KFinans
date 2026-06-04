@@ -779,7 +779,9 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 | `c0d1e2f3a4b5` | ✅ AI-005 — `users.anthropic_consent_at` + `anthropic_consent_version` |
 | `a8b9c0d1e2f3` | ✅ SEC-001 — `password_reset_tokens` tablosu |
 | `f7a8b9c0d1e2` | ✅ DBA-001 FK CASCADE düzeltmeleri + SEC-002 hesap kilitleme kolonları |
-| `e2f3a4b5c6d7` | ✅ **(HEAD)** MFA — `users.totp_secret` + `totp_enabled` + `totp_recovery_codes` |
+| `e2f3a4b5c6d7` | ✅ MFA — `users.totp_secret` + `totp_enabled` + `totp_recovery_codes` |
+| `f3a4b5c6d7e8` | ✅ Faz 3 kredi sistemi — `credit_transactions` ledger tablosu |
+| `a7b8c9d0e1f2` | ✅ **(HEAD)** Periyodik gerçekleşme — `recurring_skips` tablosu + `expenses.planned_expense_id` (FK + partial UNIQUE `(planned_expense_id, date)`) |
 
 ### Mevcut Index'ler
 - `ix_users_email` (UNIQUE)
@@ -864,8 +866,19 @@ class Asset:
 | Aggregator        | `aggregator.py`                             | `fetch_usd_to_tl`, `fetch_gbp_to_usd`, `fetch_spot_prices`, `calculate_changes`, `calculate_breakdown` — TCMB primary + exchangerate-api fallback, 5 dk in-memory TCMB cache |
 | Snapshot          | `snapshot.py::compute_and_save_snapshot()`  | Tüm kaynakları paralel topla (BES dahil), TL normalize, DB'ye yaz (idempotent). MKK import endpoint'lerinden best-effort tetiklenir                                          |
 | E-posta           | `email.py::send_verification_email()`       | Resend SDK + HTML şablon                                                                                                                                                     |
+| Ekstre import     | `statement_import/` (`detect_parser` + banka parser'ları) | PDF→metin (`extract_text`, pdfplumber) → `ParsedStatement`; pluggable `PARSERS` (Ziraat/Enpara/VakıfBank/Akbank). `_utils.parse_amount` TR+EN sayı otomatik tespit. Fail-safe: tanınmayan/değişmiş format → ValueError → endpoint 422 (kayıt yok) |
+| Recurrence        | `recurrence.py` (`applies_in_month` + `date_for_period` + `iter_due_periods`) | Periyodik gelir/gider ortak dönem hesabı (duck-typed `RecurringIncome`/`PlannedExpense`); income + planned_expenses realize ve `/recurring/pending` bunu kullanır (DRY) |
 
 > Detaylı API entegrasyon mantığı, prompt'lar, hata yönetimi: [api-referansi.md](./api-referansi.md), [ai-ve-finans.md](./ai-ve-finans.md)
+
+#### Ekstre (PDF) import parser mimarisi (Faz 3)
+
+Kredi kartı ekstresi PDF'ini parse edip `credit_cards` + `statements` + `installments` tablolarına aktarır (`/credit-cards/import-statement/preview` + `commit`). Pluggable tasarım: her banka için `StatementParser` Protocol'ü (`base.py`) implement eden bir sınıf `PARSERS` listesine eklenir; `detect_parser(text)` ilk `matches()` true olanı seçer. Parser'lar saf-metin üzerinde çalışır (pdfplumber'dan bağımsız → unit test edilebilir).
+
+- **Ziraat/Enpara/VakıfBank:** temiz metin katmanı; regex ile alan çıkarımı. Banka başına sayı formatı farkı (`500.000,00` TR vs `17,495.87` EN) `_utils.parse_amount` ile otomatik çözülür. VakıfBank taksitleri değişken formatlı → yalnız net "Nx tutar" deseni alınır + uyarı.
+- **Akbank/Axess:** PDF metin katmanı custom font encoding nedeniyle pdfplumber'da `(cid:NNN)` glyph token'ları + dağınık Latin karakter olarak çıkar (ToUnicode CMap yok). `_decode` rakam + finansal sembolleri çözer: `(cid:240..249)`→0..9 (CID = ASCII + `0xC0`), Latin rakam glyph'leri `æ`=1/`ı`=5/`ł`=8/`ø`=9, `k`=binlik nokta / `K`=ondalık virgül / `\`=`*`, `GGaAAaYYYY`→`GG/AA/YYYY`. Harf glyph'leri context-dependent (güvenilmez) → etiketler decode edilmez; bunun yerine **cid'den bağımsız format işaretleri** kullanılır: maskeli kart (`5218@07**@****@6072`) + "ekstre dönemi" tarih aralığı (`25/04/2026‘23/05/2026`) birlikte → Akbank (`matches`). Değerler konumdan: ilk tarih = son ödeme, dönem aralığı sonu = hesap kesim, ilk tutar = dönem borcu, en büyük tutar = kart limiti. Format değişirse bulunamaz → fail-safe.
+- **Fail-safe ilkesi:** Hiçbir parser eşleşmezse "banka tanınmadı", eşleşip alan bulunamazsa "format değişmiş" → 422; asla tahmini/yanlış veri yazılmaz. İki adımlı preview→commit ile kullanıcı önizleyip düzeltir/onaylar.
+- **Gelecek:** Bilinmeyen bankalar / bozuk PDF'ler için opsiyonel `AIStatementParser` (Claude PDF/vision, `document` content block — OCR'sız görselden okur; KVKK consent + kredi düşümü gerektirir).
 
 ### 7.3 E-posta Servisi (Resend)
 

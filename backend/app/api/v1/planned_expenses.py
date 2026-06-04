@@ -1,13 +1,16 @@
 import calendar
 from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.models.expense import Expense
 from app.models.planned_expense import PlannedExpense
 from app.models.user import User
 from app.schemas.planned_expense import (
@@ -18,6 +21,11 @@ from app.schemas.planned_expense import (
     PlannedExpenseOut,
     PlannedExpenseUpdate,
 )
+from app.schemas.recurring import RealizeMonthRequest, RealizeResult
+from app.services import recurrence
+
+_ISTANBUL = ZoneInfo("Europe/Istanbul")
+_NOT_FOUND = "Kayıt bulunamadı"
 
 router = APIRouter(prefix="/planned-expenses", tags=["planned-expenses"])
 
@@ -31,31 +39,8 @@ def _add_months(d: date_type, n: int) -> date_type:
 
 
 def _applies_in_month(pe: PlannedExpense, year: int, month: int) -> bool:
-    last_day = calendar.monthrange(year, month)[1]
-    first_of_month = date_type(year, month, 1)
-    last_of_month = date_type(year, month, last_day)
-
-    if pe.start_date > last_of_month:
-        return False
-    if pe.end_date is not None and pe.end_date < first_of_month:
-        return False
-
-    rec = pe.recurrence
-    months_since = (year * 12 + month) - (pe.start_date.year * 12 + pe.start_date.month)
-
-    if rec == "one_time":
-        return pe.start_date.year == year and pe.start_date.month == month
-    elif rec == "monthly":
-        return months_since >= 0
-    elif rec == "quarterly":
-        return months_since >= 0 and months_since % 3 == 0
-    elif rec == "biannual":
-        return months_since >= 0 and months_since % 6 == 0
-    elif rec == "yearly":
-        return pe.start_date.month == month and pe.start_date.year <= year
-    elif rec == "custom":
-        return pe.months is not None and month in pe.months and pe.start_date.year <= year
-    return False
+    """Periyodik giderin verilen ay içinde geçerli olup olmadığı (ortak util)."""
+    return recurrence.applies_in_month(pe, year, month)
 
 
 @router.get("", response_model=list[PlannedExpenseOut])
@@ -114,7 +99,7 @@ async def update_planned_expense(
     )
     pe = result.scalar_one_or_none()
     if not pe:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
 
     for field in (
         "title",
@@ -156,7 +141,7 @@ async def delete_planned_expense(
     )
     pe = result.scalar_one_or_none()
     if not pe:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     await db.delete(pe)
     await db.commit()
 
@@ -199,3 +184,109 @@ async def get_forecast(
         months_out.append(ForecastMonth(month=m, total=total, items=items))
 
     return ForecastResult(year=year, months=months_out, year_total=year_total)
+
+
+# ---------------------------------------------------------------------------
+# Periyodik gider gerçekleştirme (planned_expense → expenses) — income paralel
+# ---------------------------------------------------------------------------
+async def _get_owned_planned(pe_id: int, user: User, db: AsyncSession) -> PlannedExpense:
+    result = await db.execute(select(PlannedExpense).where(PlannedExpense.id == pe_id, PlannedExpense.user_id == user.id))
+    pe = result.scalar_one_or_none()
+    if not pe:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return pe
+
+
+async def _realize_one_expense(
+    db: AsyncSession,
+    pe: PlannedExpense,
+    year: int,
+    month: int,
+    user_id,
+    today: date_type | None = None,
+) -> int | None:
+    """Tek bir periyodik gider için verilen ay-yıl gerçek `Expense` oluşturur.
+
+    None döner: periyot dışı / ödeme günü henüz gelmedi / o dönem zaten realize.
+    Çift sayım: pe kredi kartından ise credit_card_id + is_paid taşınır
+    (kart borcuyla mükerrer sayılmaması filtreye uyumlu)."""
+    if not recurrence.applies_in_month(pe, year, month):
+        return None
+    target_date = recurrence.date_for_period(pe, year, month)
+    if today is None:
+        today = datetime.now(_ISTANBUL).date()
+    if target_date > today:
+        return None
+    existing_q = await db.execute(
+        select(Expense.id).where(
+            Expense.user_id == user_id,
+            Expense.planned_expense_id == pe.id,
+            Expense.date == target_date,
+        )
+    )
+    if existing_q.scalar_one_or_none() is not None:
+        return None
+    exp = Expense(
+        user_id=user_id,
+        amount=pe.amount,
+        category=pe.category,
+        date=target_date,
+        description=pe.title,
+        planned_expense_id=pe.id,
+        credit_card_id=pe.credit_card_id,
+        is_paid=True,
+    )
+    db.add(exp)
+    await db.flush()
+    return exp.id
+
+
+@router.post("/{pe_id}/realize", response_model=RealizeResult)
+async def realize_planned_period(
+    pe_id: int,
+    payload: RealizeMonthRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Periyodik giderin belirli bir ay-yılı için gerçek harcama kaydı oluştur.
+    Idempotent: aynı dönem ikinci kez çağrılırsa skip."""
+    pe = await _get_owned_planned(pe_id, current_user, db)
+    if not recurrence.applies_in_month(pe, payload.year, payload.month):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Bu kayıt belirtilen ay-yılında geçerli değil (periyot dışı)",
+        )
+    today = datetime.now(_ISTANBUL).date()
+    target_date = recurrence.date_for_period(pe, payload.year, payload.month)
+    if target_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Ödeme günü ({target_date.isoformat()}) henüz gelmedi — gerçekleşti olarak işaretlenemez",
+        )
+    new_id = await _realize_one_expense(db, pe, payload.year, payload.month, current_user.id, today=today)
+    await db.commit()
+    if new_id is None:
+        return RealizeResult(realized=0, skipped=1, ids=[])
+    return RealizeResult(realized=1, skipped=0, ids=[new_id])
+
+
+@router.post("/{pe_id}/realize-past", response_model=RealizeResult)
+async def realize_planned_past(
+    pe_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Periyodik giderin start_date'ten bugüne tüm geçmiş dönemlerini gerçekleştir.
+    Mevcut realize'ler skip."""
+    pe = await _get_owned_planned(pe_id, current_user, db)
+    today = datetime.now(_ISTANBUL).date()
+    ids: list[int] = []
+    skipped = 0
+    for y, m, _target in recurrence.iter_due_periods(pe, today):
+        new_id = await _realize_one_expense(db, pe, y, m, current_user.id, today=today)
+        if new_id is None:
+            skipped += 1
+        else:
+            ids.append(new_id)
+    await db.commit()
+    return RealizeResult(realized=len(ids), skipped=skipped, ids=ids)

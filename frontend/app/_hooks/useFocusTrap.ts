@@ -1,5 +1,6 @@
 "use client";
 
+// NOTE: native <dialog> (app/_components/Modal.tsx) sonrası kullanılmıyor; ileride kaldırılabilir.
 /**
  * A11Y-001 (FAZ H): Modal/dialog focus trap hook.
  *

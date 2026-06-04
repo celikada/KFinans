@@ -352,6 +352,10 @@ async def register(request: Request, payload: RegisterRequest, db: DB):
         overseas_consent_at=now if payload.overseas_consent else None,
         terms_accepted_at=now if payload.terms_accepted else None,
         kvkk_read_at=now if payload.kvkk_read else None,
+        # Surum bildirimleri: opt-in acik riza (varsayilan False). unsubscribe_token
+        # her kullaniciya kalici uretilir — opt-in olmasa bile sonradan acabilir.
+        release_notes_opt_in=payload.release_notes_opt_in,
+        unsubscribe_token=secrets.token_urlsafe(32),
     )
     db.add(user)
     await db.flush()  # user.id'yi al

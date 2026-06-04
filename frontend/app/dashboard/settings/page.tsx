@@ -34,6 +34,9 @@ export default function SettingsPage() {
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
   // Genel: USD karşılığı göster
   const [showUsd, setShowUsd] = useState(false);
+  // Sürüm bildirimleri (release notes) aboneliği
+  const [releaseOptIn, setReleaseOptIn] = useState(false);
+  const [releaseSaving, setReleaseSaving] = useState(false);
 
   useEffect(() => {
     setHiddenCards(getHiddenCards());
@@ -59,6 +62,7 @@ export default function SettingsPage() {
       .then((data) => {
         setUser(data);
         setSelectedRisk(data.risk_profile);
+        setReleaseOptIn(Boolean(data.release_notes_opt_in));
       })
       .catch((err: Error) => {
         if (err.message.includes("401")) router.replace("/login");
@@ -103,6 +107,20 @@ export default function SettingsPage() {
       setPwdError(err instanceof Error ? err.message : t("content.settings.passwordUpdateFailed"));
     } finally {
       setPwdSaving(false);
+    }
+  }
+
+  async function handleReleaseOptInToggle() {
+    const next = !releaseOptIn;
+    setReleaseOptIn(next); // iyimser güncelleme
+    setReleaseSaving(true);
+    try {
+      const res = await api.setReleaseOptIn(next);
+      setReleaseOptIn(res.release_notes_opt_in);
+    } catch {
+      setReleaseOptIn(!next); // başarısızsa geri al
+    } finally {
+      setReleaseSaving(false);
     }
   }
 
@@ -290,6 +308,30 @@ export default function SettingsPage() {
             >
               <span
                 className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showUsd ? "translate-x-5" : ""}`}
+              />
+            </button>
+          </div>
+        </section>
+
+        {/* Bölüm 4.5: Sürüm Bildirimleri */}
+        <section className={CARD_CLS}>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">{t("content.settings.releaseNotes")}</h2>
+          <p className="text-xs text-gray-500 mb-4">{t("content.settings.releaseNotesHint")}</p>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-gray-700">{t("content.settings.releaseNotesToggle")}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("content.settings.releaseNotesToggleHint")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleReleaseOptInToggle}
+              disabled={releaseSaving}
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${releaseOptIn ? "bg-blue-600" : "bg-gray-200"}`}
+              aria-pressed={releaseOptIn}
+              aria-label={releaseOptIn ? t("content.settings.releaseNotesToggleOff") : t("content.settings.releaseNotesToggleOn")}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${releaseOptIn ? "translate-x-5" : ""}`}
               />
             </button>
           </div>

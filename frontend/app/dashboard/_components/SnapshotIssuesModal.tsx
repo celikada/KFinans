@@ -1,16 +1,15 @@
 "use client";
 /**
  * FE-003 (FAZ H): Snapshot saglik uyari modal'i.
- * A11Y-001 (FAZ H): useFocusTrap + aria-labelledby/aria-describedby.
+ * A11Y: native <dialog> tabanli Modal primitifi (focus + role native) +
+ * aria-labelledby/aria-describedby.
  *
  * Snapshot al butonuna tiklandiginda preview endpoint'i issues dondururse
  * kullaniciya uyari listesi gosterilip "yine de kaydet / iptal" secenegi
  * sunulur. page.tsx'ten extract edildi.
  */
-import * as React from "react";
-
 import type { SnapshotHealthIssue } from "@/lib/api";
-import { useFocusTrap } from "@/app/_hooks/useFocusTrap";
+import { Modal } from "@/app/_components/Modal";
 
 
 export interface PendingIssues {
@@ -34,23 +33,15 @@ export function SnapshotIssuesModal({
 }) {
   const warns = pending.issues.filter((i) => (i.level ?? "warn") === "warn");
   const infos = pending.issues.filter((i) => i.level === "info");
-  const containerRef = useFocusTrap<HTMLDivElement>(true, onCancel);
 
   return (
-    <div
-      role="presentation"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
-      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+    <Modal
+      open
+      onClose={onCancel}
+      labelledById="snapshot-issues-title"
+      describedById="snapshot-issues-desc"
     >
-      <div
-        ref={containerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="snapshot-issues-title"
-        aria-describedby="snapshot-issues-desc"
-        className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default"
-      >
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xl p-6 max-w-lg w-full text-left cursor-default">
         <h3 id="snapshot-issues-title" className="text-base font-semibold text-gray-900 mb-1">
           Snapshot uyarıları
           {warns.length > 0 && <span className="text-amber-600"> · {warns.length} sorun</span>}
@@ -111,6 +102,6 @@ export function SnapshotIssuesModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

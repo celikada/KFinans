@@ -1,15 +1,18 @@
 """Kredi kartı CRUD endpoint'leri: tanım + dönem içi borç + ekstre + taksit."""
 
+import logging
 from datetime import date as date_type
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user, get_db
+from app.core.limiter import limiter
+from app.core.upload_validation import validate_pdf_upload
 from app.models.credit_card import CreditCard, CreditCardInstallment, CreditCardStatement
 from app.models.user import User
 from app.schemas.credit_card import (
@@ -25,6 +28,15 @@ from app.schemas.credit_card import (
     StatementOut,
     StatementUpdate,
 )
+from app.schemas.statement_import import (
+    ParsedInstallmentOut,
+    ParsedStatementOut,
+    StatementImportCommitIn,
+)
+from app.services.audit import AuditAction, log_audit
+from app.services.statement_import import detect_parser, extract_text
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
@@ -405,3 +417,235 @@ async def delete_installment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Taksit bulunamadı")
     await db.delete(inst)
     await db.commit()
+
+
+async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate) -> None:
+    """Ekstreyi (card_id, period) unique'ine göre güncelle ya da ekle."""
+    existing_q = await db.execute(
+        select(CreditCardStatement).where(
+            CreditCardStatement.card_id == card_id,
+            CreditCardStatement.period_year == s.period_year,
+            CreditCardStatement.period_month == s.period_month,
+        )
+    )
+    stmt = existing_q.scalar_one_or_none()
+    if stmt is not None:
+        stmt.statement_amount = s.statement_amount
+        stmt.statement_date = s.statement_date
+        stmt.due_date = s.due_date
+        if s.paid_at is not None:
+            stmt.paid_at = s.paid_at
+        if s.notes is not None:
+            stmt.notes = s.notes
+        return
+    db.add(
+        CreditCardStatement(
+            card_id=card_id,
+            period_year=s.period_year,
+            period_month=s.period_month,
+            statement_amount=s.statement_amount,
+            statement_date=s.statement_date,
+            due_date=s.due_date,
+            paid_at=s.paid_at,
+            notes=s.notes,
+        )
+    )
+
+
+async def _add_installments(db: AsyncSession, card_id: int, installments: list[InstallmentCreate]) -> int:
+    """Taksitleri ekle (mevcut _calc_* reuse). Aynı taksit varsa atla. Eklenen sayıyı döner."""
+    added = 0
+    for inst_in in installments:
+        total = _calc_total(inst_in.monthly_amount, inst_in.installments_total)
+        dup_q = await db.execute(
+            select(CreditCardInstallment.id).where(
+                CreditCardInstallment.card_id == card_id,
+                CreditCardInstallment.description == inst_in.description,
+                CreditCardInstallment.total_amount == total,
+                CreditCardInstallment.installments_total == inst_in.installments_total,
+                CreditCardInstallment.first_due_date == inst_in.first_due_date,
+            )
+        )
+        if dup_q.first() is not None:
+            continue
+        db.add(
+            CreditCardInstallment(
+                card_id=card_id,
+                description=inst_in.description,
+                total_amount=total,
+                monthly_amount=inst_in.monthly_amount,
+                installments_total=inst_in.installments_total,
+                installments_remaining=_calc_remaining(inst_in.first_due_date, inst_in.installments_total),
+                first_due_date=inst_in.first_due_date,
+                notes=inst_in.notes,
+            )
+        )
+        added += 1
+    return added
+
+
+# ---------------------------------------------------------------------------
+# Ekstre (PDF) import — Faz 3
+#
+# İki adımlı, fail-safe akış:
+#  - preview: PDF yüklenir → banka tanınır → veri ayıklanır → DB'ye YAZILMADAN
+#    önizleme döner. Banka tanınmazsa veya format değişmişse 422 (kayıt yok).
+#  - commit: kullanıcının onayladığı/düzelttiği veri kalıcılaştırılır.
+# ---------------------------------------------------------------------------
+@router.post("/import-statement/preview", response_model=ParsedStatementOut)
+@limiter.limit("10/hour")
+async def preview_statement_import(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+):
+    """PDF ekstreyi parse edip önizleme döner (DB'ye yazmaz).
+
+    Banka tanınmazsa veya bilinen bankanın formatı değişmişse 422 verir ve
+    hiçbir tahmini veri üretmez (fail-safe — kullanıcı uyarılır)."""
+    content = await validate_pdf_upload(file)
+
+    try:
+        text = extract_text(content)
+    except Exception:
+        logger.exception("Ekstre PDF metin çıkarma hatası")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="PDF okunamadı. Şifreli/bozuk bir dosya olabilir.",
+        )
+
+    parser = detect_parser(text)
+    if parser is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Ekstre formatı tanınmadı. Bu banka henüz desteklenmiyor olabilir; "
+                "kart bilgilerini elle girebilir veya örnek ekstreyi geliştiriciye iletebilirsiniz."
+            ),
+        )
+
+    try:
+        parsed = parser.parse(text)
+    except ValueError as exc:
+        # Banka tanındı ama beklenen alanlar yok → format değişmiş olabilir.
+        logger.warning("Ekstre parse başarısız (bank=%s): %s", parser.bank_key, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Ekstre okunamadı; banka formatı değişmiş olabilir. ({exc})",
+        )
+
+    matched_card_id: int | None = None
+    if parsed.last_4:
+        match_q = await db.execute(
+            select(CreditCard.id).where(
+                CreditCard.user_id == current_user.id,
+                CreditCard.last_4 == parsed.last_4,
+            )
+        )
+        matched_card_id = match_q.scalars().first()
+
+    return ParsedStatementOut(
+        bank_name=parsed.bank_name,
+        last_4=parsed.last_4,
+        credit_limit=parsed.credit_limit,
+        statement_day=parsed.statement_day,
+        payment_due_day=parsed.payment_due_day,
+        period_year=parsed.period_year,
+        period_month=parsed.period_month,
+        statement_amount=parsed.statement_amount,
+        statement_date=parsed.statement_date,
+        due_date=parsed.due_date,
+        installments=[
+            ParsedInstallmentOut(
+                description=i.description,
+                total_amount=i.total_amount,
+                monthly_amount=i.monthly_amount,
+                installments_total=i.installments_total,
+                installments_paid=i.installments_paid,
+                first_due_date=i.first_due_date,
+            )
+            for i in parsed.installments
+        ],
+        matched_card_id=matched_card_id,
+        warnings=parsed.warnings,
+    )
+
+
+@router.post(
+    "/import-statement/commit",
+    response_model=CardDetailOut,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("20/hour")
+async def commit_statement_import(
+    request: Request,
+    payload: StatementImportCommitIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Önizlemeden onaylanan ekstre verisini kalıcılaştırır (tek transaction).
+
+    Kart yoksa oluşturur (çoklu kart tek hesapta toplanır); ekstre dönemi varsa
+    günceller (upsert); taksitleri ekler (aynı taksit zaten varsa atlar)."""
+    # 1) Hedef kart: mevcut (IDOR korumalı) ya da yeni oluştur.
+    if payload.target_card_id is not None:
+        card = await _get_owned_card(payload.target_card_id, current_user, db)
+        if payload.bank_name is not None:
+            card.bank_name = payload.bank_name
+        if payload.credit_limit is not None:
+            card.credit_limit = payload.credit_limit
+        if payload.last_4:
+            card.last_4 = payload.last_4
+        card.statement_day = payload.statement_day
+        card.payment_due_day = payload.payment_due_day
+    else:
+        card = CreditCard(
+            user_id=current_user.id,
+            name=payload.name,
+            bank_name=payload.bank_name,
+            last_4=payload.last_4,
+            credit_limit=payload.credit_limit,
+            statement_day=payload.statement_day,
+            payment_due_day=payload.payment_due_day,
+        )
+        db.add(card)
+        await db.flush()  # card.id gerekli
+
+    # 2) Ekstre upsert + 3) taksitler (duplike atla) — helper'lara delege.
+    s = payload.statement
+    await _upsert_statement(db, card.id, s)
+    added_installments = await _add_installments(db, card.id, payload.installments)
+
+    # 4) Audit (best-effort, flush) + tek commit.
+    await log_audit(
+        db,
+        request,
+        action=AuditAction.CREDIT_STATEMENT_IMPORT,
+        user_id=current_user.id,
+        resource=f"card:{card.id}",
+        extra={
+            "period": f"{s.period_year}-{s.period_month:02d}",
+            "installments_added": added_installments,
+            "new_card": payload.target_card_id is None,
+        },
+    )
+    await db.commit()
+
+    # 5) Güncel detayı döndür (ekstreler + taksitler ile).
+    detail_q = await db.execute(
+        select(CreditCard)
+        .where(CreditCard.id == card.id, CreditCard.user_id == current_user.id)
+        .options(
+            selectinload(CreditCard.statements),
+            selectinload(CreditCard.installments),
+        )
+    )
+    card = detail_q.scalar_one()
+    sorted_statements = sorted(card.statements, key=lambda x: (x.period_year, x.period_month), reverse=True)
+    sorted_installments = sorted(card.installments, key=lambda i: i.first_due_date)
+    return CardDetailOut(
+        card=_enrich_card(card),
+        statements=sorted_statements,
+        installments=sorted_installments,
+    )

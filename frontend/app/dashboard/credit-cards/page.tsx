@@ -7,6 +7,7 @@ import { TLValue } from "@/app/_components/TLValue";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { StatementImport } from "./StatementImport";
 
 export default function CreditCardsPage() {
   const router = useRouter();
@@ -156,6 +157,9 @@ export default function CreditCardsPage() {
             <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.periodDebtHint")}</p>
           </div>
         </div>
+
+        {/* Ekstre (PDF) içe aktarma */}
+        <StatementImport onSuccess={refresh} />
 
         {/* Form */}
         <form

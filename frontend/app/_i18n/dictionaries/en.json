@@ -47,7 +47,8 @@
     "kvkkConsentLabel": "I have read and understood the KVKK Privacy Notice.",
     "termsConsentLabel": "I accept the Terms of Use and Privacy Policy.",
     "overseasConsentLong": "I give explicit consent for my personal data to be transferred abroad through service providers under KVKK Art.9 (details in the KVKK Privacy Notice).",
-    "ageConfirmLong": "I am 18 or older. Since KFinans provides a financial service, registration requires age 18+ (Turkish DPA Decision 2018/482, Civil Code Art.16)."
+    "ageConfirmLong": "I am 18 or older. Since KFinans provides a financial service, registration requires age 18+ (Turkish DPA Decision 2018/482, Civil Code Art.16).",
+    "releaseNotesOptIn": "I want to receive new release announcements by email (optional, you can unsubscribe any time)."
   },
   "common": {
     "save": "Save",
@@ -72,6 +73,7 @@
   "dashboard": {
     "totalPortfolio": "Total Portfolio",
     "financeNetBalance": "Finance (Net Balance)",
+    "refreshing": "Refreshing values…",
     "snapshot": "Take snapshot",
     "snapshotting": "Saving...",
     "history": "History",
@@ -310,6 +312,16 @@
       "insurance": "Insurance",
       "other": "Other"
     },
+    "pending": {
+      "title": "Pending recurring records",
+      "desc": "Past-dated recurring income and expenses not yet marked as realized or skipped. Choose for each.",
+      "realized": "Realized",
+      "skip": "Won't happen",
+      "income": "Income",
+      "expense": "Expense",
+      "close": "Later",
+      "error": "Operation failed"
+    },
     "income": {
       "salary": "Salary",
       "freelance": "Freelance",
@@ -414,6 +426,29 @@
       "yearTotal": "Year Total"
     },
     "creditCards": {
+      "import": {
+        "title": "Import Statement (PDF)",
+        "uploadBtn": "Select PDF Statement",
+        "uploading": "Reading…",
+        "hint": "Upload your bank statement PDF; the card, statement and installments are filled automatically. Unrecognized banks or changed formats trigger a warning and nothing is saved.",
+        "previewTitle": "Preview — review before saving",
+        "matchedCard": "This statement matched an existing card; it will be added to that card.",
+        "newCard": "A new card will be created.",
+        "cardName": "Card name",
+        "bank": "Bank",
+        "last4": "Last 4 digits",
+        "limit": "Limit (TL)",
+        "statementDay": "Statement day",
+        "dueDay": "Due day",
+        "statementSection": "Statement period",
+        "amount": "Period debt (TL)",
+        "installments": "Installments",
+        "noInstallments": "No installment transactions found in this statement.",
+        "removeInstallment": "Remove installment {desc}",
+        "save": "Import",
+        "previewFailed": "Could not read statement",
+        "saveFailed": "Import failed"
+      },
       "loadFailed": "Failed to load",
       "saveFailed": "Save failed",
       "deleteFailed": "Delete failed",
@@ -571,9 +606,9 @@
       "dayOfMonthSuffix": "day",
       "indefinite": "indefinite",
       "markThisMonthTitle": "Mark this month as realized",
-      "thisMonthBtn": "This month",
+      "thisMonthBtn": "Realize this month",
       "realizePastTitle": "Realize all past periods",
-      "pastBtn": "Past",
+      "pastBtn": "Realize past",
       "deleteAriaSuffix": "delete record",
       "monthsShort": {
         "1": "Jan",
@@ -605,7 +640,15 @@
       "endLabel": "end",
       "monthsLabel": "months",
       "forecastTitle": "cash flow forecast",
-      "totalLabel": "Total"
+      "totalLabel": "Total",
+      "realizeThisMonth": "Realize this month",
+      "realizePast": "Realize past",
+      "realizedThisMonth": "marked as this month's expense",
+      "alreadyRealized": "already realized for this month — skipped",
+      "confirmRealizePast": "— mark all past periods as expenses?",
+      "pastResultPrefix": "periods realized,",
+      "pastResultSuffix": "skipped",
+      "opFailed": "Operation failed"
     },
     "bes": {
       "headerTitle": "BES — Private Pension",
@@ -791,6 +834,12 @@
       "showUsdHint": "Live $ equivalent below TL values (TCMB rate, 5 min cache)",
       "showUsdToggleOff": "Turn off USD equivalent",
       "showUsdToggleOn": "Turn on USD equivalent",
+      "releaseNotes": "Release Announcements",
+      "releaseNotesHint": "Get notified by email when a new version is released.",
+      "releaseNotesToggle": "Release announcements",
+      "releaseNotesToggleHint": "Highlights are sent by email (verified email only).",
+      "releaseNotesToggleOn": "Turn on release announcements",
+      "releaseNotesToggleOff": "Turn off release announcements",
       "dashboardView": "Dashboard Layout",
       "dashboardViewHint": "Hide the cards you don't want to see.",
       "showCardAria": "show",
@@ -809,6 +858,15 @@
       "dangerZone": "Danger Zone",
       "dangerZoneHint": "Permanently delete your account. This action cannot be undone.",
       "deleteAccountBtn": "Delete Account"
+    },
+    "unsubscribe": {
+      "processing": "Processing...",
+      "successTitle": "You have been unsubscribed",
+      "successBody": "You will no longer receive KFinans release announcement emails. You can re-enable them anytime from the Settings page.",
+      "goSettings": "Go to settings",
+      "errorTitle": "Invalid link",
+      "errorBody": "Could not unsubscribe. The link may be invalid or expired.",
+      "goLogin": "Back to login"
     },
     "stocks": {
       "stockHoldings": "Stock Holdings",

@@ -19,10 +19,11 @@ Karışmaması için net ayrım:
 | `investment_advice.credits_used` (INT) | ✅ **Uygulandı** — AI-007 |
 | Kredi **tüketim** akışı (`/advice/generate`, tavsiye başına 1 kredi atomik düşüm) | ✅ **Uygulandı** — AI-007, bkz. §4.2 |
 | Yetersiz bakiye → 402 Payment Required | ✅ **Uygulandı** |
-| `credit_transactions` tablosu (ledger/audit trail) | ❌ **Planlanan** — kod yok |
-| `GET /credits`, `POST /credits/checkout`, `POST /credits/webhook` endpoint'leri | ❌ **Planlanan** — router yok |
-| iyzico ödeme entegrasyonu (checkout, webhook, HMAC, idempotency) | ❌ **Planlanan** — kod yok |
-| `core/credits.py` `deduct_credits()` helper | ❌ **Planlanan** — düşüm şu an doğrudan `advice.py`'de |
+| `credit_transactions` tablosu (ledger/audit trail) | ✅ **Uygulandı** (Aşama 1) — model `credit_transaction.py` + migration `f3a4b5c6d7e8`. NOT: DDL'deki `metadata` kolonu SQLAlchemy rezerve ismiyle çakıştığı için kod/DB'de **`extra`** olarak uygulandı (AuditLog ile tutarlı). |
+| `GET /credits` endpoint (bakiye + sayfalanan defter) | ✅ **Uygulandı** (Aşama 1) — `api/v1/credits.py`, IDOR korumalı, `PaginatedResponse[T]`. |
+| `POST /credits/checkout`, `POST /credits/webhook` endpoint'leri | ❌ **Planlanan** (Aşama 2) — iyzico key gelince |
+| iyzico ödeme entegrasyonu (checkout, webhook, HMAC, idempotency) | ❌ **Planlanan** (Aşama 2) — kod yok |
+| `core/credits.py` `deduct_credits()` + `add_credits()` helper | ✅ **Uygulandı** (Aşama 1) — `SELECT FOR UPDATE` satır kilidi + ledger insert; commit caller'da (tek transaction). `advice.py` artık bunu kullanır. |
 | Kredi paketleri / fiyatlandırma | ❌ **Planlanan** — tasarım |
 | Frontend: bakiye göstergesi, satın alma, geçmiş, modal | ❌ **Planlanan** |
 | e-Arşiv fatura, cayma hakkı, refund | ❌ **Planlanan** |
@@ -456,12 +457,12 @@ GROUP BY reason;
 - [x] `users.anthropic_consent_at` + `anthropic_consent_version` (KVKK m.9 rıza)
 - [x] `investment_advice.credits_used` kolonu
 - [x] `POST /api/v1/advice/generate` — kredi düşme akışı (AI-007, tavsiye başına 1 kredi)
-- [ ] `credit_transactions` migration (ledger / audit trail)
-- [ ] `core/credits.py` — `deduct_credits(user_id, amount, reason, ref_id)` helper (şu an düşüm doğrudan `advice.py`'de)
-- [ ] iyzico SDK / HTTPx wrapper
-- [ ] `GET /api/v1/credits` endpoint
-- [ ] `POST /api/v1/credits/checkout` endpoint
-- [ ] `POST /api/v1/credits/webhook` endpoint
+- [x] `credit_transactions` migration (ledger / audit trail) — `f3a4b5c6d7e8` (Aşama 1)
+- [x] `core/credits.py` — `deduct_credits()` + `add_credits()` helper (SELECT FOR UPDATE, commit caller'da; `advice.py` refactor edildi, ledger insert eklendi)
+- [x] `GET /api/v1/credits` endpoint (bakiye + sayfalanan defter, IDOR korumalı)
+- [ ] iyzico SDK / HTTPx wrapper (Aşama 2)
+- [ ] `POST /api/v1/credits/checkout` endpoint (Aşama 2)
+- [ ] `POST /api/v1/credits/webhook` endpoint (Aşama 2)
 - [ ] Frontend: kredi bakiye header componenti
 - [ ] Frontend: kredi geçmişi sayfası
 - [ ] Frontend: paket satın alma sayfası

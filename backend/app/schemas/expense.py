@@ -60,6 +60,7 @@ class ExpenseOut(BaseModel):
     date: date_type
     description: Optional[str] = None
     credit_card_id: Optional[int] = None
+    planned_expense_id: Optional[int] = None
     is_paid: bool = True
 
     model_config = {"from_attributes": True}

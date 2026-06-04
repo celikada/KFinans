@@ -165,8 +165,10 @@ async def test_round_trip_downgrade_then_upgrade(fresh_db):
       - Tum kolonlar tekrar mevcut, FK CASCADE
     """
     _run_alembic("upgrade", "head")
-    # MFA + PERF-003 + AI-005 + KVKK + SEC-001 + SEC-002 + DBA-001 -> f7a8 oncesi
-    _run_alembic("downgrade", "-6")
+    # Hedef: f7a8 (SEC-002/DBA-001) + a8b9 (SEC-001) ve sonrasi geri alinmis state =
+    # e6f7a8b9c0d1 (f7a8'in down_revision). Sabit revizyon kullan ki yeni migration
+    # eklendikce offset ("-N") kaymasin (eskiden "-6" idi; her yeni migration kiriyordu).
+    _run_alembic("downgrade", "e6f7a8b9c0d1")
 
     cols = await _table_columns("users")
     assert "failed_login_count" not in cols

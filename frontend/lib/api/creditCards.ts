@@ -1,5 +1,5 @@
-import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, StatementDTO, StatementInput } from "./types";
-import { request } from "./_client";
+import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput } from "./types";
+import { request, uploadForm } from "./_client";
 
 export const creditCardsApi = {
   // Kredi kartları (Faz 3 — manuel giriş)
@@ -38,4 +38,13 @@ export const creditCardsApi = {
     }),
   deleteInstallment: (cardId: number, installmentId: number) =>
     request<void>(`/credit-cards/${cardId}/installments/${installmentId}`, { method: "DELETE" }),
+
+  // Ekstre (PDF) import — preview (DB yazmaz) + commit (kalıcılaştır)
+  previewStatementImport: (file: File) =>
+    uploadForm<ParsedStatementDTO>("/credit-cards/import-statement/preview", file),
+  commitStatementImport: (payload: StatementImportCommitInput) =>
+    request<CreditCardDetailDTO>("/credit-cards/import-statement/commit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

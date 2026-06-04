@@ -4,6 +4,8 @@
 // modülleri (auth.ts, expense.ts, ...) `request`'i buradan import eder.
 // Public API: setAuth, clearAuth (consumer'lar login/logout flow'da kullanır).
 
+import { clearDashboardCache } from "@/lib/dashboardCache";
+
 export const BASE = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1`;
 
 const ACCESS_TOKEN_KEY = "access_token";
@@ -29,6 +31,8 @@ export function clearAuth() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  // Baska kullanici login olursa eski dashboard cache'i gorunmesin.
+  clearDashboardCache();
 }
 
 // Single-flight: aynı anda birden çok 401 → tek refresh request paylaş.

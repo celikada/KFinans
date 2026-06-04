@@ -71,11 +71,19 @@ class AuditAction(str, Enum):
     # Snapshot
     SNAPSHOT_DELETE = "snapshot.delete"
 
+    # Kredi karti ekstresi (PDF) import — Faz 3
+    CREDIT_STATEMENT_IMPORT = "credit_card.statement_import"
+
     # Account
     ACCOUNT_SOFT_DELETE = "account.soft_delete"
 
+    # Sürüm bildirimleri (release notes) — admin opt-in kullanicilara mail
+    RELEASE_NOTES_SENT = "release_notes.sent"
+
     # AI / Advice (FAZ H — AI-004)
     ADVICE_GENERATE = "advice.generate"
+    # Faz 3: Harcama AI analizi (3 kredi) — KVKK m.12 ucuncu taraf veri aktarimi
+    EXPENSE_ANALYSIS_GENERATE = "expense.analysis.generate"
 
     # MFA — TOTP (audit #5 MFA)
     MFA_SETUP = "auth.mfa.setup"

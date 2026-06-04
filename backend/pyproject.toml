@@ -34,6 +34,8 @@ dependencies = [
     "python-multipart>=0.0.18",
     "openpyxl>=3.1",
     "reportlab>=4.0",
+    # Kredi karti ekstresi (PDF) import: PDF -> metin cikarma (deterministik parser).
+    "pdfplumber>=0.11",
     # NOTE: xlrd 1.2.0 BILEREK pinli. 2.0+ surumler eski .xls (BIFF) binary
     # destegini kaldirdi; MKK e-Yatirimci .xls export'lari icin alternatif yok.
     # SEC-009 magic-byte gate (validate_excel_upload) ile saldiri yuzeyi azaltildi.

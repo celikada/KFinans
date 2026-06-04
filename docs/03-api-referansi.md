@@ -1351,6 +1351,16 @@ DELETE /credit-cards/{id}/installments/{iid} → sil
 
 Cash Flow projection (`/cash-flow`) installments'i otomatik dahil eder.
 
+**Ekstre (PDF) içe aktarma — Faz 3:**
+```
+POST /credit-cards/import-statement/preview   → PDF upload (multipart) → ParsedStatementOut (DB YAZMAZ); 10/saat
+POST /credit-cards/import-statement/commit    → onaylanan JSON → CardDetailOut (201); 20/saat
+```
+- **preview:** `validate_pdf_upload` (magic byte `%PDF-`) → `services/statement_import` parser → ayıklanmış kart + ekstre + taksitler + `matched_card_id` (user_id + last_4 eşleşmesi) + `warnings`. DB'ye yazmaz; kullanıcı önizleyip düzeltir.
+- **commit:** `target_card_id` doluysa o karta ekler (IDOR korumalı), boşsa yeni kart (çoklu kart tek hesapta toplanır). Ekstre `(card_id, period)` unique → upsert; taksitler eklenir (aynı taksit varsa atlanır). Audit `credit_card.statement_import`.
+- **Fail-safe:** Hiçbir parser eşleşmezse 422 "banka tanınmadı"; banka eşleşip beklenen alan bulunamazsa (format değişmiş) 422 — hiçbir durumda tahmini veri yazılmaz.
+- **Desteklenen bankalar (`PARSERS`):** Ziraat Bankası, Enpara, VakıfBank, **Akbank/Axess** (custom font garbled metni şifre çözümüyle okunur — bkz. `02-mimari`). Yeni banka = `StatementParser` arayüzüyle yeni bir parser + `PARSERS`'a ekleme.
+
 ---
 
 ## 15.4 Asset Catalog — Manuel Kripto Autocomplete (`/api/v1/asset-catalog`) — Faz 3
@@ -1400,6 +1410,28 @@ POST   /income/recurring/realize-all-past      → tüm aktif recurring'ler içi
 ```
 
 UI'da realize'lı kayıtlarda mavi "↻ periyodik" rozeti.
+
+---
+
+## 15.5.1 Periyodik Gider Realize + Skip + Pending (Faz 3 — 2026-06-04)
+
+**Gider realize** (gelir realize paraleli — `planned_expense` → `expenses`):
+```
+POST /planned-expenses/{id}/realize        → tek dönem ({year, month}) → expenses'a gerçek kayıt
+POST /planned-expenses/{id}/realize-past   → start_date'ten bugüne tüm dönemler
+```
+- `expenses.planned_expense_id` (FK→planned_expenses, ON DELETE SET NULL) + partial UNIQUE `(planned_expense_id, date) WHERE planned_expense_id IS NOT NULL` — çift realize engeli.
+- Oluşan `Expense`: `amount/category/description=title`, `is_paid=true`; pe kredi kartından ise `credit_card_id` taşınır (çift sayım kuralı korunur). Ödeme günü gelmemiş / periyot dışı / zaten realize → 422 ya da `skipped`.
+
+**Skip ("gerçekleşmeyecek") + Pending** (`/api/v1/recurring`):
+```
+GET    /recurring/pending      → tarihi geçmiş + ne realize ne skip olan gelir+gider dönemleri (popup)
+POST   /recurring/skips        → bir dönemi 'gerçekleşmeyecek' işaretle (idempotent, IDOR)
+DELETE /recurring/skips/{id}   → işareti geri al
+```
+- `recurring_skips` tablosu (`kind ∈ {income, expense}` + `ref_id` + `period_year/month`, polimorfik referans) + UNIQUE `(user_id, kind, ref_id, period_year, period_month)`.
+- `pending` response: `{ items: [{kind, ref_id, title, category, amount, period_year, period_month, occurrence_date}] }` (occurrence_date'e göre sıralı). Frontend dashboard mount'ta çağırır; `items.length>0` ise `PendingRealizeModal` açılır.
+- Dönem hesabı ortak `services/recurrence.py` (`applies_in_month` + `date_for_period` + `iter_due_periods`) — gelir+gider duck-typed.
 
 ---
 

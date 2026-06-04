@@ -35,6 +35,7 @@ from app.schemas.income import (
     RecurringIncomeOut,
     RecurringIncomeUpdate,
 )
+from app.services import recurrence
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/income", tags=["income"])
@@ -345,32 +346,8 @@ async def import_incomes(
 # Periyodik gelir (recurring_incomes) CRUD + dashboard hesaplama
 # ---------------------------------------------------------------------------
 def _applies_in_month(ri: RecurringIncome, year: int, month: int) -> bool:
-    """Bir periyodik gelirin verilen ay içinde geçerli olup olmadığı."""
-    last_day = calendar.monthrange(year, month)[1]
-    first_of_month = date_type(year, month, 1)
-    last_of_month = date_type(year, month, last_day)
-
-    if ri.start_date > last_of_month:
-        return False
-    if ri.end_date is not None and ri.end_date < first_of_month:
-        return False
-
-    rec = ri.recurrence
-    months_since = (year * 12 + month) - (ri.start_date.year * 12 + ri.start_date.month)
-
-    if rec == "one_time":
-        return ri.start_date.year == year and ri.start_date.month == month
-    if rec == "monthly":
-        return months_since >= 0
-    if rec == "quarterly":
-        return months_since >= 0 and months_since % 3 == 0
-    if rec == "biannual":
-        return months_since >= 0 and months_since % 6 == 0
-    if rec == "yearly":
-        return ri.start_date.month == month and ri.start_date.year <= year
-    if rec == "custom":
-        return ri.months is not None and month in ri.months and ri.start_date.year <= year
-    return False
+    """Bir periyodik gelirin verilen ay içinde geçerli olup olmadığı (ortak util)."""
+    return recurrence.applies_in_month(ri, year, month)
 
 
 @router.get("/recurring", response_model=list[RecurringIncomeOut])
@@ -543,11 +520,8 @@ _RECURRING_TO_INCOME_CAT: dict[str, str] = {
 
 
 def _date_for_period(ri: RecurringIncome, year: int, month: int) -> date_type:
-    """Recurring'in o ay-yıl için 'gerçekleştiği gün' tarihini döner.
-    day_of_month o ayın son gününden büyükse son güne çekilir."""
-    last_day = calendar.monthrange(year, month)[1]
-    day = min(ri.day_of_month, last_day)
-    return date_type(year, month, day)
+    """Recurring'in o ay-yıl için 'gerçekleştiği gün' tarihini döner (ortak util)."""
+    return recurrence.date_for_period(ri, year, month)
 
 
 async def _realize_one(
