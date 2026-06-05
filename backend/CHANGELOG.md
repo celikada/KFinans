@@ -6,6 +6,20 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.3.5] - 2026-06-05
+
+### Eklenenler
+
+- **Kredi kartı hatırlatma popup'ı (girişte):** Hesap kesim tarihi gelmiş ama o
+  dönemin ekstresi yüklenmemiş kartlar için "ekstre yükle" hatırlatması; ayrıca
+  son ödeme tarihi yaklaşan (7 gün) veya geçmiş, henüz ödenmemiş ekstreler için
+  ödeme hatırlatması.
+- **Google Takvim'e ekleme (opsiyonel):** Ödeme hatırlatmalarında, son ödeme
+  tarihini tek tıkla Google Takvim'e etkinlik olarak ekleme bağlantısı (hesap
+  bağlama/yetki gerekmez — ön-doldurulmuş takvim ekranı açılır).
+
+---
+
 ## [0.3.4] - 2026-06-05
 
 ### Eklenenler

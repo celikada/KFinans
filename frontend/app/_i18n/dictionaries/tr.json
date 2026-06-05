@@ -383,6 +383,24 @@
       "close": "Daha sonra",
       "error": "İşlem başarısız"
     },
+    "ccReminders": {
+      "title": "Kredi kartı hatırlatmaları",
+      "desc": "Hesap kesim tarihi gelmiş ama ekstresi yüklenmemiş kartlar ve son ödeme tarihi yaklaşan ödemeler.",
+      "uploadSection": "Ekstre yüklenmemiş kartlar",
+      "cutoff": "kesim",
+      "uploadBtn": "Ekstre yükle",
+      "dueSection": "Ödemesi yaklaşan / geçmiş ekstreler",
+      "dueDate": "Son ödeme",
+      "overdue": "{n} gün gecikti",
+      "dueToday": "bugün son gün",
+      "dueInDays": "{n} gün kaldı",
+      "addToCalendar": "Google Takvim'e ekle",
+      "openCard": "Kartı aç",
+      "calTitleSuffix": "kredi kartı ödemesi",
+      "calDetailsDue": "Son ödeme",
+      "calDetailsAmount": "Tutar",
+      "close": "Daha sonra"
+    },
     "budget": {
       "loadFailed": "Yüklenemedi",
       "deleteFailed": "Silinemedi",

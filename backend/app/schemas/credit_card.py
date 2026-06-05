@@ -163,3 +163,40 @@ class CardDetailOut(BaseModel):
     card: CreditCardOut
     statements: list[StatementOut]
     installments: list[InstallmentOut]
+
+
+class PendingStatementCard(BaseModel):
+    """Hesap kesim tarihi geçmiş ama o dönemin ekstresi yüklenmemiş kart.
+
+    Girişte ekstre yükleme hatırlatma popup'ı için."""
+
+    card_id: int
+    name: str
+    bank_name: Optional[str] = None
+    last_4: Optional[str] = None
+    period_year: int
+    period_month: int
+    cutoff_date: date_type  # bu dönemin hesap kesim tarihi (statement_day)
+
+
+class DuePaymentItem(BaseModel):
+    """Son ödeme tarihi yaklaşan/geçmiş ama henüz ödenmemiş ekstre.
+
+    days_until_due < 0 → gecikmiş; 0 → bugün; >0 → yaklaşıyor."""
+
+    card_id: int
+    card_name: str
+    bank_name: Optional[str] = None
+    statement_id: int
+    period_year: int
+    period_month: int
+    due_date: date_type
+    statement_amount: Decimal
+    days_until_due: int
+
+
+class CreditCardRemindersResponse(BaseModel):
+    """Girişte gösterilen kredi kartı hatırlatmaları (ekstre yükleme + ödeme)."""
+
+    pending_statements: list[PendingStatementCard] = Field(default_factory=list)
+    due_payments: list[DuePaymentItem] = Field(default_factory=list)

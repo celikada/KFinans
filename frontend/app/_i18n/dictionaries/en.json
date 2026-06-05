@@ -383,6 +383,24 @@
       "close": "Later",
       "error": "Operation failed"
     },
+    "ccReminders": {
+      "title": "Credit card reminders",
+      "desc": "Cards whose statement cutoff has passed but the statement isn't uploaded, and payments with an approaching due date.",
+      "uploadSection": "Cards missing a statement",
+      "cutoff": "cutoff",
+      "uploadBtn": "Upload statement",
+      "dueSection": "Upcoming / overdue payments",
+      "dueDate": "Due",
+      "overdue": "{n} days overdue",
+      "dueToday": "due today",
+      "dueInDays": "{n} days left",
+      "addToCalendar": "Add to Google Calendar",
+      "openCard": "Open card",
+      "calTitleSuffix": "credit card payment",
+      "calDetailsDue": "Due date",
+      "calDetailsAmount": "Amount",
+      "close": "Later"
+    },
     "budget": {
       "loadFailed": "Could not load",
       "deleteFailed": "Could not delete",
