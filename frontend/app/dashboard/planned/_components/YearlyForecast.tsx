@@ -1,7 +1,6 @@
 "use client";
 import { ForecastResultDTO, MONTH_NAMES } from "@/lib/api";
-import { fmtTL } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -21,6 +20,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export function YearlyForecast({ data, year }: Props) {
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const maxTotal = Math.max(...data.months.map((m) => Number.parseFloat(m.total)), 1);
 
   return (
@@ -28,7 +29,7 @@ export function YearlyForecast({ data, year }: Props) {
       <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">{year} {t("content.planned.forecastTitle")}</h3>
         <span className="text-sm font-bold text-gray-900 flex items-center gap-1">
-          {t("content.planned.totalLabel")}: <TLValue tl={data.year_total} className="text-sm font-bold text-gray-900" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums" />
+          {t("content.planned.totalLabel")}: <Money tl={data.year_total} className="text-sm font-bold text-gray-900" />
         </span>
       </div>
 
@@ -63,7 +64,7 @@ export function YearlyForecast({ data, year }: Props) {
                             <span
                               key={item.id}
                               className={`text-xs px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[item.category] ?? "bg-gray-100 text-gray-600"}`}
-                              title={`${item.title} — ${fmtTL(Number.parseFloat(item.amount))} ₺${estSuffix}`}
+                              title={`${item.title} — ${formatTlAs(Number.parseFloat(item.amount), displayCurrency, rates)}${estSuffix}`}
                             >
                               {item.title}
                             </span>
@@ -75,7 +76,7 @@ export function YearlyForecast({ data, year }: Props) {
                 </div>
 
                 <span className={`text-xs tabular-nums w-24 text-right shrink-0 font-semibold ${isEmpty ? "text-gray-300" : "text-gray-800"}`}>
-                  {isEmpty ? "—" : `${fmtTL(total)} ₺`}
+                  {isEmpty ? "—" : formatTlAs(total, displayCurrency, rates)}
                 </span>
               </div>
             </div>

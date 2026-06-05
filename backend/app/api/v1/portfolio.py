@@ -27,6 +27,7 @@ from app.schemas.portfolio import (
     WalletPositionOut,
     WalletResponse,
 )
+from app.services import currency as currency_svc
 from app.services.aggregator import fetch_combined_prices, fetch_usd_to_tl, lookup_usd_price
 from app.services.audit import AuditAction, log_audit
 from app.services.blockchain.algorand import AlgorandService
@@ -74,6 +75,19 @@ async def get_usd_rate(
     göstermek için kullanır. 5 dk in-memory cache (aggregator katmanında)."""
     rate = await fetch_usd_to_tl()
     return {"usd_try": str(rate)}
+
+
+@router.get("/rates")
+async def get_rates(
+    _: CurrentUser,
+):
+    """Desteklenen tüm para birimleri için 1 birim = X TL kur haritası (v0.3.0).
+
+    Frontend görüntüleme para birimi (display currency) dönüşümü için: bir TL
+    tutarı seçili para birimine çevirirken `tl / rates[currency]` kullanır.
+    `currency_svc.fetch_rates()` (TCMB, TRY=1, eksik kur USD fallback, 5 dk cache)."""
+    rates = await currency_svc.fetch_rates()
+    return {"rates": {k: str(v) for k, v in rates.items()}}
 
 
 @router.post("/snapshot/preview", response_model=SnapshotPreviewOut)

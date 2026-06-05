@@ -229,6 +229,27 @@ async def test_usd_rate_requires_auth(client: AsyncClient):
     assert resp.status_code == 401
 
 
+# --- /portfolio/rates (v0.3.0 görüntüleme para birimi) ---
+@pytest.mark.asyncio
+async def test_rates_endpoint(client: AsyncClient):
+    """Tüm para birimleri için 1 birim = X TL kur haritası; TRY her zaman 1."""
+    headers = await make_user(client, "pf_rates@test.com")
+    with respx.mock(assert_all_called=False) as rsx:
+        _mock_rates(rsx)
+        resp = await client.get("/api/v1/portfolio/rates", headers=headers)
+    assert resp.status_code == 200
+    rates = resp.json()["rates"]
+    assert rates["TRY"] == "1"
+    # USD fallback ile dolu (TCMB boş → exchangerate-api), pozitif
+    assert float(rates["USD"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_rates_requires_auth(client: AsyncClient):
+    resp = await client.get("/api/v1/portfolio/rates")
+    assert resp.status_code == 401
+
+
 # --- GET /portfolio (current) ---
 @pytest.mark.asyncio
 async def test_get_current_portfolio_404_when_empty(client: AsyncClient):

@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, CurrencyType, CURRENCIES } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money } from "@/app/_components/Money";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
@@ -144,20 +144,12 @@ export default function CreditCardsPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("table.totalDebt")}</p>
-            <TLValue
-              tl={totalDebtAll}
-              className="text-3xl font-bold text-rose-600"
-              usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
-            />
+            <Money tl={totalDebtAll} className="text-3xl font-bold text-rose-600" />
             <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.totalDebtHint").replace("{count}", String(cards.length))}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("dashboard.currentPeriodDebt")}</p>
-            <TLValue
-              tl={totalPeriodAll}
-              className="text-3xl font-bold text-rose-500"
-              usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
-            />
+            <Money tl={totalPeriodAll} className="text-3xl font-bold text-rose-500" />
             <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.periodDebtHint")}</p>
           </div>
         </div>

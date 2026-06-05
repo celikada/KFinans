@@ -6,8 +6,8 @@ import {
   RecurringIncomeDTO, INCOME_CATEGORY_LABELS,
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { TOOLBAR_BTN_CLS } from "@/lib/format";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { IncomeForm } from "./_components/IncomeForm";
 import { IncomeTable } from "./_components/IncomeTable";
@@ -20,6 +20,8 @@ type Tab = "actual" | "recurring";
 export default function IncomePage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -122,21 +124,21 @@ export default function IncomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.thisMonthActual")}</p>
-            <TLValue tl={monthTotal} className="text-2xl font-bold text-emerald-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
+            <Money tl={monthTotal} className="text-2xl font-bold text-emerald-600" />
             {summary && summary.count > 0 && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.income.records")}</p>
             )}
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.ytdActual")}</p>
-            <TLValue tl={ytdTotal} className="text-2xl font-bold text-blue-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
+            <Money tl={ytdTotal} className="text-2xl font-bold text-blue-600" />
             <p className="text-xs text-gray-400 mt-1">{year} {t("content.income.sinceYearStart")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.yearEndEstimate")}</p>
-            <TLValue tl={yearEstimate} className="text-2xl font-bold text-purple-600" usdClassName="block text-xs text-gray-400 font-normal mt-1 tabular-nums" />
+            <Money tl={yearEstimate} className="text-2xl font-bold text-purple-600" />
             {remainingRecurring > 0 && (
-              <p className="text-xs text-gray-400 mt-1">+{fmtTL(remainingRecurring)} ₺ {t("content.income.remainingRecurring")}</p>
+              <p className="text-xs text-gray-400 mt-1">+{formatTlAs(remainingRecurring, displayCurrency, rates)} {t("content.income.remainingRecurring")}</p>
             )}
           </div>
         </div>
@@ -199,7 +201,7 @@ export default function IncomePage() {
                       <div key={b.category}>
                         <div className="flex justify-between text-xs text-gray-600 mb-1">
                           <span>{INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category}</span>
-                          <span className="font-semibold">{fmtTL(Number.parseFloat(b.total))} ₺ <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
+                          <span className="font-semibold">{formatTlAs(Number.parseFloat(b.total), displayCurrency, rates)} <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                           <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />

@@ -14,7 +14,8 @@ import { getAccessToken } from "@/lib/api/_client";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { deriveScope, loadCache, saveCache, type DashboardSnapshot } from "@/lib/dashboardCache";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
-import { TLValue, useUsdRate } from "@/app/_components/TLValue";
+import { useUsdRate } from "@/app/_components/TLValue";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
@@ -128,6 +129,9 @@ export default function DashboardPage() {
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
 
   const usdRate = useUsdRate();
+  // Görüntüleme para birimi (toplam/grafik dönüşümü için).
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
   // Snapshot uyarı popup state
   const [pendingIssues, setPendingIssues] = useState<PendingIssues | null>(null);
@@ -619,7 +623,7 @@ export default function DashboardPage() {
               )}
             </p>
             {grandTotal > 0 ? (
-              <TLValue tl={grandTotal} className="text-3xl font-bold text-gray-900 tabular-nums" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
+              <Money tl={grandTotal} className="text-3xl font-bold text-gray-900 tabular-nums" />
             ) : (
               <p className="text-3xl font-bold text-gray-300">—</p>
             )}
@@ -635,7 +639,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold text-gray-300">—</p>
                 ) : (
                   <p className={`text-2xl font-bold tabular-nums ${currentMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {currentMonthNet >= 0 ? "+" : ""}{fmtTL(currentMonthNet)} ₺
+                    {currentMonthNet >= 0 ? "+" : ""}{formatTlAs(currentMonthNet, displayCurrency, rates)}
                   </p>
                 )}
               </div>
@@ -645,7 +649,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold text-gray-300">—</p>
                 ) : (
                   <p className={`text-2xl font-bold tabular-nums ${nextMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {nextMonthNet >= 0 ? "+" : ""}{fmtTL(nextMonthNet)} ₺
+                    {nextMonthNet >= 0 ? "+" : ""}{formatTlAs(nextMonthNet, displayCurrency, rates)}
                   </p>
                 )}
               </div>
@@ -681,7 +685,7 @@ export default function DashboardPage() {
                 top={[]}
                 placeholder={t("dashboard.cards.creditCardsHint")}
                 footer={creditCardPeriod !== null && (
-                  <span>{t("dashboard.currentPeriodDebt")}: <span className="font-semibold text-gray-700">{fmtTL(creditCardPeriod)} ₺</span></span>
+                  <span>{t("dashboard.currentPeriodDebt")}: <span className="font-semibold text-gray-700">{formatTlAs(creditCardPeriod, displayCurrency, rates)}</span></span>
                 )}
               />
             )}
@@ -699,7 +703,7 @@ export default function DashboardPage() {
                 top={incomeTop}
                 placeholder={t("dashboard.cards.incomeHint")}
                 footer={incomeYearEstimate !== null && (
-                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtTL(incomeYearEstimate)} ₺</span></span>
+                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{formatTlAs(incomeYearEstimate, displayCurrency, rates)}</span></span>
                 )}
               />
             )}

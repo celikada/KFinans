@@ -8,6 +8,7 @@ import { INPUT_CLS, fmtDate, DASHBOARD_CARDS, DASHBOARD_GROUPS, DashboardCardId,
 import { getShowUsd, setShowUsd as persistShowUsd } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { cacheDefaultCurrency } from "@/lib/defaultCurrency";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
   { key: "conservative", label: RISK_PROFILE_LABELS.conservative },
@@ -80,6 +81,9 @@ export default function SettingsPage() {
     try {
       const updated = await api.updateProfile(selectedRisk, selectedCurrency);
       setUser(updated);
+      // Formların okuduğu localStorage önbelleğini hemen güncelle (tam sayfa
+      // yenileme beklemeden yeni varsayılan para birimi formlarda ön-seçili gelsin).
+      cacheDefaultCurrency(updated.default_currency ?? selectedCurrency);
       setProfileMsg(t("content.settings.profileUpdated"));
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : t("content.settings.profileSaveFailed"));

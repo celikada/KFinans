@@ -35,4 +35,7 @@ export const portfolioApi = {
   deleteSnapshot: (snapshotDate: string) => request<void>(`/portfolio/snapshot/${snapshotDate}`, { method: "DELETE" }),
 
   getUsdRate: () => request<{ usd_try: string }>("/portfolio/usd-rate"),
+
+  // v0.3.0 görüntüleme para birimi: tüm desteklenen kurlar (1 birim = X TL)
+  getRates: () => request<{ rates: Record<string, string> }>("/portfolio/rates"),
 };

@@ -24,6 +24,7 @@ vi.mock("@/lib/api", () => ({
     createInstallment: (...a: unknown[]) => createInstallment(...a),
     updateInstallment: (...a: unknown[]) => updateInstallment(...a),
     deleteInstallment: (...a: unknown[]) => deleteInstallment(...a),
+    getRates: () => Promise.resolve({ rates: { TRY: "1", USD: "35", EUR: "38", GBP: "44", CHF: "40", JPY: "0.23" } }),
   },
   CURRENCIES: ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"],
 }));

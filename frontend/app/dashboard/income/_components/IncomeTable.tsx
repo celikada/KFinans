@@ -1,7 +1,7 @@
 "use client";
 import { api, IncomeDTO, INCOME_CATEGORY_LABELS } from "@/lib/api";
 import { fmtTL, fmtDate } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money } from "@/app/_components/Money";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
@@ -36,7 +36,7 @@ export function IncomeTable({ incomes, onDeleted, onEdit }: Readonly<Props>) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center">
         <h3 className="text-sm font-semibold text-gray-700">{t("content.income.listTitle")}</h3>
-        <TLValue tl={runningTotal} className="text-sm font-bold text-emerald-600" usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right" />
+        <Money tl={runningTotal} className="text-sm font-bold text-emerald-600" />
       </div>
       <ul className="divide-y divide-gray-50">
         {incomes.map((inc) => (

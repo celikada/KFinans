@@ -6,6 +6,7 @@ import {
   StatementInput, InstallmentInput, CurrencyType, CURRENCIES,
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { Money } from "@/app/_components/Money";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
@@ -92,9 +93,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-1">{t("table.totalDebt")}</p>
-              <p className={`text-2xl font-bold tabular-nums ${totalDebt > 0 ? "text-rose-600" : "text-gray-400"}`}>
-                {fmtTL(totalDebt)} ₺
-              </p>
+              <Money tl={totalDebt} className={`text-2xl font-bold tabular-nums ${totalDebt > 0 ? "text-rose-600" : "text-gray-400"}`} />
               {utilization !== null && limit !== null && limit > 0 && (
                 <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.utilization").replace("{pct}", utilization.toFixed(0))}</p>
               )}
@@ -103,24 +102,22 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
           <div className="border-t border-gray-50 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-xs text-gray-400">{t("empty.pendingNoStatement")}</p>
-              <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(currentPeriod)} ₺</p>
+              <Money tl={currentPeriod} className="font-semibold text-gray-700 tabular-nums" />
             </div>
             <div>
               <p className="text-xs text-gray-400">{t("table.unpaidStatement")}</p>
-              <p className={`font-semibold tabular-nums ${unpaid > 0 ? "text-rose-600" : "text-gray-700"}`}>
-                {fmtTL(unpaid)} ₺
-              </p>
+              <Money tl={unpaid} className={`font-semibold tabular-nums ${unpaid > 0 ? "text-rose-600" : "text-gray-700"}`} />
               {c.unpaid_statement_count >= 2 && (
                 <p className="text-[10px] text-amber-600 mt-0.5">⚠ {t("content.creditCards.recordCount").replace("{count}", String(c.unpaid_statement_count))}</p>
               )}
             </div>
             <div>
               <p className="text-xs text-gray-400">{t("dashboard.currentPeriodDebt")}</p>
-              <p className="font-semibold text-rose-500 tabular-nums">{fmtTL(periodDebt)} ₺</p>
+              <Money tl={periodDebt} className="font-semibold text-rose-500 tabular-nums" />
             </div>
             <div>
               <p className="text-xs text-gray-400">{t("table.futureInstallment")}</p>
-              <p className="font-semibold text-gray-700 tabular-nums">{fmtTL(future)} ₺</p>
+              <Money tl={future} className="font-semibold text-gray-700 tabular-nums" />
             </div>
           </div>
         </div>
