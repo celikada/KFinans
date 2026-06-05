@@ -390,6 +390,8 @@
       "cutoff": "kesim",
       "uploadBtn": "Ekstre yükle",
       "dueSection": "Ödemesi yaklaşan / geçmiş ekstreler",
+      "markPaid": "Ödendi",
+      "markPaidFailed": "İşaretlenemedi",
       "dueDate": "Son ödeme",
       "overdue": "{n} gün gecikti",
       "dueToday": "bugün son gün",

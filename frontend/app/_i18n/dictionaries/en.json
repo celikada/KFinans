@@ -390,6 +390,8 @@
       "cutoff": "cutoff",
       "uploadBtn": "Upload statement",
       "dueSection": "Upcoming / overdue payments",
+      "markPaid": "Paid",
+      "markPaidFailed": "Could not mark",
       "dueDate": "Due",
       "overdue": "{n} days overdue",
       "dueToday": "due today",
