@@ -2,8 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, PlannedExpenseDTO, ForecastResultDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money } from "@/app/_components/Money";
 import { PlannedForm } from "./_components/PlannedForm";
 import { PlannedList } from "./_components/PlannedList";
 import { YearlyForecast } from "./_components/YearlyForecast";
@@ -62,11 +61,11 @@ export default function PlannedPage() {
           <div className="flex gap-8">
             <div>
               <p className="text-xs text-gray-400 mb-1">{t("content.planned.yearlyTotal")}</p>
-              <TLValue tl={yearTotal} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
+              <Money tl={yearTotal} className="text-3xl font-bold text-gray-900" />
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-1">{t("content.planned.monthlyAverage")}</p>
-              <p className="text-xl font-semibold text-gray-600">{fmtTL(monthlyAvg)} ₺</p>
+              <Money tl={monthlyAvg} className="text-xl font-semibold text-gray-600" />
             </div>
           </div>
 

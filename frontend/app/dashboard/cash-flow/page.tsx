@@ -14,12 +14,14 @@ import {
 } from "recharts";
 import { api, CashFlowYearDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function CashFlowPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const MONTH_NAMES = t("content.cashFlow.monthsShort").split(",");
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -110,18 +112,18 @@ export default function CashFlowPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalIncome")}</p>
-            <p className="text-2xl font-bold text-emerald-600 tabular-nums">{fmtTL(totalIncome)} ₺</p>
+            <Money tl={totalIncome} className="text-2xl font-bold text-emerald-600 tabular-nums" />
             <p className="text-xs text-gray-400 mt-1">{year} {t("content.cashFlow.yearTotalHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalExpense")}</p>
-            <p className="text-2xl font-bold text-rose-600 tabular-nums">{fmtTL(totalExpense)} ₺</p>
+            <Money tl={totalExpense} className="text-2xl font-bold text-rose-600 tabular-nums" />
             <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.expenseHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("table.net")}</p>
             <p className={`text-2xl font-bold tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {totalNet >= 0 ? "+" : ""}{fmtTL(totalNet)} ₺
+              {totalNet >= 0 ? "+" : ""}{formatTlAs(totalNet, displayCurrency, rates)}
             </p>
             <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.netHint")}</p>
           </div>
@@ -136,9 +138,16 @@ export default function CashFlowPage() {
                 <ComposedChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="name" fontSize={11} stroke="#9ca3af" />
-                  <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} fontSize={11} stroke="#9ca3af" />
+                  <YAxis
+                    tickFormatter={(v) => {
+                      const rate = displayCurrency === "TRY" ? 1 : (rates?.[displayCurrency] ?? 1);
+                      return `${((v / rate) / 1000).toFixed(0)}K`;
+                    }}
+                    fontSize={11}
+                    stroke="#9ca3af"
+                  />
                   <Tooltip
-                    formatter={(v) => `${fmtTL(v as number)} ₺`}
+                    formatter={(v) => formatTlAs(v as number, displayCurrency, rates)}
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -178,12 +187,12 @@ export default function CashFlowPage() {
                         <span className="font-medium text-gray-900">{MONTH_NAMES[m.month - 1]}</span>
                         {!m.is_past && <span className="ml-2 text-[10px] text-gray-400">{t("content.cashFlow.forecast")}</span>}
                       </td>
-                      <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtTL(incActual)} ₺</td>
-                      <td className="px-4 py-3 text-right text-emerald-400 tabular-nums">{fmtTL(incForecast)} ₺</td>
-                      <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmtTL(expActual)} ₺</td>
-                      <td className="px-4 py-3 text-right text-rose-400 tabular-nums">{fmtTL(expForecast)} ₺</td>
+                      <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatTlAs(incActual, displayCurrency, rates)}</td>
+                      <td className="px-4 py-3 text-right text-emerald-400 tabular-nums">{formatTlAs(incForecast, displayCurrency, rates)}</td>
+                      <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{formatTlAs(expActual, displayCurrency, rates)}</td>
+                      <td className="px-4 py-3 text-right text-rose-400 tabular-nums">{formatTlAs(expForecast, displayCurrency, rates)}</td>
                       <td className={`px-4 py-3 text-right font-semibold tabular-nums ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {net >= 0 ? "+" : ""}{fmtTL(net)} ₺
+                        {net >= 0 ? "+" : ""}{formatTlAs(net, displayCurrency, rates)}
                       </td>
                     </tr>
                   );
@@ -192,10 +201,10 @@ export default function CashFlowPage() {
               <tfoot className="bg-gray-50 font-semibold">
                 <tr>
                   <td className="px-4 py-3 text-gray-700">{t("content.cashFlow.yearTotal")}</td>
-                  <td colSpan={2} className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtTL(totalIncome)} ₺</td>
-                  <td colSpan={2} className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmtTL(totalExpense)} ₺</td>
+                  <td colSpan={2} className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatTlAs(totalIncome, displayCurrency, rates)}</td>
+                  <td colSpan={2} className="px-4 py-3 text-right text-rose-600 tabular-nums">{formatTlAs(totalExpense, displayCurrency, rates)}</td>
                   <td className={`px-4 py-3 text-right tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {totalNet >= 0 ? "+" : ""}{fmtTL(totalNet)} ₺
+                    {totalNet >= 0 ? "+" : ""}{formatTlAs(totalNet, displayCurrency, rates)}
                   </td>
                 </tr>
               </tfoot>

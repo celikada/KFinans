@@ -1,7 +1,6 @@
 "use client";
 import { BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
-import { fmtTL } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -11,6 +10,8 @@ interface Props {
 
 export function ComparisonTable({ rows, onDelete }: Props) {
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   if (rows.length === 0) {
     return (
       <p className="text-center text-sm text-gray-400 py-8">
@@ -46,12 +47,11 @@ export function ComparisonTable({ rows, onDelete }: Props) {
               </div>
               <div className="flex items-center gap-3 text-sm">
                 {budget !== null && (
-                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {fmtTL(budget)} {row.currency ?? "TRY"}</span>
+                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {formatTlAs(budget, displayCurrency, rates)}</span>
                 )}
-                <TLValue
+                <Money
                   tl={actual}
                   className={`font-semibold ${row.over_budget ? "text-red-600" : "text-gray-900"}`}
-                  usdClassName="block text-[10px] text-gray-400 font-normal mt-0.5 tabular-nums text-right"
                 />
                 {budget !== null && (
                   <button
@@ -80,7 +80,7 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                   <span>%{pct.toFixed(0)} {t("content.budget.used")}</span>
                   {row.remaining !== null && (
                     <span className={row.over_budget ? "text-red-500 font-medium" : "text-emerald-600"}>
-                      {row.over_budget ? `${fmtTL(Math.abs(Number.parseFloat(row.remaining)))} ₺ ${t("content.budget.over")}` : `${fmtTL(Number.parseFloat(row.remaining))} ₺ ${t("content.budget.remaining")}`}
+                      {row.over_budget ? `${formatTlAs(Math.abs(Number.parseFloat(row.remaining)), displayCurrency, rates)} ${t("content.budget.over")}` : `${formatTlAs(Number.parseFloat(row.remaining), displayCurrency, rates)} ${t("content.budget.remaining")}`}
                     </span>
                   )}
                 </div>

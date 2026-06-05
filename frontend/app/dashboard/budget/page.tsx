@@ -3,8 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, BudgetComparisonDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { BudgetForm } from "./_components/BudgetForm";
 import { ComparisonTable } from "./_components/ComparisonTable";
@@ -13,6 +12,8 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function BudgetPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -60,14 +61,13 @@ export default function BudgetPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-6 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("content.budget.totalSpendThisMonth")}</p>
-            <TLValue
+            <Money
               tl={totalActual}
               className={`text-3xl font-bold ${overBudgetCount > 0 ? "text-red-600" : "text-gray-900"}`}
-              usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums"
             />
             {totalBudget > 0 && (
               <p className="text-xs text-gray-400 mt-1">
-                {fmtTL(totalBudget)} ₺ {t("content.budget.totalBudgetSuffix")}
+                {formatTlAs(totalBudget, displayCurrency, rates)} {t("content.budget.totalBudgetSuffix")}
                 {overBudgetCount > 0 && (
                   <span className="ml-2 text-red-500 font-medium">{overBudgetCount} {t("content.budget.categoriesExceeded")}</span>
                 )}

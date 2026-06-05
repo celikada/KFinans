@@ -46,6 +46,7 @@ vi.mock("@/lib/api", () => ({
   api: {
     getCashFlow: (...a: unknown[]) => getCashFlow(...a),
     downloadReport: (...a: unknown[]) => downloadReport(...a),
+    getRates: () => Promise.resolve({ rates: { TRY: "1", USD: "35", EUR: "38", GBP: "44", CHF: "40", JPY: "0.23" } }),
   },
 }));
 

@@ -19,6 +19,7 @@ vi.mock("@/lib/api", () => ({
     updateCreditCard: (...a: unknown[]) => updateCreditCard(...a),
     deleteCreditCard: (...a: unknown[]) => deleteCreditCard(...a),
     getUsdRate: (...a: unknown[]) => getUsdRate(...a),
+    getRates: () => Promise.resolve({ rates: { TRY: "1", USD: "35", EUR: "38", GBP: "44", CHF: "40", JPY: "0.23" } }),
   },
   CURRENCIES: ["TRY", "USD", "EUR", "GBP", "CHF", "JPY"],
 }));

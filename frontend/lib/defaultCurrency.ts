@@ -24,10 +24,18 @@ export function getDefaultCurrency(): CurrencyType {
   return isCurrency(v) ? v : "TRY";
 }
 
-/** `/user/me` sonucundan gelen değeri önbelleğe yaz (geçersizse dokunma). */
+/** Görüntüleme (display) para birimi değiştiğinde tetiklenen olay adı. */
+export const DISPLAY_CURRENCY_CHANGED = "kfinans-display-currency-changed";
+
+/** `/user/me` sonucundan / ayarlardan gelen değeri önbelleğe yaz (geçersizse dokunma).
+ *  Değer gerçekten değiştiyse `DISPLAY_CURRENCY_CHANGED` olayını yayar — tüm Money
+ *  bileşenleri tam sayfa yenileme olmadan yeni para birimine geçer. */
 export function cacheDefaultCurrency(currency: string | null | undefined): void {
   if (globalThis.window === undefined) return;
-  if (isCurrency(currency)) {
-    localStorage.setItem(KEY, currency);
+  if (!isCurrency(currency)) return;
+  const prev = localStorage.getItem(KEY);
+  localStorage.setItem(KEY, currency);
+  if (prev !== currency) {
+    globalThis.dispatchEvent(new CustomEvent(DISPLAY_CURRENCY_CHANGED));
   }
 }

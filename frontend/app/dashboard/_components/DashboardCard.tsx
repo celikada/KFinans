@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { TLValue } from "@/app/_components/TLValue";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { COLOR_MAP, ICONS, type IconName } from "./icons";
 
@@ -62,13 +62,16 @@ export function Card({
 }: CardProps) {
   const router = useRouter();
   const c = COLOR_MAP[color];
+  // Görüntüleme para birimi dönüşümü (top3 satırları için; total Money kullanır).
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   // total === 0 da geçerli yüklenmiş değer (örn. kredi kartı borç yoksa).
   // Sadece null = henüz fetch gelmedi.
   const hasTotal = total !== null;
 
   let body: React.ReactNode;
   if (hasTotal) {
-    body = <TLValue tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
+    body = <Money tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
   } else if ((count ?? 0) > 0) {
     body = <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>;
   } else if (loading) {
@@ -97,7 +100,7 @@ export function Card({
           {top.map((it) => (
             <li key={it.label} className="flex justify-between items-center text-xs">
               <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
-              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">{fmtTL(it.value)} ₺</span>
+              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">{formatTlAs(it.value, displayCurrency, rates)}</span>
             </li>
           ))}
         </ul>
@@ -115,6 +118,8 @@ export function Card({
 export function GoalCard({ href, pct, passive, updating }: { readonly href: string; readonly pct: number | null; readonly passive: number | null; readonly updating?: boolean }) {
   const router = useRouter();
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const hasData = pct !== null;
 
   return (
@@ -148,7 +153,7 @@ export function GoalCard({ href, pct, passive, updating }: { readonly href: stri
           </div>
           {passive !== null && (
             <p className="text-xs text-gray-400">
-              {t("content.dashboard.goalPassiveIncome")} <span className="font-medium text-gray-600">{fmtTL(passive)} {t("content.dashboard.perMonthSuffix")}</span>
+              {t("content.dashboard.goalPassiveIncome")} <span className="font-medium text-gray-600">{formatTlAs(passive, displayCurrency, rates)}{t("content.dashboard.perMonthSuffix")}</span>
             </p>
           )}
         </>

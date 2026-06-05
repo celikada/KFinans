@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
-import { TLValue } from "@/app/_components/TLValue";
+import { TOOLBAR_BTN_CLS } from "@/lib/format";
+import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { ExpenseForm } from "./_components/ExpenseForm";
 import { ExpenseTable } from "./_components/ExpenseTable";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
@@ -14,6 +14,8 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function ExpensesPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const rates = useRates();
+  const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -97,7 +99,7 @@ export default function ExpensesPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("content.expenses.monthTotal")}</p>
-            <TLValue tl={total} className="text-3xl font-bold text-gray-900" usdClassName="block text-sm text-gray-400 font-normal mt-1 tabular-nums" />
+            <Money tl={total} className="text-3xl font-bold text-gray-900" />
             {summary && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.expenses.records")}</p>
             )}
@@ -139,7 +141,7 @@ export default function ExpensesPage() {
                 return (
                   <li key={r.category} className="flex justify-between text-xs text-red-600">
                     <span>{label}</span>
-                    <span className="font-medium">{fmtTL(budget)} ₺ {t("content.expenses.limit")} · {fmtTL(excess)} ₺ {t("content.expenses.over")}</span>
+                    <span className="font-medium">{formatTlAs(budget, displayCurrency, rates)} {t("content.expenses.limit")} · {formatTlAs(excess, displayCurrency, rates)} {t("content.expenses.over")}</span>
                   </li>
                 );
               })}

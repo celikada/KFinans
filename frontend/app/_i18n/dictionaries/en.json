@@ -1018,7 +1018,7 @@
     "dashboard": {
       "goalTitle": "Financial Goal",
       "goalPassiveIncome": "Passive income:",
-      "perMonthSuffix": "₺/mo",
+      "perMonthSuffix": "/mo",
       "goalEmptyHint": "Enter your monthly need, calculate your goal",
       "budgetTitle": "Budget Tracking",
       "budgetEmptyHint": "Set limits per category",
