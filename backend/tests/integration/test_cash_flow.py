@@ -892,3 +892,82 @@ async def test_cash_flow_usd_forecast_uses_current_rate(client: AsyncClient, mon
     # Gelecek aylarda forecast = 200 USD × 35 = 7000 TL
     future = [m for m in months if not m["is_past"] and Decimal(m["income_forecast"]) >= Decimal("7000.00")]
     assert len(future) >= 1, f"USD recurring güncel kurla çevrilmedi. months={months}"
+
+
+# ─── Bu ay (current month) henüz gerçekleşmemiş periyodik forecast ──────────
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_current_month_pending_planned_in_forecast(client: AsyncClient):
+    """Bu ay geçerli ama realize/skip edilmemiş planlı gider → current month
+    expense_forecast'ta görünür (ödeme günü gelmese de arada kaybolmaz)."""
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
+    session = await _make_user(client, "cf_pending_planned@example.com")
+    user_id = await _get_user_id(session["email"])
+
+    async with TestSession() as db:
+        db.add(
+            PlannedExpense(
+                user_id=user_id,
+                title="Kira",
+                amount=Decimal("42000.00"),
+                category="rent",
+                recurrence="monthly",
+                day_of_month=15,
+                start_date=date(today.year - 1, 1, 1),
+            )
+        )
+        await db.commit()
+
+    resp = await client.get(f"/api/v1/cash-flow?year={today.year}", headers=session["headers"])
+    assert resp.status_code == 200
+    cur = resp.json()["months"][today.month - 1]
+    # Bu ay hâlâ is_past=True ama henüz gerçekleşmemiş kira tahmini gidere girer
+    assert cur["is_past"] is True
+    assert Decimal(cur["expense_forecast"]) >= Decimal("42000.00")
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_current_month_realized_planned_not_double_counted(client: AsyncClient):
+    """Bu ay realize edilmiş planlı gider actual'da; pending forecast'ta DEĞİL (çift sayım yok)."""
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
+    session = await _make_user(client, "cf_realized_planned@example.com")
+    user_id = await _get_user_id(session["email"])
+
+    async with TestSession() as db:
+        pe = PlannedExpense(
+            user_id=user_id,
+            title="Aidat",
+            amount=Decimal("6000.00"),
+            category="utility",
+            recurrence="monthly",
+            day_of_month=10,
+            start_date=date(today.year - 1, 1, 1),
+        )
+        db.add(pe)
+        await db.flush()
+        # Bu ay realize edilmiş gibi: planned_expense_id'li expense
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("6000.00"),
+                amount_tl=Decimal("6000.00"),
+                date=date(today.year, today.month, 10),
+                category="utility",
+                description="Aidat",
+                planned_expense_id=pe.id,
+                is_paid=True,
+            )
+        )
+        await db.commit()
+
+    resp = await client.get(f"/api/v1/cash-flow?year={today.year}", headers=session["headers"])
+    cur = resp.json()["months"][today.month - 1]
+    # Realize → actual'da
+    assert Decimal(cur["expense_actual"]) >= Decimal("6000.00")
+    # Pending forecast'a GİRMEZ (çift sayım yok)
+    assert Decimal(cur["expense_forecast"]) == Decimal("0")

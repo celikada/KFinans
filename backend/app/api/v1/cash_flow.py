@@ -28,6 +28,7 @@ from app.models.expense import Expense
 from app.models.income import Income
 from app.models.planned_expense import PlannedExpense
 from app.models.recurring_income import RecurringIncome
+from app.models.recurring_skip import RecurringSkip
 from app.models.user import User
 from app.services import currency as currency_svc
 
@@ -242,9 +243,100 @@ async def _planned_by_month(db: AsyncSession, user_id, year: int, rates: dict[st
     return by_month
 
 
+def _month_bounds(year: int, month: int) -> tuple[date_type, date_type]:
+    last = calendar.monthrange(year, month)[1]
+    return date_type(year, month, 1), date_type(year, month, last)
+
+
+async def _pending_planned_for_month(db: AsyncSession, user_id, year: int, month: int, rates: dict[str, Decimal]) -> Decimal:
+    """BU AY geçerli ama henüz realize edilmemiş ve skip edilmemiş planlı giderler.
+
+    Bu ay (current month) için forecast'a girer: ödeme günü ay içinde ileride olup
+    henüz gerçekleşmeyen kira/aidat gibi kayıtlar "tahmini gider" olarak sayılır
+    (aksi halde ne actual'da ne forecast'ta görünmeyip arada kaybolurlardı).
+    Realize edilmiş olanlar zaten actual'da olduğu için hariç (çift sayım yok)."""
+    pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == user_id))
+    all_planned = pe_q.scalars().all()
+    eligible = [pe for pe in all_planned if (pe.credit_card_id is None or not pe.is_paid) and _applies_planned_in_month(pe, year, month)]
+    if not eligible:
+        return Decimal(0)
+
+    start, end = _month_bounds(year, month)
+    realized_q = await db.execute(
+        select(Expense.planned_expense_id).where(
+            Expense.user_id == user_id,
+            Expense.planned_expense_id.is_not(None),
+            Expense.date >= start,
+            Expense.date <= end,
+        )
+    )
+    realized_ids = {r for (r,) in realized_q.all()}
+    skip_q = await db.execute(
+        select(RecurringSkip.ref_id).where(
+            RecurringSkip.user_id == user_id,
+            RecurringSkip.kind == "expense",
+            RecurringSkip.period_year == year,
+            RecurringSkip.period_month == month,
+        )
+    )
+    skipped_ids = {r for (r,) in skip_q.all()}
+
+    total = Decimal(0)
+    for pe in eligible:
+        if pe.id in realized_ids or pe.id in skipped_ids:
+            continue
+        total += currency_svc.convert_to_tl(Decimal(pe.amount), pe.currency, rates)
+    return total
+
+
+async def _pending_recurring_income_for_month(db: AsyncSession, user_id, year: int, month: int, rates: dict[str, Decimal]) -> Decimal:
+    """BU AY geçerli ama henüz realize/skip edilmemiş periyodik gelirler (forecast).
+
+    Planlı gider ile simetrik: bu ay beklenen ama henüz gerçekleşmemiş maaş/kira
+    geliri "tahmini gelir" olarak sayılır."""
+    ri_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == user_id))
+    all_ri = ri_q.scalars().all()
+    eligible = [ri for ri in all_ri if _applies_recurring_income_in_month(ri, year, month)]
+    if not eligible:
+        return Decimal(0)
+
+    realized_q = await db.execute(
+        select(Income.recurring_income_id).where(
+            Income.user_id == user_id,
+            Income.recurring_income_id.is_not(None),
+            *_month_filter(year, month),
+        )
+    )
+    realized_ids = {r for (r,) in realized_q.all()}
+    skip_q = await db.execute(
+        select(RecurringSkip.ref_id).where(
+            RecurringSkip.user_id == user_id,
+            RecurringSkip.kind == "income",
+            RecurringSkip.period_year == year,
+            RecurringSkip.period_month == month,
+        )
+    )
+    skipped_ids = {r for (r,) in skip_q.all()}
+
+    total = Decimal(0)
+    for ri in eligible:
+        if ri.id in realized_ids or ri.id in skipped_ids:
+            continue
+        total += currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency, rates)
+    return total
+
+
+def _month_filter(year: int, month: int):
+    start, end = _month_bounds(year, month)
+    return (Income.date >= start, Income.date <= end)
+
+
 def _build_month_row(
     m: int,
     is_past: bool,
+    is_current: bool,
+    pending_income: Decimal,
+    pending_expense: Decimal,
     actual_income: dict[int, Decimal],
     actual_expense: dict[int, Decimal],
     statement: dict[int, Decimal],
@@ -256,8 +348,16 @@ def _build_month_row(
     income_actual = actual_income[m]
     expense_actual = actual_expense[m] + statement[m]
 
-    # Forecast ölçüler — geçmiş ay için 0 göster (yanıltıcı olmasın)
-    if is_past:
+    # Forecast ölçüler:
+    #  - Bu ay (current): gerçekleşen + henüz gerçekleşmemiş (ödeme günü ay içinde
+    #    ileride olup realize/skip edilmemiş) periyodik kayıtlar forecast'a girer —
+    #    aksi halde kira/aidat gibi kayıtlar ne actual ne forecast'ta görünmezdi.
+    #  - Strictly geçmiş ay: forecast 0 (yanıltıcı olmasın).
+    #  - Gelecek ay: tam periyodik forecast.
+    if is_current:
+        income_forecast = pending_income
+        expense_forecast = pending_expense + installment[m]
+    elif is_past:
         income_forecast = Decimal(0)
         expense_forecast = Decimal(0)
     else:
@@ -301,15 +401,27 @@ async def get_cash_flow(
     recurring_income = await _recurring_income_by_month(db, uid, year, rates)
     planned = await _planned_by_month(db, uid, year, rates)
 
-    # Aylık birleştirme: actual = geçmiş+bu ay; forecast = gelecek aylar.
+    # Bu ay (current month) için henüz gerçekleşmemiş periyodik forecast (kira/aidat
+    # gibi ödeme günü ay içinde ileride olanlar). Yalnızca görüntülenen yıl bu yılsa.
+    pending_income = Decimal(0)
+    pending_expense = Decimal(0)
+    if year == current_year:
+        pending_income = await _pending_recurring_income_for_month(db, uid, year, current_month, rates)
+        pending_expense = await _pending_planned_for_month(db, uid, year, current_month, rates)
+
+    # Aylık birleştirme: actual = geçmiş+bu ay; forecast = gelecek aylar + bu ay pending.
     months_out: list[CashFlowMonth] = []
     total_income = Decimal(0)
     total_expense = Decimal(0)
     for m in range(1, 13):
+        is_current = year == current_year and m == current_month
         is_past = (year < current_year) or (year == current_year and m <= current_month)
         row = _build_month_row(
             m,
             is_past,
+            is_current,
+            pending_income,
+            pending_expense,
             actual_income,
             actual_expense,
             statement,
