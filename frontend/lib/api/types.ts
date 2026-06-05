@@ -483,6 +483,24 @@ export interface UnrealizeResultDTO {
   removed: number;
 }
 
+// ─── Periyodik gelir dönem durumu (realize/skip geri alma) ──────
+export interface RecurringPeriodStatusDTO {
+  year: number;
+  month: number;
+  target_date: string; // YYYY-MM-DD
+  status: PeriodStatusKind;
+  income_id?: number | null;
+  skip_id?: number | null;
+}
+
+export interface RecurringPeriodsResultDTO {
+  periods: RecurringPeriodStatusDTO[];
+}
+
+export interface RecurringUnrealizeResultDTO {
+  removed: number;
+}
+
 // ─── Cash Flow (yıllık projeksiyon) ─────────────────────────────
 
 export interface CashFlowMonthDTO {

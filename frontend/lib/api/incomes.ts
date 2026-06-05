@@ -1,4 +1,4 @@
-import type { IncomeDTO, IncomeDashboardDTO, IncomeInput, IncomeSummaryDTO, RealizeResultDTO, RecurringIncomeDTO, RecurringIncomeInput } from "./types";
+import type { IncomeDTO, IncomeDashboardDTO, IncomeInput, IncomeSummaryDTO, RealizeResultDTO, RecurringIncomeDTO, RecurringIncomeInput, RecurringPeriodsResultDTO, RecurringUnrealizeResultDTO } from "./types";
 import { downloadBlob, request, uploadForm } from "./_client";
 
 export const incomesApi = {
@@ -31,6 +31,14 @@ export const incomesApi = {
     }),
   realizeRecurringPast: (id: number) => request<RealizeResultDTO>(`/income/recurring/${id}/realize-past`, { method: "POST" }),
   realizeAllRecurringPast: () => request<RealizeResultDTO>(`/income/recurring/realize-all-past`, { method: "POST" }),
+
+  // Dönem durumları (pending/realized/skipped) — realize/skip geri alma ekranı için
+  getRecurringPeriods: (id: number) => request<RecurringPeriodsResultDTO>(`/income/recurring/${id}/periods`),
+  unrealizeRecurringPeriod: (id: number, year: number, month: number) =>
+    request<RecurringUnrealizeResultDTO>(`/income/recurring/${id}/unrealize`, {
+      method: "POST",
+      body: JSON.stringify({ year, month }),
+    }),
 
   // Gelir Excel export/import
   exportIncomes: (year?: number, month?: number) => {

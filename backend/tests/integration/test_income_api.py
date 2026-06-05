@@ -683,3 +683,94 @@ async def test_realize_all_past(client: AsyncClient):
 async def test_realize_unauthenticated(client: AsyncClient):
     resp = await client.post("/api/v1/income/recurring/realize-all-past")
     assert resp.status_code == 401
+
+
+# ─── Periyodik gelir dönem yönetimi + realize/skip geri alma ────────────────
+
+
+async def _create_recurring(client: AsyncClient, headers: dict, **kw) -> int:
+    resp = await client.post("/api/v1/income/recurring", json=_recurring(**kw), headers=headers)
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_recurring_periods_lists_status(client: AsyncClient):
+    """GET /income/recurring/{id}/periods her dönemi pending/realized/skipped döner."""
+    headers = await make_user(client, "inc_periods@example.com")
+    rid = await _create_recurring(client, headers, start_date="2026-01-01", day_of_month=1)
+
+    r = await client.get(f"/api/v1/income/recurring/{rid}/periods", headers=headers)
+    assert r.status_code == 200
+    periods = r.json()["periods"]
+    assert len(periods) >= 2
+    assert all(p["status"] == "pending" for p in periods)
+
+    rr = await client.post(
+        f"/api/v1/income/recurring/{rid}/realize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert rr.status_code == 200 and rr.json()["realized"] == 1
+
+    sk = await client.post(
+        "/api/v1/recurring/skips",
+        json={"kind": "income", "ref_id": rid, "year": 2026, "month": 3},
+        headers=headers,
+    )
+    assert sk.status_code == 201
+
+    r2 = await client.get(f"/api/v1/income/recurring/{rid}/periods", headers=headers)
+    by_month = {(p["year"], p["month"]): p for p in r2.json()["periods"]}
+    assert by_month[(2026, 2)]["status"] == "realized"
+    assert by_month[(2026, 2)]["income_id"] is not None
+    assert by_month[(2026, 3)]["status"] == "skipped"
+    assert by_month[(2026, 3)]["skip_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_recurring_unrealize_removes_income(client: AsyncClient):
+    """POST /income/recurring/{id}/unrealize gelir realize'ini geri alir (idempotent)."""
+    headers = await make_user(client, "inc_unrealize@example.com")
+    rid = await _create_recurring(client, headers, start_date="2026-01-01", day_of_month=1)
+
+    await client.post(
+        f"/api/v1/income/recurring/{rid}/realize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    lst = await client.get("/api/v1/income?year=2026&month=2", headers=headers)
+    assert len(lst.json()) >= 1
+
+    un = await client.post(
+        f"/api/v1/income/recurring/{rid}/unrealize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert un.status_code == 200 and un.json()["removed"] == 1
+
+    r = await client.get(f"/api/v1/income/recurring/{rid}/periods", headers=headers)
+    by_month = {(p["year"], p["month"]): p for p in r.json()["periods"]}
+    assert by_month[(2026, 2)]["status"] == "pending"
+
+    un2 = await client.post(
+        f"/api/v1/income/recurring/{rid}/unrealize",
+        json={"year": 2026, "month": 2},
+        headers=headers,
+    )
+    assert un2.json()["removed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_recurring_periods_idor(client: AsyncClient):
+    headers_a = await make_user(client, "inc_periods_a@example.com")
+    headers_b = await make_user(client, "inc_periods_b@example.com")
+    rid = await _create_recurring(client, headers_a, start_date="2026-01-01")
+    r = await client.get(f"/api/v1/income/recurring/{rid}/periods", headers=headers_b)
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_recurring_unrealize_unauthenticated(client: AsyncClient):
+    resp = await client.post("/api/v1/income/recurring/1/unrealize", json={"year": 2026, "month": 2})
+    assert resp.status_code == 401
