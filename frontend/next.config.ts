@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
 
 // CSP — frontend HTML response'larina uygulanir.
 // Dev modda backend http://localhost:8000'da, prod'da https://kfinans.app'da.
@@ -21,6 +22,9 @@ const cspBase = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
+  // PWA: service worker + web app manifest must load from same origin.
+  "worker-src 'self'",
+  "manifest-src 'self'",
 ];
 
 // upgrade-insecure-requests sadece production'da — dev'de HTTP backend'i HTTPS'e
@@ -62,4 +66,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// PWA service worker (Serwist). Source app/sw.ts is compiled to public/sw.js at
+// build time. Disabled in development so `next dev` (Turbopack) stays fast and
+// the SW never serves stale shells while iterating. `next build` must run with
+// the Webpack bundler (npm run build uses --webpack) because Serwist's SW
+// compilation requires Webpack; the app bundle itself is unaffected.
+const withSerwist = withSerwistInit({
+  swSrc: "app/sw.ts",
+  swDest: "public/sw.js",
+  disable: process.env.NODE_ENV === "development",
+  // Reload all open tabs once a new SW activates, so users get fresh assets.
+  reloadOnOnline: true,
+});
+
+export default withSerwist(nextConfig);

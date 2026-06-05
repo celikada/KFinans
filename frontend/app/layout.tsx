@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { I18nProvider } from "./_i18n/I18nProvider";
@@ -17,7 +17,24 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KFinans",
   description: "Kişisel yatırım portföyü",
-  icons: { icon: "/images/kfinans-logo.png" },
+  // manifest.ts is auto-linked, but set it explicitly for clarity.
+  manifest: "/manifest.webmanifest",
+  applicationName: "KFinans",
+  icons: {
+    icon: "/images/kfinans-logo.png",
+    apple: "/icons/apple-touch-icon-180.png",
+  },
+  // iOS standalone "Add to Home Screen" behaviour.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "KFinans",
+  },
+};
+
+export const viewport: Viewport = {
+  // Brand blue — colors the mobile browser/status bar chrome.
+  themeColor: "#1D4ED8",
 };
 
 export default function RootLayout({
