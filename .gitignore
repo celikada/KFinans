@@ -48,3 +48,6 @@ k8s/secrets.yaml
 
 # Claude Code lokal ayarlar (kişisel — SSH izin kuralı vb.)
 .claude/settings.local.json
+
+# Fiyatlandırma / iş planı raporu (kişisel — repoya girmez)
+docs/fiyatlandirma-raporu-*.md

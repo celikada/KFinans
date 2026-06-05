@@ -131,6 +131,9 @@ class InstallmentCreate(BaseModel):
     installments_total: int = Field(..., ge=1, le=120)
     first_due_date: date_type
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Ekstre import'ta o ekstrede görünen taksit sırası (X/Y'deki X). Manuel
+    # girişte None — yalnız import yolu kullanır: gelecek taksit = total - paid.
+    installments_paid: Optional[int] = Field(default=None, ge=1, le=120)
 
 
 class InstallmentUpdate(BaseModel):

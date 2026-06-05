@@ -115,12 +115,16 @@ def _applies_recurring_income_in_month(ri: RecurringIncome, year: int, month: in
 def _installment_applies_in_month(inst: CreditCardInstallment, year: int, month: int) -> bool:
     """Bir taksit kaydı verilen ay-yılı yakalar mı?
 
-    İlk vade ile installments_total kadar ay sürer. first_due ay'ı dahil
-    sayılır (installments_total - 1 ay daha sonra biter).
+    Invariant (v0.3.7): `first_due_date` = ilk GELECEK taksit ayı,
+    `installments_remaining` = projekte edilecek (gelecek) taksit sayısı.
+    Yani [first_due, first_due + remaining - 1] aralığı sayılır — ekstreye düşmüş
+    (geçmiş/mevcut) dilimler buraya GİRMEZ (çift sayım yok).
     """
+    if inst.installments_remaining <= 0:
+        return False
     start = date_type(inst.first_due_date.year, inst.first_due_date.month, 1)
     end_year = inst.first_due_date.year
-    end_month = inst.first_due_date.month + inst.installments_total - 1
+    end_month = inst.first_due_date.month + inst.installments_remaining - 1
     while end_month > 12:
         end_month -= 12
         end_year += 1
