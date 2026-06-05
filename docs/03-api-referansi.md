@@ -390,6 +390,13 @@ Anlık USD/TRY kuru (TCMB → Yahoo Finance fallback). Frontend `TLValue` bileş
 { "usd_try": "33.45" }
 ```
 
+### `GET /portfolio/rates` (v0.3.1 görüntüleme para birimi)
+Desteklenen tüm para birimleri için `1 birim = X TL` kur haritası. Frontend `Money` bileşeni bir TL toplamı seçili görüntüleme para birimine çevirirken `tl / rates[currency]` kullanır (`currency_svc.fetch_rates()`, TRY=1, eksik kur USD fallback, 5 dk cache).
+```json
+200 OK
+{ "rates": { "TRY": "1", "USD": "33.45", "EUR": "36.10", "GBP": "42.00", "CHF": "37.20", "JPY": "0.23" } }
+```
+
 ### `GET /portfolio/staking`
 Tüm staking pozisyonları (Sonic, Avalanche).
 ```json
@@ -1423,6 +1430,13 @@ UI'da realize'lı kayıtlarda mavi "↻ periyodik" rozeti.
 POST /planned-expenses/{id}/realize        → tek dönem ({year, month}) → expenses'a gerçek kayıt
 POST /planned-expenses/{id}/realize-past   → start_date'ten bugüne tüm dönemler
 ```
+
+**Dönem yönetimi + geri alma (v0.3.1):**
+```
+GET  /planned-expenses/{id}/periods        → her dönem: pending | realized(expense_id) | skipped(skip_id)
+POST /planned-expenses/{id}/unrealize      → realize geri al ({year,month}) → bağlı expense silinir (idempotent removed:0/1)
+```
+- Skip geri alma: `DELETE /recurring/skips/{skip_id}` (periods çıktısındaki skip_id ile). Yanlış işaretlenen dönemleri düzeltmek için frontend `PlannedPeriodsModal`.
 - `expenses.planned_expense_id` (FK→planned_expenses, ON DELETE SET NULL) + partial UNIQUE `(planned_expense_id, date) WHERE planned_expense_id IS NOT NULL` — çift realize engeli.
 - Oluşan `Expense`: `amount/category/description=title`, `is_paid=true`; pe kredi kartından ise `credit_card_id` taşınır (çift sayım kuralı korunur). Ödeme günü gelmemiş / periyot dışı / zaten realize → 422 ya da `skipped`.
 

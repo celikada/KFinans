@@ -40,6 +40,10 @@ data:
   FRONTEND_URL: "https://kfinans.app"
   VERIFY_TOKEN_EXPIRE_HOURS: "24"
 
+  # Sürüm bildirimleri: ADMIN_EMAILS girişte otomatik admin yapar (virgülle ayır).
+  # RELEASE_NOTES_TOKEN secret'ta (CI X-Release-Token ile aynı değer olmalı).
+  ADMIN_EMAILS: "celikada@gmail.com"
+
   # Claude
   CLAUDE_MODEL: "claude-sonnet-4-6"
   CLAUDE_MAX_TOKENS: "1024"

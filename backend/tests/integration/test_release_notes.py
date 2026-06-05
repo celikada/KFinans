@@ -183,3 +183,83 @@ async def test_preview_returns_markdown(client):
     data = r.json()
     assert data["version"] == "0.2.0"
     assert "[0.2.0]" in data["body_markdown"]
+
+
+# ─── X-Release-Token (CI/CD otomasyon yolu) ─────────────────────────
+
+
+async def test_send_via_release_token(client, monkeypatch):
+    """X-Release-Token geçerli → admin JWT olmadan gönderim (CI yolu)."""
+    sent_to: list[str] = []
+
+    async def _fake_send(*, to, version, body_html, unsubscribe_url):
+        sent_to.append(to)
+        return True
+
+    monkeypatch.setattr("app.api.v1.release.send_release_notes_email", _fake_send)
+    monkeypatch.setattr("app.api.v1.release.settings.release_notes_token", "ci-secret-token")
+
+    recipient = f"rt-{uuid.uuid4().hex[:10]}@example.com"
+    await _register(client, recipient, opt_in=True)
+    await verify_user_email(recipient)
+
+    r = await client.post(
+        "/api/v1/release-notes/send",
+        headers={"X-Release-Token": "ci-secret-token"},
+        json={"version": "0.2.0"},
+    )
+    assert r.status_code == 200
+    assert recipient in sent_to
+
+
+async def test_send_wrong_release_token_401(client, monkeypatch):
+    """Yanlış token + admin JWT yok → 401."""
+    monkeypatch.setattr("app.api.v1.release.settings.release_notes_token", "ci-secret-token")
+    r = await client.post(
+        "/api/v1/release-notes/send",
+        headers={"X-Release-Token": "yanlis"},
+        json={"version": "0.2.0"},
+    )
+    assert r.status_code == 401
+
+
+async def test_send_no_auth_401(client):
+    """Token da JWT de yok → 401."""
+    r = await client.post("/api/v1/release-notes/send", json={"version": "0.2.0"})
+    assert r.status_code == 401
+
+
+# ─── ADMIN_EMAILS bootstrap (girişte otomatik admin) ────────────────
+
+
+async def test_admin_emails_bootstrap_on_login(client, monkeypatch):
+    """ADMIN_EMAILS'teki kullanıcı girişte otomatik is_admin olur."""
+    email = f"boot-{uuid.uuid4().hex[:10]}@example.com"
+    await _register(client, email)
+    await verify_user_email(email)
+
+    # Önce admin değil
+    assert (await _get_user(email)).is_admin is False
+
+    monkeypatch.setattr("app.api.v1.auth.settings.admin_emails", f"{email}, other@x.com")
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "guclu-sifre-123", "age_confirmed": True},
+    )
+    assert r.status_code == 200
+    # Giriş sonrası admin oldu
+    assert (await _get_user(email)).is_admin is True
+
+
+async def test_admin_emails_empty_no_grant(client, monkeypatch):
+    """ADMIN_EMAILS boş → kimse otomatik admin olmaz."""
+    email = f"noboot-{uuid.uuid4().hex[:10]}@example.com"
+    await _register(client, email)
+    await verify_user_email(email)
+    monkeypatch.setattr("app.api.v1.auth.settings.admin_emails", "")
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "guclu-sifre-123", "age_confirmed": True},
+    )
+    assert r.status_code == 200
+    assert (await _get_user(email)).is_admin is False
