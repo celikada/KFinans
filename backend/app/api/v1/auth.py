@@ -56,6 +56,15 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def _is_admin_email(email: str) -> bool:
+    """E-posta `settings.admin_emails` (virgülle ayrılmış) listesinde mi?
+
+    Girişte otomatik `is_admin` bootstrap için — manuel SQL gerektirmeden
+    yönetici belirlemek (örn. release-notes gönderimi). Boş liste → kimse admin."""
+    allowed = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
+    return bool(allowed) and email.lower() in allowed
+
+
 def _new_verify_token() -> tuple[str, datetime]:
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.verify_token_expire_hours)
@@ -150,6 +159,12 @@ async def login(request: Request, payload: LoginRequest, db: DB):
     if user.failed_login_count or user.locked_until:
         user.failed_login_count = 0
         user.locked_until = None
+
+    # ADMIN_EMAILS bootstrap: env'deki e-postalar girişte otomatik admin olur
+    # (manuel SQL'siz). Idempotent — zaten admin ise dokunmaz.
+    if not user.is_admin and _is_admin_email(user.email):
+        user.is_admin = True
+        logger.info("Admin yetkisi verildi (ADMIN_EMAILS): %s", mask_email(user.email))
 
     # MFA — TOTP aktif kullanici icin full token yerine pre_mfa_token doner.
     # Frontend /mfa/verify endpoint'ine yonlendirir. (audit #5 MFA)

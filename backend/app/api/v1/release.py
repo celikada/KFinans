@@ -14,16 +14,21 @@ CHANGELOG olduğu için XSS riski düşük; yine de html.escape ile kaçışlan�
 import html as html_lib
 import logging
 import re
-from typing import Annotated
+import secrets
+import uuid
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.deps import get_current_admin, get_current_user, get_db
 from app.core.limiter import limiter
+from app.core.security import decode_token
+from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.schemas.release import (
     OptInStatusOut,
@@ -45,6 +50,52 @@ AdminUser = Annotated[User, Depends(get_current_admin)]
 DB = Annotated[AsyncSession, Depends(get_db)]
 
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+
+
+async def authorize_release_sender(
+    db: DB,
+    x_release_token: Annotated[Optional[str], Header()] = None,
+    authorization: Annotated[Optional[str], Header()] = None,
+) -> Optional[User]:
+    """Release-notes gönderim yetkisi: `X-Release-Token` (CI) VEYA admin JWT.
+
+    Token yolu CI/CD otomasyonu için: `settings.release_notes_token` set ise ve
+    header sabit-zaman (compare_digest) eşleşiyorsa yetkilidir (kullanıcı yok →
+    None döner). Token yoksa/eşleşmezse Bearer admin JWT zorunlu (UI/manuel yol).
+    Token boşsa (dev) yalnızca admin JWT geçerlidir."""
+    cfg_token = settings.release_notes_token
+    if cfg_token and x_release_token and secrets.compare_digest(x_release_token, cfg_token):
+        return None  # CI token ile yetkili (audit user_id=None)
+
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Kimlik doğrulama gerekir",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization[7:]
+    try:
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+        jti = payload.get("jti")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz token")
+    if jti:
+        revoked = await db.execute(select(RevokedToken).where(RevokedToken.jti == jti))
+        if revoked.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token iptal edilmiş")
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Kimlik doğrulama başarısız")
+    if not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu işlem için yönetici yetkisi gerekir")
+    return user
+
+
+ReleaseSender = Annotated[Optional[User], Depends(authorize_release_sender)]
 
 
 def _inline_md(text: str) -> str:
@@ -106,10 +157,12 @@ def _unsubscribe_url(token: str) -> str:
 async def send_release_notes(
     request: Request,
     payload: SendReleaseRequest,
-    admin: AdminUser,
+    sender: ReleaseSender,
     db: DB,
 ):
-    """CHANGELOG'tan sürümü ayrıştırıp opt-in + email_verified kullanıcılara mail."""
+    """CHANGELOG'tan sürümü ayrıştırıp opt-in + email_verified kullanıcılara mail.
+
+    Yetki: admin JWT (UI/manuel) VEYA `X-Release-Token` (CI/CD otomasyonu)."""
     body_md = changelog.parse_changelog(payload.version)
     if body_md is None:
         raise HTTPException(
@@ -148,9 +201,14 @@ async def send_release_notes(
         db,
         request,
         action=AuditAction.RELEASE_NOTES_SENT,
-        user_id=admin.id,
+        user_id=sender.id if sender else None,
         resource=f"release:{payload.version}",
-        extra={"recipients": len(recipients), "sent": sent, "failed": failed},
+        extra={
+            "recipients": len(recipients),
+            "sent": sent,
+            "failed": failed,
+            "via": "admin" if sender else "ci_token",
+        },
     )
     await db.commit()
 

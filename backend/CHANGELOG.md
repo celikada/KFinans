@@ -6,6 +6,42 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.3.1] - 2026-06-05
+
+### Eklenenler
+
+- **Görüntüleme para birimi:** Ayarlar'dan seçilen para birimi artık tüm
+  toplamları (dashboard kartları, grafikler, finans sayfaları) o birimde
+  gösterir; güncel TCMB kuruyla çevrilir. Tek tek gelir/gider kayıtları kendi
+  giriş para biriminde kalır (maaş TRY → TRY, kira USD → USD).
+- **Planlı harcama dönem yönetimi:** Yanlış işaretlenen "gerçekleşti /
+  gerçekleşmeyecek" dönemleri geri alma (dönem listesi + tek tıkla geri al).
+- **Ayarlarda varsayılan/görüntüleme para birimi** seçici.
+- **Dashboard kart-bazlı "güncelleniyor" göstergesi** — başka ekrandan dönüşte
+  hangi kartın verisi yenileniyor görünür.
+
+### Düzeltmeler
+
+- Bekleyen periyodik kayıt popup'ındaki etiketler Türkçeleştirildi.
+
+---
+
+## [0.3.0] - 2026-06-04
+
+### Eklenenler
+
+- **Çoklu para birimi omurgası:** Gelir, gider, planlı ödeme, periyodik gelir,
+  bütçe ve kredi kartı kayıtları TRY/USD/EUR/GBP/CHF/JPY girilebilir. Kayıtta
+  varsayılan para birimi gelir; toplamlar TCMB kuruyla TL'ye çevrilip toplanır.
+  Gerçekleşmiş kayıtlar işlem-anı kuruyla sabitlenir, tahminler güncel kurla
+  hesaplanır.
+
+### Güvenlik
+
+- Kredi kartı ekstresi parser regex'leri ReDoS'a karşı sınırlandırıldı.
+
+---
+
 ## [0.2.0] - 2026-06-04
 
 ### Eklenenler

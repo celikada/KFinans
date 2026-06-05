@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     slow_request_threshold_ms: int = 500
     metrics_token: str = ""
 
+    # ─── Sürüm bildirimleri (release notes) otomasyonu ───────────────
+    # admin_emails: virgülle ayrılmış e-postalar; bu kullanıcılar girişte
+    # otomatik is_admin=True olur (manuel SQL'siz admin bootstrap).
+    # release_notes_token: CI/otomasyon `POST /release-notes/send` çağrısında
+    # `X-Release-Token` header'ı ile admin JWT yerine kullanır (boşsa devre dışı).
+    admin_emails: str = ""
+    release_notes_token: str = ""
+
     # ─── Audit 2026-05-22 P0 #7: Swagger UI + OpenAPI exposure ────────
     # Default KAPALI — prod'da /docs, /redoc, /openapi.json 404 doner.
     # Saldirgan endpoint enumeration vektoru. Dev'de EXPOSE_SWAGGER=true
