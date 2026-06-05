@@ -6,6 +6,16 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.3.6] - 2026-06-05
+
+### Eklenenler
+
+- **Kredi kartı hatırlatma popup'ından "Ödendi" işaretleme:** Girişteki ödeme
+  hatırlatma satırından, ilgili ekstreyi tek tıkla ödendi olarak işaretleme
+  (satır listeden düşer).
+
+---
+
 ## [0.3.5] - 2026-06-05
 
 ### Eklenenler

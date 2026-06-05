@@ -7,9 +7,10 @@
  *
  * A11Y: native <dialog> tabanlı Modal primitifi.
  */
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { CreditCardRemindersDTO, DuePaymentItemDTO } from "@/lib/api";
+import { api, CreditCardRemindersDTO, DuePaymentItemDTO } from "@/lib/api";
 import { Modal } from "@/app/_components/Modal";
 import { fmtTL } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
@@ -48,10 +49,31 @@ export function CreditCardRemindersModal({
 }) {
   const { t } = useTranslation();
   const router = useRouter();
+  // Ödeme satırları aksiyon sonrası değişir (state); ekstre-yükleme listesi sabit.
+  const pendingStatements = data.pending_statements;
+  const [duePayments, setDuePayments] = useState(data.due_payments);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState("");
 
   function openCard(cardId: number) {
     onClose();
     router.push(`/dashboard/credit-cards/${cardId}`);
+  }
+
+  /** Ödeme satırını "ödendi" işaretle (statement.paid_at = now) → listeden düş. */
+  async function markPaid(d: DuePaymentItemDTO) {
+    setBusy(d.statement_id);
+    setError("");
+    try {
+      await api.updateStatement(d.card_id, d.statement_id, { paid_at: new Date().toISOString() });
+      const next = duePayments.filter((x) => x.statement_id !== d.statement_id);
+      setDuePayments(next);
+      if (next.length === 0 && pendingStatements.length === 0) onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("content.ccReminders.markPaidFailed"));
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -64,14 +86,16 @@ export function CreditCardRemindersModal({
           {t("content.ccReminders.desc")}
         </p>
 
+        {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>}
+
         {/* 1) Ekstresi yüklenmemiş kartlar */}
-        {data.pending_statements.length > 0 && (
+        {pendingStatements.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
               {t("content.ccReminders.uploadSection")}
             </p>
             <ul className="space-y-2">
-              {data.pending_statements.map((p) => (
+              {pendingStatements.map((p) => (
                 <li key={`ps-${p.card_id}`} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
@@ -96,13 +120,13 @@ export function CreditCardRemindersModal({
         )}
 
         {/* 2) Ödemesi yaklaşan / geçmiş ekstreler */}
-        {data.due_payments.length > 0 && (
+        {duePayments.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
               {t("content.ccReminders.dueSection")}
             </p>
             <ul className="space-y-2">
-              {data.due_payments.map((d) => {
+              {duePayments.map((d) => {
                 const overdue = d.days_until_due < 0;
                 const today = d.days_until_due === 0;
                 const calTitle = `KFinans: ${d.card_name} ${t("content.ccReminders.calTitleSuffix")}`;
@@ -136,6 +160,14 @@ export function CreditCardRemindersModal({
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1.5">
+                      <button
+                        type="button"
+                        disabled={busy === d.statement_id}
+                        onClick={() => markPaid(d)}
+                        className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        ✓ {t("content.ccReminders.markPaid")}
+                      </button>
                       <a
                         href={googleCalendarUrl(d, calTitle, calDetails)}
                         target="_blank"

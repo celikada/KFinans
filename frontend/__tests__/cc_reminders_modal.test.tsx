@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.setConfig({ testTimeout: 30000 });
@@ -10,7 +10,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
 const i18nStub = { t: (key: string) => key, locale: "tr", setLocale: vi.fn() };
 vi.mock("@/app/_i18n/I18nProvider", () => ({ useTranslation: () => i18nStub }));
 
-vi.mock("@/lib/api", () => ({ api: {} }));
+const updateStatement = vi.fn();
+vi.mock("@/lib/api", () => ({ api: { updateStatement: (...a: unknown[]) => updateStatement(...a) } }));
 
 import { CreditCardRemindersModal } from "@/app/dashboard/_components/CreditCardRemindersModal";
 import type { CreditCardRemindersDTO } from "@/lib/api";
@@ -27,6 +28,7 @@ const DATA: CreditCardRemindersDTO = {
 describe("CreditCardRemindersModal", () => {
   beforeEach(() => {
     routerPush.mockReset();
+    updateStatement.mockReset().mockResolvedValue({});
     HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
       this.open = true;
     });
@@ -58,5 +60,16 @@ describe("CreditCardRemindersModal", () => {
     expect(link).toHaveAttribute("href", expect.stringContaining("calendar.google.com/calendar/render"));
     expect(link?.getAttribute("href")).toContain("20260608"); // due_date YYYYMMDD
     expect(link?.getAttribute("href")).toContain("20260609"); // end (next day)
+  });
+
+  it("'Ödendi' → updateStatement(paid_at) çağrılır + satır düşer", async () => {
+    render(<CreditCardRemindersModal data={DATA} onClose={vi.fn()} />);
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByText(/content\.ccReminders\.markPaid/));
+    await waitFor(() =>
+      expect(updateStatement).toHaveBeenCalledWith(2, 9, { paid_at: expect.any(String) }),
+    );
+    // Ödeme satırı (Akbank Axess) listeden düşer
+    await waitFor(() => expect(screen.queryByText("Akbank Axess")).not.toBeInTheDocument());
   });
 });
