@@ -6,6 +6,22 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] - 2026-06-05
+
+### Eklenenler
+
+- **Kurulabilir PWA (mobil uygulama temeli):** Frontend artık Progressive Web App.
+  Kullanıcı telefonda (Android Chrome / iOS Safari) "Ana ekrana ekle" ile uygulamayı
+  yükleyebilir; standalone (tarayıcı çubuğu olmadan) tam ekran açılır. `@serwist/next`
+  ile service worker, web app manifest (`/manifest.webmanifest`), uygulama ikonları
+  (192/512/maskable/apple-touch) ve çevrimdışı fallback sayfası (`/offline`) eklendi.
+  **Finansal veri güvenliği:** API yanıtları (`/api/*` portföy/bakiye) **asla**
+  service worker cache'ine alınmaz (`NetworkOnly`) — yalnızca statik asset ve uygulama
+  kabuğu cache'lenir; bayat finansal veri gösterilmez. CSP'ye yalnızca `worker-src 'self'`
+  + `manifest-src 'self'` eklendi (wildcard yok). Tek kod tabanı — ayrı native proje yok.
+
+---
+
 ## [0.3.7] - 2026-06-05
 
 ### Düzeltmeler

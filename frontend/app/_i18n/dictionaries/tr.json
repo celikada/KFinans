@@ -284,7 +284,12 @@
     "cashFlow": "Nakit Akışı",
     "creditCards": "Kredi Kartları",
     "settings": "Ayarlar",
-    "history": "Portföy Geçmişi"
+    "history": "Portföy Geçmişi",
+    "offline": {
+      "title": "Çevrimdışısınız",
+      "description": "İnternet bağlantısı kurulamadı. Finansal verileriniz yalnızca çevrimiçiyken güncellenir. Bağlantınızı kontrol edip tekrar deneyin.",
+      "retry": "Yeniden dene"
+    }
   },
   "months": {
     "1": "Ocak",

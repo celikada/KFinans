@@ -284,7 +284,12 @@
     "cashFlow": "Cash Flow",
     "creditCards": "Credit Cards",
     "settings": "Settings",
-    "history": "Portfolio History"
+    "history": "Portfolio History",
+    "offline": {
+      "title": "You're offline",
+      "description": "No internet connection. Your financial data only updates while online. Check your connection and try again.",
+      "retry": "Try again"
+    }
   },
   "months": {
     "1": "January",
