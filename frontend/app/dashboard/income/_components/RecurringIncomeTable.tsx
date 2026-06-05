@@ -9,6 +9,7 @@ import {
 import { fmtTL } from "@/lib/format";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { RecurringPeriodsModal } from "./RecurringPeriodsModal";
 
 interface Props {
   items: RecurringIncomeDTO[];
@@ -22,6 +23,8 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Re
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  // Dönem yönetim modalı (realize/skip geri alma) — açık olduğu periyodik gelir
+  const [periodsFor, setPeriodsFor] = useState<RecurringIncomeDTO | null>(null);
 
   async function handleDelete(id: number, title: string) {
     if (!(await confirm(`"${title}" ${t("content.income.confirmDeleteRecurring")}`))) return;
@@ -170,6 +173,14 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Re
                       </button>
                       <button
                         type="button"
+                        onClick={() => setPeriodsFor(it)}
+                        className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
+                        title={t("content.planned.periods.manage")}
+                      >
+                        {t("content.planned.periods.manage")}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => onEdit(it)}
                         className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
                         title={t("common.edit")}
@@ -194,6 +205,10 @@ export function RecurringIncomeTable({ items, onDeleted, onEdit, onRefresh }: Re
           </tbody>
         </table>
       </div>
+
+      {periodsFor && (
+        <RecurringPeriodsModal ri={periodsFor} onClose={() => setPeriodsFor(null)} onChanged={onRefresh} />
+      )}
     </div>
   );
 }

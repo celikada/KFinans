@@ -6,6 +6,38 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.3.4] - 2026-06-05
+
+### Eklenenler
+
+- **Periyodik gelir dönem yönetimi:** Planlı giderlerdeki gibi, periyodik
+  gelirlerde de "Dönemler" ekranından her dönemi gerçekleşti/gerçekleşmeyecek
+  işaretleme ve yanlış işareti geri alma (realize → income silinir, skip → geri
+  alınır).
+
+---
+
+## [0.3.3] - 2026-06-05
+
+### Düzeltmeler
+
+- **Nakit akışı bu ay:** Ödeme günü ay içinde ileride olan (henüz gerçekleşemeyen)
+  periyodik kira/aidat gibi giderler nakit akışında ne gerçek ne tahmini gider
+  olarak görünmüyordu (arada kayboluyordu). Artık "tahmini gider" olarak sayılır;
+  gelir tarafı da simetrik.
+
+---
+
+## [0.3.2] - 2026-06-05
+
+### Eklenenler
+
+- **Sürüm bildirimi otomasyonu:** Yeni sürüm deploy edildikten sonra, opt-in
+  kullanıcılara bu CHANGELOG'tan ilgili sürümün notlarının e-posta ile
+  gönderilmesi yarı-otomatik hâle geldi (deploy hattında manuel onaylı adım).
+
+---
+
 ## [0.3.1] - 2026-06-05
 
 ### Eklenenler

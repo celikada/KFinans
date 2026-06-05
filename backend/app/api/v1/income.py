@@ -20,6 +20,7 @@ from app.core.deps import get_current_user, get_db
 from app.core.upload_validation import validate_excel_upload
 from app.models.income import Income
 from app.models.recurring_income import RecurringIncome
+from app.models.recurring_skip import RecurringSkip
 from app.models.user import User
 from app.schemas.income import (
     INCOME_CATEGORIES,
@@ -35,6 +36,11 @@ from app.schemas.income import (
     RecurringIncomeOut,
     RecurringIncomeUpdate,
 )
+from app.schemas.recurring import (
+    RecurringPeriodsResult,
+    RecurringPeriodStatus,
+    RecurringUnrealizeResult,
+)
 from app.services import currency as currency_svc
 from app.services import recurrence
 
@@ -42,6 +48,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/income", tags=["income"])
 
 _NOT_FOUND_DETAIL = "Kayıt bulunamadı"
+_RECURRING_NOT_FOUND = "Periyodik kayıt bulunamadı"
 _OPENPYXL_MISSING = "openpyxl kütüphanesi bulunamadı"
 
 # Türkçe label -> İngilizce key haritası (import için)
@@ -630,7 +637,7 @@ async def realize_recurring_period(
     )
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_RECURRING_NOT_FOUND)
     if not _applies_in_month(ri, payload.year, payload.month):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -666,7 +673,7 @@ async def realize_recurring_past(
     )
     ri = result.scalar_one_or_none()
     if not ri:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periyodik kayıt bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_RECURRING_NOT_FOUND)
 
     today = datetime.now(_ISTANBUL).date()
     realized_ids: list[int] = []
@@ -688,6 +695,100 @@ async def realize_recurring_past(
             y += 1
     await db.commit()
     return RealizeResult(realized=len(realized_ids), skipped=skipped, income_ids=realized_ids)
+
+
+async def _get_owned_recurring(rid: int, user: User, db: AsyncSession) -> RecurringIncome:
+    result = await db.execute(select(RecurringIncome).where(RecurringIncome.id == rid, RecurringIncome.user_id == user.id))
+    ri = result.scalar_one_or_none()
+    if not ri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_RECURRING_NOT_FOUND)
+    return ri
+
+
+@router.get("/recurring/{rid}/periods", response_model=RecurringPeriodsResult)
+async def get_recurring_periods(
+    rid: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Periyodik gelirin geçmiş+güncel dönemlerini gerçekleşme durumuyla döndürür.
+
+    Yanlış işaretlenen realize/skip'i görüp geri almak için (planlı gider ile
+    simetrik): her dönem 'pending' | 'realized' (income_id) | 'skipped' (skip_id)."""
+    ri = await _get_owned_recurring(rid, current_user, db)
+    today = datetime.now(_ISTANBUL).date()
+
+    inc_rows = (
+        await db.execute(
+            select(Income.date, Income.id).where(
+                Income.user_id == current_user.id,
+                Income.recurring_income_id == ri.id,
+            )
+        )
+    ).all()
+    realized_by_date = dict(inc_rows)
+
+    skip_rows = (
+        await db.execute(
+            select(RecurringSkip.period_year, RecurringSkip.period_month, RecurringSkip.id).where(
+                RecurringSkip.user_id == current_user.id,
+                RecurringSkip.kind == "income",
+                RecurringSkip.ref_id == ri.id,
+            )
+        )
+    ).all()
+    skip_by_period = {(y, m): sid for y, m, sid in skip_rows}
+
+    periods: list[RecurringPeriodStatus] = []
+    for y, m, target in recurrence.iter_due_periods(ri, today):
+        income_id = realized_by_date.get(target)
+        skip_id = skip_by_period.get((y, m))
+        if income_id is not None:
+            stat = "realized"
+        elif skip_id is not None:
+            stat = "skipped"
+        else:
+            stat = "pending"
+        periods.append(
+            RecurringPeriodStatus(
+                year=y,
+                month=m,
+                target_date=target,
+                status=stat,
+                income_id=income_id,
+                skip_id=skip_id,
+            )
+        )
+    periods.reverse()
+    return RecurringPeriodsResult(periods=periods)
+
+
+@router.post("/recurring/{rid}/unrealize", response_model=RecurringUnrealizeResult)
+async def unrealize_recurring_period(
+    rid: int,
+    payload: RealizeMonthRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Bir dönemin gelir realize'ını geri al: o döneme ait gerçek income kaydını sil.
+
+    Idempotent: o dönem zaten realize değilse removed=0."""
+    ri = await _get_owned_recurring(rid, current_user, db)
+    target_date = _date_for_period(ri, payload.year, payload.month)
+    inc = (
+        await db.execute(
+            select(Income).where(
+                Income.user_id == current_user.id,
+                Income.recurring_income_id == ri.id,
+                Income.date == target_date,
+            )
+        )
+    ).scalar_one_or_none()
+    if inc is None:
+        return RecurringUnrealizeResult(removed=0)
+    await db.delete(inc)
+    await db.commit()
+    return RecurringUnrealizeResult(removed=1)
 
 
 @router.post("/recurring/realize-all-past", response_model=RealizeResult)

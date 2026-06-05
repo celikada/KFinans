@@ -2,7 +2,7 @@
 
 from datetime import date as date_type
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -58,3 +58,28 @@ class PendingItem(BaseModel):
 
 class PendingResponse(BaseModel):
     items: list[PendingItem] = Field(default_factory=list)
+
+
+class RecurringPeriodStatus(BaseModel):
+    """Bir periyodik gelirin tek bir dönemi (ay-yıl) ve gerçekleşme durumu.
+
+    status: 'pending' | 'realized' (income_id) | 'skipped' (skip_id). Geri alma:
+    realized → /recurring/{id}/unrealize (income silinir), skipped → DELETE
+    /recurring/skips/{skip_id}. Planlı gider PeriodStatus ile simetrik."""
+
+    year: int
+    month: int
+    target_date: date_type
+    status: Literal["pending", "realized", "skipped"]
+    income_id: Optional[int] = None
+    skip_id: Optional[int] = None
+
+
+class RecurringPeriodsResult(BaseModel):
+    periods: list[RecurringPeriodStatus] = Field(default_factory=list)
+
+
+class RecurringUnrealizeResult(BaseModel):
+    """Gelir realize geri alma sonucu: silinen gerçek income sayısı (0 veya 1)."""
+
+    removed: int
