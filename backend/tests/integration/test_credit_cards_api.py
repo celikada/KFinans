@@ -753,3 +753,92 @@ async def test_statement_create_idor_other_user_card(client: AsyncClient):
         headers=headers_b,
     )
     assert resp.status_code == 404
+
+
+# ─── Hatırlatmalar (ekstre yükleme + ödeme) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_reminders_pending_statement(client: AsyncClient):
+    """statement_day=1 → bu ayın kesim günü geçmiş; ekstre yoksa pending listede."""
+    headers = await make_user(client, "cc_rem_pending@example.com")
+    await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Kart A", "statement_day": 1, "payment_due_day": 10},
+        headers=headers,
+    )
+    r = await client.get("/api/v1/credit-cards/reminders", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["pending_statements"]) == 1
+    assert data["pending_statements"][0]["name"] == "Kart A"
+    assert data["due_payments"] == []
+
+
+@pytest.mark.asyncio
+async def test_reminders_due_payment(client: AsyncClient):
+    """Ödenmemiş + son ödeme tarihi 3 gün sonra olan ekstre → due_payments'ta."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    headers = await make_user(client, "cc_rem_due@example.com")
+    cc = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Kart B", "statement_day": 1, "payment_due_day": 10},
+        headers=headers,
+    )
+    cid = cc.json()["id"]
+    due_soon = (today + timedelta(days=3)).isoformat()
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": today.year,
+            "period_month": today.month,
+            "statement_amount": "1000",
+            "statement_date": today.isoformat(),
+            "due_date": due_soon,
+        },
+        headers=headers,
+    )
+    r = await client.get("/api/v1/credit-cards/reminders", headers=headers)
+    data = r.json()
+    assert len(data["due_payments"]) == 1
+    assert data["due_payments"][0]["days_until_due"] == 3
+    assert float(data["due_payments"][0]["statement_amount"]) == 1000.0
+    # Bu ayın ekstresi yüklendiği için pending boş
+    assert data["pending_statements"] == []
+
+
+@pytest.mark.asyncio
+async def test_reminders_far_due_not_listed(client: AsyncClient):
+    """Son ödeme tarihi 30 gün sonra → due_payments'ta YOK (7 gün eşiği)."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    headers = await make_user(client, "cc_rem_far@example.com")
+    cc = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Kart C", "statement_day": 1, "payment_due_day": 10},
+        headers=headers,
+    )
+    cid = cc.json()["id"]
+    far = (today + timedelta(days=30)).isoformat()
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": today.year,
+            "period_month": today.month,
+            "statement_amount": "1000",
+            "statement_date": today.isoformat(),
+            "due_date": far,
+        },
+        headers=headers,
+    )
+    r = await client.get("/api/v1/credit-cards/reminders", headers=headers)
+    assert r.json()["due_payments"] == []
+
+
+@pytest.mark.asyncio
+async def test_reminders_requires_auth(client: AsyncClient):
+    r = await client.get("/api/v1/credit-cards/reminders")
+    assert r.status_code == 401

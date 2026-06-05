@@ -1,9 +1,11 @@
-import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput } from "./types";
+import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardRemindersDTO, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput } from "./types";
 import { request, uploadForm } from "./_client";
 
 export const creditCardsApi = {
   // Kredi kartları (Faz 3 — manuel giriş)
   listCreditCards: () => request<CreditCardSummaryDTO>("/credit-cards"),
+  // Girişte hatırlatmalar: ekstre yüklenmemiş kartlar + ödemesi yaklaşan ekstreler
+  getCreditCardReminders: () => request<CreditCardRemindersDTO>("/credit-cards/reminders"),
   createCreditCard: (payload: CreditCardInput) =>
     request<CreditCardDTO>("/credit-cards", { method: "POST", body: JSON.stringify(payload) }),
   updateCreditCard: (id: number, payload: Partial<CreditCardInput>) =>

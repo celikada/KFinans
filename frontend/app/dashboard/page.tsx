@@ -9,6 +9,7 @@ import {
   INCOME_CATEGORY_LABELS,
   type BudgetComparisonDTO,
   type PendingItemDTO,
+  type CreditCardRemindersDTO,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/api/_client";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
@@ -24,6 +25,7 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { Card, GoalCard, BudgetCard, type TopItem } from "./_components/DashboardCard";
 import { SnapshotIssuesModal, type PendingIssues } from "./_components/SnapshotIssuesModal";
 import { PendingRealizeModal } from "./_components/PendingRealizeModal";
+import { CreditCardRemindersModal } from "./_components/CreditCardRemindersModal";
 
 
 function fmtTL(val: number) {
@@ -137,6 +139,8 @@ export default function DashboardPage() {
   const [pendingIssues, setPendingIssues] = useState<PendingIssues | null>(null);
   // Periyodik gelir/gider bekleyen dönem popup state
   const [pendingRealize, setPendingRealize] = useState<PendingItemDTO[]>([]);
+  // Kredi kartı hatırlatma popup (ekstre yükleme + ödeme yaklaşan) state
+  const [ccReminders, setCcReminders] = useState<CreditCardRemindersDTO | null>(null);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -153,6 +157,21 @@ export default function DashboardPage() {
       .getPendingRealizations()
       .then((res) => {
         if (!cancelled && res.items.length > 0) setPendingRealize(res.items);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Girişte: ekstresi yüklenmemiş veya ödemesi yaklaşan kredi kartı varsa popup aç
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getCreditCardReminders()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.pending_statements.length > 0 || res.due_payments.length > 0) setCcReminders(res);
       })
       .catch(() => {});
     return () => {
@@ -901,6 +920,11 @@ export default function DashboardPage() {
       {/* Periyodik gelir/gider bekleyen dönem popup'ı */}
       {pendingRealize.length > 0 && (
         <PendingRealizeModal items={pendingRealize} onClose={() => setPendingRealize([])} />
+      )}
+
+      {/* Kredi kartı ekstre/ödeme hatırlatma popup'ı */}
+      {ccReminders && (
+        <CreditCardRemindersModal data={ccReminders} onClose={() => setCcReminders(null)} />
       )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">

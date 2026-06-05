@@ -592,6 +592,34 @@ export interface StatementDTO {
   currency?: CurrencyType; // v0.3.0
 }
 
+// Girişte kredi kartı hatırlatmaları (ekstre yükleme + ödeme)
+export interface PendingStatementCardDTO {
+  card_id: number;
+  name: string;
+  bank_name: string | null;
+  last_4: string | null;
+  period_year: number;
+  period_month: number;
+  cutoff_date: string; // YYYY-MM-DD
+}
+
+export interface DuePaymentItemDTO {
+  card_id: number;
+  card_name: string;
+  bank_name: string | null;
+  statement_id: number;
+  period_year: number;
+  period_month: number;
+  due_date: string; // YYYY-MM-DD
+  statement_amount: string;
+  days_until_due: number; // <0 gecikmiş, 0 bugün, >0 yaklaşıyor
+}
+
+export interface CreditCardRemindersDTO {
+  pending_statements: PendingStatementCardDTO[];
+  due_payments: DuePaymentItemDTO[];
+}
+
 // Taksit
 // total_amount + installments_remaining backend'de otomatik hesaplanır
 // (monthly × count = total; first_due_date'ten bugüne kalan = remaining).

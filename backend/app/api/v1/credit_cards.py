@@ -1,9 +1,12 @@
 """Kredi kartı CRUD endpoint'leri: tanım + dönem içi borç + ekstre + taksit."""
 
+import calendar
 import logging
 from datetime import date as date_type
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
@@ -19,11 +22,14 @@ from app.schemas.credit_card import (
     CardDetailOut,
     CreditCardCreate,
     CreditCardOut,
+    CreditCardRemindersResponse,
     CreditCardSummaryOut,
     CreditCardUpdate,
+    DuePaymentItem,
     InstallmentCreate,
     InstallmentOut,
     InstallmentUpdate,
+    PendingStatementCard,
     StatementCreate,
     StatementOut,
     StatementUpdate,
@@ -41,6 +47,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
 _CARD_NOT_FOUND = "Kart bulunamadı"
+_ISTANBUL = ZoneInfo("Europe/Istanbul")
+# Son ödeme tarihi bu kadar gün içindeyse "yaklaşıyor" sayılır (girişte hatırlat).
+_DUE_SOON_DAYS = 7
+
+
+def _last_passed_cutoff(today: date_type, statement_day: int) -> tuple[int, int, date_type]:
+    """En son hesap kesim tarihi <= today olan dönemi (year, month, cutoff_date) döner.
+
+    statement_day ayın son gününden büyükse o ayın son gününe çekilir."""
+
+    def _cutoff(y: int, mo: int) -> date_type:
+        day = min(statement_day, calendar.monthrange(y, mo)[1])
+        return date_type(y, mo, day)
+
+    cur = _cutoff(today.year, today.month)
+    if cur <= today:
+        return today.year, today.month, cur
+    # Bu ayın kesim günü henüz gelmedi → önceki ayın kesim dönemi
+    if today.month == 1:
+        py, pm = today.year - 1, 12
+    else:
+        py, pm = today.year, today.month - 1
+    return py, pm, _cutoff(py, pm)
 
 
 def _enrich_card(card: CreditCard) -> CreditCardOut:
@@ -104,6 +133,67 @@ async def list_credit_cards(
         total_debt=total,
         total_current_period_debt=total_current,  # legacy field
     )
+
+
+@router.get("/reminders", response_model=CreditCardRemindersResponse)
+async def get_reminders(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Girişte gösterilecek kredi kartı hatırlatmaları:
+
+    1. **pending_statements:** hesap kesim tarihi geçmiş ama o dönemin ekstresi
+       henüz yüklenmemiş kartlar (ekstre yükleme hatırlatması).
+    2. **due_payments:** son ödeme tarihi <= bugün + 7 gün olan, henüz ödenmemiş
+       (paid_at IS NULL) ekstreler (ödeme hatırlatması; gecikmiş + yaklaşan)."""
+    today = datetime.now(_ISTANBUL).date()
+
+    result = await db.execute(
+        select(CreditCard).where(CreditCard.user_id == current_user.id).options(selectinload(CreditCard.statements)).order_by(CreditCard.name)
+    )
+    cards = result.scalars().all()
+
+    pending: list[PendingStatementCard] = []
+    due: list[DuePaymentItem] = []
+
+    for card in cards:
+        # 1) Ekstre yükleme hatırlatması
+        py, pm, cutoff = _last_passed_cutoff(today, card.statement_day)
+        has_stmt = any(s.period_year == py and s.period_month == pm for s in (card.statements or []))
+        if not has_stmt:
+            pending.append(
+                PendingStatementCard(
+                    card_id=card.id,
+                    name=card.name,
+                    bank_name=card.bank_name,
+                    last_4=card.last_4,
+                    period_year=py,
+                    period_month=pm,
+                    cutoff_date=cutoff,
+                )
+            )
+        # 2) Ödeme hatırlatması — ödenmemiş + son ödeme tarihi yaklaşan/geçmiş
+        for s in card.statements or []:
+            if s.paid_at is not None or s.due_date is None:
+                continue
+            days = (s.due_date - today).days
+            if days <= _DUE_SOON_DAYS:
+                due.append(
+                    DuePaymentItem(
+                        card_id=card.id,
+                        card_name=card.name,
+                        bank_name=card.bank_name,
+                        statement_id=s.id,
+                        period_year=s.period_year,
+                        period_month=s.period_month,
+                        due_date=s.due_date,
+                        statement_amount=Decimal(s.statement_amount),
+                        days_until_due=days,
+                    )
+                )
+
+    due.sort(key=lambda d: d.due_date)
+    return CreditCardRemindersResponse(pending_statements=pending, due_payments=due)
 
 
 @router.post("", response_model=CreditCardOut, status_code=status.HTTP_201_CREATED)
