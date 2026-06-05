@@ -16,6 +16,7 @@ import { api, CashFlowYearDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
+import { CashFlowMonthDetailModal } from "./_components/CashFlowMonthDetailModal";
 
 export default function CashFlowPage() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function CashFlowPage() {
   const [data, setData] = useState<CashFlowYearDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [detailMonth, setDetailMonth] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -135,7 +137,15 @@ export default function CashFlowPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-4">{t("content.cashFlow.monthlyChartTitle")}</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                  onClick={(state) => {
+                    const idx = state?.activeTooltipIndex;
+                    if (typeof idx === "number" && idx >= 0 && idx < 12) setDetailMonth(idx + 1);
+                  }}
+                  className="cursor-pointer"
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="name" fontSize={11} stroke="#9ca3af" />
                   <YAxis
@@ -162,6 +172,9 @@ export default function CashFlowPage() {
 
         {/* Aylık tablo */}
         {!loading && data && (
+          <p className="text-xs text-gray-400 -mb-2">{t("content.cashFlow.rowDetailHint")}</p>
+        )}
+        {!loading && data && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -184,7 +197,13 @@ export default function CashFlowPage() {
                   return (
                     <tr key={m.month} className={m.is_past ? "" : "bg-gray-50/30"}>
                       <td className="px-4 py-3">
-                        <span className="font-medium text-gray-900">{MONTH_NAMES[m.month - 1]}</span>
+                        <button
+                          type="button"
+                          onClick={() => setDetailMonth(m.month)}
+                          className="font-medium text-blue-700 hover:text-blue-900 hover:underline focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none rounded"
+                        >
+                          {MONTH_NAMES[m.month - 1]}
+                        </button>
                         {!m.is_past && <span className="ml-2 text-[10px] text-gray-400">{t("content.cashFlow.forecast")}</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatTlAs(incActual, displayCurrency, rates)}</td>
@@ -214,6 +233,15 @@ export default function CashFlowPage() {
 
         {loading && <p className="text-sm text-gray-400 text-center py-8">{t("common.loading")}</p>}
       </main>
+
+      {detailMonth !== null && (
+        <CashFlowMonthDetailModal
+          year={year}
+          month={detailMonth}
+          monthName={MONTH_NAMES[detailMonth - 1]}
+          onClose={() => setDetailMonth(null)}
+        />
+      )}
     </div>
   );
 }

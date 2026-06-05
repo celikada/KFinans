@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // PWA: Serwist tarafından build-time üretilen service worker çıktıları
+    // (minified, gitignore'da). Lint edilmez.
+    "public/sw.js",
+    "public/sw.js.map",
+    "public/swe-worker-*.js",
   ]),
   // KFinans-spesifik kural override'lari (2026-05-21 lint refactor):
   // - react-hooks/set-state-in-effect: React 19 yeni kurali, mevcut 23 yerde

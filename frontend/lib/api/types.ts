@@ -523,6 +523,29 @@ export interface CashFlowYearDTO {
   total_net: string;
 }
 
+export interface CashFlowItemDTO {
+  kind: "actual" | "forecast";
+  category: "income" | "expense" | "statement" | "installment" | "recurring_income" | "planned";
+  label: string;
+  sub_label: string | null;
+  date: string | null;
+  amount: string;
+  currency: string;
+  amount_tl: string;
+}
+
+export interface CashFlowMonthDetailDTO {
+  year: number;
+  month: number;
+  is_past: boolean;
+  is_current: boolean;
+  income_items: CashFlowItemDTO[];
+  expense_items: CashFlowItemDTO[];
+  income_total: string;
+  expense_total: string;
+  net: string;
+}
+
 // ─── Credit Cards ───────────────────────────────────────────────
 
 // Kredi kartları (Faz 3 — manuel giriş)

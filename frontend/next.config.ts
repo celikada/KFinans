@@ -53,6 +53,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Next.js 16 Turbopack varsayılan. Serwist (`withSerwist`) bir `webpack` config
+  // enjekte ettiği için `next dev` "custom webpack config" hatası verip çıkıyordu
+  // (dev restart döngüsü). Boş `turbopack` config'i bu hatayı susturur → dev
+  // Turbopack'te hızlı çalışır; serwist dev'de zaten disabled. Prod build
+  // `next build --webpack` ile açıkça webpack kullandığından bu ayardan etkilenmez.
+  turbopack: {},
   watchOptions: {
     pollIntervalMs: 1000,
   },

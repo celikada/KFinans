@@ -971,3 +971,224 @@ async def test_cash_flow_current_month_realized_planned_not_double_counted(clien
     assert Decimal(cur["expense_actual"]) >= Decimal("6000.00")
     # Pending forecast'a GİRMEZ (çift sayım yok)
     assert Decimal(cur["expense_forecast"]) == Decimal("0")
+
+
+# ─── Ay detayı (GET /cash-flow/{year}/{month}/detail) ───────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_requires_auth(client: AsyncClient):
+    resp = await client.get("/api/v1/cash-flow/2026/6/detail")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_month_validation(client: AsyncClient):
+    """month 0 veya 13 -> 422."""
+    session = await _make_user(client, "cf_detail_badmonth@example.com")
+    bad = await client.get("/api/v1/cash-flow/2026/13/detail", headers=session["headers"])
+    assert bad.status_code == 422
+    bad2 = await client.get("/api/v1/cash-flow/2026/0/detail", headers=session["headers"])
+    assert bad2.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_empty_month(client: AsyncClient):
+    """Boş ay -> boş kalem listeleri + 0 toplam."""
+    session = await _make_user(client, "cf_detail_empty@example.com")
+    resp = await client.get("/api/v1/cash-flow/2026/6/detail", headers=session["headers"])
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["year"] == 2026
+    assert data["month"] == 6
+    assert data["income_items"] == []
+    assert data["expense_items"] == []
+    assert Decimal(data["income_total"]) == 0
+    assert Decimal(data["expense_total"]) == 0
+    assert Decimal(data["net"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_lists_actual_items(client: AsyncClient):
+    """Gerçekleşmiş gelir + gider kalemleri label/amount ile listelenir."""
+    session = await _make_user(client, "cf_detail_actual@example.com")
+    user_id = await _get_user_id(session["email"])
+
+    async with TestSession() as db:
+        db.add(
+            Income(
+                user_id=user_id,
+                amount=Decimal("5000.00"),
+                amount_tl=Decimal("5000.00"),
+                date=date(2026, 3, 15),
+                category="salary",
+                description="Maaş",
+            )
+        )
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("250.50"),
+                amount_tl=Decimal("250.50"),
+                date=date(2026, 3, 20),
+                category="other",
+                description="Market",
+                is_paid=False,
+            )
+        )
+        await db.commit()
+
+    resp = await client.get("/api/v1/cash-flow/2026/3/detail", headers=session["headers"])
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert len(data["income_items"]) == 1
+    inc = data["income_items"][0]
+    assert inc["kind"] == "actual"
+    assert inc["category"] == "income"
+    assert inc["label"] == "Maaş"
+    assert Decimal(inc["amount_tl"]) == Decimal("5000.00")
+
+    assert len(data["expense_items"]) == 1
+    exp = data["expense_items"][0]
+    assert exp["label"] == "Market"
+    assert Decimal(exp["amount_tl"]) == Decimal("250.50")
+
+    assert Decimal(data["income_total"]) == Decimal("5000.00")
+    assert Decimal(data["expense_total"]) == Decimal("250.50")
+    assert Decimal(data["net"]) == Decimal("4749.50")
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_totals_match_aggregation(client: AsyncClient):
+    """Detay toplamları, GET /cash-flow'daki o ayın income_total/expense_total ile birebir eşit (invariant)."""
+    session = await _make_user(client, "cf_detail_match@example.com")
+    user_id = await _get_user_id(session["email"])
+    today = datetime.now().date()
+
+    async with TestSession() as db:
+        # Gerçekleşmiş + ekstre + gelecek taksit + planlı: karışık veri
+        card = CreditCard(user_id=user_id, name="Kart")
+        db.add(card)
+        await db.flush()
+        db.add(Income(user_id=user_id, amount=Decimal("3000"), amount_tl=Decimal("3000"), date=date(today.year, 6, 1), category="salary", description="x"))
+        db.add(
+            Expense(
+                user_id=user_id, amount=Decimal("400"), amount_tl=Decimal("400"), date=date(today.year, 6, 2), category="other", description="y", is_paid=False
+            )
+        )
+        db.add(
+            CreditCardStatement(
+                card_id=card.id,
+                period_year=today.year,
+                period_month=5,
+                statement_amount=Decimal("1200"),
+                statement_date=date(today.year, 5, 28),
+                due_date=date(today.year, 6, 10),
+            )
+        )
+        db.add(
+            CreditCardInstallment(
+                card_id=card.id,
+                description="Telefon",
+                total_amount=Decimal("3000"),
+                monthly_amount=Decimal("500"),
+                installments_total=6,
+                installments_remaining=6,
+                first_due_date=date(today.year, 6, 1),
+            )
+        )
+        await db.commit()
+
+    agg = await client.get(f"/api/v1/cash-flow?year={today.year}", headers=session["headers"])
+    detail = await client.get(f"/api/v1/cash-flow/{today.year}/6/detail", headers=session["headers"])
+    assert agg.status_code == 200
+    assert detail.status_code == 200
+
+    haziran = agg.json()["months"][5]  # index 5 = Haziran
+    d = detail.json()
+    assert Decimal(d["income_total"]) == Decimal(haziran["income_total"])
+    assert Decimal(d["expense_total"]) == Decimal(haziran["expense_total"])
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_installment_item_has_remaining_info(client: AsyncClient):
+    """Taksit kalemi forecast olarak, kalan/toplam + ilk vade bilgisiyle gelir."""
+    session = await _make_user(client, "cf_detail_inst@example.com")
+    user_id = await _get_user_id(session["email"])
+    today = datetime.now().date()
+
+    async with TestSession() as db:
+        card = CreditCard(user_id=user_id, name="TaksitKart")
+        db.add(card)
+        await db.flush()
+        db.add(
+            CreditCardInstallment(
+                card_id=card.id,
+                description="Laptop",
+                total_amount=Decimal("12000"),
+                monthly_amount=Decimal("1000"),
+                installments_total=12,
+                installments_remaining=12,
+                first_due_date=date(today.year, 1, 1),
+            )
+        )
+        await db.commit()
+
+    # Aralık (gelecek ay olması için yıl sonu seçtik; taksit tüm yıl aktif)
+    resp = await client.get(f"/api/v1/cash-flow/{today.year}/12/detail", headers=session["headers"])
+    assert resp.status_code == 200
+    inst_items = [it for it in resp.json()["expense_items"] if it["category"] == "installment"]
+    assert len(inst_items) == 1
+    it = inst_items[0]
+    assert it["kind"] == "forecast"
+    assert "TaksitKart" in it["label"]
+    assert "Laptop" in it["label"]
+    assert "12 taksit" in it["sub_label"]
+    assert Decimal(it["amount_tl"]) == Decimal("1000")
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_paid_card_expense_excluded(client: AsyncClient):
+    """Ödenmiş kart gideri (çift sayım) detay kalemlerine girmez."""
+    session = await _make_user(client, "cf_detail_paidcard@example.com")
+    user_id = await _get_user_id(session["email"])
+
+    async with TestSession() as db:
+        card = CreditCard(user_id=user_id, name="DC")
+        db.add(card)
+        await db.flush()
+        db.add(
+            Expense(
+                user_id=user_id,
+                amount=Decimal("1000"),
+                amount_tl=Decimal("1000"),
+                date=date(2026, 4, 10),
+                category="other",
+                description="paid card",
+                credit_card_id=card.id,
+                is_paid=True,
+            )
+        )
+        await db.commit()
+
+    resp = await client.get("/api/v1/cash-flow/2026/4/detail", headers=session["headers"])
+    assert resp.status_code == 200
+    # Ödenmiş kart gideri hariç → expense kalemi yok
+    assert [it for it in resp.json()["expense_items"] if it["category"] == "expense"] == []
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_detail_idor(client: AsyncClient):
+    """User A'nın verisi User B'nin detayında görünmez."""
+    session_a = await _make_user(client, "cf_detail_idor_a@example.com")
+    session_b = await _make_user(client, "cf_detail_idor_b@example.com")
+    a_id = await _get_user_id(session_a["email"])
+
+    async with TestSession() as db:
+        db.add(Income(user_id=a_id, amount=Decimal("9999"), amount_tl=Decimal("9999"), date=date(2026, 1, 10), category="salary", description="a"))
+        await db.commit()
+
+    resp = await client.get("/api/v1/cash-flow/2026/1/detail", headers=session_b["headers"])
+    assert resp.status_code == 200
+    assert resp.json()["income_items"] == []

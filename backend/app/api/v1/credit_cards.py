@@ -50,7 +50,7 @@ router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 _CARD_NOT_FOUND = "Kart bulunamadı"
 _ISTANBUL = ZoneInfo("Europe/Istanbul")
 # Son ödeme tarihi bu kadar gün içindeyse "yaklaşıyor" sayılır (girişte hatırlat).
-_DUE_SOON_DAYS = 7
+_DUE_SOON_DAYS = 5
 
 
 def _last_passed_cutoff(today: date_type, statement_day: int) -> tuple[int, int, date_type]:
@@ -440,15 +440,32 @@ def _add_months(d: date_type, n: int) -> date_type:
     return date_type(y, m + 1, 1)
 
 
-# Taksit açıklamasındaki "(k/n)" eki — plan eşleştirmede ay-bağımsız anahtar için çıkarılır.
-# Bounded quantifiers (sınırsız `*`/`+` yok) ReDoS hotspot'unu kaynağında kaldırır; taksit
-# sayıları <=120 (<=3 hane) ve ek minimal boşluklu, ör. " (12/24)".
+# Taksit açıklamasındaki dilim göstergeleri — saklanan açıklamadan ve plan-eşleştirme
+# anahtarından çıkarılır. Kayıt zaten KALAN dilimleri temsil ettiği için "(1/4)" / "01.Tak"
+# / "2. Taksit" gibi işaretler yanıltıcıdır; geriye temiz satıcı adı kalır
+# (ör. "01/06 IYZICO/HOYA TURKEY 01.Tak İSTANBUL (1/4)" → "01/06 IYZICO/HOYA TURKEY İSTANBUL").
+# Bounded quantifiers (sınırsız `*`/`+` yok) ReDoS hotspot'unu kaynağında kaldırır.
 _INSTALLMENT_SUFFIX_RE = re.compile(r"\s{0,4}\(\d{1,3}\s{0,4}/\s{0,4}\d{1,3}\)\s{0,4}$")
+# "01.Tak", "2. Taksit", "4/4 Taksidi", "Sonradan Taksit" gibi gömülü dilim işaretleri.
+_INSTALLMENT_MARKER_RE = re.compile(
+    r"\s{0,4}(?:\d{1,3}\s{0,2}\.\s{0,2}Tak(?:sit|sidi|\.)?|Sonradan\s{1,2}Taksit)\b\.?",
+    re.IGNORECASE,
+)
+_MULTISPACE_RE = re.compile(r"\s{2,}")
 
 
 def _norm_installment_desc(desc: str) -> str:
-    """'... (2/4)' → '...' — aynı planın aylar arası eşleşmesi için (k/n eki at)."""
-    return _INSTALLMENT_SUFFIX_RE.sub("", desc).strip()
+    """Taksit açıklamasını temizler: "(k/n)" eki + dilim göstergeleri ("N.Tak",
+    "N. Taksit", "Sonradan Taksit") çıkarılır, fazla boşluk sadeleşir.
+
+    Hem SAKLANAN açıklama hem de aynı planın aylar-arası EŞLEŞTİRME anahtarı bu
+    temiz biçimi kullanır (idempotent — zaten temiz metni tekrar temizlemek no-op;
+    ham ve temiz kayıtlar re-import'ta doğru eşleşir). Tüm bankalarda + manuel
+    girişte aynı şekilde çalışır."""
+    s = _INSTALLMENT_SUFFIX_RE.sub("", desc)
+    s = _INSTALLMENT_MARKER_RE.sub(" ", s)
+    s = _MULTISPACE_RE.sub(" ", s)
+    return s.strip(" .-").strip()
 
 
 @router.post("/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
@@ -619,7 +636,7 @@ async def _upsert_installments(
             continue
 
         if match is not None:
-            match.description = inst_in.description
+            match.description = norm
             match.total_amount = total
             match.monthly_amount = inst_in.monthly_amount
             match.installments_remaining = remaining
@@ -629,7 +646,7 @@ async def _upsert_installments(
             db.add(
                 CreditCardInstallment(
                     card_id=card_id,
-                    description=inst_in.description,
+                    description=norm,
                     currency=currency,
                     total_amount=total,
                     monthly_amount=inst_in.monthly_amount,
@@ -717,7 +734,10 @@ async def preview_statement_import(
         due_date=parsed.due_date,
         installments=[
             ParsedInstallmentOut(
-                description=i.description,
+                # Temiz satıcı adı (dilim göstergeleri çıkarılmış) — önizleme,
+                # kaydedilecek değerle birebir aynı olsun. "k/n" bilgisi ayrı
+                # installments_total/paid alanlarında korunur.
+                description=_norm_installment_desc(i.description),
                 total_amount=i.total_amount,
                 monthly_amount=i.monthly_amount,
                 installments_total=i.installments_total,
