@@ -2,6 +2,7 @@
 
 import calendar
 import logging
+import re
 from datetime import date as date_type
 from datetime import datetime
 from decimal import Decimal
@@ -432,6 +433,24 @@ def _calc_remaining(first_due: date_type, total_count: int) -> int:
     return max(0, total_count - months_passed)
 
 
+def _add_months(d: date_type, n: int) -> date_type:
+    """d'ye n ay ekler, gün=1 (ay başı). Negatif n geriye gider."""
+    total = (d.year * 12 + (d.month - 1)) + n
+    y, m = divmod(total, 12)
+    return date_type(y, m + 1, 1)
+
+
+# Taksit açıklamasındaki "(k/n)" eki — plan eşleştirmede ay-bağımsız anahtar için çıkarılır.
+# Bounded quantifiers (sınırsız `*`/`+` yok) ReDoS hotspot'unu kaynağında kaldırır; taksit
+# sayıları <=120 (<=3 hane) ve ek minimal boşluklu, ör. " (12/24)".
+_INSTALLMENT_SUFFIX_RE = re.compile(r"\s{0,4}\(\d{1,3}\s{0,4}/\s{0,4}\d{1,3}\)\s{0,4}$")
+
+
+def _norm_installment_desc(desc: str) -> str:
+    """'... (2/4)' → '...' — aynı planın aylar arası eşleşmesi için (k/n eki at)."""
+    return _INSTALLMENT_SUFFIX_RE.sub("", desc).strip()
+
+
 @router.post("/{card_id}/installments", response_model=InstallmentOut, status_code=status.HTTP_201_CREATED)
 async def create_installment(
     card_id: int,
@@ -441,7 +460,11 @@ async def create_installment(
 ):
     await _get_owned_card(card_id, current_user, db)
     total = _calc_total(payload.monthly_amount, payload.installments_total)
+    # Invariant: installments_remaining = GELECEK taksit sayısı, first_due_date =
+    # ilk GELECEK taksit ayı. Geçmişte başlamış planda first_due'yu ileri çek
+    # (cash_flow/_enrich_card kalanı first_due'dan itibaren projekte eder).
     remaining = _calc_remaining(payload.first_due_date, payload.installments_total)
+    first_due = _add_months(payload.first_due_date, payload.installments_total - remaining)
     inst = CreditCardInstallment(
         card_id=card_id,
         description=payload.description,
@@ -449,7 +472,7 @@ async def create_installment(
         monthly_amount=payload.monthly_amount,
         installments_total=payload.installments_total,
         installments_remaining=remaining,
-        first_due_date=payload.first_due_date,
+        first_due_date=first_due,
         notes=payload.notes,
     )
     db.add(inst)
@@ -542,36 +565,82 @@ async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate) 
     )
 
 
-async def _add_installments(db: AsyncSession, card_id: int, installments: list[InstallmentCreate]) -> int:
-    """Taksitleri ekle (mevcut _calc_* reuse). Aynı taksit varsa atla. Eklenen sayıyı döner."""
-    added = 0
+async def _upsert_installments(
+    db: AsyncSession,
+    card_id: int,
+    due_date: date_type,
+    installments: list[InstallmentCreate],
+) -> int:
+    """Ekstre import'undan taksitleri **çift sayımsız** kalıcılaştırır.
+
+    Çekirdek kural: bir ekstrenin TOPLAMI o ayın taksit dilimini (k/n'deki k)
+    zaten içerir → taksit kaydı yalnızca **GELECEK** dilimleri temsil etmeli.
+    Bu yüzden her `(k/n)` için:
+      - `installments_remaining = n - k` (sadece sonraki taksitler),
+      - `first_due_date = due_date ayı + 1` (ekstre nakit-akışına due_date ayına
+        yazılır; gelecek taksitler bir sonraki aydan başlar → çift sayım yok),
+      - aynı plan (kart + normalize açıklama + n + total + currency) varsa
+        **MUTLAK set** (idempotent — aynı ekstre 2 kez import edilse de bozulmaz),
+        yoksa oluştur; `n - k <= 0` (son dilim) → varsa sil, yoksa atla.
+    Eklenen/güncellenen kayıt sayısını döner.
+    """
+    first_due = _add_months(date_type(due_date.year, due_date.month, 1), 1)
+
+    existing = (await db.execute(select(CreditCardInstallment).where(CreditCardInstallment.card_id == card_id))).scalars().all()
+
+    touched = 0
     for inst_in in installments:
-        total = _calc_total(inst_in.monthly_amount, inst_in.installments_total)
-        dup_q = await db.execute(
-            select(CreditCardInstallment.id).where(
-                CreditCardInstallment.card_id == card_id,
-                CreditCardInstallment.description == inst_in.description,
-                CreditCardInstallment.total_amount == total,
-                CreditCardInstallment.installments_total == inst_in.installments_total,
-                CreditCardInstallment.first_due_date == inst_in.first_due_date,
-            )
+        n = inst_in.installments_total
+        # k: ekstrede görünen taksit sırası; yoksa (eski/elle veri) 1 varsay.
+        k = inst_in.installments_paid or 1
+        remaining = n - k
+        total = _calc_total(inst_in.monthly_amount, n)
+        currency = getattr(inst_in, "currency", None) or "TRY"
+        norm = _norm_installment_desc(inst_in.description)
+
+        # Aynı planı bul (ay-bağımsız anahtar: monthly DEĞİL — küsurat dengesi kayar).
+        match = next(
+            (
+                e
+                for e in existing
+                if _norm_installment_desc(e.description) == norm
+                and e.installments_total == n
+                and Decimal(e.total_amount) == total
+                and (e.currency or "TRY") == currency
+            ),
+            None,
         )
-        if dup_q.first() is not None:
+
+        if remaining <= 0:
+            # Son dilim — gelecek yok. Önceki projeksiyon varsa kaldır.
+            if match is not None:
+                await db.delete(match)
+                touched += 1
             continue
-        db.add(
-            CreditCardInstallment(
-                card_id=card_id,
-                description=inst_in.description,
-                total_amount=total,
-                monthly_amount=inst_in.monthly_amount,
-                installments_total=inst_in.installments_total,
-                installments_remaining=_calc_remaining(inst_in.first_due_date, inst_in.installments_total),
-                first_due_date=inst_in.first_due_date,
-                notes=inst_in.notes,
+
+        if match is not None:
+            match.description = inst_in.description
+            match.total_amount = total
+            match.monthly_amount = inst_in.monthly_amount
+            match.installments_remaining = remaining
+            match.first_due_date = first_due
+            match.currency = currency
+        else:
+            db.add(
+                CreditCardInstallment(
+                    card_id=card_id,
+                    description=inst_in.description,
+                    currency=currency,
+                    total_amount=total,
+                    monthly_amount=inst_in.monthly_amount,
+                    installments_total=n,
+                    installments_remaining=remaining,
+                    first_due_date=first_due,
+                    notes=inst_in.notes,
+                )
             )
-        )
-        added += 1
-    return added
+        touched += 1
+    return touched
 
 
 # ---------------------------------------------------------------------------
@@ -702,10 +771,11 @@ async def commit_statement_import(
         db.add(card)
         await db.flush()  # card.id gerekli
 
-    # 2) Ekstre upsert + 3) taksitler (duplike atla) — helper'lara delege.
+    # 2) Ekstre upsert + 3) taksitler (çift sayımsız upsert: gelecek dilimler +
+    #    plan eşleştir-ilerlet; due_date ayı + 1'den başlar) — helper'lara delege.
     s = payload.statement
     await _upsert_statement(db, card.id, s)
-    added_installments = await _add_installments(db, card.id, payload.installments)
+    added_installments = await _upsert_installments(db, card.id, s.due_date, payload.installments)
 
     # 4) Audit (best-effort, flush) + tek commit.
     await log_audit(

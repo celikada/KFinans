@@ -102,6 +102,7 @@ export function StatementImport({ onSuccess }: Readonly<{ onSuccess: () => void 
           monthly_amount: i.monthly_amount,
           installments_total: i.installments_total,
           first_due_date: i.first_due_date,
+          installments_paid: i.installments_paid, // çift sayım fix (v0.3.7): gelecek = total - paid
         })),
       };
       await api.commitStatementImport(payload);

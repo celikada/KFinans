@@ -512,8 +512,9 @@ async def test_card_detail_returns_sorted_statements_and_installments(client: As
             },
             headers=headers,
         )
-    # İki taksit, farklı first_due_date -> erken olan önce
-    for due in ("2026-08-01", "2026-03-01"):
+    # İki taksit, farklı first_due_date -> erken olan önce. Gelecek tarihler
+    # (advancing tetiklenmez; manuel create invariant'ı first_due'yu korur).
+    for due in ("2026-11-01", "2026-09-01"):
         await client.post(
             f"/api/v1/credit-cards/{cid}/installments",
             json={
@@ -532,9 +533,9 @@ async def test_card_detail_returns_sorted_statements_and_installments(client: As
     # Ekstre: en yeni period önce (6 sonra 4)
     assert data["statements"][0]["period_month"] == 6
     assert data["statements"][1]["period_month"] == 4
-    # Taksit: erken first_due önce (Mart sonra Agustos)
-    assert data["installments"][0]["first_due_date"] == "2026-03-01"
-    assert data["installments"][1]["first_due_date"] == "2026-08-01"
+    # Taksit: erken first_due önce (Eylül sonra Kasım)
+    assert data["installments"][0]["first_due_date"] == "2026-09-01"
+    assert data["installments"][1]["first_due_date"] == "2026-11-01"
 
 
 # ─── Statement update / delete ──────────────────────────────────────────

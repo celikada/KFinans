@@ -6,6 +6,20 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.3.7] - 2026-06-05
+
+### Düzeltmeler
+
+- **Kredi kartı taksit çift sayımı:** Ekstre import'unda taksitli alışverişin
+  o ekstrede görünen dilimi zaten ekstre toplamında olduğu için ayrıca taksit
+  projeksiyonu olarak da sayılıyordu (çift sayım); ayrıca her ay yeni ekstre
+  yüklendiğinde aynı alışveriş yeni satır olarak ekleniyordu. Artık taksit kaydı
+  yalnızca **gelecek** dilimleri temsil eder; her yeni ekstre yüklemesinde ilgili
+  ay realize olduğundan plan ilerletilir (o ayın projeksiyonu kaldırılır). Nakit
+  akışı ve toplam borç hesapları buna göre düzeltildi.
+
+---
+
 ## [0.3.6] - 2026-06-05
 
 ### Eklenenler

@@ -122,15 +122,17 @@ def _commit_payload(target_card_id=None):
         },
         "installments": [
             {
-                "description": "S/ANADOLU HAY (4/4)",
+                "description": "S/ANADOLU HAY (1/4)",
                 "monthly_amount": "25000.00",
                 "installments_total": 4,
+                "installments_paid": 1,
                 "first_due_date": "2026-02-01",
             },
             {
-                "description": "IYZICO/SHOP.HUAWEİ (3/3)",
+                "description": "IYZICO/SHOP.HUAWEİ (1/3)",
                 "monthly_amount": "5166.33",
                 "installments_total": 3,
+                "installments_paid": 1,
                 "first_due_date": "2026-03-01",
             },
         ],
@@ -205,3 +207,99 @@ async def test_commit_appends_to_existing_card(client: AsyncClient):
     assert resp.status_code == 201
     assert resp.json()["card"]["id"] == card_id
     assert len(resp.json()["statements"]) == 1
+
+
+# ─── Taksit çift-sayım fix (v0.3.7) ────────────────────────────────────────
+
+
+def _stmt_commit(*, target_card_id, period_month, due_date, desc, paid, total, monthly="25000.00", amount="100000.00"):
+    """Tek taksitli ekstre commit payload'ı (çift-sayım testleri için)."""
+    return {
+        "target_card_id": target_card_id,
+        "name": "Test Kart",
+        "bank_name": "Test",
+        "last_4": "0001",
+        "statement_day": 26,
+        "payment_due_day": 5,
+        "statement": {
+            "period_year": 2026,
+            "period_month": period_month,
+            "statement_amount": amount,
+            "statement_date": f"2026-{period_month:02d}-26",
+            "due_date": due_date,
+        },
+        "installments": [
+            {
+                "description": f"{desc} ({paid}/{total})",
+                "monthly_amount": monthly,
+                "installments_total": total,
+                "installments_paid": paid,
+                "first_due_date": "2026-02-01",
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_installment_only_future_projected(client: AsyncClient):
+    """(1/4) ekstresi → kayıt: remaining=3 (gelecek), first_due = due_ay + 1."""
+    headers = await make_user(client, "si_inst_future@example.com")
+    r = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=None, period_month=6, due_date="2026-06-05", desc="IYZICO HOYA", paid=1, total=4),
+        headers=headers,
+    )
+    assert r.status_code == 201
+    insts = r.json()["installments"]
+    assert len(insts) == 1
+    assert insts[0]["installments_remaining"] == 3  # 4 - 1 (mevcut dilim ekstrede)
+    assert insts[0]["first_due_date"] == "2026-07-01"  # due ayı (Haziran) + 1
+
+
+@pytest.mark.asyncio
+async def test_installment_last_not_projected(client: AsyncClient):
+    """(4/4) son dilim → gelecek yok → taksit kaydı oluşmaz."""
+    headers = await make_user(client, "si_inst_last@example.com")
+    r = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=None, period_month=8, due_date="2026-08-05", desc="SON DILIM", paid=4, total=4),
+        headers=headers,
+    )
+    assert r.status_code == 201
+    assert r.json()["installments"] == []
+
+
+@pytest.mark.asyncio
+async def test_installment_advances_on_reimport(client: AsyncClient):
+    """Sonraki ay (2/4) yüklenince aynı plan ilerler: yeni satır DEĞİL, remaining=2."""
+    headers = await make_user(client, "si_inst_adv@example.com")
+    first = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=None, period_month=6, due_date="2026-06-05", desc="HOYA TURKEY", paid=1, total=4),
+        headers=headers,
+    )
+    cid = first.json()["card"]["id"]
+
+    second = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=cid, period_month=7, due_date="2026-07-05", desc="HOYA TURKEY", paid=2, total=4),
+        headers=headers,
+    )
+    insts = second.json()["installments"]
+    assert len(insts) == 1  # YENİ satır değil — aynı plan güncellendi
+    assert insts[0]["installments_remaining"] == 2  # 4 - 2
+    assert insts[0]["first_due_date"] == "2026-08-01"  # Temmuz + 1
+
+
+@pytest.mark.asyncio
+async def test_installment_reimport_idempotent(client: AsyncClient):
+    """Aynı (2/4) ekstresi 2 kez → remaining 2'de kalır (mutlak set, artımsal değil)."""
+    headers = await make_user(client, "si_inst_idem@example.com")
+    p = _stmt_commit(target_card_id=None, period_month=7, due_date="2026-07-05", desc="TEKRAR", paid=2, total=4)
+    first = await client.post("/api/v1/credit-cards/import-statement/commit", json=p, headers=headers)
+    cid = first.json()["card"]["id"]
+    p2 = _stmt_commit(target_card_id=cid, period_month=7, due_date="2026-07-05", desc="TEKRAR", paid=2, total=4)
+    second = await client.post("/api/v1/credit-cards/import-statement/commit", json=p2, headers=headers)
+    insts = second.json()["installments"]
+    assert len(insts) == 1
+    assert insts[0]["installments_remaining"] == 2  # ilerletme mutlak — 1'e düşmedi
