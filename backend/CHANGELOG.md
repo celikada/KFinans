@@ -6,6 +6,38 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.4.1] - 2026-06-05
+
+### Eklenenler
+
+- **Nakit akışı ay detayı:** Nakit akışı sayfasında bir aya (tablo satırı veya
+  grafik) tıklanınca, o ayın gelir/gider TOPLAMINI oluşturan kalemler tek tek
+  listelenir (popup): gerçekleşen gelir/gider, kredi kartı ekstreleri ve tahmini
+  kalemler (periyodik gelir, planlı gider, **kredi kartı taksitleri**). Taksit
+  kalemleri "kalan/toplam dilim + ilk vade" bilgisiyle gösterilir — taksit
+  projeksiyonu şeffaflaşır. Toplamlar yıllık nakit akışı tablosuyla bire bir
+  tutar (aynı çift-sayım/pending/taksit kuralları). `GET /cash-flow/{year}/{month}/detail`.
+
+### Değişenler
+
+- **Kredi kartı hatırlatma popup'ı artık günde 1 kez:** Her dashboard açılışında
+  değil, günde en fazla bir kez gösterilir (localStorage). Ödeme yaklaşıyor eşiği
+  7 → **5 gün** (son ödeme tarihine ≤5 gün kalan veya gecikmiş ödemeler).
+- **Taksit adı temizliği (tüm bankalar + manuel):** İçe aktarılan/saklanan taksit
+  açıklamasından dilim göstergeleri ("(1/4)" eki, "01.Tak", "2. Taksit",
+  "Sonradan Taksit") çıkarılır; geriye temiz satıcı adı kalır (ör. "01/06
+  IYZICO/HOYA TURKEY 01.Tak İSTANBUL (1/4)" → "01/06 IYZICO/HOYA TURKEY İSTANBUL").
+  Kayıt zaten kalan dilimleri temsil ettiği için bu işaretler yanıltıcıydı.
+
+### Düzeltmeler
+
+- **Ay detayı popup'ı saydam görünüyordu** → opak beyaz kart + koyu backdrop.
+- **`npm run dev` restart döngüsü:** PWA (Serwist) webpack config'i Next 16
+  Turbopack ile çakışıp `next dev`'i bozuyordu; `turbopack: {}` ile giderildi
+  (dev Turbopack'te hızlı kalır, prod build `--webpack` etkilenmez).
+
+---
+
 ## [0.4.0] - 2026-06-05
 
 ### Eklenenler

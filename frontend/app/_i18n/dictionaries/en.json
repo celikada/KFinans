@@ -452,7 +452,15 @@
       "monthlyChartTitle": "Monthly Cash Flow",
       "income": "Income",
       "expense": "Expense",
-      "yearTotal": "Year Total"
+      "yearTotal": "Year Total",
+      "rowDetailHint": "Click a month for details",
+      "detail": {
+        "title": "Month Detail",
+        "actual": "actual",
+        "forecast": "forecast",
+        "noIncome": "No income items this month.",
+        "noExpense": "No expense items this month."
+      }
     },
     "creditCards": {
       "import": {

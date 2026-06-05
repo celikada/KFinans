@@ -452,7 +452,15 @@
       "monthlyChartTitle": "Aylık Nakit Akışı",
       "income": "Gelir",
       "expense": "Gider",
-      "yearTotal": "Yıl Toplamı"
+      "yearTotal": "Yıl Toplamı",
+      "rowDetailHint": "Detay için aya tıklayın",
+      "detail": {
+        "title": "Ay Detayı",
+        "actual": "gerçekleşen",
+        "forecast": "tahmini",
+        "noIncome": "Bu ay gelir kalemi yok.",
+        "noExpense": "Bu ay gider kalemi yok."
+      }
     },
     "creditCards": {
       "import": {

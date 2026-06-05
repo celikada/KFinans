@@ -812,7 +812,7 @@ async def test_reminders_due_payment(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_reminders_far_due_not_listed(client: AsyncClient):
-    """Son ödeme tarihi 30 gün sonra → due_payments'ta YOK (7 gün eşiği)."""
+    """Son ödeme tarihi 30 gün sonra → due_payments'ta YOK (5 gün eşiği)."""
     from datetime import date, timedelta
 
     today = date.today()
@@ -837,6 +837,51 @@ async def test_reminders_far_due_not_listed(client: AsyncClient):
     )
     r = await client.get("/api/v1/credit-cards/reminders", headers=headers)
     assert r.json()["due_payments"] == []
+
+
+@pytest.mark.asyncio
+async def test_reminders_due_window_is_five_days(client: AsyncClient):
+    """5 gün sonra olan ödeme listede; 6 gün sonra olan listede DEĞİL (eşik = 5)."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    headers = await make_user(client, "cc_rem_window5@example.com")
+    cc = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Kart W", "statement_day": 1, "payment_due_day": 10},
+        headers=headers,
+    )
+    cid = cc.json()["id"]
+    # 5 gün sonra (Mayıs) → listede
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": today.year,
+            "period_month": today.month,
+            "statement_amount": "500",
+            "statement_date": today.isoformat(),
+            "due_date": (today + timedelta(days=5)).isoformat(),
+        },
+        headers=headers,
+    )
+    # 6 gün sonra (farklı dönem) → listede DEĞİL
+    nxt = today.month % 12 + 1
+    nyr = today.year + (1 if today.month == 12 else 0)
+    await client.post(
+        f"/api/v1/credit-cards/{cid}/statements",
+        json={
+            "period_year": nyr,
+            "period_month": nxt,
+            "statement_amount": "600",
+            "statement_date": today.isoformat(),
+            "due_date": (today + timedelta(days=6)).isoformat(),
+        },
+        headers=headers,
+    )
+    r = await client.get("/api/v1/credit-cards/reminders", headers=headers)
+    due = r.json()["due_payments"]
+    assert len(due) == 1
+    assert due[0]["days_until_due"] == 5
 
 
 @pytest.mark.asyncio

@@ -164,14 +164,23 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Girişte: ekstresi yüklenmemiş veya ödemesi yaklaşan kredi kartı varsa popup aç
+  // Kredi kartı hatırlatması: her dashboard açılışında DEĞİL, günde en fazla 1 kez.
+  // localStorage'da o gün gösterildiyse atla; gösterilecek bir şey varsa (ekstre
+  // eksik veya ödemesi ≤5 gün kala) bir kez aç ve günü işaretle.
   useEffect(() => {
+    const STORAGE_KEY = "kfinans-cc-reminders-shown";
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(STORAGE_KEY) === todayStr) return; // bugün zaten gösterildi
+
     let cancelled = false;
     api
       .getCreditCardReminders()
       .then((res) => {
         if (cancelled) return;
-        if (res.pending_statements.length > 0 || res.due_payments.length > 0) setCcReminders(res);
+        if (res.pending_statements.length > 0 || res.due_payments.length > 0) {
+          setCcReminders(res);
+          localStorage.setItem(STORAGE_KEY, todayStr);
+        }
       })
       .catch(() => {});
     return () => {

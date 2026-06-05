@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import or_, select
@@ -55,6 +55,36 @@ class CashFlowYear(BaseModel):
     total_income: Decimal
     total_expense: Decimal
     total_net: Decimal
+
+
+class CashFlowItem(BaseModel):
+    """Bir ayın gelir/gider toplamını oluşturan tek kalem (detay görünümü)."""
+
+    kind: str  # "actual" | "forecast"
+    category: str  # income|expense|statement|installment|recurring_income|planned
+    label: str
+    sub_label: str | None = None
+    date: date_type | None = None
+    amount: Decimal  # kalemin kendi para birimindeki tutarı
+    currency: str
+    amount_tl: Decimal  # TL karşılığı (toplama giren değer)
+
+
+class CashFlowMonthDetail(BaseModel):
+    """Tek bir ayın itemize edilmiş gelir/gider dökümü.
+
+    Toplamlar ``GET /cash-flow`` ile bire bir tutar (aynı çift-sayım/pending/taksit
+    kuralları); kalemler tek tek listelenir."""
+
+    year: int
+    month: int
+    is_past: bool
+    is_current: bool
+    income_items: list[CashFlowItem]
+    expense_items: list[CashFlowItem]
+    income_total: Decimal
+    expense_total: Decimal
+    net: Decimal
 
 
 def _applies_planned_in_month(pe: PlannedExpense, year: int, month: int) -> bool:
@@ -443,6 +473,241 @@ async def get_cash_flow(
         total_income=total_income,
         total_expense=total_expense,
         total_net=total_income - total_expense,
+    )
+
+
+async def _income_items_for_month(
+    db: AsyncSession, user_id, year: int, month: int, is_past: bool, is_current: bool, rates: dict[str, Decimal]
+) -> list[CashFlowItem]:
+    """Bir ayın gelir kalemleri (actual incomes + forecast recurring) — toplama uyumlu."""
+    start, end = _month_bounds(year, month)
+    items: list[CashFlowItem] = []
+
+    # 1) Gerçekleşen gelirler (incomes) — her ay için (geçmiş/gelecek farketmez).
+    inc_q = await db.execute(select(Income).where(Income.user_id == user_id, Income.date >= start, Income.date <= end).order_by(Income.date))
+    for inc in inc_q.scalars().all():
+        items.append(
+            CashFlowItem(
+                kind="actual",
+                category="income",
+                label=inc.description or inc.category,
+                sub_label=("periyodik" if inc.recurring_income_id is not None else inc.category),
+                date=inc.date,
+                amount=Decimal(inc.amount),
+                currency=inc.currency,
+                amount_tl=Decimal(inc.amount_tl),
+            )
+        )
+
+    # 2) Forecast (periyodik gelir): current ay → pending (realize/skip edilmemiş);
+    #    gelecek ay → uygulanan tüm periyodikler; strictly geçmiş → yok.
+    if is_current or not is_past:
+        ri_q = await db.execute(select(RecurringIncome).where(RecurringIncome.user_id == user_id))
+        eligible = [ri for ri in ri_q.scalars().all() if _applies_recurring_income_in_month(ri, year, month)]
+        skip_ids: set[int] = set()
+        realized_ids: set[int] = set()
+        if is_current and eligible:
+            realized_q = await db.execute(
+                select(Income.recurring_income_id).where(
+                    Income.user_id == user_id,
+                    Income.recurring_income_id.is_not(None),
+                    Income.date >= start,
+                    Income.date <= end,
+                )
+            )
+            realized_ids = {r for (r,) in realized_q.all()}
+            skip_q = await db.execute(
+                select(RecurringSkip.ref_id).where(
+                    RecurringSkip.user_id == user_id,
+                    RecurringSkip.kind == "income",
+                    RecurringSkip.period_year == year,
+                    RecurringSkip.period_month == month,
+                )
+            )
+            skip_ids = {r for (r,) in skip_q.all()}
+        for ri in eligible:
+            if ri.id in realized_ids or ri.id in skip_ids:
+                continue
+            items.append(
+                CashFlowItem(
+                    kind="forecast",
+                    category="recurring_income",
+                    label=ri.title,
+                    sub_label=ri.category,
+                    date=None,
+                    amount=Decimal(ri.amount),
+                    currency=ri.currency,
+                    amount_tl=currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency, rates),
+                )
+            )
+    return items
+
+
+async def _expense_items_for_month(
+    db: AsyncSession, user_id, year: int, month: int, is_past: bool, is_current: bool, rates: dict[str, Decimal]
+) -> list[CashFlowItem]:
+    """Bir ayın gider kalemleri (actual expenses + ekstreler + forecast planned/taksit)."""
+    start, end = _month_bounds(year, month)
+    items: list[CashFlowItem] = []
+
+    # Kart adı haritası (ekstre + taksit etiketleri için).
+    card_q = await db.execute(select(CreditCard.id, CreditCard.name).where(CreditCard.user_id == user_id))
+    card_names = dict(card_q.all())
+
+    # 1) Gerçekleşen giderler (çift sayım filtresi: kart + ödendi olanlar hariç).
+    exp_q = await db.execute(
+        select(Expense)
+        .where(
+            Expense.user_id == user_id,
+            Expense.date >= start,
+            Expense.date <= end,
+            or_(Expense.credit_card_id.is_(None), Expense.is_paid.is_(False)),
+        )
+        .order_by(Expense.date)
+    )
+    for exp in exp_q.scalars().all():
+        items.append(
+            CashFlowItem(
+                kind="actual",
+                category="expense",
+                label=exp.description or exp.category,
+                sub_label=exp.category,
+                date=exp.date,
+                amount=Decimal(exp.amount),
+                currency=exp.currency,
+                amount_tl=Decimal(exp.amount_tl),
+            )
+        )
+
+    # 2) Kredi kartı ekstreleri (due_date bu aya denk) — her ay actual sayılır.
+    stmt_q = await db.execute(
+        select(CreditCardStatement)
+        .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
+        .where(CreditCard.user_id == user_id, CreditCardStatement.due_date >= start, CreditCardStatement.due_date <= end)
+        .order_by(CreditCardStatement.due_date)
+    )
+    for st in stmt_q.scalars().all():
+        items.append(
+            CashFlowItem(
+                kind="actual",
+                category="statement",
+                label=card_names.get(st.card_id, "Kredi kartı"),
+                sub_label=f"{st.period_month:02d}/{st.period_year} ekstresi" + ("" if st.paid_at is None else " · ödendi"),
+                date=st.due_date,
+                amount=Decimal(st.statement_amount),
+                currency=st.currency,
+                amount_tl=currency_svc.convert_to_tl(Decimal(st.statement_amount), st.currency, rates),
+            )
+        )
+
+    # 3) Forecast: current → pending planned + taksit; gelecek → planned + taksit;
+    #    strictly geçmiş → yok.
+    if is_current or not is_past:
+        items.extend(await _planned_forecast_items(db, user_id, year, month, is_current, rates))
+        items.extend(await _installment_forecast_items(db, user_id, year, month, card_names, rates))
+    return items
+
+
+async def _planned_forecast_items(db: AsyncSession, user_id, year: int, month: int, is_current: bool, rates: dict[str, Decimal]) -> list[CashFlowItem]:
+    """Planlı gider forecast kalemleri (çift sayım filtresi + current ay realize/skip hariç)."""
+    pe_q = await db.execute(select(PlannedExpense).where(PlannedExpense.user_id == user_id))
+    eligible = [pe for pe in pe_q.scalars().all() if (pe.credit_card_id is None or not pe.is_paid) and _applies_planned_in_month(pe, year, month)]
+    realized_ids, skip_ids = await _realized_and_skipped_expense_ids(db, user_id, year, month, is_current and bool(eligible))
+    return [
+        CashFlowItem(
+            kind="forecast",
+            category="planned",
+            label=pe.title,
+            sub_label=pe.category,
+            date=None,
+            amount=Decimal(pe.amount),
+            currency=pe.currency,
+            amount_tl=currency_svc.convert_to_tl(Decimal(pe.amount), pe.currency, rates),
+        )
+        for pe in eligible
+        if pe.id not in realized_ids and pe.id not in skip_ids
+    ]
+
+
+async def _realized_and_skipped_expense_ids(db: AsyncSession, user_id, year: int, month: int, active: bool) -> tuple[set, set]:
+    """Current ay için realize edilmiş (planned_expense_id) + skip edilmiş pe id'leri."""
+    if not active:
+        return set(), set()
+    start, end = _month_bounds(year, month)
+    realized_q = await db.execute(
+        select(Expense.planned_expense_id).where(
+            Expense.user_id == user_id,
+            Expense.planned_expense_id.is_not(None),
+            Expense.date >= start,
+            Expense.date <= end,
+        )
+    )
+    realized_ids = {r for (r,) in realized_q.all()}
+    skip_q = await db.execute(
+        select(RecurringSkip.ref_id).where(
+            RecurringSkip.user_id == user_id,
+            RecurringSkip.kind == "expense",
+            RecurringSkip.period_year == year,
+            RecurringSkip.period_month == month,
+        )
+    )
+    skip_ids = {r for (r,) in skip_q.all()}
+    return realized_ids, skip_ids
+
+
+async def _installment_forecast_items(db: AsyncSession, user_id, year: int, month: int, card_names: dict, rates: dict[str, Decimal]) -> list[CashFlowItem]:
+    """Kredi kartı taksiti forecast kalemleri (yalnızca GELECEK dilimler — v0.3.7 invariant)."""
+    inst_q = await db.execute(
+        select(CreditCardInstallment).join(CreditCard, CreditCardInstallment.card_id == CreditCard.id).where(CreditCard.user_id == user_id)
+    )
+    return [
+        CashFlowItem(
+            kind="forecast",
+            category="installment",
+            label=f"{card_names.get(inst.card_id, 'Kredi kartı')} · {inst.description}",
+            sub_label=f"{inst.installments_remaining}/{inst.installments_total} taksit kaldı · ilk vade {inst.first_due_date.isoformat()}",
+            date=None,
+            amount=Decimal(inst.monthly_amount),
+            currency=inst.currency,
+            amount_tl=currency_svc.convert_to_tl(Decimal(inst.monthly_amount), inst.currency, rates),
+        )
+        for inst in inst_q.scalars().all()
+        if _installment_applies_in_month(inst, year, month)
+    ]
+
+
+@router.get("/{year}/{month}/detail", response_model=CashFlowMonthDetail)
+async def get_cash_flow_month_detail(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Path(ge=2020, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+):
+    """Tek bir ayın gelir/gider kalemlerinin dökümü (popup detayı).
+
+    Toplamlar ``GET /cash-flow``'daki o ayın ``income_total``/``expense_total``
+    değerleriyle bire bir tutar."""
+    today = datetime.now(_ISTANBUL).date()
+    is_current = year == today.year and month == today.month
+    is_past = (year < today.year) or (year == today.year and month <= today.month)
+    uid = current_user.id
+
+    rates = await currency_svc.fetch_rates()
+    income_items = await _income_items_for_month(db, uid, year, month, is_past, is_current, rates)
+    expense_items = await _expense_items_for_month(db, uid, year, month, is_past, is_current, rates)
+
+    income_total = sum((it.amount_tl for it in income_items), Decimal(0))
+    expense_total = sum((it.amount_tl for it in expense_items), Decimal(0))
+    return CashFlowMonthDetail(
+        year=year,
+        month=month,
+        is_past=is_past,
+        is_current=is_current,
+        income_items=income_items,
+        expense_items=expense_items,
+        income_total=income_total,
+        expense_total=expense_total,
+        net=income_total - expense_total,
     )
 
 

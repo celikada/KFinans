@@ -270,6 +270,55 @@ async def test_installment_last_not_projected(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_installment_description_cleaned(client: AsyncClient):
+    """Saklanan taksit adı dilim göstergelerinden temizlenir (tüm bankalar için).
+
+    "... 01.Tak ... (1/4)" → "(k/n)" eki + "01.Tak" işareti çıkar; temiz satıcı kalır."""
+    headers = await make_user(client, "si_inst_clean@example.com")
+    r = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(
+            target_card_id=None,
+            period_month=6,
+            due_date="2026-06-05",
+            desc="01/06 IYZICO/HOYA TURKEY 01.Tak İSTANBUL",
+            paid=1,
+            total=4,
+        ),
+        headers=headers,
+    )
+    assert r.status_code == 201
+    insts = r.json()["installments"]
+    assert len(insts) == 1
+    # "(1/4)" eki + "01.Tak" işareti çıkmış, temiz satıcı adı kalmış.
+    assert insts[0]["description"] == "01/06 IYZICO/HOYA TURKEY İSTANBUL"
+
+
+@pytest.mark.asyncio
+async def test_installment_reimport_with_markers_still_matches(client: AsyncClient):
+    """Ham (işaretli) açıklamayla re-import, temiz saklanan kayda eşleşir — duplike yok.
+
+    Eşleştirme her iki tarafta da tam-temizleme uygular; ilk ekstre temiz saklanır,
+    sonraki ekstre ham gelse de aynı plana ilerler."""
+    headers = await make_user(client, "si_inst_marker_match@example.com")
+    first = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=None, period_month=6, due_date="2026-06-05", desc="HOYA TURKEY 01.Tak", paid=1, total=4),
+        headers=headers,
+    )
+    cid = first.json()["card"]["id"]
+    second = await client.post(
+        "/api/v1/credit-cards/import-statement/commit",
+        json=_stmt_commit(target_card_id=cid, period_month=7, due_date="2026-07-05", desc="HOYA TURKEY 02.Tak", paid=2, total=4),
+        headers=headers,
+    )
+    insts = second.json()["installments"]
+    assert len(insts) == 1  # duplike DEĞİL — aynı plan (temiz ad eşleşti)
+    assert insts[0]["installments_remaining"] == 2
+    assert insts[0]["description"] == "HOYA TURKEY"
+
+
+@pytest.mark.asyncio
 async def test_installment_advances_on_reimport(client: AsyncClient):
     """Sonraki ay (2/4) yüklenince aynı plan ilerler: yeni satır DEĞİL, remaining=2."""
     headers = await make_user(client, "si_inst_adv@example.com")
