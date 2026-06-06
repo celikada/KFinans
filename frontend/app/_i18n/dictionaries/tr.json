@@ -906,6 +906,8 @@
         "iosHint": "iPhone/iPad'de önce uygulamayı Ana Ekrana Ekleyin, sonra açtığınızda bildirimleri etkinleştirin (iOS 16.4+).",
         "sendTest": "Test bildirimi gönder",
         "testSent": "Test bildirimi gönderildi.",
+        "testNoSubs": "Bu cihaz için kayıtlı abonelik bulunamadı. Bildirimleri kapatıp tekrar açmayı deneyin.",
+        "pushServiceError": "Tarayıcının push servisi devre dışı olabilir. Brave'de: Ayarlar → Gizlilik → 'Use Google services for push messaging' açın; ya da Chrome/Edge/Firefox deneyin.",
         "failed": "İşlem başarısız oldu, lütfen tekrar deneyin."
       },
       "dashboardView": "Dashboard Görünümü",

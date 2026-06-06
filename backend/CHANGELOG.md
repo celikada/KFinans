@@ -6,6 +6,26 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.5.1] - 2026-06-06
+
+### Düzeltmeler
+
+- **Web Push hata mesajları:** Bildirim açma başarısız olduğunda gerçek hata
+  artık konsola loglanır; `AbortError` (tarayıcının push servisi devre dışı, ör.
+  Brave'de Google push kapalı) için kullanıcıya eyleme dönük açıklama gösterilir.
+  Test bildirimi gönderiminde abonelik bulunamazsa (sent=0) yanıltıcı "gönderildi"
+  yerine net mesaj verilir.
+- **Service worker navigasyon hatası:** Catch-all `NetworkOnly` kuralı sayfa
+  gezinmelerini (document) yakalayıp çevrimdışıyken `no-response` üretiyordu;
+  navigasyonlar artık SW'yi atlar (tarayıcı yönetir).
+
+### Altyapı
+
+- **VAPID anahtarları SealedSecret'a alındı** (GitOps): prod VAPID artık
+  `k8s/sealed-secrets.yaml`'dan gelir; canlı patch'in ileride düşme riski kapandı.
+
+---
+
 ## [0.5.0] - 2026-06-05
 
 ### Eklenenler
