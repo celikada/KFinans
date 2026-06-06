@@ -192,6 +192,19 @@ describe("SettingsPage — yatirim profili", () => {
     ).toBeInTheDocument();
   });
 
+  it("e-posta odeme hatirlatmasi toggle → updateProfile(risk, undefined, true)", async () => {
+    getMe.mockResolvedValue({ ...USER, payment_reminder_email: false });
+    updateProfile.mockResolvedValue({ ...USER, payment_reminder_email: true });
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+    await waitFor(() => expect(getMe).toHaveBeenCalled());
+
+    await user.click(await screen.findByLabelText("content.settings.emailReminder.toggleOn"));
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith("balanced", undefined, true),
+    );
+  });
+
   it("profil kaydetme hatasi (Error) → mesaj gosterilir", async () => {
     updateProfile.mockRejectedValue(new Error("profil patladi"));
     const user = userEvent.setup();

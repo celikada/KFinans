@@ -893,6 +893,14 @@
       "releaseNotesToggleHint": "Yenilik özetleri e-posta ile gönderilir (yalnızca doğrulanmış e-posta).",
       "releaseNotesToggleOn": "Sürüm bildirimlerini aç",
       "releaseNotesToggleOff": "Sürüm bildirimlerini kapat",
+      "emailReminder": {
+        "title": "E-posta Ödeme Hatırlatması",
+        "description": "Ödemesi yaklaşan kredi kartı borçların için e-posta hatırlatması al. Tarayıcı/telefon bildiriminden bağımsız çalışır; her cihazda alırsın.",
+        "toggle": "E-posta ile ödeme hatırlatması",
+        "toggleHint": "Son ödeme tarihine 5 gün veya daha az kalan ekstreler için (yalnızca doğrulanmış e-posta).",
+        "toggleOn": "E-posta hatırlatmasını aç",
+        "toggleOff": "E-posta hatırlatmasını kapat"
+      },
       "push": {
         "title": "Telefon Bildirimleri",
         "description": "Ödeme hatırlatmalarını uygulama kapalıyken bile bu cihaza anlık bildirim olarak alın.",

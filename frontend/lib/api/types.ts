@@ -36,6 +36,7 @@ export interface UserMeDTO {
   is_admin?: boolean;
   release_notes_opt_in?: boolean;
   default_currency?: CurrencyType;
+  payment_reminder_email?: boolean;
 }
 
 // ─── Sürüm bildirimleri (release notes) ──────────────────────────

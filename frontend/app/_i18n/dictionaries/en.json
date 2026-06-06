@@ -890,6 +890,14 @@
       "releaseNotes": "Release Announcements",
       "releaseNotesHint": "Get notified by email when a new version is released.",
       "releaseNotesToggle": "Release announcements",
+      "emailReminder": {
+        "title": "Email Payment Reminder",
+        "description": "Get an email reminder for upcoming credit card payments. Works independently of browser/phone push; you receive it on any device.",
+        "toggle": "Payment reminder by email",
+        "toggleHint": "For statements due in 5 days or less (verified email only).",
+        "toggleOn": "Enable email reminder",
+        "toggleOff": "Disable email reminder"
+      },
       "releaseNotesToggleHint": "Highlights are sent by email (verified email only).",
       "releaseNotesToggleOn": "Turn on release announcements",
       "releaseNotesToggleOff": "Turn off release announcements",

@@ -69,6 +69,10 @@ class User(Base):
     # KVKK acik riza: kayitta varsayilan KAPALI (onceden isaretli OLAMAZ).
     # Sadece email_verified=True VE bu True olan kullanicilara mail gider.
     release_notes_opt_in: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Ödeme hatırlatması e-postası (push'a alternatif, opt-in). Her gün ödemesi
+    # yaklaşan kredi kartı borçları için, email_verified=True olan opt-in
+    # kullanıcılara Resend ile e-posta gönderilir. Kayıtta varsayılan KAPALI.
+    payment_reminder_email: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     # Kalici user-ozel unsubscribe token (secrets.token_urlsafe). Mail icindeki
     # auth'suz unsubscribe linki bu token ile eslesir. Unique index.
     unsubscribe_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

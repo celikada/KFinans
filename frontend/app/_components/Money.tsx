@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { fmtTL } from "@/lib/format";
 import { getDefaultCurrency, DISPLAY_CURRENCY_CHANGED } from "@/lib/defaultCurrency";
+import { getShowUsd, SHOW_USD_CHANGED_EVENT } from "@/app/_components/TLValue";
 import type { CurrencyType } from "@/lib/api";
 
 const RATES_KEY = "kfinans_rates_cache";
@@ -82,6 +83,18 @@ export function useRates(): Rates | null {
   return rates;
 }
 
+/** "USD karşılığı göster" tercihi; Ayarlar'dan değişince reaktif güncellenir. */
+export function useShowUsd(): boolean {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    setShow(getShowUsd());
+    const handler = () => setShow(getShowUsd());
+    globalThis.addEventListener(SHOW_USD_CHANGED_EVENT, handler);
+    return () => globalThis.removeEventListener(SHOW_USD_CHANGED_EVENT, handler);
+  }, []);
+  return show;
+}
+
 /** Seçili görüntüleme para birimi; Ayarlar'dan değişince reaktif güncellenir. */
 export function useDisplayCurrency(): CurrencyType {
   const [currency, setCurrency] = useState<CurrencyType>("TRY");
@@ -110,16 +123,37 @@ interface Props {
   /** TL cinsinden değer (number veya parsable string). */
   readonly tl: number | string | null | undefined;
   readonly className?: string;
+  /** USD karşılığı alt-satırı için ek class (varsayılan: küçük gri blok). */
+  readonly usdClassName?: string;
+  /** "USD karşılığı göster" alt-satırını bu örnekte gösterme (ör. dar footer'lar). */
+  readonly hideUsd?: boolean;
 }
 
 /**
  * Bir TL TOPLAMINI seçili görüntüleme para birimine çevirip gösterir.
  * (Tek tek satır kalemleri için DEĞİL — onlar kendi para biriminde gösterilir.)
+ *
+ * "USD karşılığı göster" (Ayarlar) açıksa ve görüntüleme birimi USD değilse,
+ * değerin ALTINA `≈ $X` USD karşılığını ekler (güncel USD/TRY kuruyla).
  */
-export function Money({ tl, className }: Props) {
+export function Money({ tl, className, usdClassName, hideUsd }: Props) {
   const rates = useRates();
   const currency = useDisplayCurrency();
+  const showUsd = useShowUsd();
   const n = typeof tl === "string" ? Number.parseFloat(tl) : (tl ?? 0);
   const value = Number.isFinite(n) ? n : 0;
-  return <span className={className}>{formatTlAs(value, currency, rates)}</span>;
+
+  const usdRate = rates?.USD;
+  const showUsdLine = showUsd && !hideUsd && currency !== "USD" && !!usdRate && usdRate > 0;
+
+  return (
+    <span className={className}>
+      {formatTlAs(value, currency, rates)}
+      {showUsdLine && (
+        <span className={usdClassName ?? "block text-xs text-gray-400 font-normal mt-0.5 tabular-nums"}>
+          ≈ ${(value / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        </span>
+      )}
+    </span>
+  );
 }

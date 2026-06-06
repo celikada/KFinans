@@ -160,3 +160,88 @@ async def send_release_notes_email(*, to: str, version: str, body_html: str, uns
     except Exception:
         logger.exception("Sürüm bildirimi gönderilemedi: %s", to)
         return False
+
+
+# Ödeme hatırlatması — push'a alternatif, opt-in kullanıcılara ödemesi yaklaşan
+# kredi kartı borçlarını özetleyen e-posta. verify/reset stiliyle uyumlu şablon.
+def _reminder_status(days) -> tuple[str, str]:
+    """days_until_due → (durum metni, renk). <0 gecikti, 0 son gün, >0 kaldı."""
+    if isinstance(days, int) and days < 0:
+        return f"{abs(days)} gün gecikti", "#dc2626"
+    if days == 0:
+        return "Son gün", "#dc2626"
+    if isinstance(days, int):
+        return f"{days} gün kaldı", "#d97706"
+    return "-", "#6b7280"
+
+
+def _payment_reminder_row(item: dict) -> str:
+    status_text, status_color = _reminder_status(item.get("days_until_due"))
+    card_name = item.get("card_name", "-")
+    amount = f"{item.get('amount', '-')} {item.get('currency', '')}"
+    due_date = item.get("due_date", "-")
+    cell = "padding: 8px 12px; border-bottom: 1px solid #e5e7eb;"
+    return f"""
+      <tr>
+        <td style="{cell}">{card_name}</td>
+        <td style="{cell} text-align: right; white-space: nowrap;">{amount}</td>
+        <td style="{cell} white-space: nowrap;">{due_date}</td>
+        <td style="{cell} color: {status_color}; font-weight: 500; white-space: nowrap;">{status_text}</td>
+      </tr>
+    """
+
+
+def _payment_reminder_html(items: list[dict]) -> str:
+    rows = "".join(_payment_reminder_row(item) for item in items)
+    return f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+      <h2 style="color: #111827; margin-bottom: 4px;">Yaklaşan kart ödemeleri</h2>
+      <p style="color: #6b7280; font-size: 14px; margin-top: 0;">
+        Aşağıdaki kredi kartı ekstrelerinin son ödeme tarihi yaklaşıyor:
+      </p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 16px;">
+        <thead>
+          <tr style="background: #f9fafb; color: #374151; text-align: left;">
+            <th style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">Kart</th>
+            <th style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">Tutar</th>
+            <th style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">Son Ödeme</th>
+            <th style="padding: 8px 12px; border-bottom: 1px solid #e5e7eb;">Durum</th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+      <p style="color: #9ca3af; font-size: 13px; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+        Bu e-postayı, KFinans hesabınızda ödeme hatırlatması e-postalarını açtığınız
+        için aldınız. Bildirimleri kapatmak için Ayarlar sayfasını kullanın.
+      </p>
+    </div>
+    """
+
+
+async def send_payment_reminder_email(*, to: str, items: list[dict]) -> bool:
+    """Tek bir kullanıcıya ödemesi yaklaşan kart borçlarını özetleyen mail gönderir.
+
+    `items`: her biri {card_name, amount, currency, due_date, days_until_due} dict'i.
+    verify/reset pattern'i ile aynı: hata durumunda False döner, exception fırlatmaz.
+    RESEND_API_KEY yoksa veya items boşsa no-op + False döner.
+    """
+    if not items:
+        return False
+    if not _configure():
+        logger.warning("RESEND_API_KEY tanımlı değil; ödeme hatırlatması gönderilmedi (to=%s)", to)
+        return False
+
+    payload = {
+        "from": settings.email_from,
+        "to": [to],
+        "subject": "KFinans — Yaklaşan kart ödemeleri",
+        "html": _payment_reminder_html(items),
+    }
+
+    try:
+        await asyncio.to_thread(resend.Emails.send, payload)
+        logger.info("Ödeme hatırlatması gönderildi: %s (%d kalem)", to, len(items))
+        return True
+    except Exception:
+        logger.exception("Ödeme hatırlatması gönderilemedi: %s", to)
+        return False

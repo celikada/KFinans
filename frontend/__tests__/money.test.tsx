@@ -74,4 +74,37 @@ describe("Money bileşeni", () => {
     globalThis.dispatchEvent(new CustomEvent(DISPLAY_CURRENCY_CHANGED));
     await waitFor(() => expect(screen.getByText(/\$/)).toBeInTheDocument());
   });
+
+  // "USD karşılığı göster" alt-satırı (Money'e taşındı; eski TLValue toggle'ı)
+  it("showUsd açık + display TRY → değerin altında ≈ $ karşılığı", async () => {
+    localStorage.setItem("kfinans_default_currency", "TRY");
+    localStorage.setItem("kfinans_show_usd", "true");
+    render(<Money tl={4000} />);
+    await waitFor(() => expect(screen.getByText(/₺/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/≈ \$100/)).toBeInTheDocument()); // 4000/40
+  });
+
+  it("showUsd kapalı → alt-satır yok", async () => {
+    localStorage.setItem("kfinans_default_currency", "TRY");
+    localStorage.setItem("kfinans_show_usd", "false");
+    render(<Money tl={4000} />);
+    await waitFor(() => expect(screen.getByText(/₺/)).toBeInTheDocument());
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
+
+  it("display USD iken showUsd açık olsa da alt-satır yok (gereksiz)", async () => {
+    localStorage.setItem("kfinans_default_currency", "USD");
+    localStorage.setItem("kfinans_show_usd", "true");
+    render(<Money tl={4000} />);
+    await waitFor(() => expect(screen.getByText(/\$/)).toBeInTheDocument());
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
+
+  it("hideUsd prop → showUsd açık olsa da alt-satır gizlenir", async () => {
+    localStorage.setItem("kfinans_default_currency", "TRY");
+    localStorage.setItem("kfinans_show_usd", "true");
+    render(<Money tl={4000} hideUsd />);
+    await waitFor(() => expect(screen.getByText(/₺/)).toBeInTheDocument());
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
 });
