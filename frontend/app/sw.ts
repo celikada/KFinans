@@ -110,11 +110,14 @@ const runtimeCaching: RuntimeCaching[] = [
   },
 
   // 7) Everything else (cross-origin third-party, etc.) → network only.
-  //    We do NOT cache same-origin HTML navigations here: those are handled by
-  //    navigationPreload + the precached offline fallback so we never serve a
-  //    stale authenticated page shell.
+  //    DOCUMENT navigations are intentionally EXCLUDED: when the catch-all
+  //    NetworkOnly intercepted navigations, an offline/failed navigation threw
+  //    a `no-response` error (the `/offline` fallback is not reliably precached
+  //    under @serwist/next App Router). Letting navigations bypass the SW means
+  //    the browser handles them directly (online works; offline shows the
+  //    browser's own page) — no stale authenticated shell, no `no-response`.
   {
-    matcher: () => true,
+    matcher: ({ request }) => request.destination !== "document",
     handler: new NetworkOnly(),
   },
 ];

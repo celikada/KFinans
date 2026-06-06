@@ -906,6 +906,8 @@
         "iosHint": "On iPhone/iPad, first Add to Home Screen, then enable notifications when you open it (iOS 16.4+).",
         "sendTest": "Send test notification",
         "testSent": "Test notification sent.",
+        "testNoSubs": "No subscription registered for this device. Try turning notifications off and on again.",
+        "pushServiceError": "Your browser's push service may be disabled. In Brave: Settings → Privacy → enable 'Use Google services for push messaging'; or try Chrome/Edge/Firefox.",
         "failed": "The action failed, please try again."
       },
       "dashboardView": "Dashboard Layout",

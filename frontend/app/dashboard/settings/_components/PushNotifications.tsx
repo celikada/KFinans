@@ -70,8 +70,19 @@ export function PushNotifications() {
         user_agent: navigator.userAgent,
       });
       setSubscribed(true);
-    } catch {
-      setError(t("content.settings.push.failed"));
+    } catch (e) {
+      console.error("Push enable failed:", e);
+      // AbortError "Registration failed - push service error": tarayıcının push
+      // servisi devre dışı (en sık Brave'de Google push kapalıyken). Kullanıcıya
+      // genel "başarısız" yerine eyleme dönük ipucu ver.
+      const name = e instanceof Error ? e.name : "";
+      if (name === "AbortError") {
+        setError(t("content.settings.push.pushServiceError"));
+      } else if (name === "NotAllowedError") {
+        setError(t("content.settings.push.permissionDenied"));
+      } else {
+        setError(t("content.settings.push.failed"));
+      }
     } finally {
       setBusy(false);
     }
@@ -89,7 +100,8 @@ export function PushNotifications() {
         await sub.unsubscribe();
       }
       setSubscribed(false);
-    } catch {
+    } catch (e) {
+      console.error("Push disable failed:", e);
       setError(t("content.settings.push.failed"));
     } finally {
       setBusy(false);
@@ -101,9 +113,11 @@ export function PushNotifications() {
     setInfo("");
     setBusy(true);
     try {
-      await api.sendTestPush();
-      setInfo(t("content.settings.push.testSent"));
-    } catch {
+      const { sent } = await api.sendTestPush();
+      // sent=0: abonelik sunucuda yok / gönderilemedi → kullanıcı yanıltılmasın.
+      setInfo(sent > 0 ? t("content.settings.push.testSent") : t("content.settings.push.testNoSubs"));
+    } catch (e) {
+      console.error("Push test failed:", e);
       setError(t("content.settings.push.failed"));
     } finally {
       setBusy(false);
