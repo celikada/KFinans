@@ -6,6 +6,23 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] - 2026-06-05
+
+### Eklenenler
+
+- **Telefon bildirimleri (Web Push):** Kullanıcı Ayarlar'dan "Telefon Bildirimleri"ni
+  açarak push aboneliği oluşturur; uygulama kapalıyken bile ödeme hatırlatması alır.
+  **Mağaza gerekmez** — standart Web Push API + VAPID (App Store/Play Store yok).
+  Android Chrome'da tam; iOS'ta yalnız "Ana ekrana eklenmiş" PWA + iOS 16.4+. Her gün
+  09:00'da (Europe/Istanbul) ödemesi ≤5 gün kalan/gecikmiş kredi kartı ekstreleri için
+  tek özet bildirim gönderilir. Backend: `push_subscriptions` tablosu + `/push/*`
+  endpoint'leri (`vapid-public-key`, `subscribe`, `unsubscribe`, `test`) + `pywebpush`
+  + günlük cron. Frontend: Ayarlar toggle'ı + service worker `push`/`notificationclick`
+  handler'ları + iOS uyarısı. Süresi dolmuş abonelikler (404/410) otomatik temizlenir.
+  Bildirim yalnızca izin veren kullanıcıya gider; VAPID anahtarı yoksa servis no-op.
+
+---
+
 ## [0.4.1] - 2026-06-05
 
 ### Eklenenler

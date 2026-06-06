@@ -779,9 +779,13 @@ async def test_reminders_pending_statement(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_reminders_due_payment(client: AsyncClient):
     """Ödenmemiş + son ödeme tarihi 3 gün sonra olan ekstre → due_payments'ta."""
-    from datetime import date, timedelta
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
 
-    today = date.today()
+    # Backend reminders endpoint'i İstanbul saatini kullanıyor; test de aynı
+    # referansı kullanmalı (UTC ile İstanbul farklı güne düşünce days_until_due
+    # ±1 kayıp CI'ı 00:00-03:00 İstanbul arası flaky yapıyordu).
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
     headers = await make_user(client, "cc_rem_due@example.com")
     cc = await client.post(
         "/api/v1/credit-cards",
@@ -813,9 +817,13 @@ async def test_reminders_due_payment(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_reminders_far_due_not_listed(client: AsyncClient):
     """Son ödeme tarihi 30 gün sonra → due_payments'ta YOK (5 gün eşiği)."""
-    from datetime import date, timedelta
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
 
-    today = date.today()
+    # Backend reminders endpoint'i İstanbul saatini kullanıyor; test de aynı
+    # referansı kullanmalı (UTC ile İstanbul farklı güne düşünce days_until_due
+    # ±1 kayıp CI'ı 00:00-03:00 İstanbul arası flaky yapıyordu).
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
     headers = await make_user(client, "cc_rem_far@example.com")
     cc = await client.post(
         "/api/v1/credit-cards",
@@ -842,9 +850,13 @@ async def test_reminders_far_due_not_listed(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_reminders_due_window_is_five_days(client: AsyncClient):
     """5 gün sonra olan ödeme listede; 6 gün sonra olan listede DEĞİL (eşik = 5)."""
-    from datetime import date, timedelta
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
 
-    today = date.today()
+    # Backend reminders endpoint'i İstanbul saatini kullanıyor; test de aynı
+    # referansı kullanmalı (UTC ile İstanbul farklı güne düşünce days_until_due
+    # ±1 kayıp CI'ı 00:00-03:00 İstanbul arası flaky yapıyordu).
+    today = datetime.now(ZoneInfo("Europe/Istanbul")).date()
     headers = await make_user(client, "cc_rem_window5@example.com")
     cc = await client.post(
         "/api/v1/credit-cards",

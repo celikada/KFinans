@@ -21,6 +21,7 @@ from app.api.v1 import (
     mfa,
     planned_expenses,
     portfolio,
+    push,
     recurring,
     release,
     stocks,
@@ -56,3 +57,4 @@ api_router.include_router(asset_catalog.router)
 api_router.include_router(advice.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(metrics.router)
+api_router.include_router(push.router)

@@ -27,6 +27,7 @@ import { integrationsApi } from "./api/integrations";
 import { manualCryptoApi } from "./api/manualCrypto";
 import { plannedExpensesApi } from "./api/plannedExpenses";
 import { portfolioApi } from "./api/portfolio";
+import { pushApi } from "./api/push";
 import { recurringApi } from "./api/recurring";
 import { releaseApi } from "./api/release";
 import { reportsApi } from "./api/reports";
@@ -50,6 +51,7 @@ export const api = {
   ...manualCryptoApi,
   ...plannedExpensesApi,
   ...portfolioApi,
+  ...pushApi,
   ...recurringApi,
   ...releaseApi,
   ...reportsApi,
