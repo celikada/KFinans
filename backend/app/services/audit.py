@@ -74,6 +74,10 @@ class AuditAction(str, Enum):
     # Kredi karti ekstresi (PDF) import — Faz 3
     CREDIT_STATEMENT_IMPORT = "credit_card.statement_import"
 
+    # Web Push abonelik
+    PUSH_SUBSCRIBE = "push.subscribe"
+    PUSH_UNSUBSCRIBE = "push.unsubscribe"
+
     # Account
     ACCOUNT_SOFT_DELETE = "account.soft_delete"
 

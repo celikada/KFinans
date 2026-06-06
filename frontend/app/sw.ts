@@ -136,3 +136,46 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// ─── Web Push (feat/web-push) ───────────────────────────────────────────────
+// Serwist's addEventListeners() wires up install/activate/fetch/message only —
+// it does NOT register `push` or `notificationclick`. These extra listeners run
+// alongside without conflicting. Backend push payload shape: { title, body, url, tag }.
+
+interface PushPayload {
+  title?: string;
+  body?: string;
+  url?: string;
+  tag?: string;
+}
+
+self.addEventListener("push", (event) => {
+  let data: PushPayload = {};
+  try {
+    data = (event.data?.json() as PushPayload | undefined) ?? {};
+  } catch {
+    // Malformed/empty payload → fall back to defaults below.
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "KFinans", {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url ?? "/dashboard" },
+      tag: data.tag,
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data?.url as string | undefined) ?? "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((wins) => {
+      for (const w of wins) {
+        if (w.url.includes(target) && "focus" in w) return w.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

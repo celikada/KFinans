@@ -2,21 +2,30 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, distinct, select, text
 
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.audit_log import AuditLog
+from app.models.credit_card import CreditCard, CreditCardStatement
+from app.models.push_subscription import PushSubscription
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
+from app.services.push import send_to_user
 from app.services.snapshot import compute_and_save_snapshot
 
 logger = logging.getLogger(__name__)
 _TZ = "Europe/Istanbul"
+_ISTANBUL = ZoneInfo(_TZ)
 _scheduler = AsyncIOScheduler(timezone=_TZ)
+
+# Ödemesi bu kadar gün içinde olan (veya gecikmiş) ekstreler için push hatırlatma.
+# credit_cards.py `_DUE_SOON_DAYS` (girişteki popup hatırlatması) ile tutarlı.
+_PUSH_DUE_SOON_DAYS = 5
 
 # ARC-011 (FAZ H): Multi-replica safety — sadece 1 pod scheduler'i baslatir.
 # K8s deployment'ta `SCHEDULER_ENABLED=true` sadece 1 replica'ya verilir
@@ -193,6 +202,65 @@ async def _hard_delete_expired_users_job(session_factory=None) -> None:
         logger.debug("COMP-004 hard-delete: silinecek kayit yok")
 
 
+async def _push_due_payments_job(session_factory=None) -> None:
+    """Her gün 09:00 Europe/Istanbul: ödemesi yaklaşan kart borçları için push.
+
+    Push aboneliği olan her kullanıcı için, `paid_at IS NULL` ve `due_date <=
+    bugün + _PUSH_DUE_SOON_DAYS` koşulunu sağlayan kredi kartı ekstrelerini sayar;
+    en az bir tane varsa o kullanıcıya TEK özet bildirim gönderir.
+
+    ARC-011: pg advisory lock — multi-replica deploy'da sadece bir pod yürütür.
+
+    `session_factory`: test'te TestSession enjekte etmek için; default production'da
+    AsyncSessionLocal.
+    """
+    sf = session_factory or AsyncSessionLocal
+    today = datetime.now(_ISTANBUL).date()
+    cutoff = today + timedelta(days=_PUSH_DUE_SOON_DAYS)
+
+    async with sf() as lock_session:
+        if not await _try_acquire_lock(lock_session, _SCHEDULER_LOCK_KEY):
+            logger.info("Push due-payments job: pg advisory lock alinamadi, baska pod calisiyor — skip")
+            return
+
+        try:
+            async with sf() as session:
+                # Push aboneliği olan kullanıcılar
+                user_ids = (await session.execute(select(distinct(PushSubscription.user_id)))).scalars().all()
+                total_sent = 0
+                for user_id in user_ids:
+                    count = (
+                        (
+                            await session.execute(
+                                select(CreditCardStatement)
+                                .join(CreditCard, CreditCard.id == CreditCardStatement.card_id)
+                                .where(
+                                    CreditCard.user_id == user_id,
+                                    CreditCardStatement.paid_at.is_(None),
+                                    CreditCardStatement.due_date <= cutoff,
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    n = len(count)
+                    if n == 0:
+                        continue
+                    sent = await send_to_user(
+                        session,
+                        user_id,
+                        title="Yaklaşan kart ödemesi",
+                        body=f"{n} ödeme yaklaşıyor/gecikti",
+                        url="/dashboard/credit-cards",
+                        tag="kfinans-due-payments",
+                    )
+                    total_sent += sent
+            logger.info("Push due-payments job tamamlandi: %d bildirim gonderildi", total_sent)
+        finally:
+            await _release_lock(lock_session, _SCHEDULER_LOCK_KEY)
+
+
 def start_scheduler() -> None:
     # ARC-011 (FAZ H): Multi-replica safety — sadece SCHEDULER_ENABLED=true
     # olan pod scheduler'i baslatir. Defence-in-depth: job icinde de pg advisory
@@ -229,11 +297,18 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _push_due_payments_job,
+        CronTrigger(hour=9, minute=0, timezone=_TZ),
+        id="push_due_payments",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
         "Zamanlayici baslatildi (haftalik snapshot: Pazar 23:00, "
         "revoked_tokens cleanup: gunluk 03:00, hard-delete: 04:00, "
-        "audit retention: 04:30 Europe/Istanbul)"
+        "audit retention: 04:30, push hatirlatma: 09:00 Europe/Istanbul)"
     )
 
 

@@ -1055,3 +1055,24 @@ export interface BudgetComparisonDTO {
   over_budget: boolean;
   currency?: CurrencyType; // v0.3.0 — bütçe satırının para birimi
 }
+
+// ─── Web Push (feat/web-push) ───────────────────────────────────
+
+export interface VapidPublicKeyDTO {
+  public_key: string; // base64url-encoded VAPID application server key
+}
+
+export interface PushSubscriptionKeys {
+  p256dh: string;
+  auth: string;
+}
+
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: PushSubscriptionKeys;
+  user_agent: string;
+}
+
+export interface PushTestResultDTO {
+  sent: number; // number of test notifications dispatched
+}

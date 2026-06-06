@@ -62,6 +62,9 @@ dependencies = [
     # SEC (audit #5 MFA): TOTP (RFC 6238) + QR PNG (kullaniciya servis)
     "pyotp>=2.9",
     "qrcode[pil]>=7.4",
+    # Web Push (VAPID + payload sifreleme) — tarayici/PWA bildirimleri.
+    # py_vapid + http_ece bagimliliklarini icerir.
+    "pywebpush>=2.0",
 ]
 
 [project.optional-dependencies]

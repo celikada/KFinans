@@ -8,6 +8,7 @@ from app.models.credit_transaction import CreditTransaction
 from app.models.integration import Integration, WalletAddress
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
+from app.models.push_subscription import PushSubscription
 from app.models.recurring_income import RecurringIncome
 from app.models.recurring_skip import RecurringSkip
 from app.models.tefas import TefasHolding
@@ -21,6 +22,7 @@ __all__ = [
     "WalletAddress",
     "PortfolioSnapshot",
     "AssetPosition",
+    "PushSubscription",
     "InvestmentAdvice",
     "TefasHolding",
     "CommodityHolding",

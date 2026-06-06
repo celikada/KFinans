@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     # (tüm Host header'larına izin) çünkü localhost + 127.0.0.1 + IP karışık.
     allowed_hosts: list[str] = ["*"]
 
+    # ─── Web Push (VAPID) — tarayıcı/PWA bildirimleri ─────────────────
+    # Anahtarlar base64url ham formatında (public: 65 byte uncompressed EC point,
+    # private: 32 byte raw). Üretim:
+    #   from py_vapid import Vapid; v = Vapid(); v.generate_keys()
+    #   public  = v.public_key (raw base64url), private = v.private_key (raw base64url)
+    # Anahtarlar boşsa push servisi no-op (dev/CI güvenli — gönderim 0 döner).
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:celikada@gmail.com"
+
     # E-posta (Resend) — kullanıcı kayıt doğrulama
     resend_api_key: str = ""
     # Startup'ta Resend key canlı geçerlilik probu (1 API çağrısı). Prod'da True

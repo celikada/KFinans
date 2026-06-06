@@ -9,6 +9,7 @@ import { getShowUsd, setShowUsd as persistShowUsd } from "@/app/_components/TLVa
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { cacheDefaultCurrency } from "@/lib/defaultCurrency";
+import { PushNotifications } from "./_components/PushNotifications";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
   { key: "conservative", label: RISK_PROFILE_LABELS.conservative },
@@ -362,6 +363,9 @@ export default function SettingsPage() {
             </button>
           </div>
         </section>
+
+        {/* Bölüm 4.6: Telefon Bildirimleri (Web Push) */}
+        <PushNotifications />
 
         {/* Bölüm 5: Dashboard Görünümü */}
         <section className={CARD_CLS}>
