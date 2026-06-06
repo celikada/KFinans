@@ -9,6 +9,7 @@ import { getShowUsd, setShowUsd as persistShowUsd } from "@/app/_components/TLVa
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { cacheDefaultCurrency } from "@/lib/defaultCurrency";
+import { APP_VERSION } from "@/lib/version";
 import { PushNotifications } from "./_components/PushNotifications";
 
 const RISK_OPTIONS: Array<{ key: "conservative" | "balanced" | "aggressive"; label: string }> = [
@@ -41,6 +42,9 @@ export default function SettingsPage() {
   // Sürüm bildirimleri (release notes) aboneliği
   const [releaseOptIn, setReleaseOptIn] = useState(false);
   const [releaseSaving, setReleaseSaving] = useState(false);
+  // E-posta ödeme hatırlatması (opt-in)
+  const [paymentEmail, setPaymentEmail] = useState(false);
+  const [paymentEmailSaving, setPaymentEmailSaving] = useState(false);
 
   useEffect(() => {
     setHiddenCards(getHiddenCards());
@@ -68,6 +72,7 @@ export default function SettingsPage() {
         setSelectedRisk(data.risk_profile);
         setSelectedCurrency(data.default_currency ?? "TRY");
         setReleaseOptIn(Boolean(data.release_notes_opt_in));
+        setPaymentEmail(Boolean(data.payment_reminder_email));
       })
       .catch((err: Error) => {
         if (err.message.includes("401")) router.replace("/login");
@@ -129,6 +134,21 @@ export default function SettingsPage() {
       setReleaseOptIn(!next); // başarısızsa geri al
     } finally {
       setReleaseSaving(false);
+    }
+  }
+
+  async function handlePaymentEmailToggle() {
+    const next = !paymentEmail;
+    setPaymentEmail(next); // iyimser
+    setPaymentEmailSaving(true);
+    try {
+      // risk_profile zorunlu; mevcut değeri koruyup yalnız e-posta tercihini değiştir.
+      const res = await api.updateProfile(selectedRisk, undefined, next);
+      setPaymentEmail(Boolean(res.payment_reminder_email));
+    } catch {
+      setPaymentEmail(!next); // başarısızsa geri al
+    } finally {
+      setPaymentEmailSaving(false);
     }
   }
 
@@ -367,6 +387,30 @@ export default function SettingsPage() {
         {/* Bölüm 4.6: Telefon Bildirimleri (Web Push) */}
         <PushNotifications />
 
+        {/* Bölüm 4.7: E-posta Ödeme Hatırlatması (push'tan bağımsız, herkese garanti) */}
+        <section className={CARD_CLS}>
+          <h2 className="text-base font-semibold text-gray-900 mb-1">{t("content.settings.emailReminder.title")}</h2>
+          <p className="text-xs text-gray-500 mb-4">{t("content.settings.emailReminder.description")}</p>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="text-sm text-gray-700">{t("content.settings.emailReminder.toggle")}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("content.settings.emailReminder.toggleHint")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handlePaymentEmailToggle}
+              disabled={paymentEmailSaving}
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50 ${paymentEmail ? "bg-blue-600" : "bg-gray-200"}`}
+              aria-pressed={paymentEmail}
+              aria-label={paymentEmail ? t("content.settings.emailReminder.toggleOff") : t("content.settings.emailReminder.toggleOn")}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${paymentEmail ? "translate-x-5" : ""}`}
+              />
+            </button>
+          </div>
+        </section>
+
         {/* Bölüm 5: Dashboard Görünümü */}
         <section className={CARD_CLS}>
           <h2 className="text-base font-semibold text-gray-900 mb-1">{t("content.settings.dashboardView")}</h2>
@@ -467,6 +511,11 @@ export default function SettingsPage() {
             {t("content.settings.deleteAccountBtn")}
           </button>
         </section>
+
+        {/* Sürüm bilgisi — kurulu sistemin hangi sürüm olduğunu gösterir */}
+        <p className="text-center text-xs text-gray-400 pt-2 pb-4">
+          KFinans <span className="font-medium text-gray-500">v{APP_VERSION}</span>
+        </p>
       </main>
     </div>
   );

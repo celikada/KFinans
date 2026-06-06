@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import delete, distinct, select, text
 
+from app.api.v1.credit_cards import _DUE_SOON_DAYS as _CREDIT_CARD_DUE_SOON_DAYS
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.audit_log import AuditLog
@@ -15,6 +16,7 @@ from app.models.credit_card import CreditCard, CreditCardStatement
 from app.models.push_subscription import PushSubscription
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
+from app.services.email import send_payment_reminder_email
 from app.services.push import send_to_user
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -23,9 +25,10 @@ _TZ = "Europe/Istanbul"
 _ISTANBUL = ZoneInfo(_TZ)
 _scheduler = AsyncIOScheduler(timezone=_TZ)
 
-# Ödemesi bu kadar gün içinde olan (veya gecikmiş) ekstreler için push hatırlatma.
-# credit_cards.py `_DUE_SOON_DAYS` (girişteki popup hatırlatması) ile tutarlı.
-_PUSH_DUE_SOON_DAYS = 5
+# Ödemesi bu kadar gün içinde olan (veya gecikmiş) ekstreler için hatırlatma
+# (hem push hem e-posta). credit_cards.py `_DUE_SOON_DAYS` (girişteki popup
+# hatırlatması) tek kaynaktır; import edilerek tutarlılık garanti edilir.
+_DUE_SOON_DAYS = _CREDIT_CARD_DUE_SOON_DAYS
 
 # ARC-011 (FAZ H): Multi-replica safety — sadece 1 pod scheduler'i baslatir.
 # K8s deployment'ta `SCHEDULER_ENABLED=true` sadece 1 replica'ya verilir
@@ -37,6 +40,11 @@ _SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() in ("1", "tr
 # alirsa job-icinde defence-in-depth. Lock key sabit; ayni job sadece bir pod'da
 # calisir. pg_try_advisory_xact_lock transaction-scoped (commit/rollback ile auto release).
 _SCHEDULER_LOCK_KEY = 0x4B46494E_414E5300  # "KFINANS\x00" hex
+
+# Ödeme hatırlatması e-posta cron'u için AYRI lock key — push job (09:00) ile
+# e-posta job (09:05) aynı anda farklı pod'larda paralel çalışabilsin diye
+# bağımsız leader election. (Aynı lock olsaydı iki job birbirini bloklardı.)
+_EMAIL_REMINDER_LOCK_KEY = 0x4B46494E_454D4C00  # "KFINEML\x00" hex
 
 # ARC-003 (FAZ H): Paralel snapshot semaphore — 100 kullanici icin sirali for
 # loop yerine 5'er paralel grup. Her kullanici dis API'ye birden fazla istek
@@ -202,12 +210,32 @@ async def _hard_delete_expired_users_job(session_factory=None) -> None:
         logger.debug("COMP-004 hard-delete: silinecek kayit yok")
 
 
+async def _due_statements_for_user(session, user_id, today) -> list[CreditCardStatement]:
+    """DRY: bir kullanıcının ödemesi yaklaşan/gecikmiş kart ekstrelerini döner.
+
+    `paid_at IS NULL` ve `due_date <= bugün + _DUE_SOON_DAYS` koşulunu sağlayan
+    `CreditCardStatement` kayıtları (kullanıcının kartlarına join). Hem push
+    (`_push_due_payments_job`) hem e-posta (`_email_due_payments_job`) cron'ları
+    bu helper'ı kullanır (SonarQube S4144 duplication önlenir).
+    """
+    cutoff = today + timedelta(days=_DUE_SOON_DAYS)
+    result = await session.execute(
+        select(CreditCardStatement)
+        .join(CreditCard, CreditCard.id == CreditCardStatement.card_id)
+        .where(
+            CreditCard.user_id == user_id,
+            CreditCardStatement.paid_at.is_(None),
+            CreditCardStatement.due_date <= cutoff,
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def _push_due_payments_job(session_factory=None) -> None:
     """Her gün 09:00 Europe/Istanbul: ödemesi yaklaşan kart borçları için push.
 
-    Push aboneliği olan her kullanıcı için, `paid_at IS NULL` ve `due_date <=
-    bugün + _PUSH_DUE_SOON_DAYS` koşulunu sağlayan kredi kartı ekstrelerini sayar;
-    en az bir tane varsa o kullanıcıya TEK özet bildirim gönderir.
+    Push aboneliği olan her kullanıcı için, `_due_statements_for_user` ile yaklaşan
+    ekstreleri bulur; en az bir tane varsa o kullanıcıya TEK özet bildirim gönderir.
 
     ARC-011: pg advisory lock — multi-replica deploy'da sadece bir pod yürütür.
 
@@ -216,7 +244,6 @@ async def _push_due_payments_job(session_factory=None) -> None:
     """
     sf = session_factory or AsyncSessionLocal
     today = datetime.now(_ISTANBUL).date()
-    cutoff = today + timedelta(days=_PUSH_DUE_SOON_DAYS)
 
     async with sf() as lock_session:
         if not await _try_acquire_lock(lock_session, _SCHEDULER_LOCK_KEY):
@@ -229,22 +256,7 @@ async def _push_due_payments_job(session_factory=None) -> None:
                 user_ids = (await session.execute(select(distinct(PushSubscription.user_id)))).scalars().all()
                 total_sent = 0
                 for user_id in user_ids:
-                    count = (
-                        (
-                            await session.execute(
-                                select(CreditCardStatement)
-                                .join(CreditCard, CreditCard.id == CreditCardStatement.card_id)
-                                .where(
-                                    CreditCard.user_id == user_id,
-                                    CreditCardStatement.paid_at.is_(None),
-                                    CreditCardStatement.due_date <= cutoff,
-                                )
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-                    n = len(count)
+                    n = len(await _due_statements_for_user(session, user_id, today))
                     if n == 0:
                         continue
                     sent = await send_to_user(
@@ -259,6 +271,73 @@ async def _push_due_payments_job(session_factory=None) -> None:
             logger.info("Push due-payments job tamamlandi: %d bildirim gonderildi", total_sent)
         finally:
             await _release_lock(lock_session, _SCHEDULER_LOCK_KEY)
+
+
+def _statement_to_reminder_item(stmt: CreditCardStatement, card_name: str, today) -> dict:
+    """Ekstre → e-posta hatırlatma satırı dict'i (DRY, S7500 dict() kaçınma)."""
+    return {
+        "card_name": card_name,
+        "amount": f"{stmt.statement_amount:,.2f}",
+        "currency": stmt.currency,
+        "due_date": stmt.due_date.isoformat(),
+        "days_until_due": (stmt.due_date - today).days,
+    }
+
+
+async def _email_due_payments_job(session_factory=None) -> None:
+    """Her gün 09:05 Europe/Istanbul: ödemesi yaklaşan kart borçları için e-posta.
+
+    Push'a alternatif (Google/tarayıcı bağımsız). `payment_reminder_email=True`
+    VE `email_verified=True` VE `deleted_at IS NULL` her kullanıcı için
+    `_due_statements_for_user` ile yaklaşan ekstreleri bulur; en az bir tane
+    varsa Resend ile TEK özet e-posta gönderir (best-effort).
+
+    Push job (09:00) ile çakışmasın diye 5 dk sonra + AYRI advisory lock key.
+
+    `session_factory`: test'te TestSession enjekte etmek için; default production'da
+    AsyncSessionLocal.
+    """
+    sf = session_factory or AsyncSessionLocal
+    today = datetime.now(_ISTANBUL).date()
+
+    async with sf() as lock_session:
+        if not await _try_acquire_lock(lock_session, _EMAIL_REMINDER_LOCK_KEY):
+            logger.info("Email due-payments job: pg advisory lock alinamadi, baska pod calisiyor — skip")
+            return
+
+        try:
+            async with sf() as session:
+                users = (
+                    (
+                        await session.execute(
+                            select(User).where(
+                                User.payment_reminder_email.is_(True),
+                                User.email_verified.is_(True),
+                                User.deleted_at.is_(None),
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                total_sent = 0
+                for user in users:
+                    statements = await _due_statements_for_user(session, user.id, today)
+                    if not statements:
+                        continue
+                    # Kart adlarını tek sorguda çek (N+1 önle).
+                    card_ids = {s.card_id for s in statements}
+                    cards = (await session.execute(select(CreditCard).where(CreditCard.id.in_(card_ids)))).scalars().all()
+                    card_names = {c.id: c.name for c in cards}
+                    items = [_statement_to_reminder_item(s, card_names.get(s.card_id, "-"), today) for s in statements]
+                    try:
+                        if await send_payment_reminder_email(to=user.email, items=items):
+                            total_sent += 1
+                    except Exception as e:
+                        logger.exception("Ödeme hatırlatması e-postası gönderilemedi (user=%s): %s", user.id, e)
+            logger.info("Email due-payments job tamamlandi: %d kullaniciya e-posta gonderildi", total_sent)
+        finally:
+            await _release_lock(lock_session, _EMAIL_REMINDER_LOCK_KEY)
 
 
 def start_scheduler() -> None:
@@ -304,11 +383,19 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _email_due_payments_job,
+        CronTrigger(hour=9, minute=5, timezone=_TZ),
+        id="email_due_payments",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
         "Zamanlayici baslatildi (haftalik snapshot: Pazar 23:00, "
         "revoked_tokens cleanup: gunluk 03:00, hard-delete: 04:00, "
-        "audit retention: 04:30, push hatirlatma: 09:00 Europe/Istanbul)"
+        "audit retention: 04:30, push hatirlatma: 09:00, "
+        "e-posta hatirlatma: 09:05 Europe/Istanbul)"
     )
 
 

@@ -7,6 +7,9 @@ const STORAGE_KEY = "kfinans_show_usd";
 const RATE_KEY = "kfinans_usd_rate_cache";
 const RATE_TTL_MS = 5 * 60 * 1000;
 
+/** "USD karşılığı göster" değişince yayınlanan olay (aynı sekmede reaktif güncelleme). */
+export const SHOW_USD_CHANGED_EVENT = "kfinans-show-usd-changed";
+
 export function getShowUsd(): boolean {
   if (globalThis.window === undefined) return false;
   return localStorage.getItem(STORAGE_KEY) === "true";
@@ -15,7 +18,7 @@ export function getShowUsd(): boolean {
 export function setShowUsd(v: boolean) {
   localStorage.setItem(STORAGE_KEY, v ? "true" : "false");
   // Tüm bileşenlere haber ver — storage event aynı sekmede tetiklenmez
-  globalThis.dispatchEvent(new CustomEvent("kfinans-show-usd-changed"));
+  globalThis.dispatchEvent(new CustomEvent(SHOW_USD_CHANGED_EVENT));
 }
 
 interface CachedRate {
@@ -74,8 +77,8 @@ export function TLValue({ tl, className, usdClassName }: Props) {
   useEffect(() => {
     setShow(getShowUsd());
     const handler = () => setShow(getShowUsd());
-    globalThis.addEventListener("kfinans-show-usd-changed", handler);
-    return () => globalThis.removeEventListener("kfinans-show-usd-changed", handler);
+    globalThis.addEventListener(SHOW_USD_CHANGED_EVENT, handler);
+    return () => globalThis.removeEventListener(SHOW_USD_CHANGED_EVENT, handler);
   }, []);
 
   if (tl === null || tl === undefined || tl === "") {

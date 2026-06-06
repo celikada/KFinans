@@ -95,6 +95,9 @@ async def update_profile(payload: ProfileUpdate, current_user: CurrentUser, db: 
     # v0.3.0: varsayılan para birimi tercihi (opsiyonel; verilmezse korunur).
     if payload.default_currency is not None:
         current_user.default_currency = payload.default_currency
+    # Ödeme hatırlatması e-postası opt-in tercihi (opsiyonel; verilmezse korunur).
+    if payload.payment_reminder_email is not None:
+        current_user.payment_reminder_email = payload.payment_reminder_email
     await db.commit()
     await db.refresh(current_user)
     logger.info(

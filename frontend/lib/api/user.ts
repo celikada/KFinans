@@ -5,10 +5,15 @@ export const userApi = {
   getMe: () => request<UserMeDTO>("/user/me"),
 
   // v0.3.0: default_currency opsiyonel — verilirse varsayilan para birimi guncellenir.
-  updateProfile: (risk_profile: string, default_currency?: CurrencyType) =>
+  // v0.6.0: payment_reminder_email opsiyonel — e-posta odeme hatirlatmasi tercihi.
+  updateProfile: (risk_profile: string, default_currency?: CurrencyType, payment_reminder_email?: boolean) =>
     request<UserMeDTO>("/user/profile", {
       method: "PUT",
-      body: JSON.stringify({ risk_profile, ...(default_currency ? { default_currency } : {}) }),
+      body: JSON.stringify({
+        risk_profile,
+        ...(default_currency ? { default_currency } : {}),
+        ...(payment_reminder_email === undefined ? {} : { payment_reminder_email }),
+      }),
     }),
 
   changePassword: (current_password: string, new_password: string) =>

@@ -6,6 +6,27 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.6.0] - 2026-06-06
+
+### Eklenenler
+
+- **E-posta ödeme hatırlatması (opt-in):** Push'a alternatif, tarayıcı/Google
+  bağımsız garanti kanal. Ayarlar'dan açılır; her gün 09:05'te ödemesi ≤5 gün
+  kalan/gecikmiş kredi kartı ekstreleri için doğrulanmış e-postaya hatırlatma
+  gönderilir (Resend). Yalnızca opt-in + e-postası doğrulanmış kullanıcılara.
+- **Sürüm gösterimi:** Ayarlar sayfasının altında kurulu uygulama sürümü
+  (`vX.Y.Z`) gösterilir — hangi sürümün canlı olduğunu görmek için.
+
+### Düzeltmeler
+
+- **"USD karşılığı göster" yeniden çalışıyor:** Görüntüleme para birimi özelliği
+  (v0.3.1) eklenince dashboard kartları `TLValue` yerine `Money` bileşenine
+  geçmişti; bu yüzden "USD karşılığı göster" toggle'ı çalışmıyordu. USD karşılığı
+  alt-satırı artık `Money` bileşeninde: toggle açıkken ve görüntüleme birimi USD
+  değilken, değerin altında güncel kurla `≈ $X` gösterilir.
+
+---
+
 ## [0.5.1] - 2026-06-06
 
 ### Düzeltmeler
