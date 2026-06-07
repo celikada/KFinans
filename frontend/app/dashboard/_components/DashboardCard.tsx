@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { Money, DisplayMoney, fmtCurrency, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { COLOR_MAP, ICONS, type IconName } from "./icons";
 
@@ -34,11 +34,10 @@ export interface CardProps {
   // Cache hit sonrasi bu kartin verisi yeniden cekiliyor mu? true ise kart
   // ustunde "guncelleniyor" rozeti gosterilir (hangi kartin guncellendigini belirtir).
   readonly updating?: boolean;
-}
-
-
-function fmtTL(val: number) {
-  return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Faz C: `total` ve `top` değerleri ZATEN görüntüleme para biriminde mi (backend
+  // `*_display`, tarihsel kur)? true → DisplayMoney/fmtCurrency (BÖLME YOK).
+  // false/undefined → Money/formatTlAs (TL → güncel kur; canlı yatırım kartları).
+  readonly displayValue?: boolean;
 }
 
 
@@ -58,7 +57,7 @@ export function UpdatingBadge() {
 
 
 export function Card({
-  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating,
+  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating, displayValue,
 }: CardProps) {
   const router = useRouter();
   const c = COLOR_MAP[color];
@@ -71,7 +70,11 @@ export function Card({
 
   let body: React.ReactNode;
   if (hasTotal) {
-    body = <Money tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
+    // Faz C: finans kartları (displayValue) → DisplayMoney (zaten görüntüleme
+    // biriminde, BÖLME YOK); yatırım kartları → Money (TL → güncel kur).
+    body = displayValue
+      ? <DisplayMoney value={total} currency={displayCurrency} className={`text-base font-bold tabular-nums ${c.text}`} />
+      : <Money tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
   } else if ((count ?? 0) > 0) {
     body = <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>;
   } else if (loading) {
@@ -100,7 +103,9 @@ export function Card({
           {top.map((it) => (
             <li key={it.label} className="flex justify-between items-center text-xs">
               <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
-              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">{formatTlAs(it.value, displayCurrency, rates)}</span>
+              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">
+                {displayValue ? fmtCurrency(it.value, displayCurrency) : formatTlAs(it.value, displayCurrency, rates)}
+              </span>
             </li>
           ))}
         </ul>

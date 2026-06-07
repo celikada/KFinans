@@ -109,7 +109,7 @@ describe("budgetApi", () => {
   });
   it("getBudgetComparison", async () => {
     await budgetApi.getBudgetComparison(2026, 5);
-    expectFetch("/budgets/comparison?year=2026&month=5");
+    expectFetch("/budgets/comparison?year=2026&month=5&display=TRY");
   });
 });
 
@@ -135,7 +135,7 @@ describe("cashApi", () => {
 describe("cashFlowApi", () => {
   it("getCashFlow", async () => {
     await cashFlowApi.getCashFlow(2026);
-    expectFetch("/cash-flow?year=2026");
+    expectFetch("/cash-flow?year=2026&display=TRY");
   });
 });
 
@@ -170,7 +170,7 @@ describe("commodityApi", () => {
 describe("creditCardsApi", () => {
   it("listCreditCards", async () => {
     await creditCardsApi.listCreditCards();
-    expectFetch("/credit-cards");
+    expectFetch("/credit-cards?display=TRY");
   });
   it("createCreditCard", async () => {
     await creditCardsApi.createCreditCard({ name: "X" } as never);
@@ -237,7 +237,7 @@ describe("expensesApi", () => {
   });
   it("getExpenseSummary", async () => {
     await expensesApi.getExpenseSummary(2026, 5);
-    expectFetch("/expenses/summary?year=2026&month=5");
+    expectFetch("/expenses/summary?year=2026&month=5&display=TRY");
   });
   it("exportExpenses boş → query yok", async () => {
     stubDownload();
@@ -290,11 +290,11 @@ describe("incomesApi", () => {
   });
   it("getIncomeSummary", async () => {
     await incomesApi.getIncomeSummary(2026, 5);
-    expectFetch("/income/summary?year=2026&month=5");
+    expectFetch("/income/summary?year=2026&month=5&display=TRY");
   });
   it("getIncomeDashboard", async () => {
     await incomesApi.getIncomeDashboard(2026, 5);
-    expectFetch("/income/dashboard?year=2026&month=5");
+    expectFetch("/income/dashboard?year=2026&month=5&display=TRY");
   });
   it("listRecurringIncomes", async () => {
     await incomesApi.listRecurringIncomes();

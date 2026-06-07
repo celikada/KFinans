@@ -16,7 +16,7 @@ import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { deriveScope, loadCache, saveCache, type DashboardSnapshot } from "@/lib/dashboardCache";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { useUsdRate } from "@/app/_components/TLValue";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { Money, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { LanguageSwitcher } from "@/app/_i18n/LanguageSwitcher";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
@@ -131,8 +131,7 @@ export default function DashboardPage() {
   const [hiddenCards, setHiddenCards] = useState<DashboardCardId[]>([]);
 
   const usdRate = useUsdRate();
-  // Görüntüleme para birimi (toplam/grafik dönüşümü için).
-  const rates = useRates();
+  // Görüntüleme para birimi: finans toplamları backend *_display'inden (BÖLME YOK).
   const displayCurrency = useDisplayCurrency();
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
   // Snapshot uyarı popup state
@@ -369,10 +368,11 @@ export default function DashboardPage() {
       safe("income-summary", async () => {
         const sum = await api.getIncomeSummary(yyyy, mm);
         if (sum.count === 0) return;
-        const incomeTotal = Number.parseFloat(sum.total);
+        // Faz C: *_display ZATEN görüntüleme biriminde (tarihsel kur, BÖLME YOK).
+        const incomeTotal = Number.parseFloat(sum.total_display);
         const incomeTop = top3(
           sum.by_category,
-          (b) => Number.parseFloat(b.total),
+          (b) => Number.parseFloat(b.total_display),
           (b) => INCOME_CATEGORY_LABELS[b.category] ?? b.category,
         );
         safeSet(setIncomeTotal)(incomeTotal);
@@ -384,7 +384,8 @@ export default function DashboardPage() {
       // Gelir dashboard (yıl sonu beklentisi)
       safe("income-dashboard", async () => {
         const d = await api.getIncomeDashboard(yyyy, mm);
-        const est = Number.parseFloat(d.year_total_estimate);
+        // Faz C: year_total_estimate_display görüntüleme biriminde (BÖLME YOK).
+        const est = Number.parseFloat(d.year_total_estimate_display);
         if (est > 0) {
           safeSet(setIncomeYearEstimate)(est);
           cachePatch({ incomeYearEstimate: est });
@@ -401,13 +402,14 @@ export default function DashboardPage() {
           ? nextYear?.months.find((m) => m.month === 1)
           : thisYear.months.find((m) => m.month === mm + 1);
         const patch: Partial<DashboardSnapshot> = {};
+        // Faz C: net_display ZATEN görüntüleme biriminde (BÖLME YOK).
         if (thisMonth) {
-          const v = Number.parseFloat(thisMonth.net);
+          const v = Number.parseFloat(thisMonth.net_display);
           safeSet(setCurrentMonthNet)(v);
           patch.currentMonthNet = v;
         }
         if (nextMonthData) {
-          const v = Number.parseFloat(nextMonthData.net);
+          const v = Number.parseFloat(nextMonthData.net_display);
           safeSet(setNextMonthNet)(v);
           patch.nextMonthNet = v;
         }
@@ -417,8 +419,9 @@ export default function DashboardPage() {
       // Kredi kartları
       safe("credit-cards", async () => {
         const s = await api.listCreditCards();
-        const creditCardTotal = Number.parseFloat(s.total_debt);
-        const creditCardPeriod = Number.parseFloat(s.total_period_debt);
+        // Faz C: *_display ZATEN görüntüleme biriminde (borç → güncel kur, BÖLME YOK).
+        const creditCardTotal = Number.parseFloat(s.total_debt_display);
+        const creditCardPeriod = Number.parseFloat(s.total_period_debt_display);
         safeSet(setCreditCardTotal)(creditCardTotal);
         safeSet(setCreditCardPeriod)(creditCardPeriod);
         safeSet(setCreditCardCount)(s.cards.length);
@@ -502,10 +505,11 @@ export default function DashboardPage() {
       safe("expenses", async () => {
         const sum = await api.getExpenseSummary(yyyy, mm);
         if (sum.count === 0) return;
-        const expenseTotal = Number.parseFloat(sum.total);
+        // Faz C: *_display ZATEN görüntüleme biriminde (tarihsel kur, BÖLME YOK).
+        const expenseTotal = Number.parseFloat(sum.total_display);
         const expenseTop = top3(
           sum.by_category,
-          (b) => Number.parseFloat(b.total),
+          (b) => Number.parseFloat(b.total_display),
           (b) => EXPENSE_CATEGORY_LABELS[b.category] ?? b.category,
         );
         safeSet(setExpenseTotal)(expenseTotal);
@@ -527,7 +531,9 @@ export default function DashboardPage() {
     });
 
     return () => { cancelled = true; };
-  }, [router]);
+    // displayCurrency dep: görüntüleme para birimi değişince finans fetch'leri yeni
+    // display param ile yeniden çalışır (backend güncel *_display döner).
+  }, [router, displayCurrency]);
 
   async function logout() {
     try {
@@ -667,7 +673,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold text-gray-300">—</p>
                 ) : (
                   <p className={`text-2xl font-bold tabular-nums ${currentMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {currentMonthNet >= 0 ? "+" : ""}{formatTlAs(currentMonthNet, displayCurrency, rates)}
+                    {currentMonthNet >= 0 ? "+" : ""}{fmtCurrency(currentMonthNet, displayCurrency)}
                   </p>
                 )}
               </div>
@@ -677,7 +683,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold text-gray-300">—</p>
                 ) : (
                   <p className={`text-2xl font-bold tabular-nums ${nextMonthNet >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                    {nextMonthNet >= 0 ? "+" : ""}{formatTlAs(nextMonthNet, displayCurrency, rates)}
+                    {nextMonthNet >= 0 ? "+" : ""}{fmtCurrency(nextMonthNet, displayCurrency)}
                   </p>
                 )}
               </div>
@@ -708,12 +714,13 @@ export default function DashboardPage() {
                 color="red"
                 title={t("dashboard.cards.creditCards")}
                 total={creditCardTotal}
+                displayValue
                 count={creditCardCount}
                 countLabel={t("dashboard.card")}
                 top={[]}
                 placeholder={t("dashboard.cards.creditCardsHint")}
                 footer={creditCardPeriod !== null && (
-                  <span>{t("dashboard.currentPeriodDebt")}: <span className="font-semibold text-gray-700">{formatTlAs(creditCardPeriod, displayCurrency, rates)}</span></span>
+                  <span>{t("dashboard.currentPeriodDebt")}: <span className="font-semibold text-gray-700">{fmtCurrency(creditCardPeriod, displayCurrency)}</span></span>
                 )}
               />
             )}
@@ -726,12 +733,13 @@ export default function DashboardPage() {
                 color="emerald"
                 title={t("dashboard.cards.income")}
                 total={incomeTotal}
+                displayValue
                 count={incomeCount}
                 countLabel={t("dashboard.record")}
                 top={incomeTop}
                 placeholder={t("dashboard.cards.incomeHint")}
                 footer={incomeYearEstimate !== null && (
-                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{formatTlAs(incomeYearEstimate, displayCurrency, rates)}</span></span>
+                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtCurrency(incomeYearEstimate, displayCurrency)}</span></span>
                 )}
               />
             )}
@@ -744,6 +752,7 @@ export default function DashboardPage() {
                 color="red"
                 title={t("dashboard.cards.expenses")}
                 total={expenseTotal}
+                displayValue
                 count={expenseCount}
                 countLabel={t("dashboard.record")}
                 top={expenseTop}

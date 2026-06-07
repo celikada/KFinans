@@ -34,6 +34,7 @@ from app.schemas.expense_analysis import (
     ExpenseAnalysisRequest,
 )
 from app.services import currency as currency_svc
+from app.services import display_currency as display_svc
 from app.services.audit import AuditAction, log_audit
 
 logger = logging.getLogger(__name__)
@@ -219,15 +220,21 @@ async def get_expense_summary(
     db: Annotated[AsyncSession, Depends(get_db)],
     year: Annotated[int, Query(ge=2020, le=2100)],
     month: Annotated[int, Query(ge=1, le=12)],
+    display: Annotated[str | None, Query()] = None,
 ):
     """Belirli ay icin toplam + kategori bazinda kirilim.
 
     Cift sayim kurali: credit_card_id NOT NULL + is_paid=true olan kayitlar
     haric tutulur — bu harcamalar kart borcuyla zaten sayildi (credit_cards
     + statements + installments tarafinda).
+
+    `display` (Faz B): toplam + kategori toplamları seçili görüntüleme birimine
+    *tarihsel* kurla çevrilir (gerçekleşmiş gider). Verilmezse kullanıcı varsayılanı;
+    TRY → *_display == *_tl (regresyon yok, sıfır lookup).
     """
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
+    display_ccy = display_svc.normalize_display(display, current_user.default_currency)
 
     # Cift sayim filtresi: kart + odendi olanlari haric tut
     not_double_counted = or_(
@@ -262,15 +269,57 @@ async def get_expense_summary(
         .group_by(Expense.category)
         .order_by(desc(func.sum(Expense.amount_tl)))
     )
-    breakdown = [CategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
+    breakdown_rows = cat_q.all()
+
+    cat_display, total_display = await _expense_summary_display(db, current_user.id, first_day, last_day, not_double_counted, display_ccy, Decimal(total))
+
+    breakdown = [
+        CategoryBreakdown(
+            category=cat,
+            total=Decimal(amt),
+            total_display=cat_display.get(cat, Decimal(amt)),
+            count=cnt,
+        )
+        for cat, amt, cnt in breakdown_rows
+    ]
 
     return ExpenseSummary(
         year=year,
         month=month,
         total=Decimal(total),
+        total_display=total_display,
+        display_currency=display_ccy,
         count=count,
         by_category=breakdown,
     )
+
+
+async def _expense_summary_display(
+    db: AsyncSession,
+    user_id,
+    first_day: date_type,
+    last_day: date_type,
+    not_double_counted,
+    display_ccy: str,
+    total_tl: Decimal,
+) -> tuple[dict[str, Decimal], Decimal]:
+    """Gider özeti için kategori-bazlı + toplam görüntüleme değerleri (Faz B).
+
+    TRY → boş harita + total_tl (çağıran amount_tl'i kullanır). Aksi → kayıtları
+    (amount, currency, date) çekip kategori bazında tarihsel dönüşüm."""
+    if display_ccy == display_svc.TRY:
+        return {}, total_tl
+    rows = (
+        await db.execute(
+            select(Expense.category, Expense.amount, Expense.currency, Expense.date, Expense.amount_tl).where(
+                Expense.user_id == user_id,
+                Expense.date >= first_day,
+                Expense.date <= last_day,
+                not_double_counted,
+            )
+        )
+    ).all()
+    return await display_svc.convert_realized_grouped(db, rows, display_ccy)
 
 
 @router.get("/export", responses={500: {"description": "openpyxl kütüphanesi bulunamadı"}})

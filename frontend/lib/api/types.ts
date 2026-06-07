@@ -292,6 +292,7 @@ export interface ExpenseDTO {
 export interface CategoryBreakdownDTO {
   category: ExpenseCategory;
   total: string;
+  total_display: string; // Faz B — görüntüleme para biriminde (tarihsel kur)
   count: number;
 }
 
@@ -299,6 +300,8 @@ export interface ExpenseSummaryDTO {
   year: number;
   month: number;
   total: string;
+  total_display: string; // Faz B — görüntüleme para biriminde toplam
+  display_currency: CurrencyType; // Faz B
   count: number;
   by_category: CategoryBreakdownDTO[];
 }
@@ -356,6 +359,7 @@ export interface IncomeDTO {
 export interface IncomeCategoryBreakdownDTO {
   category: IncomeCategory;
   total: string;
+  total_display: string; // Faz B — görüntüleme para biriminde (tarihsel kur)
   count: number;
 }
 
@@ -363,6 +367,8 @@ export interface IncomeSummaryDTO {
   year: number;
   month: number;
   total: string;
+  total_display: string; // Faz B — görüntüleme para biriminde toplam
+  display_currency: CurrencyType; // Faz B
   count: number;
   by_category: IncomeCategoryBreakdownDTO[];
 }
@@ -437,6 +443,14 @@ export interface IncomeDashboardDTO {
   ytd_recurring: string;
   remaining_year_recurring: string;
   year_total_estimate: string;
+  // Faz B — görüntüleme para biriminde 6 metrik karşılığı + birim
+  display_currency: CurrencyType;
+  this_month_actual_display: string;
+  ytd_actual_display: string;
+  this_month_recurring_display: string;
+  ytd_recurring_display: string;
+  remaining_year_recurring_display: string;
+  year_total_estimate_display: string;
 }
 
 export interface RealizeResultDTO {
@@ -514,6 +528,15 @@ export interface CashFlowMonthDTO {
   expense_total: string;
   net: string;
   is_past: boolean;
+  // Faz B — görüntüleme para biriminde ay toplamları (actual=tarihsel, forecast=güncel)
+  income_total_display: string;
+  expense_total_display: string;
+  net_display: string;
+  // Faz C — görüntüleme para biriminde 4 kırılım (actual=tarihsel kur, forecast=güncel kur)
+  income_actual_display: string;
+  income_forecast_display: string;
+  expense_actual_display: string;
+  expense_forecast_display: string;
 }
 
 export interface CashFlowYearDTO {
@@ -522,6 +545,11 @@ export interface CashFlowYearDTO {
   total_income: string;
   total_expense: string;
   total_net: string;
+  // Faz B — görüntüleme para biriminde yıl toplamları + birim
+  display_currency: CurrencyType;
+  total_income_display: string;
+  total_expense_display: string;
+  total_net_display: string;
 }
 
 export interface CashFlowItemDTO {
@@ -533,6 +561,8 @@ export interface CashFlowItemDTO {
   amount: string;
   currency: string;
   amount_tl: string;
+  // Faz B — kalemin görüntüleme para birimi karşılığı (date'li=tarihsel, yoksa güncel)
+  amount_display: string;
 }
 
 export interface CashFlowMonthDetailDTO {
@@ -545,6 +575,11 @@ export interface CashFlowMonthDetailDTO {
   income_total: string;
   expense_total: string;
   net: string;
+  // Faz B — görüntüleme para biriminde toplamlar + birim
+  display_currency: CurrencyType;
+  income_total_display: string;
+  expense_total_display: string;
+  net_display: string;
 }
 
 // ─── Credit Cards ───────────────────────────────────────────────
@@ -581,6 +616,10 @@ export interface CreditCardDTO {
   future_installment_total: string;
   period_debt: string;
   total_debt: string;
+  // Faz B — görüntüleme para biriminde karşılıklar (borç → güncel kur) + birim
+  display_currency: CurrencyType;
+  period_debt_display: string;
+  total_debt_display: string;
 }
 
 export interface CreditCardSummaryDTO {
@@ -588,6 +627,10 @@ export interface CreditCardSummaryDTO {
   total_period_debt: string;
   total_debt: string;
   total_current_period_debt: string; // legacy
+  // Faz B — görüntüleme para biriminde toplamlar + birim
+  display_currency: CurrencyType;
+  total_period_debt_display: string;
+  total_debt_display: string;
 }
 
 // Ekstre
@@ -1055,6 +1098,11 @@ export interface BudgetComparisonDTO {
   pct_used: number | null;
   over_budget: boolean;
   currency?: CurrencyType; // v0.3.0 — bütçe satırının para birimi
+  // Faz B — görüntüleme para biriminde karşılıklar (actual=tarihsel, budget=güncel) + birim
+  display_currency: CurrencyType;
+  budget_amount_display: string | null;
+  actual_amount_display: string;
+  remaining_display: string | null;
 }
 
 // ─── Web Push (feat/web-push) ───────────────────────────────────

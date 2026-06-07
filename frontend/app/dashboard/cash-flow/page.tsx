@@ -14,14 +14,13 @@ import {
 } from "recharts";
 import { api, CashFlowYearDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { CashFlowMonthDetailModal } from "./_components/CashFlowMonthDetailModal";
 
 export default function CashFlowPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const rates = useRates();
   const displayCurrency = useDisplayCurrency();
   const MONTH_NAMES = t("content.cashFlow.monthsShort").split(",");
   const now = new Date();
@@ -43,24 +42,26 @@ export default function CashFlowPage() {
     } finally {
       setLoading(false);
     }
-  }, [year, router, t]);
+    // displayCurrency dep: para birimi değişince backend yeni *_display ile yeniden çekilir.
+  }, [year, router, t, displayCurrency]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  // Grafik için data hazırla
+  // Grafik için data hazırla — Faz B: değerler ZATEN görüntüleme para biriminde
+  // (*_display, actual=tarihsel/forecast=güncel kur); grafik/eksen/tooltip BÖLMEZ.
   const chartData = (data?.months ?? []).map((m) => ({
     name: MONTH_NAMES[m.month - 1],
-    income: Number.parseFloat(m.income_total),
-    expense: Number.parseFloat(m.expense_total),
-    net: Number.parseFloat(m.net),
+    income: Number.parseFloat(m.income_total_display),
+    expense: Number.parseFloat(m.expense_total_display),
+    net: Number.parseFloat(m.net_display),
     is_past: m.is_past,
   }));
 
-  const totalIncome = data ? Number.parseFloat(data.total_income) : 0;
-  const totalExpense = data ? Number.parseFloat(data.total_expense) : 0;
-  const totalNet = data ? Number.parseFloat(data.total_net) : 0;
+  const totalIncome = data ? Number.parseFloat(data.total_income_display) : 0;
+  const totalExpense = data ? Number.parseFloat(data.total_expense_display) : 0;
+  const totalNet = data ? Number.parseFloat(data.total_net_display) : 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -114,18 +115,18 @@ export default function CashFlowPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalIncome")}</p>
-            <Money tl={totalIncome} className="text-2xl font-bold text-emerald-600 tabular-nums" />
+            <DisplayMoney value={totalIncome} currency={displayCurrency} className="text-2xl font-bold text-emerald-600 tabular-nums" />
             <p className="text-xs text-gray-400 mt-1">{year} {t("content.cashFlow.yearTotalHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.cashFlow.totalExpense")}</p>
-            <Money tl={totalExpense} className="text-2xl font-bold text-rose-600 tabular-nums" />
+            <DisplayMoney value={totalExpense} currency={displayCurrency} className="text-2xl font-bold text-rose-600 tabular-nums" />
             <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.expenseHint")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("table.net")}</p>
             <p className={`text-2xl font-bold tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {totalNet >= 0 ? "+" : ""}{formatTlAs(totalNet, displayCurrency, rates)}
+              {totalNet >= 0 ? "+" : ""}{fmtCurrency(totalNet, displayCurrency)}
             </p>
             <p className="text-xs text-gray-400 mt-1">{t("content.cashFlow.netHint")}</p>
           </div>
@@ -149,15 +150,13 @@ export default function CashFlowPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="name" fontSize={11} stroke="#9ca3af" />
                   <YAxis
-                    tickFormatter={(v) => {
-                      const rate = displayCurrency === "TRY" ? 1 : (rates?.[displayCurrency] ?? 1);
-                      return `${((v / rate) / 1000).toFixed(0)}K`;
-                    }}
+                    // Değerler zaten görüntüleme para biriminde — sadece binlik kısalt (K).
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
                     fontSize={11}
                     stroke="#9ca3af"
                   />
                   <Tooltip
-                    formatter={(v) => formatTlAs(v as number, displayCurrency, rates)}
+                    formatter={(v) => fmtCurrency(v as number, displayCurrency)}
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -189,11 +188,9 @@ export default function CashFlowPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {data.months.map((m) => {
-                  const incActual = Number.parseFloat(m.income_actual);
-                  const incForecast = Number.parseFloat(m.income_forecast);
-                  const expActual = Number.parseFloat(m.expense_actual);
-                  const expForecast = Number.parseFloat(m.expense_forecast);
-                  const net = Number.parseFloat(m.net);
+                  // Faz C: backend *_display alanları ZATEN görüntüleme biriminde
+                  // (actual=tarihsel kur, forecast=güncel kur) → BÖLME YOK.
+                  const net = Number.parseFloat(m.net_display);
                   return (
                     <tr key={m.month} className={m.is_past ? "" : "bg-gray-50/30"}>
                       <td className="px-4 py-3">
@@ -206,12 +203,12 @@ export default function CashFlowPage() {
                         </button>
                         {!m.is_past && <span className="ml-2 text-[10px] text-gray-400">{t("content.cashFlow.forecast")}</span>}
                       </td>
-                      <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatTlAs(incActual, displayCurrency, rates)}</td>
-                      <td className="px-4 py-3 text-right text-emerald-400 tabular-nums">{formatTlAs(incForecast, displayCurrency, rates)}</td>
-                      <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{formatTlAs(expActual, displayCurrency, rates)}</td>
-                      <td className="px-4 py-3 text-right text-rose-400 tabular-nums">{formatTlAs(expForecast, displayCurrency, rates)}</td>
+                      <td className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtCurrency(m.income_actual_display, displayCurrency)}</td>
+                      <td className="px-4 py-3 text-right text-emerald-400 tabular-nums">{fmtCurrency(m.income_forecast_display, displayCurrency)}</td>
+                      <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmtCurrency(m.expense_actual_display, displayCurrency)}</td>
+                      <td className="px-4 py-3 text-right text-rose-400 tabular-nums">{fmtCurrency(m.expense_forecast_display, displayCurrency)}</td>
                       <td className={`px-4 py-3 text-right font-semibold tabular-nums ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                        {net >= 0 ? "+" : ""}{formatTlAs(net, displayCurrency, rates)}
+                        {net >= 0 ? "+" : ""}{fmtCurrency(net, displayCurrency)}
                       </td>
                     </tr>
                   );
@@ -220,10 +217,10 @@ export default function CashFlowPage() {
               <tfoot className="bg-gray-50 font-semibold">
                 <tr>
                   <td className="px-4 py-3 text-gray-700">{t("content.cashFlow.yearTotal")}</td>
-                  <td colSpan={2} className="px-4 py-3 text-right text-emerald-600 tabular-nums">{formatTlAs(totalIncome, displayCurrency, rates)}</td>
-                  <td colSpan={2} className="px-4 py-3 text-right text-rose-600 tabular-nums">{formatTlAs(totalExpense, displayCurrency, rates)}</td>
+                  <td colSpan={2} className="px-4 py-3 text-right text-emerald-600 tabular-nums">{fmtCurrency(totalIncome, displayCurrency)}</td>
+                  <td colSpan={2} className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmtCurrency(totalExpense, displayCurrency)}</td>
                   <td className={`px-4 py-3 text-right tabular-nums ${totalNet >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                    {totalNet >= 0 ? "+" : ""}{formatTlAs(totalNet, displayCurrency, rates)}
+                    {totalNet >= 0 ? "+" : ""}{fmtCurrency(totalNet, displayCurrency)}
                   </td>
                 </tr>
               </tfoot>

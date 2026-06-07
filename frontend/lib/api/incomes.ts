@@ -1,5 +1,6 @@
 import type { IncomeDTO, IncomeDashboardDTO, IncomeInput, IncomeSummaryDTO, RealizeResultDTO, RecurringIncomeDTO, RecurringIncomeInput, RecurringPeriodsResultDTO, RecurringUnrealizeResultDTO } from "./types";
 import { downloadBlob, request, uploadForm } from "./_client";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 
 export const incomesApi = {
   // Gelir takibi
@@ -15,10 +16,13 @@ export const incomesApi = {
   createIncome: (payload: IncomeInput) => request<IncomeDTO>("/income", { method: "POST", body: JSON.stringify(payload) }),
   updateIncome: (id: number, payload: Partial<IncomeInput>) => request<IncomeDTO>(`/income/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteIncome: (id: number) => request<void>(`/income/${id}`, { method: "DELETE" }),
-  getIncomeSummary: (year: number, month: number) => request<IncomeSummaryDTO>(`/income/summary?year=${year}&month=${month}`),
+  // Faz B: display param → backend tarihsel-kur bazlı *_display alanları döner.
+  getIncomeSummary: (year: number, month: number) =>
+    request<IncomeSummaryDTO>(`/income/summary?year=${year}&month=${month}&display=${getDefaultCurrency()}`),
 
   // Periyodik gelir (recurring_incomes)
-  getIncomeDashboard: (year: number, month: number) => request<IncomeDashboardDTO>(`/income/dashboard?year=${year}&month=${month}`),
+  getIncomeDashboard: (year: number, month: number) =>
+    request<IncomeDashboardDTO>(`/income/dashboard?year=${year}&month=${month}&display=${getDefaultCurrency()}`),
   listRecurringIncomes: () => request<RecurringIncomeDTO[]>("/income/recurring"),
   createRecurringIncome: (payload: RecurringIncomeInput) => request<RecurringIncomeDTO>("/income/recurring", { method: "POST", body: JSON.stringify(payload) }),
   updateRecurringIncome: (id: number, payload: Partial<RecurringIncomeInput>) =>

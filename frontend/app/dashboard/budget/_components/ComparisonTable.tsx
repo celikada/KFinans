@@ -1,6 +1,6 @@
 "use client";
 import { BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 interface Props {
@@ -10,7 +10,6 @@ interface Props {
 
 export function ComparisonTable({ rows, onDelete }: Props) {
   const { t } = useTranslation();
-  const rates = useRates();
   const displayCurrency = useDisplayCurrency();
   if (rows.length === 0) {
     return (
@@ -23,8 +22,9 @@ export function ComparisonTable({ rows, onDelete }: Props) {
   return (
     <div className="space-y-3">
       {rows.map((row) => {
-        const actual = Number.parseFloat(row.actual_amount);
-        const budget = row.budget_amount === null ? null : Number.parseFloat(row.budget_amount);
+        // Faz B: actual=tarihsel kur, budget=güncel kur — backend *_display verir (çift-çevrim yok).
+        const actual = row.actual_amount_display;
+        const budget = row.budget_amount_display === null ? null : Number.parseFloat(row.budget_amount_display);
         const pct = row.pct_used ?? 0;
         const barPct = Math.min(pct, 100);
         const label = EXPENSE_CATEGORY_LABELS[row.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? row.category;
@@ -47,10 +47,11 @@ export function ComparisonTable({ rows, onDelete }: Props) {
               </div>
               <div className="flex items-center gap-3 text-sm">
                 {budget !== null && (
-                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {formatTlAs(budget, displayCurrency, rates)}</span>
+                  <span className="text-gray-500 text-xs">{t("content.budget.limit")}: {fmtCurrency(budget, displayCurrency)}</span>
                 )}
-                <Money
-                  tl={actual}
+                <DisplayMoney
+                  value={actual}
+                  currency={displayCurrency}
                   className={`font-semibold ${row.over_budget ? "text-red-600" : "text-gray-900"}`}
                 />
                 {budget !== null && (
@@ -78,9 +79,9 @@ export function ComparisonTable({ rows, onDelete }: Props) {
                 </div>
                 <div className="flex justify-between text-xs text-gray-400">
                   <span>%{pct.toFixed(0)} {t("content.budget.used")}</span>
-                  {row.remaining !== null && (
+                  {row.remaining_display !== null && (
                     <span className={row.over_budget ? "text-red-500 font-medium" : "text-emerald-600"}>
-                      {row.over_budget ? `${formatTlAs(Math.abs(Number.parseFloat(row.remaining)), displayCurrency, rates)} ${t("content.budget.over")}` : `${formatTlAs(Number.parseFloat(row.remaining), displayCurrency, rates)} ${t("content.budget.remaining")}`}
+                      {row.over_budget ? `${fmtCurrency(Math.abs(Number.parseFloat(row.remaining_display)), displayCurrency)} ${t("content.budget.over")}` : `${fmtCurrency(Number.parseFloat(row.remaining_display), displayCurrency)} ${t("content.budget.remaining")}`}
                     </span>
                   )}
                 </div>

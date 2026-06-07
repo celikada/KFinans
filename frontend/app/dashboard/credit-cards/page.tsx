@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { api, CreditCardDTO, CreditCardInput, CreditCardSummaryDTO, CurrencyType, CURRENCIES } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { Money } from "@/app/_components/Money";
-import { fmtTL, INPUT_CLS } from "@/lib/format";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
+import { INPUT_CLS } from "@/lib/format";
 import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
@@ -14,6 +14,7 @@ export default function CreditCardsPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const confirm = useConfirm();
+  const displayCurrency = useDisplayCurrency();
   const [summary, setSummary] = useState<CreditCardSummaryDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -42,7 +43,8 @@ export default function CreditCardsPage() {
     } finally {
       setLoading(false);
     }
-  }, [router, t]);
+    // displayCurrency dep: para birimi değişince listCreditCards yeni *_display ile yeniden çekilir.
+  }, [router, t, displayCurrency]);
 
   useEffect(() => {
     refresh();
@@ -112,8 +114,9 @@ export default function CreditCardsPage() {
     }
   }
 
-  const totalDebtAll = summary ? Number.parseFloat(summary.total_debt) : 0;
-  const totalPeriodAll = summary ? Number.parseFloat(summary.total_period_debt) : 0;
+  // Faz C: backend *_display alanları ZATEN görüntüleme biriminde (borç → güncel kur) → BÖLME YOK.
+  const totalDebtAll = summary ? Number.parseFloat(summary.total_debt_display) : 0;
+  const totalPeriodAll = summary ? Number.parseFloat(summary.total_period_debt_display) : 0;
   const cards = summary?.cards ?? [];
   // Birden fazla ödenmemiş ekstresi olan kartlar (data hijyeni uyarısı)
   const cardsWithMultipleUnpaid = cards.filter((c) => c.unpaid_statement_count >= 2);
@@ -144,12 +147,12 @@ export default function CreditCardsPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("table.totalDebt")}</p>
-            <Money tl={totalDebtAll} className="text-3xl font-bold text-rose-600" />
+            <DisplayMoney value={totalDebtAll} currency={displayCurrency} className="text-3xl font-bold text-rose-600" />
             <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.totalDebtHint").replace("{count}", String(cards.length))}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("dashboard.currentPeriodDebt")}</p>
-            <Money tl={totalPeriodAll} className="text-3xl font-bold text-rose-500" />
+            <DisplayMoney value={totalPeriodAll} currency={displayCurrency} className="text-3xl font-bold text-rose-500" />
             <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.periodDebtHint")}</p>
           </div>
         </div>
@@ -285,10 +288,13 @@ export default function CreditCardsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {cards.map((c) => {
+                  // Kart-bazlı kalemler kartın KENDİ para biriminde (current/unpaid/future).
+                  const cardCcy = (c.currency ?? "TRY") as CurrencyType;
                   const currentPeriod = Number.parseFloat(c.current_period_debt);
                   const unpaid = Number.parseFloat(c.unpaid_statement_total);
                   const future = Number.parseFloat(c.future_installment_total);
-                  const total = Number.parseFloat(c.total_debt);
+                  // Toplam borç: backend *_display (görüntüleme birimi, güncel kur) → BÖLME YOK.
+                  const total = Number.parseFloat(c.total_debt_display);
                   return (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -311,11 +317,11 @@ export default function CreditCardsPage() {
                         {t("content.creditCards.dueShort")}: {c.payment_due_day}.
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-                        {fmtTL(currentPeriod)} ₺
+                        {fmtCurrency(currentPeriod, cardCcy)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         <span className={unpaid > 0 ? "text-rose-600" : "text-gray-400"}>
-                          {fmtTL(unpaid)} ₺
+                          {fmtCurrency(unpaid, cardCcy)}
                         </span>
                         {c.unpaid_statement_count >= 2 && (
                           <p className="text-[10px] text-amber-600 mt-0.5">
@@ -324,11 +330,11 @@ export default function CreditCardsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-gray-700">
-                        {fmtTL(future)} ₺
+                        {fmtCurrency(future, cardCcy)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className={`font-semibold tabular-nums ${total > 0 ? "text-rose-600" : "text-gray-400"}`}>
-                          {fmtTL(total)} ₺
+                          {fmtCurrency(total, displayCurrency)}
                         </span>
                       </td>
                       <td className="px-4 py-3">

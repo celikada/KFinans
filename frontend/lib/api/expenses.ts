@@ -1,5 +1,6 @@
 import type { ExpenseDTO, ExpenseInput, ExpenseSummaryDTO } from "./types";
 import { downloadBlob, request, uploadForm } from "./_client";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 
 export const expensesApi = {
   // Harcama (Faz 3 MVP — manuel giris)
@@ -27,8 +28,9 @@ export const expensesApi = {
 
   deleteExpense: (id: number) => request<void>(`/expenses/${id}`, { method: "DELETE" }),
 
+  // Faz B: display param → backend tarihsel-kur bazlı *_display alanları döner.
   getExpenseSummary: (year: number, month: number) =>
-    request<ExpenseSummaryDTO>(`/expenses/summary?year=${year}&month=${month}`),
+    request<ExpenseSummaryDTO>(`/expenses/summary?year=${year}&month=${month}&display=${getDefaultCurrency()}`),
 
   // Harcama Excel export/import
   exportExpenses: (year?: number, month?: number) => {

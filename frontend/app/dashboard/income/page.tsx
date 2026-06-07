@@ -7,7 +7,7 @@ import {
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TOOLBAR_BTN_CLS } from "@/lib/format";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { IncomeForm } from "./_components/IncomeForm";
 import { IncomeTable } from "./_components/IncomeTable";
@@ -20,7 +20,6 @@ type Tab = "actual" | "recurring";
 export default function IncomePage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const rates = useRates();
   const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -60,7 +59,8 @@ export default function IncomePage() {
     } finally {
       setLoading(false);
     }
-  }, [year, month, router, t]);
+    // displayCurrency dep: para birimi değişince backend yeni *_display ile yeniden çekilir.
+  }, [year, month, router, t, displayCurrency]);
 
   useEffect(() => {
     refresh();
@@ -110,10 +110,14 @@ export default function IncomePage() {
     }
   }
 
-  const monthTotal = dashboard ? Number.parseFloat(dashboard.this_month_actual) : 0;
-  const ytdTotal = dashboard ? Number.parseFloat(dashboard.ytd_actual) : 0;
-  const yearEstimate = dashboard ? Number.parseFloat(dashboard.year_total_estimate) : 0;
-  const remainingRecurring = dashboard ? Number.parseFloat(dashboard.remaining_year_recurring) : 0;
+  // Faz B: tüm finans toplamları backend'in tarihsel-kur bazlı *_display alanından
+  // gelir (formatTlAs/Money ile GÜNCEL kurla TEKRAR bölünMEZ — çift-çevrim önlenir).
+  const monthTotal = dashboard?.this_month_actual_display ?? "0";
+  const ytdTotal = dashboard?.ytd_actual_display ?? "0";
+  const yearEstimate = dashboard?.year_total_estimate_display ?? "0";
+  const remainingRecurring = dashboard ? Number.parseFloat(dashboard.remaining_year_recurring_display) : 0;
+  // Kategori dağılımı yüzdeleri için display-birimi aylık toplam (sayı).
+  const monthTotalNum = Number.parseFloat(monthTotal);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -124,21 +128,21 @@ export default function IncomePage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.thisMonthActual")}</p>
-            <Money tl={monthTotal} className="text-2xl font-bold text-emerald-600" />
+            <DisplayMoney value={monthTotal} currency={displayCurrency} className="text-2xl font-bold text-emerald-600" />
             {summary && summary.count > 0 && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.income.records")}</p>
             )}
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.ytdActual")}</p>
-            <Money tl={ytdTotal} className="text-2xl font-bold text-blue-600" />
+            <DisplayMoney value={ytdTotal} currency={displayCurrency} className="text-2xl font-bold text-blue-600" />
             <p className="text-xs text-gray-400 mt-1">{year} {t("content.income.sinceYearStart")}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs text-gray-400 mb-1">{t("content.income.yearEndEstimate")}</p>
-            <Money tl={yearEstimate} className="text-2xl font-bold text-purple-600" />
+            <DisplayMoney value={yearEstimate} currency={displayCurrency} className="text-2xl font-bold text-purple-600" />
             {remainingRecurring > 0 && (
-              <p className="text-xs text-gray-400 mt-1">+{formatTlAs(remainingRecurring, displayCurrency, rates)} {t("content.income.remainingRecurring")}</p>
+              <p className="text-xs text-gray-400 mt-1">+{fmtCurrency(remainingRecurring, displayCurrency)} {t("content.income.remainingRecurring")}</p>
             )}
           </div>
         </div>
@@ -196,12 +200,13 @@ export default function IncomePage() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-4">{t("content.income.monthCategoryBreakdown")}</h3>
                 <div className="space-y-3">
                   {summary.by_category.map((b) => {
-                    const pct = monthTotal > 0 ? (Number.parseFloat(b.total) / monthTotal) * 100 : 0;
+                    const catDisplay = Number.parseFloat(b.total_display);
+                    const pct = monthTotalNum > 0 ? (catDisplay / monthTotalNum) * 100 : 0;
                     return (
                       <div key={b.category}>
                         <div className="flex justify-between text-xs text-gray-600 mb-1">
                           <span>{INCOME_CATEGORY_LABELS[b.category as keyof typeof INCOME_CATEGORY_LABELS] ?? b.category}</span>
-                          <span className="font-semibold">{formatTlAs(Number.parseFloat(b.total), displayCurrency, rates)} <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
+                          <span className="font-semibold">{fmtCurrency(catDisplay, displayCurrency)} <span className="text-gray-400">(%{pct.toFixed(0)})</span></span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                           <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />

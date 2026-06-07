@@ -21,6 +21,33 @@ _TCMB_CACHE_TTL_SEC = 300
 _tcmb_cache: tuple[float, dict[str, Decimal]] | None = None
 
 
+def parse_tcmb_xml(content: bytes) -> dict[str, Decimal]:
+    """TCMB kur XML icerigini {döviz: 1 birim = X TL} haritasina cevirir.
+
+    'ForexBuying' (efektif alis) kullanilir; `Unit` ile per-1-birim normalize
+    (JPY/KRW gibi 100 birim bazinda gelenler tek birime indirilir). Hem guncel
+    (`today.xml`) hem tarihsel (`YYYYMM/DDMMYYYY.xml`) XML ayni semaya sahip
+    oldugundan ortak parse noktasi (DRY) — historical_rates servisi de kullanir.
+    """
+    root = ET.fromstring(content)
+    rates: dict[str, Decimal] = {}
+    for currency in root.findall("Currency"):
+        code = currency.get("CurrencyCode")
+        unit_text = currency.findtext("Unit") or "1"
+        buying = currency.findtext("ForexBuying")
+        if not code or not buying:
+            continue
+        try:
+            unit = Decimal(unit_text)
+            rate = Decimal(buying)
+            # JPY, KRW gibi birimler 100/USD bazinda donuyor; tek birime normalize
+            if unit > 0:
+                rates[code] = (rate / unit).quantize(Decimal("0.000001"))
+        except (InvalidOperation, ValueError):
+            continue
+    return rates
+
+
 async def fetch_tcmb_rates() -> dict[str, Decimal]:
     """TCMB kurlarinin public alias'i (snapshot, cash multi-currency)."""
     return await _fetch_tcmb_rates()
@@ -40,23 +67,7 @@ async def _fetch_tcmb_rates() -> dict[str, Decimal]:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(TCMB_URL)
         resp.raise_for_status()
-        root = ET.fromstring(resp.content)
-
-    rates: dict[str, Decimal] = {}
-    for currency in root.findall("Currency"):
-        code = currency.get("CurrencyCode")
-        unit_text = currency.findtext("Unit") or "1"
-        buying = currency.findtext("ForexBuying")
-        if not code or not buying:
-            continue
-        try:
-            unit = Decimal(unit_text)
-            rate = Decimal(buying)
-            # JPY, KRW gibi birimler 100/USD bazinda donuyor; tek birime normalize
-            if unit > 0:
-                rates[code] = (rate / unit).quantize(Decimal("0.000001"))
-        except (InvalidOperation, ValueError):
-            continue
+        rates = parse_tcmb_xml(resp.content)
 
     _tcmb_cache = (now, rates)
     return rates

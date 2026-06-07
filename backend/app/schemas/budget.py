@@ -33,3 +33,9 @@ class BudgetComparison(BaseModel):
     remaining: Optional[Decimal] = None  # TL
     pct_used: Optional[float] = None
     over_budget: bool
+    # Görüntüleme para birimi karşılıkları (Faz B). actual → gerçekleşmiş giderin
+    # tarihsel kuru; budget → güncel kurla display'e. display==TRY → *_display == TL.
+    display_currency: str = "TRY"
+    budget_amount_display: Optional[Decimal] = None
+    actual_amount_display: Decimal = Decimal(0)
+    remaining_display: Optional[Decimal] = None
