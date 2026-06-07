@@ -6,6 +6,33 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.0] - 2026-06-07
+
+### Eklenenler
+
+- **4 yeni banka ekstresi (PDF) parser'ı** — kredi kartı ekstresi otomatik içe
+  aktarma artık **8 banka** destekliyor:
+  - **Yapı Kredi (World/Platinum):** TR sayı, Türkçe ay-adı tarih
+    ("5 Haziran 2026"), "X TL'lik işlemin k / n taksidi" satırı (satıcı adı bir
+    önceki işlem satırından). VakıfBank ile "Worldcard" marka çakışması:
+    parser sırasında VakıfBank'tan önce gelir, Yapı Kredi'ye özgü imzayla eşleşir.
+  - **QNB (QNB Fix):** EN sayı ("85,275.04"), sayısal hesap kesim + Türkçe ay-adı
+    son ödeme, satır-sonu "k/n" taksit sütunu; iade (negatif) satırları atlanır.
+  - **Garanti BBVA (Bonus):** TR sayı, Türkçe ay-adı tarih, iki-noktasız etiketler
+    ("Hesap Kesim Tarihi 01 Haziran 2026"); taksit biçimi değişken → best-effort
+    + her zaman kontrol uyarısı.
+  - **İş Bankası (Maximum):** TR sayı, sayısal tarih, "Hesap Özeti Borcu" etiketi,
+    bitişik "k/ntaksidi(toplam)" taksit biçimi.
+- Ortak yardımcılar: `parse_turkish_date` (Türkçe ay adları → tarih) +
+  `search_labeled_date` ("Bir Sonraki/Önceki ... dönem" tuzaklarını atlayan etiketli
+  tarih arama). Tüm parser'larda **son dilim (k≥n) ve iade satırları** taksit
+  listesine alınmaz (çift-sayım/0-kalan gürültüsü önlenir).
+
+Fail-safe ilke korunur: tanınmayan banka → 422, eşleşip alan bulunamazsa → 422;
+asla tahmini veri yazılmaz. Migration YOK (yalnız parser + test).
+
+---
+
 ## [0.7.0] - 2026-06-06
 
 ### Değişenler
