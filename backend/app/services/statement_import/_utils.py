@@ -17,6 +17,31 @@ _AMOUNT_CLEAN_RE = re.compile(r"[^\d.,-]")
 # Tarih: gün ve ay 2 hane, ayraç nokta veya slash (26.05.2026 / 10/05/2026).
 _DATE_RE = re.compile(r"(\d{2})[./](\d{2})[./](\d{4})")
 
+# Türkçe ay adları → ay numarası (aksanlı + ASCII varyantlar; bazı PDF metin
+# katmanları aksanı düşürür, ikisini de tanı).
+_TR_MONTHS: dict[str, int] = {
+    "ocak": 1,
+    "şubat": 2,
+    "subat": 2,
+    "mart": 3,
+    "nisan": 4,
+    "mayıs": 5,
+    "mayis": 5,
+    "haziran": 6,
+    "temmuz": 7,
+    "ağustos": 8,
+    "agustos": 8,
+    "eylül": 9,
+    "eylul": 9,
+    "ekim": 10,
+    "kasım": 11,
+    "kasim": 11,
+    "aralık": 12,
+    "aralik": 12,
+}
+# "5 Haziran 2026" / "01 Haziran 2026" (gün ay-adı yıl). Ay adı 3-9 harf (bounded).
+_TR_DATE_RE = re.compile(r"(\d{1,2})\s{1,3}([A-Za-zçğıöşüÇĞİÖŞÜ]{3,9})\s{1,3}(\d{4})")
+
 
 def parse_amount(raw: str) -> Decimal:
     """TR veya EN formatlı para tutarını Decimal'e çevirir (otomatik tespit).
@@ -48,6 +73,43 @@ def parse_date(raw: str) -> date:
     if not m:
         raise ValueError(f"tarih bulunamadı: {raw!r}")
     return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+
+
+def parse_turkish_date(raw: str) -> date:
+    """İlk "GG AyAdı YYYY" (ör. "5 Haziran 2026") tarihini date'e çevirir.
+
+    Eşleşme yoksa veya ay adı tanınmazsa `ValueError` fırlatır.
+    """
+    m = _TR_DATE_RE.search(raw)
+    if not m:
+        raise ValueError(f"Türkçe tarih bulunamadı: {raw!r}")
+    month = _TR_MONTHS.get(m.group(2).lower())
+    if month is None:
+        raise ValueError(f"ay adı tanınmadı: {raw!r}")
+    return date(int(m.group(3)), month, int(m.group(1)))
+
+
+def search_labeled_date(text: str, label: str, *, turkish: bool = False) -> date | None:
+    """`label` etiketinden sonraki ilk tarihi döndürür; bulunamazsa None.
+
+    "Bir Sonraki ... / Bir Önceki ..." gibi sonraki/önceki dönem tuzaklarını
+    (etiketten hemen önceki bağlamda "sonraki"/"önceki" geçen eşleşmeleri) atlar.
+    `turkish=True` ise ay-adı biçimli tarih ("12 Haziran 2026") çözer; aksi halde
+    "GG.AA.YYYY"/"GG/AA/YYYY" sayısal biçim.
+    """
+    if turkish:
+        date_pat = r"\d{1,2}\s{1,3}[A-Za-zçğıöşüÇĞİÖŞÜ]{3,9}\s{1,3}\d{4}"
+        conv = parse_turkish_date
+    else:
+        date_pat = r"\d{2}[./]\d{2}[./]\d{4}"
+        conv = parse_date
+    pattern = re.compile(re.escape(label) + r"\s{0,3}:?\s{0,3}(" + date_pat + r")")
+    for m in pattern.finditer(text):
+        pre = text[max(0, m.start() - 24) : m.start()].lower()
+        if "sonraki" in pre or "önceki" in pre:
+            continue
+        return conv(m.group(1))
+    return None
 
 
 def clamp_day(day: int) -> int:

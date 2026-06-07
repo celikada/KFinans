@@ -19,15 +19,26 @@ import pdfplumber
 from .akbank import AkbankParser
 from .base import ParsedInstallment, ParsedStatement, StatementParser
 from .enpara import EnparaParser
+from .garanti import GarantiParser
+from .isbank import IsbankParser
+from .qnb import QnbParser
 from .vakifbank import VakifBankParser
+from .yapikredi import YapiKrediParser
 from .ziraat import ZiraatParser
 
 # Desteklenen banka parser'lari. Yeni banka buraya eklenir (siralama onemli:
 # ilk `matches()` true olan secilir; banka adi anahtar kelimeleri ortusmemeli).
+# NOT: Yapı Kredi VakıfBank'tan ÖNCE gelmeli — her ikisi de "Worldcard/World"
+# markasını kullanır; Yapı Kredi'ye özgü imza ("yapikredi") önce yakalanır.
+# Akbank/Axess heuristik (cid-font) parser olduğundan en sonda kalır.
 PARSERS: list[StatementParser] = [
     ZiraatParser(),
     EnparaParser(),
+    YapiKrediParser(),
     VakifBankParser(),
+    QnbParser(),
+    GarantiParser(),
+    IsbankParser(),
     AkbankParser(),
 ]
 
