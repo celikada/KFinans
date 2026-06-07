@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -40,6 +40,8 @@ from app.schemas.statement_import import (
     ParsedStatementOut,
     StatementImportCommitIn,
 )
+from app.services import currency as currency_svc
+from app.services import display_currency as display_svc
 from app.services.audit import AuditAction, log_audit
 from app.services.statement_import import detect_parser, extract_text
 
@@ -73,8 +75,17 @@ def _last_passed_cutoff(today: date_type, statement_day: int) -> tuple[int, int,
     return py, pm, _cutoff(py, pm)
 
 
-def _enrich_card(card: CreditCard) -> CreditCardOut:
-    """Bir kart için 5 hesaplanmış alanı doldur ve CreditCardOut döner."""
+def _enrich_card(
+    card: CreditCard,
+    rates: dict[str, Decimal] | None = None,
+    display_ccy: str = "TRY",
+) -> CreditCardOut:
+    """Bir kart için hesaplanmış alanları doldur ve CreditCardOut döner.
+
+    `rates` verilirse (güncel kur haritası) borç TL + görüntüleme-birimi karşılıkları
+    da hesaplanır (Faz B — borç cari/tahmin → güncel kur). Kart para birimi == display
+    ise dönüşüm yapılmaz (tutar aynen)."""
+    card_currency = (getattr(card, "currency", None) or "TRY").upper()
     unpaid = [s for s in (card.statements or []) if s.paid_at is None]
     unpaid_total = sum((Decimal(s.statement_amount) for s in unpaid), Decimal(0))
     unpaid_count = len(unpaid)
@@ -88,6 +99,12 @@ def _enrich_card(card: CreditCard) -> CreditCardOut:
     period_debt = unpaid_total + current_period
     total_debt = period_debt + future_total
 
+    rate_map = rates or {}
+    period_debt_tl = currency_svc.convert_to_tl(period_debt, card_currency, rate_map)
+    total_debt_tl = currency_svc.convert_to_tl(total_debt, card_currency, rate_map)
+    period_debt_display = display_svc.convert_forecast(period_debt, card_currency, display_ccy, rate_map)
+    total_debt_display = display_svc.convert_forecast(total_debt, card_currency, display_ccy, rate_map)
+
     return CreditCardOut(
         id=card.id,
         name=card.name,
@@ -97,6 +114,7 @@ def _enrich_card(card: CreditCard) -> CreditCardOut:
         statement_day=card.statement_day,
         payment_due_day=card.payment_due_day,
         current_period_debt=current_period,
+        currency=card_currency,
         notes=card.notes,
         created_at=card.created_at,
         updated_at=card.updated_at,
@@ -105,6 +123,11 @@ def _enrich_card(card: CreditCard) -> CreditCardOut:
         future_installment_total=future_total,
         period_debt=period_debt,
         total_debt=total_debt,
+        total_debt_tl=total_debt_tl,
+        period_debt_tl=period_debt_tl,
+        display_currency=display_ccy,
+        period_debt_display=period_debt_display,
+        total_debt_display=total_debt_display,
     )
 
 
@@ -112,8 +135,13 @@ def _enrich_card(card: CreditCard) -> CreditCardOut:
 async def list_credit_cards(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    display: Annotated[str | None, Query()] = None,
 ):
-    """Tüm kartları + toplam dönem içi borç + toplam borç özeti."""
+    """Tüm kartları + toplam dönem içi borç + toplam borç özeti.
+
+    `display` (Faz B): borç/ekstre cari/tahmin olduğu için **güncel** kurla seçili
+    görüntüleme birimine çevrilir (statement_date tarihsel anchor Faz B+ kapsamı).
+    display==TRY → *_display == *_tl (regresyon yok)."""
     result = await db.execute(
         select(CreditCard)
         .where(CreditCard.user_id == current_user.id)
@@ -124,15 +152,24 @@ async def list_credit_cards(
         .order_by(CreditCard.name)
     )
     cards = result.scalars().all()
-    enriched = [_enrich_card(c) for c in cards]
+    display_ccy = display_svc.normalize_display(display, current_user.default_currency)
+    # Kart borçları kendi para biriminde — güncel kurla TL + display'e çevrilir.
+    rates = await currency_svc.fetch_rates() if cards else {}
+
+    enriched = [_enrich_card(c, rates, display_ccy) for c in cards]
     total_period = sum((c.period_debt for c in enriched), Decimal(0))
     total = sum((c.total_debt for c in enriched), Decimal(0))
     total_current = sum((c.current_period_debt for c in enriched), Decimal(0))
+    total_period_display = sum((c.period_debt_display for c in enriched), Decimal(0))
+    total_display = sum((c.total_debt_display for c in enriched), Decimal(0))
     return CreditCardSummaryOut(
         cards=enriched,
         total_period_debt=total_period,
         total_debt=total,
         total_current_period_debt=total_current,  # legacy field
+        display_currency=display_ccy,
+        total_period_debt_display=display_svc.quantize_tl(total_period_display),
+        total_debt_display=display_svc.quantize_tl(total_display),
     )
 
 
@@ -212,6 +249,7 @@ async def create_credit_card(
         statement_day=payload.statement_day,
         payment_due_day=payload.payment_due_day,
         current_period_debt=payload.current_period_debt,
+        currency=payload.currency or current_user.default_currency or "TRY",
         notes=payload.notes,
     )
     db.add(card)
@@ -245,6 +283,7 @@ async def update_credit_card(
         "statement_day",
         "payment_due_day",
         "current_period_debt",
+        "currency",
         "notes",
     ):
         v = getattr(payload, attr)

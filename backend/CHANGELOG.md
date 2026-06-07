@@ -6,6 +6,37 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.7.0] - 2026-06-06
+
+### Değişenler
+
+- **Tarihsel-kur bazlı çoklu para birimi raporlama (IAS 21):** Görüntüleme para
+  birimi dönüşümündeki "round-trip çarpıtması" giderildi. Önceden tüm toplamlar
+  TL'de sabitlenip **güncel kurla** seçili birime çevriliyordu; bu, kayıtlarını
+  döviz cinsinden tutan kullanıcıda kur değişince tutarı yanlış (örn. olduğundan
+  az) gösteriyordu. Artık:
+  - **Gerçekleşmiş** gelir/gider kayıtları **işlem tarihindeki kurla** çevrilir
+    (tarihsel TCMB kuru); kayıt birimi = görüntü birimi olduğunda **tam tutar**
+    (çarpıtma sıfır), TRY görünümünde mevcut davranış birebir korunur.
+  - **Tahminler** (periyodik gelir, planlı gider, kredi kartı) güncel kurla.
+  - Çapraz görünümler (ör. USD kayıt → EUR) işlem-tarihi çapraz kuruyla.
+  - Dönüşüm backend'e, kayıt-bazlı taşındı; frontend round-trip kaldırıldı.
+    Mevcut `amount_tl` değişmedi (veri migration'ı YOK). Dashboard "Toplam
+    Portföy" (yatırım, canlı) güncel kurda kalır; finans değerleri tarihsel-aware.
+
+### Eklenenler
+
+- **Tarihsel kur altyapısı:** `daily_rates` tablosu (TCMB tarih-bazlı kur cache,
+  dinamik forward-fill — hafta sonu/tatil son iş gününe) + `historical_rates`
+  servisi + günlük cron (16:00, 7. job). İlgili endpoint'ler `?display=` parametresi
+  + `*_display` alanları döner (geriye uyumlu; `display=TRY` → eski davranış).
+
+### Düzeltmeler
+
+- Kredi kartı `currency` alanı oluşturma/güncellemede DB'ye yazılmıyordu — düzeltildi.
+
+---
+
 ## [0.6.0] - 2026-06-06
 
 ### Eklenenler

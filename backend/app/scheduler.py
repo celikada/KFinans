@@ -17,6 +17,7 @@ from app.models.push_subscription import PushSubscription
 from app.models.revoked_token import RevokedToken
 from app.models.user import User
 from app.services.email import send_payment_reminder_email
+from app.services.historical_rates import ensure_date_cached
 from app.services.push import send_to_user
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -45,6 +46,10 @@ _SCHEDULER_LOCK_KEY = 0x4B46494E_414E5300  # "KFINANS\x00" hex
 # e-posta job (09:05) aynı anda farklı pod'larda paralel çalışabilsin diye
 # bağımsız leader election. (Aynı lock olsaydı iki job birbirini bloklardı.)
 _EMAIL_REMINDER_LOCK_KEY = 0x4B46494E_454D4C00  # "KFINEML\x00" hex
+
+# Tarihsel TCMB kuru cron'u için AYRI lock key — diğer job'larla paralel farklı
+# pod'larda çalışabilsin diye bağımsız leader election.
+_DAILY_RATE_LOCK_KEY = 0x4B46494E_52415400  # "KFINRAT\x00" hex
 
 # ARC-003 (FAZ H): Paralel snapshot semaphore — 100 kullanici icin sirali for
 # loop yerine 5'er paralel grup. Her kullanici dis API'ye birden fazla istek
@@ -340,6 +345,37 @@ async def _email_due_payments_job(session_factory=None) -> None:
             await _release_lock(lock_session, _EMAIL_REMINDER_LOCK_KEY)
 
 
+async def _fetch_daily_rate_job(session_factory=None) -> None:
+    """Her gün 16:00 Europe/Istanbul: bugünün TCMB kurunu daily_rates'e cache'ler.
+
+    TCMB döviz kurlarını ~15:30'da yayınlar; 16:00 güvenli pencere. Tarihsel kur
+    altyapısının (historical_rates) günlük beslemesi — Faz B kayıt-bazlı dönüşüm
+    için "işlem tarihindeki kur"un birikmesini sağlar.
+
+    Hafta sonu/tatil → TCMB o gün veri yayınlamaz (404) → `ensure_date_cached`
+    no-op (forward-fill lookup zaten önceki iş gününü bulur).
+
+    ARC-011: pg advisory lock (AYRI key) — multi-replica deploy'da sadece bir pod
+    yürütür. `session_factory`: test'te enjekte edilir; default AsyncSessionLocal.
+    """
+    sf = session_factory or AsyncSessionLocal
+    today = datetime.now(_ISTANBUL).date()
+
+    async with sf() as lock_session:
+        if not await _try_acquire_lock(lock_session, _DAILY_RATE_LOCK_KEY):
+            logger.info("Daily rate job: pg advisory lock alinamadi, baska pod calisiyor — skip")
+            return
+
+        try:
+            async with sf() as session:
+                await ensure_date_cached(session, today)
+            logger.info("Daily rate job tamamlandi: %s TCMB kuru cache'lendi (varsa)", today.isoformat())
+        except Exception as e:
+            logger.exception("Daily rate job hatasi (%s): %s", today.isoformat(), e)
+        finally:
+            await _release_lock(lock_session, _DAILY_RATE_LOCK_KEY)
+
+
 def start_scheduler() -> None:
     # ARC-011 (FAZ H): Multi-replica safety — sadece SCHEDULER_ENABLED=true
     # olan pod scheduler'i baslatir. Defence-in-depth: job icinde de pg advisory
@@ -390,12 +426,19 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _fetch_daily_rate_job,
+        CronTrigger(hour=16, minute=0, timezone=_TZ),
+        id="fetch_daily_rate",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
         "Zamanlayici baslatildi (haftalik snapshot: Pazar 23:00, "
         "revoked_tokens cleanup: gunluk 03:00, hard-delete: 04:00, "
         "audit retention: 04:30, push hatirlatma: 09:00, "
-        "e-posta hatirlatma: 09:05 Europe/Istanbul)"
+        "e-posta hatirlatma: 09:05, gunluk kur: 16:00 Europe/Istanbul)"
     )
 
 

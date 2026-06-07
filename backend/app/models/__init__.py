@@ -5,6 +5,7 @@ from app.models.cash import CashHolding
 from app.models.commodity import CommodityHolding
 from app.models.credit_card import CreditCard, CreditCardInstallment, CreditCardStatement
 from app.models.credit_transaction import CreditTransaction
+from app.models.daily_rate import DailyRate
 from app.models.integration import Integration, WalletAddress
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
@@ -34,4 +35,5 @@ __all__ = [
     "CreditCardStatement",
     "CreditCardInstallment",
     "CreditTransaction",
+    "DailyRate",
 ]

@@ -63,6 +63,7 @@ function makeCard(over: Partial<Record<string, unknown>> = {}) {
     payment_due_day: 15,
     current_period_debt: "1000.00",
     notes: "kişisel",
+    currency: "TRY",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     unpaid_statement_total: "2000.00",
@@ -70,6 +71,10 @@ function makeCard(over: Partial<Record<string, unknown>> = {}) {
     future_installment_total: "500.00",
     period_debt: "1000.00",
     total_debt: "3500.00",
+    // Faz B/C: *_display (TRY → raw ile birebir)
+    display_currency: "TRY",
+    period_debt_display: "3000.00",
+    total_debt_display: "3500.00",
     ...over,
   };
 }
@@ -80,6 +85,9 @@ function makeSummary(cards: ReturnType<typeof makeCard>[] = [makeCard()]) {
     total_period_debt: "1000.00",
     total_debt: "3500.00",
     total_current_period_debt: "1000.00",
+    display_currency: "TRY",
+    total_period_debt_display: "3000.00",
+    total_debt_display: "3500.00",
   };
 }
 

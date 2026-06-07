@@ -59,16 +59,32 @@ function month(m: number, opts: Partial<{
   expense_actual: string; expense_forecast: string;
   income_total: string; expense_total: string; net: string; is_past: boolean;
 }> = {}) {
+  // Faz C: tablo *_display alanlarını okur (TRY senaryosunda display = raw).
+  const incomeActual = opts.income_actual ?? "0";
+  const incomeForecast = opts.income_forecast ?? "0";
+  const expenseActual = opts.expense_actual ?? "0";
+  const expenseForecast = opts.expense_forecast ?? "0";
+  const incomeTotal = opts.income_total ?? "1000";
+  const expenseTotal = opts.expense_total ?? "600";
+  const net = opts.net ?? "400";
   return {
     month: m,
-    income_actual: opts.income_actual ?? "0",
-    income_forecast: opts.income_forecast ?? "0",
-    expense_actual: opts.expense_actual ?? "0",
-    expense_forecast: opts.expense_forecast ?? "0",
-    income_total: opts.income_total ?? "1000",
-    expense_total: opts.expense_total ?? "600",
-    net: opts.net ?? "400",
+    income_actual: incomeActual,
+    income_forecast: incomeForecast,
+    expense_actual: expenseActual,
+    expense_forecast: expenseForecast,
+    income_total: incomeTotal,
+    expense_total: expenseTotal,
+    net,
     is_past: opts.is_past ?? false,
+    // *_display (TRY → raw ile birebir)
+    income_total_display: incomeTotal,
+    expense_total_display: expenseTotal,
+    net_display: net,
+    income_actual_display: incomeActual,
+    income_forecast_display: incomeForecast,
+    expense_actual_display: expenseActual,
+    expense_forecast_display: expenseForecast,
   };
 }
 
@@ -83,6 +99,10 @@ function yearData(year: number) {
     total_income: "2800",
     total_expense: "2000",
     total_net: "800",
+    display_currency: "TRY",
+    total_income_display: "2800",
+    total_expense_display: "2000",
+    total_net_display: "800",
   };
 }
 

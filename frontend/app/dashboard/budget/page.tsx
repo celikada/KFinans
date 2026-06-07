@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, BudgetComparisonDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { MonthSelector } from "@/app/dashboard/expenses/_components/MonthSelector";
 import { BudgetForm } from "./_components/BudgetForm";
 import { ComparisonTable } from "./_components/ComparisonTable";
@@ -12,7 +12,6 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function BudgetPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const rates = useRates();
   const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -33,7 +32,8 @@ export default function BudgetPage() {
     } finally {
       setLoading(false);
     }
-  }, [year, month, router, t]);
+    // displayCurrency dep: para birimi değişince backend yeni *_display ile yeniden çekilir.
+  }, [year, month, router, t, displayCurrency]);
 
   useEffect(() => {
     refresh();
@@ -48,9 +48,10 @@ export default function BudgetPage() {
     }
   }
 
+  // Faz B: toplamlar satır-bazlı *_display'lerden (budget=güncel, actual=tarihsel kur).
   const overBudgetCount = rows.filter((r) => r.over_budget).length;
-  const totalBudget = rows.reduce((s, r) => s + (r.budget_amount ? Number.parseFloat(r.budget_amount) : 0), 0);
-  const totalActual = rows.reduce((s, r) => s + Number.parseFloat(r.actual_amount), 0);
+  const totalBudget = rows.reduce((s, r) => s + (r.budget_amount_display ? Number.parseFloat(r.budget_amount_display) : 0), 0);
+  const totalActual = rows.reduce((s, r) => s + Number.parseFloat(r.actual_amount_display), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -61,13 +62,14 @@ export default function BudgetPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-6 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("content.budget.totalSpendThisMonth")}</p>
-            <Money
-              tl={totalActual}
+            <DisplayMoney
+              value={totalActual}
+              currency={displayCurrency}
               className={`text-3xl font-bold ${overBudgetCount > 0 ? "text-red-600" : "text-gray-900"}`}
             />
             {totalBudget > 0 && (
               <p className="text-xs text-gray-400 mt-1">
-                {formatTlAs(totalBudget, displayCurrency, rates)} {t("content.budget.totalBudgetSuffix")}
+                {fmtCurrency(totalBudget, displayCurrency)} {t("content.budget.totalBudgetSuffix")}
                 {overBudgetCount > 0 && (
                   <span className="ml-2 text-red-500 font-medium">{overBudgetCount} {t("content.budget.categoriesExceeded")}</span>
                 )}

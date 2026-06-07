@@ -42,6 +42,7 @@ from app.schemas.recurring import (
     RecurringUnrealizeResult,
 )
 from app.services import currency as currency_svc
+from app.services import display_currency as display_svc
 from app.services import recurrence
 
 logger = logging.getLogger(__name__)
@@ -181,15 +182,41 @@ async def delete_income(
     await db.commit()
 
 
+async def _income_summary_display(
+    db: AsyncSession,
+    user_id,
+    first_day: date_type,
+    last_day: date_type,
+    display_ccy: str,
+    total_tl: Decimal,
+) -> tuple[dict[str, Decimal], Decimal]:
+    """Gelir özeti için kategori-bazlı + toplam görüntüleme değerleri (Faz B).
+
+    TRY → boş harita + total_tl (çağıran amount_tl'i kullanır). Aksi → kayıtları
+    (amount, currency, date) çekip kategori bazında tarihsel dönüşüm."""
+    if display_ccy == display_svc.TRY:
+        return {}, total_tl
+    rows = (
+        await db.execute(
+            select(Income.category, Income.amount, Income.currency, Income.date, Income.amount_tl).where(
+                Income.user_id == user_id, Income.date >= first_day, Income.date <= last_day
+            )
+        )
+    ).all()
+    return await display_svc.convert_realized_grouped(db, rows, display_ccy)
+
+
 @router.get("/summary", response_model=IncomeSummary)
 async def get_income_summary(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     year: Annotated[int, Query(ge=2020, le=2100)],
     month: Annotated[int, Query(ge=1, le=12)],
+    display: Annotated[str | None, Query()] = None,
 ):
     first_day = date_type(year, month, 1)
     last_day = date_type(year, month, calendar.monthrange(year, month)[1])
+    display_ccy = display_svc.normalize_display(display, current_user.default_currency)
 
     # v0.3.0 çoklu para birimi: toplamlar amount_tl (işlem-anı kuruyla sabit) üzerinden.
     total_q = await db.execute(
@@ -205,12 +232,28 @@ async def get_income_summary(
         .group_by(Income.category)
         .order_by(desc(func.sum(Income.amount_tl)))
     )
-    breakdown = [IncomeCategoryBreakdown(category=cat, total=Decimal(amt), count=cnt) for cat, amt, cnt in cat_q.all()]
+    breakdown_rows = cat_q.all()
+
+    # Görüntüleme para birimi (Faz B): gerçekleşmiş gelir → tarihsel kur. TRY hızlı
+    # yol = amount_tl (Σ aynen). Çapraz için kayıt-bazlı (amount, currency, date).
+    cat_display, total_display = await _income_summary_display(db, current_user.id, first_day, last_day, display_ccy, Decimal(total))
+
+    breakdown = [
+        IncomeCategoryBreakdown(
+            category=cat,
+            total=Decimal(amt),
+            total_display=cat_display.get(cat, Decimal(amt)),
+            count=cnt,
+        )
+        for cat, amt, cnt in breakdown_rows
+    ]
 
     return IncomeSummary(
         year=year,
         month=month,
         total=Decimal(total),
+        total_display=total_display,
+        display_currency=display_ccy,
         count=count,
         by_category=breakdown,
     )
@@ -474,12 +517,95 @@ async def delete_recurring_income(
     await db.commit()
 
 
+async def _income_dashboard_display(
+    db: AsyncSession,
+    user_id,
+    first_day_year: date_type,
+    first_day_month: date_type,
+    last_day_month: date_type,
+    recurring: list[RecurringIncome],
+    display_ccy: str,
+    year: int,
+    month: int,
+) -> dict[str, Decimal]:
+    """Dashboard 6 metriğinin görüntüleme-birimi karşılıklarını hesaplar (Faz B).
+
+    actual'lar (this_month/ytd) → tarihsel kur (kayıt-bazlı); recurring tahminleri
+    → güncel kur. Yalnız display != TRY iken çağrılır."""
+    # 1) actual incomes — ytd (yıl başı..son gün) tek çekiş; ay alt-kümesi filtrelenir.
+    rows = (
+        await db.execute(
+            select(Income.amount, Income.currency, Income.date, Income.amount_tl).where(
+                Income.user_id == user_id,
+                Income.date >= first_day_year,
+                Income.date <= last_day_month,
+            )
+        )
+    ).all()
+    ytd_items = [(Decimal(a), c, d) for a, c, d, _ in rows]
+    ytd_tls = [Decimal(t) for *_, t in rows]
+    month_items = [(Decimal(a), c, d) for a, c, d, _ in rows if first_day_month <= d <= last_day_month]
+    month_tls = [Decimal(t) for a, c, d, t in rows if first_day_month <= d <= last_day_month]
+
+    this_month_actual = await display_svc.convert_realized(db, month_items, display_ccy, amount_tls=month_tls)
+    ytd_actual = await display_svc.convert_realized(db, ytd_items, display_ccy, amount_tls=ytd_tls)
+
+    # 2) recurring forecast — güncel kur (display birimine).
+    rates = await currency_svc.fetch_rates() if recurring else {}
+    this_month_recurring = Decimal(0)
+    ytd_recurring = Decimal(0)
+    remaining = Decimal(0)
+    for m in range(1, 13):
+        for ri in recurring:
+            if not _applies_in_month(ri, year, m):
+                continue
+            amt = display_svc.convert_forecast(Decimal(ri.amount), ri.currency or "TRY", display_ccy, rates)
+            if m == month:
+                this_month_recurring += amt
+            if m <= month:
+                ytd_recurring += amt
+            else:
+                remaining += amt
+
+    return {
+        "this_month_actual": this_month_actual,
+        "ytd_actual": ytd_actual,
+        "this_month_recurring": display_svc.quantize_tl(this_month_recurring),
+        "ytd_recurring": display_svc.quantize_tl(ytd_recurring),
+        "remaining_year_recurring": display_svc.quantize_tl(remaining),
+        "year_total_estimate": display_svc.quantize_tl(ytd_actual + remaining),
+    }
+
+
+def _recurring_tl_metrics(recurring, rates, year: int, month: int) -> tuple[Decimal, Decimal, Decimal]:
+    """Periyodik gelirlerin TL (güncel kur) metrikleri: (this_month, ytd, remaining).
+
+    12 ay taranır; her uygulanan dönem güncel kurla TL'ye çevrilip ilgili kovaya
+    eklenir. (get_income_dashboard'dan ayrıldı — cognitive complexity.)"""
+    this_month = Decimal(0)
+    ytd = Decimal(0)
+    remaining = Decimal(0)
+    for m in range(1, 13):
+        for ri in recurring:
+            if not _applies_in_month(ri, year, m):
+                continue
+            amt = currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency or "TRY", rates)
+            if m == month:
+                this_month += amt
+            if m <= month:
+                ytd += amt
+            else:
+                remaining += amt
+    return this_month, ytd, remaining
+
+
 @router.get("/dashboard", response_model=IncomeDashboard)
 async def get_income_dashboard(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     year: Annotated[int, Query(ge=2020, le=2100)],
     month: Annotated[int, Query(ge=1, le=12)],
+    display: Annotated[str | None, Query()] = None,
 ):
     """Gelir özet paneli: gerçekleşen + tahmini metrikler.
 
@@ -518,22 +644,32 @@ async def get_income_dashboard(
     recurring = rec_q.scalars().all()
     rates = await currency_svc.fetch_rates() if recurring else {}
 
-    this_month_recurring = Decimal(0)
-    ytd_recurring = Decimal(0)
-    remaining_year_recurring = Decimal(0)
-    for m in range(1, 13):
-        for ri in recurring:
-            if not _applies_in_month(ri, year, m):
-                continue
-            amt = currency_svc.convert_to_tl(Decimal(ri.amount), ri.currency or "TRY", rates)
-            if m == month:
-                this_month_recurring += amt
-            if m <= month:
-                ytd_recurring += amt
-            else:
-                remaining_year_recurring += amt
-
+    this_month_recurring, ytd_recurring, remaining_year_recurring = _recurring_tl_metrics(recurring, rates, year, month)
     year_total_estimate = ytd_actual + remaining_year_recurring
+
+    # Görüntüleme para birimi (Faz B). TRY → *_display == * (hızlı yol, sıfır lookup).
+    display_ccy = display_svc.normalize_display(display, current_user.default_currency)
+    if display_ccy == display_svc.TRY:
+        disp = {
+            "this_month_actual": this_month_actual,
+            "ytd_actual": ytd_actual,
+            "this_month_recurring": this_month_recurring,
+            "ytd_recurring": ytd_recurring,
+            "remaining_year_recurring": remaining_year_recurring,
+            "year_total_estimate": year_total_estimate,
+        }
+    else:
+        disp = await _income_dashboard_display(
+            db,
+            current_user.id,
+            first_day_year,
+            first_day_month,
+            last_day_month,
+            list(recurring),
+            display_ccy,
+            year,
+            month,
+        )
 
     return IncomeDashboard(
         year=year,
@@ -544,6 +680,13 @@ async def get_income_dashboard(
         ytd_recurring=ytd_recurring,
         remaining_year_recurring=remaining_year_recurring,
         year_total_estimate=year_total_estimate,
+        display_currency=display_ccy,
+        this_month_actual_display=disp["this_month_actual"],
+        ytd_actual_display=disp["ytd_actual"],
+        this_month_recurring_display=disp["this_month_recurring"],
+        ytd_recurring_display=disp["ytd_recurring"],
+        remaining_year_recurring_display=disp["remaining_year_recurring"],
+        year_total_estimate_display=disp["year_total_estimate"],
     )
 
 

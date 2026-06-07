@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TOOLBAR_BTN_CLS } from "@/lib/format";
-import { Money, formatTlAs, useRates, useDisplayCurrency } from "@/app/_components/Money";
+import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
 import { ExpenseForm } from "./_components/ExpenseForm";
 import { ExpenseTable } from "./_components/ExpenseTable";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
@@ -14,7 +14,6 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function ExpensesPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const rates = useRates();
   const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -48,7 +47,8 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [year, month, handle401, t]);
+    // displayCurrency dep: para birimi değişince backend yeni *_display ile yeniden çekilir.
+  }, [year, month, handle401, t, displayCurrency]);
 
   useEffect(() => {
     refresh();
@@ -88,7 +88,9 @@ export default function ExpensesPage() {
     }
   }
 
-  const total = summary ? Number.parseFloat(summary.total) : 0;
+  // Faz B: toplam backend tarihsel-kur bazlı total_display'den (çift-çevrim yok).
+  const totalDisplay = summary?.total_display ?? "0";
+  const totalDisplayNum = Number.parseFloat(totalDisplay);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,7 +101,7 @@ export default function ExpensesPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             <p className="text-xs text-gray-400 mb-1">{t("content.expenses.monthTotal")}</p>
-            <Money tl={total} className="text-3xl font-bold text-gray-900" />
+            <DisplayMoney value={totalDisplay} currency={displayCurrency} className="text-3xl font-bold text-gray-900" />
             {summary && (
               <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.expenses.records")}</p>
             )}
@@ -134,14 +136,15 @@ export default function ExpensesPage() {
             </p>
             <ul className="space-y-1">
               {overBudget.map((r) => {
-                const actual = Number.parseFloat(r.actual_amount);
-                const budget = Number.parseFloat(r.budget_amount ?? "");
-                const excess = actual - budget;
+                // Faz B: actual=tarihsel, budget=güncel kur — backend *_display verir.
+                const actualD = Number.parseFloat(r.actual_amount_display);
+                const budgetD = Number.parseFloat(r.budget_amount_display ?? "0");
+                const excessD = actualD - budgetD;
                 const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
                 return (
                   <li key={r.category} className="flex justify-between text-xs text-red-600">
                     <span>{label}</span>
-                    <span className="font-medium">{formatTlAs(budget, displayCurrency, rates)} {t("content.expenses.limit")} · {formatTlAs(excess, displayCurrency, rates)} {t("content.expenses.over")}</span>
+                    <span className="font-medium">{fmtCurrency(budgetD, displayCurrency)} {t("content.expenses.limit")} · {fmtCurrency(excessD, displayCurrency)} {t("content.expenses.over")}</span>
                   </li>
                 );
               })}
@@ -164,7 +167,7 @@ export default function ExpensesPage() {
         )}
 
         {!loading && summary && summary.by_category.length > 0 && (
-          <CategoryPieChart data={summary.by_category} total={total} />
+          <CategoryPieChart data={summary.by_category} total={totalDisplayNum} currency={displayCurrency} />
         )}
 
         {!loading && (

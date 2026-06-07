@@ -1,9 +1,10 @@
 import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardRemindersDTO, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput } from "./types";
 import { request, uploadForm } from "./_client";
+import { getDefaultCurrency } from "@/lib/defaultCurrency";
 
 export const creditCardsApi = {
-  // Kredi kartları (Faz 3 — manuel giriş)
-  listCreditCards: () => request<CreditCardSummaryDTO>("/credit-cards"),
+  // Kredi kartları (Faz 3 — manuel giriş). Faz B: display param → *_display alanları.
+  listCreditCards: () => request<CreditCardSummaryDTO>(`/credit-cards?display=${getDefaultCurrency()}`),
   // Girişte hatırlatmalar: ekstre yüklenmemiş kartlar + ödemesi yaklaşan ekstreler
   getCreditCardReminders: () => request<CreditCardRemindersDTO>("/credit-cards/reminders"),
   createCreditCard: (payload: CreditCardInput) =>

@@ -68,6 +68,11 @@ class CreditCardOut(BaseModel):
     # TL karşılığı (güncel kurla — kart para birimi != TRY ise dolu)
     total_debt_tl: Decimal = Decimal(0)
     period_debt_tl: Decimal = Decimal(0)
+    # Görüntüleme para birimi karşılıkları (Faz B — borç/ekstre cari/tahmin
+    # niteliğinde olduğu için GÜNCEL kurla çevrilir). display==TRY → *_display == *_tl.
+    display_currency: str = "TRY"
+    period_debt_display: Decimal = Decimal(0)
+    total_debt_display: Decimal = Decimal(0)
 
     model_config = {"from_attributes": True}
 
@@ -82,6 +87,10 @@ class CreditCardSummaryOut(BaseModel):
     total_debt: Decimal  # tüm kartların toplam borcu (TL)
     # Geriye uyumluluk için eski isim — frontend yeni alanları kullanmalı
     total_current_period_debt: Decimal = Decimal(0)
+    # Görüntüleme para birimi toplamları (Faz B — güncel kur).
+    display_currency: str = "TRY"
+    total_period_debt_display: Decimal = Decimal(0)
+    total_debt_display: Decimal = Decimal(0)
 
 
 # ---------------------------------------------------------------------------

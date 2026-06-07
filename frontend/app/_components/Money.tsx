@@ -119,6 +119,21 @@ export function formatTlAs(tl: number, currency: CurrencyType, rates: Rates | nu
   return `${fmtTL(tl / rate)} ${symbol}`;
 }
 
+/**
+ * Faz B (tarihsel kur): ZATEN görüntüleme para biriminde olan bir değeri
+ * biçimlendirir — KUR BÖLMESİ YOK. Backend `*_display` alanları işlem-tarihi
+ * tarihsel kuruyla hesaplandığı için `formatTlAs`'tan (güncel kurla bölme)
+ * GEÇİRİLMEMELİDİR; bu yardımcı çift-çevrimi engeller.
+ *
+ * `value` number veya parsable string (Decimal JSON) olabilir; geçersizse 0.
+ */
+export function fmtCurrency(value: number | string, currency: CurrencyType): string {
+  const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
+  const n = typeof value === "string" ? Number.parseFloat(value) : value;
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${fmtTL(safe)} ${symbol}`;
+}
+
 interface Props {
   /** TL cinsinden değer (number veya parsable string). */
   readonly tl: number | string | null | undefined;
@@ -152,6 +167,53 @@ export function Money({ tl, className, usdClassName, hideUsd }: Props) {
       {showUsdLine && (
         <span className={usdClassName ?? "block text-xs text-gray-400 font-normal mt-0.5 tabular-nums"}>
           ≈ ${(value / usdRate).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        </span>
+      )}
+    </span>
+  );
+}
+
+interface DisplayMoneyProps {
+  /** ZATEN görüntüleme para biriminde olan değer (backend `*_display`). */
+  readonly value: number | string | null | undefined;
+  /** Değerin para birimi (backend `display_currency`). Yoksa seçili görüntüleme birimi. */
+  readonly currency?: CurrencyType;
+  readonly className?: string;
+  readonly usdClassName?: string;
+  /** "USD karşılığı göster" alt-satırını bu örnekte gösterme. */
+  readonly hideUsd?: boolean;
+}
+
+/**
+ * FİNANS TOPLAMLARI için (gelir/gider/bütçe/KK/nakit-akışı). Backend tarihsel
+ * kurla hesaplanmış `*_display` değerini OLDUĞU GİBİ gösterir (çift-çevrim yok).
+ *
+ * `Money`'den farkı: `Money` TL'yi GÜNCEL kurla böler (yatırım/canlı piyasa
+ * değerleri için doğru); `DisplayMoney` bölme yapmaz.
+ *
+ * "USD karşılığı göster" (Ayarlar) açıksa ve görüntüleme birimi USD değilse,
+ * değerin ALTINA `≈ $X` ekler (display değerini güncel kurla USD'ye çevirir).
+ */
+export function DisplayMoney({ value, currency, className, usdClassName, hideUsd }: DisplayMoneyProps) {
+  const rates = useRates();
+  const fallbackCurrency = useDisplayCurrency();
+  const showUsd = useShowUsd();
+  const ccy = currency ?? fallbackCurrency;
+  const n = typeof value === "string" ? Number.parseFloat(value) : (value ?? 0);
+  const safe = Number.isFinite(n) ? n : 0;
+
+  // USD karşılığı: display değeri → TL → USD (display ve USD güncel kurlarıyla).
+  const usdRate = rates?.USD;
+  const ccyRate = ccy === "TRY" ? 1 : rates?.[ccy];
+  const showUsdLine = showUsd && !hideUsd && ccy !== "USD" && !!usdRate && usdRate > 0 && !!ccyRate && ccyRate > 0;
+  const usdValue = showUsdLine && ccyRate && usdRate ? (safe * ccyRate) / usdRate : 0;
+
+  return (
+    <span className={className}>
+      {fmtCurrency(safe, ccy)}
+      {showUsdLine && (
+        <span className={usdClassName ?? "block text-xs text-gray-400 font-normal mt-0.5 tabular-nums"}>
+          ≈ ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
         </span>
       )}
     </span>

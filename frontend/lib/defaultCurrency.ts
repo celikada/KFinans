@@ -8,8 +8,8 @@
 // `getDefaultCurrency()` senkron çalışır (form initial state için); değer yoksa
 // güvenli "TRY" döner (geriye uyumlu — eski TL-bazlı davranış).
 
-import type { CurrencyType } from "@/lib/api";
-import { CURRENCIES } from "@/lib/api";
+import type { CurrencyType } from "@/lib/api/types";
+import { CURRENCIES } from "@/lib/api/types";
 
 const KEY = "kfinans_default_currency";
 

@@ -75,13 +75,17 @@ class RealizeResult(BaseModel):
 class IncomeCategoryBreakdown(BaseModel):
     category: str
     total: Decimal
+    # Görüntüleme para birimindeki karşılık (Faz B; gerçekleşmiş → tarihsel kur).
+    total_display: Decimal = Decimal(0)
     count: int
 
 
 class IncomeSummary(BaseModel):
     year: int
     month: int
-    total: Decimal
+    total: Decimal  # TL (geriye uyumlu)
+    total_display: Decimal = Decimal(0)  # görüntüleme para biriminde
+    display_currency: str = "TRY"
     count: int
     by_category: list[IncomeCategoryBreakdown]
 
@@ -168,3 +172,13 @@ class IncomeDashboard(BaseModel):
     ytd_recurring: Decimal  # recurring_incomes(yıl başı..bugün geçen)
     remaining_year_recurring: Decimal  # recurring_incomes(bugünden..yıl sonu)
     year_total_estimate: Decimal  # ytd_actual + remaining_year_recurring
+
+    # Görüntüleme para birimi karşılıkları (Faz B). actual'lar tarihsel, recurring
+    # tahminleri güncel kurla. display_currency == "TRY" iken *_display == *.
+    display_currency: str = "TRY"
+    this_month_actual_display: Decimal = Decimal(0)
+    ytd_actual_display: Decimal = Decimal(0)
+    this_month_recurring_display: Decimal = Decimal(0)
+    ytd_recurring_display: Decimal = Decimal(0)
+    remaining_year_recurring_display: Decimal = Decimal(0)
+    year_total_estimate_display: Decimal = Decimal(0)

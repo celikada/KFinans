@@ -78,12 +78,16 @@ class ExpenseOut(BaseModel):
 class CategoryBreakdown(BaseModel):
     category: str
     total: Decimal
+    # Görüntüleme para birimindeki karşılık (Faz B; gerçekleşmiş → tarihsel kur).
+    total_display: Decimal = Decimal(0)
     count: int
 
 
 class ExpenseSummary(BaseModel):
     year: int
     month: int
-    total: Decimal
+    total: Decimal  # TL (geriye uyumlu)
+    total_display: Decimal = Decimal(0)  # görüntüleme para biriminde
+    display_currency: str = "TRY"
     count: int
     by_category: list[CategoryBreakdown]
