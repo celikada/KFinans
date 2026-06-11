@@ -26,8 +26,9 @@ _LIMIT_RE = re.compile(r"(?<!Müşteri )Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20}
 # ("Dönem Hesap" araya girer, "Dönem Borcu" bitişik değildir).
 _DEBT_RE = re.compile(tr_tolerant("Dönem Borcu") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # Taksit: "12.000,00 TL'lik işlemin 6 / 6 taksidi"
+# "işlemin" ş harfi pdfplumber'da cid token olabilir → tr_tolerant.
 _INSTALLMENT_RE = re.compile(
-    r"([\d.,]{1,20})\s{0,4}TL.?lik işlemin\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}taksidi",
+    r"([\d.,]{1,20})\s{0,4}TL.?lik\s{1,3}" + tr_tolerant("işlemin") + r"\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}taksidi",
     re.IGNORECASE,
 )
 _LEAD_TR_DATE_RE = re.compile(r"^\d{1,2}\s{1,3}\w{3,9}\s{1,3}\d{4}\s{0,4}")

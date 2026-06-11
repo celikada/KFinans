@@ -28,8 +28,9 @@ _STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s{0,4}:?\s{0,4}(\d{
 _DUE_DATE_RE = re.compile(r"(?<!Sonraki )" + tr_tolerant("Son Ödeme Tarihi") + r"\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
 _DEBT_RE = re.compile(tr_tolerant("Dönem Borcu TL") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
 # Taksit satiri: "... (100000.00 TL İşlemin 4/4 Taksidi) ..." + onundeki aciklama.
+# "İşlemin" İ/ş harfleri pdfplumber'da cid token olabilir → tr_tolerant.
 _INSTALLMENT_RE = re.compile(
-    r"\(([\d.]{1,20})\s{0,4}TL\s{0,4}İşlemin\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}Taksidi\)",
+    r"\(([\d.]{1,20})\s{0,4}TL\s{0,4}" + tr_tolerant("İşlemin") + r"\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}Taksidi\)",
     re.IGNORECASE,
 )
 

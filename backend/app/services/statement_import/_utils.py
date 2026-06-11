@@ -46,23 +46,44 @@ _TR_MONTHS: dict[str, int] = {
     "aralik": 12,
     "aralk": 12,
 }
-# "5 Haziran 2026" / "01 Haziran 2026" (gün ay-adı yıl). Ay adı 3-9 harf (bounded).
-_TR_DATE_RE = re.compile(r"(\d{1,2})\s{1,3}([A-Za-zçğıöşüÇĞİÖŞÜ]{3,9})\s{1,3}(\d{4})")
+# Ay-adı token'ı: harf VEYA `(cid:N)` token (pdfplumber Türkçe harfi cid'e çevirir:
+# "Mayıs"→"May(cid:0)s"). Bounded (3-12 birim) → ReDoS-safe.
+_TR_MONTH_TOKEN = r"(?:\(cid:\d{1,4}\)|[A-Za-zçğıöşüÇĞİÖŞÜ]){3,12}"
+_CID_TOKEN_RE = re.compile(r"\(cid:\d{1,4}\)")
+# "5 Haziran 2026" / "01 Haziran 2026" (gün ay-adı yıl).
+_TR_DATE_RE = re.compile(r"(\d{1,2})\s{1,3}(" + _TR_MONTH_TOKEN + r")\s{1,3}(\d{4})")
 
 # Türkçe-özel harfler: bazı banka PDF'lerinin metin katmanı (font cmap eksiği)
 # bunları düşürür ("Ödeme"→"deme", "Numarası"→"Numaras", "Özeti"→"zeti").
 _TR_SPECIAL_CHARS = "çÇğĞıİöÖşŞüÜ"
 
 
-def tr_tolerant(label: str) -> str:
-    r"""Bir etiketi Türkçe-harf glyph kaybına dayanıklı regex desenine çevirir.
+# Türkçe-özel harf, PDF metin katmanında üç biçimde görülebilir:
+#   (1) korunmuş   → tek non-space karakter ("Ödeme")
+#   (2) düşmüş      → hiç karakter yok ("deme")     — bazı PDF render'ları
+#   (3) cid token   → "(cid:0)" ("(cid:0)deme")     — pdfplumber'ın yaygın çıktısı
+# Bu üçünü de kapsayan, bounded (ReDoS-safe) tek-harf deseni:
+_TR_GLYPH = r"(?:\(cid:\d{1,4}\)|\S){0,2}"
 
-    Her Türkçe-özel harf `\S{0,2}` (en çok 2 non-space; bounded → ReDoS-safe),
-    diğer karakterler `re.escape` ile birebir temsil edilir. Böylece hem sağlam
-    ("Son Ödeme Tarihi") hem glyph-düşmüş ("Son deme Tarihi") metin eşleşir.
-    Türkçe-özel harf içermeyen etiketlerde çıktı `re.escape(label)` ile aynıdır.
+
+def tr_tolerant(label: str) -> str:
+    r"""Bir etiketi Türkçe-harf glyph bozulmasına dayanıklı regex desenine çevirir.
+
+    Her Türkçe-özel harf `_TR_GLYPH` (korunmuş tek char VEYA `(cid:N)` token VEYA
+    hiç; en çok 2 birim, bounded → ReDoS-safe), boşluklar `\s{1,3}` (çoklu boşluğa
+    tolerans), diğer karakterler `re.escape` ile temsil edilir. Böylece hem sağlam
+    ("Son Ödeme Tarihi") hem glyph-düşmüş ("Son deme Tarihi") hem pdfplumber cid
+    ("Son (cid:0)deme Tarihi") metin eşleşir.
     """
-    return "".join(r"\S{0,2}" if ch in _TR_SPECIAL_CHARS else re.escape(ch) for ch in label)
+    out: list[str] = []
+    for ch in label:
+        if ch in _TR_SPECIAL_CHARS:
+            out.append(_TR_GLYPH)
+        elif ch == " ":
+            out.append(r"\s{1,3}")
+        else:
+            out.append(re.escape(ch))
+    return "".join(out)
 
 
 def parse_amount(raw: str) -> Decimal:
@@ -105,7 +126,10 @@ def parse_turkish_date(raw: str) -> date:
     m = _TR_DATE_RE.search(raw)
     if not m:
         raise ValueError(f"Türkçe tarih bulunamadı: {raw!r}")
-    month = _TR_MONTHS.get(m.group(2).lower())
+    # cid token'larını ay adından temizle: "May(cid:0)s" → "Mays" (glyph-düşmüş
+    # biçim _TR_MONTHS'ta zaten var). pdfplumber Türkçe harfi cid'e çevirebilir.
+    name = _CID_TOKEN_RE.sub("", m.group(2)).lower()
+    month = _TR_MONTHS.get(name)
     if month is None:
         raise ValueError(f"ay adı tanınmadı: {raw!r}")
     return date(int(m.group(3)), month, int(m.group(1)))
@@ -120,7 +144,7 @@ def search_labeled_date(text: str, label: str, *, turkish: bool = False) -> date
     "GG.AA.YYYY"/"GG/AA/YYYY" sayısal biçim.
     """
     if turkish:
-        date_pat = r"\d{1,2}\s{1,3}[A-Za-zçğıöşüÇĞİÖŞÜ]{3,9}\s{1,3}\d{4}"
+        date_pat = r"\d{1,2}\s{1,3}" + _TR_MONTH_TOKEN + r"\s{1,3}\d{4}"
         conv = parse_turkish_date
     else:
         date_pat = r"\d{2}[./]\d{2}[./]\d{4}"
