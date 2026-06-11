@@ -1,7 +1,10 @@
 FROM python:3.12-slim AS base
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# apt-get upgrade: python:3.12-slim (Debian) base'inde biriken OS CVE'lerini yamalar
+# (frontend'deki `apk upgrade` karşılığı). Yoksa OpenSSL/glibc/perl vb. birikip bir
+# sonraki tag'de Trivy HIGH/CRITICAL gate'ini kırabilir (rc11 frontend senaryosu).
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl \
     fonts-dejavu fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
