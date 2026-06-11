@@ -15,15 +15,16 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from ._utils import clamp_day, months_back, parse_amount, search_labeled_date
+from ._utils import clamp_day, months_back, parse_amount, search_labeled_date, tr_tolerant
 from .base import ParsedInstallment, ParsedStatement
 
-# ReDoS-safe: bounded quantifiers (SonarQube S5852)
-_CARD_RE = re.compile(r"Kart Numarası\s{0,4}:?\s{0,4}([\d *]{8,30})")
+# ReDoS-safe: bounded quantifiers (SonarQube S5852). tr_tolerant: Türkçe harf
+# içeren etiketler glyph-düşmüş PDF metninde de eşleşir ("Numarası"→"Numaras" vb).
+_CARD_RE = re.compile(tr_tolerant("Kart Numarası") + r"\s{0,4}:?\s{0,4}([\d *]{8,30})")
 _LIMIT_RE = re.compile(r"(?<!Müşteri )Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # "Dönem Borcu : 2.000,00 TL" — "Önceki Dönem Hesap Özeti Borcu" tuzağına düşmez
 # ("Dönem Hesap" araya girer, "Dönem Borcu" bitişik değildir).
-_DEBT_RE = re.compile(r"Dönem Borcu\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
+_DEBT_RE = re.compile(tr_tolerant("Dönem Borcu") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # Taksit: "12.000,00 TL'lik işlemin 6 / 6 taksidi"
 _INSTALLMENT_RE = re.compile(
     r"([\d.,]{1,20})\s{0,4}TL.?lik işlemin\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}taksidi",

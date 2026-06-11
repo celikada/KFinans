@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { api, AssetCatalogItem, LinkedSource, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
+import { api, AssetCatalogItem, LinkedSource, ManualCryptoPositionDTO, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
@@ -65,6 +65,10 @@ export default function ManualCryptoPage() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Düzenleme modu: null → yeni kayıt, sayı → o id'li pozisyonu güncelle
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   // Form state
   const [exchange, setExchange] = useState("binancetr");
@@ -122,6 +126,42 @@ export default function ManualCryptoPage() {
     return () => clearTimeout(handle);
   }, [linkedQuery, priceSource]);
 
+  function resetForm() {
+    setEditingId(null);
+    setExchange("binancetr");
+    setLabel("");
+    setSymbol("");
+    setQuantity("");
+    setAvgCost("");
+    setPriceSource("auto");
+    setManualPrice("");
+    setLinkedQuery("");
+    setLinkedSelected(null);
+    setNotes("");
+  }
+
+  function startEdit(p: ManualCryptoPositionDTO) {
+    setEditingId(p.id);
+    setExchange(p.exchange);
+    setLabel(p.label ?? "");
+    setSymbol(p.symbol);
+    setQuantity(p.quantity);
+    setAvgCost(p.avg_cost_tl ?? "");
+    setPriceSource(p.price_source);
+    setManualPrice(p.manual_unit_price_tl ?? "");
+    setNotes(p.notes ?? "");
+    setLinkedQuery("");
+    // linked pozisyonda seçili varlığı yeniden kur (name yoksa id'yi göster).
+    if (p.price_source === "linked" && p.linked_source && p.linked_id) {
+      setLinkedSelected({ source: p.linked_source, id: p.linked_id, symbol: null, name: p.linked_id });
+    } else {
+      setLinkedSelected(null);
+    }
+    setError("");
+    // jsdom scrollIntoView'i implemente etmez → opsiyonel cagri.
+    formRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!exchange || !symbol.trim() || !quantity.trim()) {
@@ -138,28 +178,25 @@ export default function ManualCryptoPage() {
     }
     setSaving(true);
     setError("");
+    const payload = {
+      exchange,
+      label: label.trim() || null,
+      symbol: symbol.trim().toUpperCase(),
+      quantity: Number.parseFloat(quantity),
+      avg_cost_tl: avgCost.trim() ? Number.parseFloat(avgCost) : null,
+      price_source: priceSource,
+      manual_unit_price_tl: priceSource === "manual" ? Number.parseFloat(manualPrice) : null,
+      linked_source: priceSource === "linked" ? linkedSelected!.source : null,
+      linked_id: priceSource === "linked" ? linkedSelected!.id : null,
+      notes: notes.trim() || null,
+    };
     try {
-      await api.createManualCrypto({
-        exchange,
-        label: label.trim() || null,
-        symbol: symbol.trim().toUpperCase(),
-        quantity: Number.parseFloat(quantity),
-        avg_cost_tl: avgCost.trim() ? Number.parseFloat(avgCost) : null,
-        price_source: priceSource,
-        manual_unit_price_tl: priceSource === "manual" ? Number.parseFloat(manualPrice) : null,
-        linked_source: priceSource === "linked" ? linkedSelected!.source : null,
-        linked_id: priceSource === "linked" ? linkedSelected!.id : null,
-        notes: notes.trim() || null,
-      });
-      setLabel("");
-      setSymbol("");
-      setQuantity("");
-      setAvgCost("");
-      setPriceSource("auto");
-      setManualPrice("");
-      setLinkedQuery("");
-      setLinkedSelected(null);
-      setNotes("");
+      if (editingId === null) {
+        await api.createManualCrypto(payload);
+      } else {
+        await api.updateManualCrypto(editingId, payload);
+      }
+      resetForm();
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("content.manualCrypto.saveFailed"));
@@ -213,6 +250,11 @@ export default function ManualCryptoPage() {
   const totalTL = summary ? Number.parseFloat(summary.total_value_tl) : 0;
   const positions = summary?.positions ?? [];
   const unknownSymbols = summary?.unknown_symbols ?? [];
+
+  let submitLabel: string;
+  if (saving) submitLabel = t("common.saving");
+  else if (editingId === null) submitLabel = t("form.add");
+  else submitLabel = t("form.update");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -286,10 +328,17 @@ export default function ManualCryptoPage() {
 
         {/* Yeni kayıt formu */}
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-3"
+          className={`bg-white rounded-2xl border shadow-sm p-6 space-y-3 ${
+            editingId === null ? "border-gray-100" : "border-blue-300 ring-1 ring-blue-200"
+          }`}
         >
-          <h2 className="text-sm font-semibold text-gray-700">{t("content.manualCrypto.newPositionTitle")}</h2>
+          <h2 className="text-sm font-semibold text-gray-700">
+            {editingId === null
+              ? t("content.manualCrypto.newPositionTitle")
+              : t("content.manualCrypto.editPositionTitle")}
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
             <select
               value={exchange}
@@ -438,13 +487,25 @@ export default function ManualCryptoPage() {
           {error && (
             <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
           )}
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? t("common.saving") : t("form.add")}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {submitLabel}
+            </button>
+            {editingId !== null && (
+              <button
+                type="button"
+                onClick={resetForm}
+                disabled={saving}
+                className="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+            )}
+          </div>
         </form>
 
         {/* Liste */}
@@ -510,14 +571,24 @@ export default function ManualCryptoPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleDelete(p.id, p.symbol)}
-                          className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
-                          title={t("common.delete")}
-                          aria-label={t("content.manualCrypto.deleteAria").replace("{symbol}", p.symbol)}
-                        >
-                          <span aria-hidden="true">✕</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => startEdit(p)}
+                            className="text-gray-400 hover:text-blue-600 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded"
+                            title={t("common.edit")}
+                            aria-label={t("content.manualCrypto.editAria").replace("{symbol}", p.symbol)}
+                          >
+                            <span aria-hidden="true">✎</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id, p.symbol)}
+                            className="text-gray-400 hover:text-red-500 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
+                            title={t("common.delete")}
+                            aria-label={t("content.manualCrypto.deleteAria").replace("{symbol}", p.symbol)}
+                          >
+                            <span aria-hidden="true">✕</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

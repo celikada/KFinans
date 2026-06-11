@@ -14,13 +14,18 @@ from decimal import InvalidOperation
 from ._utils import clamp_day, parse_amount, parse_date
 from .base import ParsedStatement
 
-# ReDoS-safe: bounded quantifiers (SonarQube S5852)
+# ReDoS-safe: bounded quantifiers (SonarQube S5852).
+# NOT: Bazı Enpara PDF varyantlarının metin katmanı Türkçe karakterleri düşürür
+# ("Son ödeme tarihi" → "Son deme tarihi", "Kart numarası" → "Kart numaras").
+# Türkçe harf içeren etiketlerde harfin yerine `\S{0,2}` koyarak ikisini de tanı.
 # "Kart numarası 5269 11** **** 1104" — satır kalanındaki son 4 hane.
-_CARD_RE = re.compile(r"Kart numarası\s{0,4}:?\s{0,4}([0-9*\s]{1,40})")
+_CARD_RE = re.compile(r"Kart numaras\S{0,2}\s{0,4}:?\s{0,4}([0-9*\s]{1,40})")
 # Büyük K: "Kart limiti" (küçük k'li "Kullanılabilir kart limiti" hariç).
 _LIMIT_RE = re.compile(r"(?<!labilir )Kart limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 _STMT_DATE_RE = re.compile(r"Ekstre tarihi\s{0,4}:?\s{0,4}(\d{2}/\d{2}/\d{4})")
-_DUE_DATE_RE = re.compile(r"Son ödeme tarihi\s{0,4}:?\s{0,4}(\d{2}/\d{2}/\d{4})")
+# "Son ödeme tarihi" (ö düşmüş → "Son deme tarihi"). Büyük S ile başlar; alt
+# satırdaki "son ödeme tarihi ise ..." tuzağı küçük s olduğundan eşleşmez.
+_DUE_DATE_RE = re.compile(r"Son\s{1,3}\S{0,2}deme\s{1,3}tarihi\s{0,4}:?\s{0,4}(\d{2}/\d{2}/\d{4})")
 _DEBT_RE = re.compile(r"Ekstre borcu\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 
 

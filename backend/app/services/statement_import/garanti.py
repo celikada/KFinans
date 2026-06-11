@@ -12,13 +12,14 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from ._utils import clamp_day, months_back, parse_amount, search_labeled_date
+from ._utils import clamp_day, months_back, parse_amount, search_labeled_date, tr_tolerant
 from .base import ParsedInstallment, ParsedStatement
 
-# ReDoS-safe: bounded quantifiers (SonarQube S5852)
-_CARD_RE = re.compile(r"Kart Numarası\s{0,4}:?\s{0,4}([\d *]{8,30})")
+# ReDoS-safe: bounded quantifiers (SonarQube S5852). tr_tolerant: Türkçe harf
+# içeren etiketler glyph-düşmüş PDF metninde de eşleşir ("Numarası"→"Numaras" vb).
+_CARD_RE = re.compile(tr_tolerant("Kart Numarası") + r"\s{0,4}:?\s{0,4}([\d *]{8,30})")
 _LIMIT_RE = re.compile(r"(?<!Müşteri )(?<!Avans )Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
-_DEBT_RE = re.compile(r"Dönem Borcunuz\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
+_DEBT_RE = re.compile(tr_tolerant("Dönem Borcunuz") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # Taksitli işlem satırı (best-effort): "... <tutar> k/n" — Garanti işlem tarihleri
 # Türkçe ay adıyla olduğundan "/" yalnız taksit sütununda görünür.
 _INSTALLMENT_RE = re.compile(r"([\d.,]{1,20})\s{1,4}(\d{1,2})/(\d{1,2})(?:\s|$)")

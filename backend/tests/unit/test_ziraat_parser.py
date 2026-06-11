@@ -92,6 +92,20 @@ def test_parse_missing_required_field_raises():
         ZiraatParser().parse(broken)
 
 
+def test_parse_stripped_turkish_chars():
+    """Glyph-düşmüş metin (Türkçe-özel harf kaybı) zorunlu alanları okumalı.
+
+    Bazı PDF metin katmanları "Ödeme"→"deme", "Dönem"→"Dnem" gibi harf düşürür;
+    parser bu durumda da kart + ekstre alanlarını çıkarabilmeli (regresyon).
+    """
+    stripped = SAMPLE_TEXT.translate({ord(c): None for c in "çÇğĞıİöÖşŞüÜ"})
+    parsed = ZiraatParser().parse(stripped)
+    assert parsed.last_4 == "7316"
+    assert parsed.due_date == date(2026, 6, 5)  # "Sonraki Son Ödeme" tuzağına düşmez
+    assert parsed.statement_amount == Decimal("83558.33")
+    assert parsed.statement_date == date(2026, 5, 26)
+
+
 def test_statement_day_clamped_to_28():
     """Kesim günü >28 ise model aralığına (le=28) clamp edilir."""
     text = SAMPLE_TEXT.replace("Hesap Kesim Tarihi : 26.05.2026", "Hesap Kesim Tarihi : 31.05.2026")

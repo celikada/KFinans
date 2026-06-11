@@ -10,6 +10,7 @@ import { Money } from "@/app/_components/Money";
 import { fmtTL, INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
+import { StatementImport } from "../StatementImport";
 
 const MONTH_KEYS = [
   "monthJan", "monthFeb", "monthMar", "monthApr", "monthMay", "monthJun",
@@ -121,6 +122,9 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
             </div>
           </div>
         </div>
+
+        {/* Ekstre (PDF) içe aktarma — elle giriş yerine PDF'ten otomatik doldurma */}
+        <StatementImport onSuccess={refresh} />
 
         {/* Ekstreler */}
         <StatementsSection

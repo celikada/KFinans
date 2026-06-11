@@ -15,17 +15,18 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from ._utils import clamp_day, months_back, parse_amount
+from ._utils import clamp_day, months_back, parse_amount, tr_tolerant
 from .base import ParsedInstallment, ParsedStatement
 
-# ReDoS-safe: bounded quantifiers (SonarQube S5852)
+# ReDoS-safe: bounded quantifiers (SonarQube S5852). tr_tolerant: Türkçe harf
+# içeren etiketler glyph-düşmüş PDF metninde de eşleşir ("Ödeme"→"deme" vb).
 # Maskeli kart numarasi: "5309-####-####-7316" -> son 4 hane (7316).
 _CARD_RE = re.compile(r"\d{4}-[\d#*]{4}-[\d#*]{4}-(\d{4})")
 _LIMIT_RE = re.compile(r"Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
 # "Hesap Kesim Tarihi : 26.05.2026" — "Sonraki Hesap Kesim Tarihi" haric tutulur.
 _STMT_DATE_RE = re.compile(r"(?<!Sonraki )Hesap Kesim Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
-_DUE_DATE_RE = re.compile(r"(?<!Sonraki )Son Ödeme Tarihi\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
-_DEBT_RE = re.compile(r"Dönem Borcu TL\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
+_DUE_DATE_RE = re.compile(r"(?<!Sonraki )" + tr_tolerant("Son Ödeme Tarihi") + r"\s{0,4}:?\s{0,4}(\d{2})\.(\d{2})\.(\d{4})")
+_DEBT_RE = re.compile(tr_tolerant("Dönem Borcu TL") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL", re.IGNORECASE)
 # Taksit satiri: "... (100000.00 TL İşlemin 4/4 Taksidi) ..." + onundeki aciklama.
 _INSTALLMENT_RE = re.compile(
     r"\(([\d.]{1,20})\s{0,4}TL\s{0,4}İşlemin\s{0,4}(\d{1,3})\s{0,4}/\s{0,4}(\d{1,3})\s{0,4}Taksidi\)",

@@ -17,30 +17,52 @@ _AMOUNT_CLEAN_RE = re.compile(r"[^\d.,-]")
 # Tarih: gün ve ay 2 hane, ayraç nokta veya slash (26.05.2026 / 10/05/2026).
 _DATE_RE = re.compile(r"(\d{2})[./](\d{2})[./](\d{4})")
 
-# Türkçe ay adları → ay numarası (aksanlı + ASCII varyantlar; bazı PDF metin
-# katmanları aksanı düşürür, ikisini de tanı).
+# Türkçe ay adları → ay numarası. Üç varyant tanınır: aksanlı ("şubat"),
+# ASCII-translit ("subat") ve glyph-düşmüş ("ubat" — bazı PDF metin katmanları
+# Türkçe-özel harfi tamamen düşürür: Mayıs→Mays, Ağustos→Austos, Aralık→Aralk).
 _TR_MONTHS: dict[str, int] = {
     "ocak": 1,
     "şubat": 2,
     "subat": 2,
+    "ubat": 2,
     "mart": 3,
     "nisan": 4,
     "mayıs": 5,
     "mayis": 5,
+    "mays": 5,
     "haziran": 6,
     "temmuz": 7,
     "ağustos": 8,
     "agustos": 8,
+    "austos": 8,
     "eylül": 9,
     "eylul": 9,
+    "eyll": 9,
     "ekim": 10,
     "kasım": 11,
     "kasim": 11,
+    "kasm": 11,
     "aralık": 12,
     "aralik": 12,
+    "aralk": 12,
 }
 # "5 Haziran 2026" / "01 Haziran 2026" (gün ay-adı yıl). Ay adı 3-9 harf (bounded).
 _TR_DATE_RE = re.compile(r"(\d{1,2})\s{1,3}([A-Za-zçğıöşüÇĞİÖŞÜ]{3,9})\s{1,3}(\d{4})")
+
+# Türkçe-özel harfler: bazı banka PDF'lerinin metin katmanı (font cmap eksiği)
+# bunları düşürür ("Ödeme"→"deme", "Numarası"→"Numaras", "Özeti"→"zeti").
+_TR_SPECIAL_CHARS = "çÇğĞıİöÖşŞüÜ"
+
+
+def tr_tolerant(label: str) -> str:
+    r"""Bir etiketi Türkçe-harf glyph kaybına dayanıklı regex desenine çevirir.
+
+    Her Türkçe-özel harf `\S{0,2}` (en çok 2 non-space; bounded → ReDoS-safe),
+    diğer karakterler `re.escape` ile birebir temsil edilir. Böylece hem sağlam
+    ("Son Ödeme Tarihi") hem glyph-düşmüş ("Son deme Tarihi") metin eşleşir.
+    Türkçe-özel harf içermeyen etiketlerde çıktı `re.escape(label)` ile aynıdır.
+    """
+    return "".join(r"\S{0,2}" if ch in _TR_SPECIAL_CHARS else re.escape(ch) for ch in label)
 
 
 def parse_amount(raw: str) -> Decimal:
@@ -103,10 +125,12 @@ def search_labeled_date(text: str, label: str, *, turkish: bool = False) -> date
     else:
         date_pat = r"\d{2}[./]\d{2}[./]\d{4}"
         conv = parse_date
-    pattern = re.compile(re.escape(label) + r"\s{0,3}:?\s{0,3}(" + date_pat + r")")
+    # tr_tolerant: etiketteki Türkçe harfler glyph-düşmesine dayanıklı eşleşir.
+    pattern = re.compile(tr_tolerant(label) + r"\s{0,3}:?\s{0,3}(" + date_pat + r")")
     for m in pattern.finditer(text):
         pre = text[max(0, m.start() - 24) : m.start()].lower()
-        if "sonraki" in pre or "önceki" in pre:
+        # "önceki" glyph-düşmüş hâli "nceki" — ikisini de yakala (ö düşebilir).
+        if "sonraki" in pre or "nceki" in pre:
             continue
         return conv(m.group(1))
     return None

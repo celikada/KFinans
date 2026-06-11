@@ -51,6 +51,7 @@ vi.mock("@/app/_components/ConfirmDialog", () => ({
 // lib/api — manuel kripto + asset katalog metodlari.
 const listManualCrypto = vi.fn();
 const createManualCrypto = vi.fn();
+const updateManualCrypto = vi.fn();
 const deleteManualCrypto = vi.fn();
 const exportManualCrypto = vi.fn();
 const importManualCrypto = vi.fn();
@@ -59,6 +60,7 @@ vi.mock("@/lib/api", () => ({
   api: {
     listManualCrypto: (...a: unknown[]) => listManualCrypto(...a),
     createManualCrypto: (...a: unknown[]) => createManualCrypto(...a),
+    updateManualCrypto: (...a: unknown[]) => updateManualCrypto(...a),
     deleteManualCrypto: (...a: unknown[]) => deleteManualCrypto(...a),
     exportManualCrypto: (...a: unknown[]) => exportManualCrypto(...a),
     importManualCrypto: (...a: unknown[]) => importManualCrypto(...a),
@@ -574,6 +576,85 @@ describe("ManualCryptoPage — silme", () => {
       screen.getByRole("button", { name: "content.manualCrypto.deleteAria" }),
     );
     expect(await screen.findByText("silme hatasi")).toBeInTheDocument();
+  });
+});
+
+// ─── Düzenleme (inline edit) ──────────────────────────────────────────────
+describe("ManualCryptoPage — düzenleme", () => {
+  it("düzenle butonu → form pozisyon değerleriyle dolar + güncelle ile updateManualCrypto", async () => {
+    const user = userEvent.setup();
+    listManualCrypto.mockResolvedValue(
+      summary({
+        total_value_tl: "1000000",
+        positions: [pos({ id: 7, symbol: "BTC", quantity: "0.5", label: "ana cuzdan" })],
+      }),
+    );
+    updateManualCrypto.mockResolvedValue({ id: 7 });
+    render(<ManualCryptoPage />);
+    expect(await screen.findByText("BTC")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "content.manualCrypto.editAria" }),
+    );
+
+    // Form düzenleme moduna geçti.
+    expect(
+      await screen.findByText("content.manualCrypto.editPositionTitle"),
+    ).toBeInTheDocument();
+    const symbolInput = screen.getByPlaceholderText(
+      "content.manualCrypto.symbolPlaceholder",
+    ) as HTMLInputElement;
+    expect(symbolInput.value).toBe("BTC");
+    const qtyInput = screen.getByPlaceholderText(
+      "content.manualCrypto.quantityPlaceholder",
+    ) as HTMLInputElement;
+    expect(qtyInput.value).toBe("0.5");
+
+    // Miktarı değiştir → güncelle.
+    await user.clear(qtyInput);
+    await user.type(qtyInput, "1.25");
+    await user.click(screen.getByRole("button", { name: "form.update" }));
+
+    await waitFor(() => expect(updateManualCrypto).toHaveBeenCalledTimes(1));
+    expect(updateManualCrypto).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ symbol: "BTC", quantity: 1.25 }),
+    );
+    expect(createManualCrypto).not.toHaveBeenCalled();
+    // Güncelleme sonrası liste yenilenir + form temizlenir (yeni kayıt moduna döner).
+    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText("content.manualCrypto.newPositionTitle"),
+    ).toBeInTheDocument();
+  });
+
+  it("iptal → düzenleme modundan çıkar, update çağrılmaz", async () => {
+    const user = userEvent.setup();
+    listManualCrypto.mockResolvedValue(
+      summary({ total_value_tl: "1000000", positions: [pos({ id: 3, symbol: "ETH" })] }),
+    );
+    render(<ManualCryptoPage />);
+    expect(await screen.findByText("ETH")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "content.manualCrypto.editAria" }),
+    );
+    expect(
+      await screen.findByText("content.manualCrypto.editPositionTitle"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "common.cancel" }));
+
+    expect(
+      await screen.findByText("content.manualCrypto.newPositionTitle"),
+    ).toBeInTheDocument();
+    // Form temizlendi.
+    expect(
+      (screen.getByPlaceholderText(
+        "content.manualCrypto.symbolPlaceholder",
+      ) as HTMLInputElement).value,
+    ).toBe("");
+    expect(updateManualCrypto).not.toHaveBeenCalled();
   });
 });
 
