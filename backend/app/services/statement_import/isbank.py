@@ -12,15 +12,16 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from ._utils import clamp_day, months_back, parse_amount, search_labeled_date
+from ._utils import clamp_day, months_back, parse_amount, search_labeled_date, tr_tolerant
 from .base import ParsedInstallment, ParsedStatement
 
-# ReDoS-safe: bounded quantifiers (SonarQube S5852)
-_CARD_RE = re.compile(r"Kart Numarası\s{0,4}:?\s{0,4}([\d *]{8,30})")
+# ReDoS-safe: bounded quantifiers (SonarQube S5852). tr_tolerant: Türkçe harf
+# içeren etiketler glyph-düşmüş PDF metninde de eşleşir ("Özeti"→"zeti" vb).
+_CARD_RE = re.compile(tr_tolerant("Kart Numarası") + r"\s{0,4}:?\s{0,4}([\d *]{8,30})")
 # "Toplam Kart Limiti: 195.090,00 TL" — "Toplam Kullanılabilir Kart Limiti" ile
 # çakışmaz ("Toplam Kart" bitişik değildir orada).
 _LIMIT_RE = re.compile(r"Toplam Kart Limiti\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
-_DEBT_RE = re.compile(r"Hesap Özeti Borcu\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
+_DEBT_RE = re.compile(tr_tolerant("Hesap Özeti Borcu") + r"\s{0,4}:?\s{0,4}([\d.,]{1,20})\s{0,4}TL")
 # Taksit: "<aylık tutar> k/ntaksidi(<toplam>)" (PDF metninde bitişik).
 _INSTALLMENT_RE = re.compile(
     r"(-?[\d.,]{1,20})\s{1,4}(\d{1,2})\s{0,2}/\s{0,2}(\d{1,2})\s{0,2}taksidi\s{0,2}\(([\d.,]{1,20})\)",

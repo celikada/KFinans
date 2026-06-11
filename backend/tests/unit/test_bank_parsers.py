@@ -3,15 +3,39 @@
 Fixture metinleri gerçek ekstrelerin pdfplumber'ın üreteceğine yakın temsilidir.
 """
 
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
 import pytest
 
 from app.services.statement_import import detect_parser
-from app.services.statement_import._utils import clamp_day, months_back, parse_amount, parse_date
+from app.services.statement_import._utils import (
+    clamp_day,
+    months_back,
+    parse_amount,
+    parse_date,
+    tr_tolerant,
+)
 from app.services.statement_import.enpara import EnparaParser
 from app.services.statement_import.vakifbank import VakifBankParser
+
+# Glyph-düşmesini taklit eder: bazı PDF metin katmanları Türkçe-özel harfleri
+# tamamen düşürür ("Ödeme"→"deme", "Numarası"→"Numaras", "Mayıs"→"Mays").
+_TR_SPECIAL = "çÇğĞıİöÖşŞüÜ"
+
+
+def _strip_tr(s: str) -> str:
+    return s.translate({ord(c): None for c in _TR_SPECIAL})
+
+
+def test_tr_tolerant_matches_intact_and_stripped():
+    pat = re.compile(tr_tolerant("Son Ödeme Tarihi") + r"\s{0,3}(\d{2}\.\d{2}\.\d{4})")
+    assert pat.search("Son Ödeme Tarihi 05.06.2026").group(1) == "05.06.2026"
+    assert pat.search("Son deme Tarihi 05.06.2026").group(1) == "05.06.2026"
+    # Türkçe-özel harf içermeyen etiket: re.escape ile birebir.
+    assert tr_tolerant("Hesap Kesim") == re.escape("Hesap Kesim")
+
 
 # ─── Ortak parse util ────────────────────────────────────────────────────────
 
@@ -92,6 +116,37 @@ def test_enpara_missing_field_raises():
         EnparaParser().parse("Enpara ama alan yok")
 
 
+# Bazı Enpara PDF varyantlarının metin katmanı Türkçe karakterleri düşürür:
+# "ödeme"→"deme", "numarası"→"numaras", "Açıklama"→"Aıklama" vb. Parser bu
+# bozuk metinde de kart + ekstre alanlarını çıkarabilmeli (regresyon).
+ENPARA_TEXT_STRIPPED = """Ekstre tarihi 10/06/2026
+Ekstre borcu 4.915,01 TL
+Minimum deme tutarı 984,00 TL
+Son deme tarihi 22/06/2026
+Ad soyad Ozan elikada
+Kart numarası 5269 11** **** 1104
+Kart limiti 9.000,00 TL
+Kullanlabilir kart limiti 4.084,99 TL
+lem tarihi Aıklama Taksit Tutar
+08/06/2026 BIZIM CICEK EVI 1.100,00 TL
+Bir sonraki ekstrenizin tarihi 10/07/2026, son deme tarihi ise 20/07/2026'dr.
+Enpara Bank A.. B	y	k M	kellefler V.D. 3350917589
+"""
+
+
+def test_enpara_stripped_turkish_chars():
+    """Türkçe karakteri düşmüş Enpara metni de doğru parse edilmeli."""
+    p = EnparaParser().parse(ENPARA_TEXT_STRIPPED)
+    assert p.bank_name == "Enpara"
+    assert p.last_4 == "1104"
+    assert p.credit_limit == Decimal("9000.00")
+    assert p.statement_date == date(2026, 6, 10)
+    assert p.due_date == date(2026, 6, 22)  # "son deme tarihi ise 20/07" tuzağına düşmez
+    assert p.statement_amount == Decimal("4915.01")
+    assert p.statement_day == 10
+    assert p.payment_due_day == 22
+
+
 # ─── VakıfBank ─────────────────────────────────────────────────────────────────
 
 VAKIF_TEXT = """Kredi Kartı Hesap Özeti (TL)
@@ -135,6 +190,14 @@ def test_vakifbank_installments_net_pattern():
     assert first.total_amount == Decimal("6507.00")  # 1084.50 * 6
     # Değişken format uyarısı her zaman eklenir.
     assert any("değişken" in w.lower() for w in p.warnings)
+
+
+def test_vakifbank_stripped_turkish_chars():
+    """Türkçe karakteri düşmüş VakıfBank metni de zorunlu alanları okumalı."""
+    p = VakifBankParser().parse(_strip_tr(VAKIF_TEXT))
+    assert p.due_date == date(2026, 5, 25)  # "Bir Sonraki Son Ödeme" tuzağına düşmez
+    assert p.statement_amount == Decimal("17495.87")
+    assert p.last_4 == "4156"
 
 
 # ─── Fail-safe: yetersiz/tanınmayan içerik ────────────────────────────────────

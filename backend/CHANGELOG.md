@@ -6,6 +6,38 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.1] - 2026-06-11
+
+### Düzeltmeler
+
+- **Ekstre PDF import — Türkçe karakter (glyph) kaybına dayanıklılık.** Bazı banka
+  ekstrelerinin PDF metin katmanı font cmap eksiği nedeniyle Türkçe-özel harfleri
+  düşürüyordu ("Son **Ö**deme Tarihi" → "Son deme Tarihi", "Numara**sı**" →
+  "Numaras", "Dön**em**" benzeri). Parser etiketleri bu harfleri birebir aradığı
+  için ekstre "okunamadı / format tanınmadı" hatası veriyordu (ör. Enpara).
+  Ortak `tr_tolerant()` yardımcısı eklendi: Türkçe-özel harf içeren tüm zorunlu-alan
+  etiketleri (son ödeme tarihi, dönem borcu / hesap özeti borcu, kart numarası) artık
+  hem sağlam hem glyph-düşmüş metinde eşleşir. **8 bankanın hepsi** (Ziraat, Enpara,
+  Yapı Kredi, VakıfBank, QNB, Garanti, İş Bankası) + ortak `search_labeled_date`
+  güncellendi. Türkçe ay adlarının glyph-düşmüş biçimleri de tanınır
+  (Mayıs→Mays, Şubat→ubat, Ağustos→Austos, Eylül→Eyll, Kasım→Kasm, Aralık→Aralk).
+  Tüm tuzak korumaları (Sonraki/Önceki dönem, Toplam limit) glyph-düşmüş metinde de
+  korunur. Regex'ler bounded (`\S{0,2}`) → ReDoS-safe.
+
+### İyileştirmeler
+
+- **Kredi kartı hatırlatma popup'ı → ekstre ekleme akışı.** "Ekstre yükle" butonu
+  kullanıcıyı kart detay sayfasına yönlendiriyordu ama orada PDF yükleme alanı yoktu
+  (yalnız elle giriş vardı). Artık kart detay sayfasına da **PDF ekstre içe aktarma**
+  paneli eklendi; popup'tan gelen kullanıcı hem PDF yükleyebilir hem elle girebilir.
+  Buton metni "Ekstre yükle" → **"Ekstre ekle"** olarak güncellendi (her iki seçeneği
+  kapsar).
+- **Manuel kripto — pozisyon düzenleme.** Manuel kripto pozisyonları artık satır
+  başındaki "düzenle" ile forma yüklenip güncellenebilir (önceden yalnız ekleme/silme
+  vardı).
+
+---
+
 ## [0.8.0] - 2026-06-07
 
 ### Eklenenler

@@ -225,3 +225,45 @@ def test_new_parsers_do_not_match_each_other():
     assert isinstance(detect_parser(GARANTI_TEXT), GarantiParser)
     assert isinstance(detect_parser(ISBANK_TEXT), IsbankParser)
     assert isinstance(detect_parser(YAPIKREDI_TEXT), YapiKrediParser)
+
+
+# ─── Glyph-düşmesi (Türkçe karakter kaybı) regresyonu ─────────────────────────
+# Bazı banka PDF'lerinin metin katmanı Türkçe-özel harfleri tamamen düşürür
+# ("Son Ödeme"→"Son deme", "Numarası"→"Numaras", "Mayıs"→"Mays"). Zorunlu
+# alanlar (son ödeme tarihi + dönem borcu) yine de okunabilmeli.
+_TR_SPECIAL = "çÇğĞıİöÖşŞüÜ"
+
+
+def _strip_tr(s: str) -> str:
+    return s.translate({ord(c): None for c in _TR_SPECIAL})
+
+
+def test_yapikredi_stripped_glyphs():
+    p = YapiKrediParser().parse(_strip_tr(YAPIKREDI_TEXT))
+    assert p.due_date == date(2026, 6, 15)  # "Bir Sonraki Ay" tuzağına düşmez
+    assert p.statement_amount == Decimal("2000.00")  # "Önceki Dönem" değil
+    assert p.last_4 == "6593"
+
+
+def test_qnb_stripped_glyphs():
+    # "20 Mayıs 2026" → "20 Mays 2026" (ı düşmüş ay adı da çözülmeli).
+    p = QnbParser().parse(_strip_tr(QNB_TEXT))
+    assert p.due_date == date(2026, 5, 20)
+    assert p.statement_amount == Decimal("85275.04")
+    assert p.last_4 == "8936"
+    assert p.credit_limit == Decimal("315000.00")  # "Toplam" tuzağına düşmez
+
+
+def test_garanti_stripped_glyphs():
+    p = GarantiParser().parse(_strip_tr(GARANTI_TEXT))
+    assert p.due_date == date(2026, 6, 11)  # "son ödemeniz 13 Temmuz" tuzağına düşmez
+    assert p.statement_amount == Decimal("17176.69")
+    assert p.last_4 == "4010"
+
+
+def test_isbank_stripped_glyphs():
+    # "Hesap Özeti Borcu" → "Hesap zeti Borcu" (Ö düşmüş) yine okunmalı.
+    p = IsbankParser().parse(_strip_tr(ISBANK_TEXT))
+    assert p.due_date == date(2026, 6, 15)
+    assert p.statement_amount == Decimal("14589.28")
+    assert p.last_4 == "8014"
