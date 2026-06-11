@@ -104,6 +104,8 @@ class StatementCreate(BaseModel):
     due_date: date_type
     paid_at: Optional[datetime] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    # Çoklu para birimi — None → kartın para birimini devralır (yazma yolu).
+    currency: Optional[CurrencyType] = None
 
 
 class StatementUpdate(BaseModel):
@@ -112,6 +114,7 @@ class StatementUpdate(BaseModel):
     due_date: Optional[date_type] = None
     paid_at: Optional[datetime] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    currency: Optional[CurrencyType] = None
 
 
 class StatementOut(BaseModel):
@@ -143,6 +146,11 @@ class InstallmentCreate(BaseModel):
     # Ekstre import'ta o ekstrede görünen taksit sırası (X/Y'deki X). Manuel
     # girişte None — yalnız import yolu kullanır: gelecek taksit = total - paid.
     installments_paid: Optional[int] = Field(default=None, ge=1, le=120)
+    # Ekstre import'ta parser'ın çıkardığı GERÇEK plan toplamı (monthly×n yerine
+    # bunu sakla → son dilim küsuratında plan-eşleştirme kayması olmaz).
+    total_amount: Optional[Decimal] = Field(default=None, gt=0, le=Decimal("999999999999.99"))
+    # Çoklu para birimi — None → kartın para birimini devralır.
+    currency: Optional[CurrencyType] = None
 
 
 class InstallmentUpdate(BaseModel):
@@ -151,6 +159,7 @@ class InstallmentUpdate(BaseModel):
     installments_total: Optional[int] = Field(default=None, ge=1, le=120)
     first_due_date: Optional[date_type] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    currency: Optional[CurrencyType] = None
 
 
 class InstallmentOut(BaseModel):

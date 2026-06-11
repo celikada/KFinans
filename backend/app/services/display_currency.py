@@ -276,8 +276,10 @@ def convert_forecast(
         return quantize_tl(tl)
     dst = current_rates.get(display)
     if not dst or dst <= 0:
-        logger.error("Güncel display kuru yok (%s); forecast 0", display)
-        return Decimal(0)
+        # Değeri SIFIRLAMA (tutar sessizce kaybolurdu, ör. kart toplam borcu 0
+        # görünür) — tl_to_display ile tutarlı olarak TL değerine düş + warning.
+        logger.error("Güncel display kuru yok (%s); TL döndürülüyor (fallback)", display)
+        return quantize_tl(tl)
     return quantize_tl(tl / dst)
 
 

@@ -5,8 +5,19 @@ Frontend service worker `PushManager.subscribe()` çıktısını (`endpoint` + `
 """
 
 from typing import Optional
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Yalnız bilinen tarayıcı push servisleri (SSRF koruması): kullanıcı keyfi bir
+# `endpoint` kaydedip sunucunun (anında /push/test + her gün cron ile) iç ağa
+# (169.254.169.254 metadata, localhost, K8s servis IP'leri) POST atmasını engeller.
+_ALLOWED_PUSH_HOST_SUFFIXES = (
+    "googleapis.com",  # fcm.googleapis.com, android.googleapis.com (Chrome/Android)
+    "push.services.mozilla.com",  # Firefox
+    "notify.windows.com",  # Edge / WNS
+    "push.apple.com",  # Safari / WebKit
+)
 
 
 class PushKeys(BaseModel):
@@ -30,8 +41,13 @@ class PushSubscriptionIn(BaseModel):
     @field_validator("endpoint")
     @classmethod
     def _validate_endpoint(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("endpoint geçerli bir URL olmalı")
+        parts = urlsplit(v)
+        if parts.scheme != "https" or not parts.hostname:
+            raise ValueError("endpoint geçerli bir HTTPS URL olmalı")
+        host = parts.hostname.lower()
+        # Tam eşleşme ya da alt-domain (".suffix") — "evilgoogleapis.com" eşleşmez.
+        if not any(host == s or host.endswith("." + s) for s in _ALLOWED_PUSH_HOST_SUFFIXES):
+            raise ValueError("endpoint tanınan bir push servisine ait değil")
         return v
 
 

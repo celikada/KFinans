@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import date as date_type
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -372,7 +372,7 @@ async def create_statement(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await _get_owned_card(card_id, current_user, db)
+    card = await _get_owned_card(card_id, current_user, db)
     # Aynı dönem var mı? unique constraint zaten tutar ama net mesaj için
     existing_q = await db.execute(
         select(CreditCardStatement).where(
@@ -395,6 +395,9 @@ async def create_statement(
         due_date=payload.due_date,
         paid_at=payload.paid_at,
         notes=payload.notes,
+        # currency verilmezse kartın para birimini devral (TRY-dışı kartta cash
+        # flow'un TRY varsayıp ~kur kat yanlış saymasını önler).
+        currency=payload.currency or card.currency or "TRY",
     )
     db.add(stmt)
     await db.commit()
@@ -420,7 +423,7 @@ async def update_statement(
     stmt = result.scalar_one_or_none()
     if not stmt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
-    for attr in ("statement_amount", "statement_date", "due_date", "paid_at", "notes"):
+    for attr in ("statement_amount", "statement_date", "due_date", "paid_at", "notes", "currency"):
         v = getattr(payload, attr)
         if v is not None:
             setattr(stmt, attr, v)
@@ -514,8 +517,10 @@ async def create_installment(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await _get_owned_card(card_id, current_user, db)
-    total = _calc_total(payload.monthly_amount, payload.installments_total)
+    card = await _get_owned_card(card_id, current_user, db)
+    # Parser gerçek plan toplamını verdiyse onu kullan (monthly×n yerine — son
+    # dilim küsuratında kayma olmaz); yoksa monthly×n.
+    total = payload.total_amount or _calc_total(payload.monthly_amount, payload.installments_total)
     # Invariant: installments_remaining = GELECEK taksit sayısı, first_due_date =
     # ilk GELECEK taksit ayı. Geçmişte başlamış planda first_due'yu ileri çek
     # (cash_flow/_enrich_card kalanı first_due'dan itibaren projekte eder).
@@ -530,6 +535,7 @@ async def create_installment(
         installments_remaining=remaining,
         first_due_date=first_due,
         notes=payload.notes,
+        currency=payload.currency or card.currency or "TRY",
     )
     db.add(inst)
     await db.commit()
@@ -555,7 +561,7 @@ async def update_installment(
     inst = result.scalar_one_or_none()
     if not inst:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Taksit bulunamadı")
-    for attr in ("description", "monthly_amount", "installments_total", "first_due_date", "notes"):
+    for attr in ("description", "monthly_amount", "installments_total", "first_due_date", "notes", "currency"):
         v = getattr(payload, attr)
         if v is not None:
             setattr(inst, attr, v)
@@ -588,8 +594,9 @@ async def delete_installment(
     await db.commit()
 
 
-async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate) -> None:
+async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate, currency: str = "TRY") -> None:
     """Ekstreyi (card_id, period) unique'ine göre güncelle ya da ekle."""
+    ccy = s.currency or currency or "TRY"
     existing_q = await db.execute(
         select(CreditCardStatement).where(
             CreditCardStatement.card_id == card_id,
@@ -602,6 +609,7 @@ async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate) 
         stmt.statement_amount = s.statement_amount
         stmt.statement_date = s.statement_date
         stmt.due_date = s.due_date
+        stmt.currency = ccy
         if s.paid_at is not None:
             stmt.paid_at = s.paid_at
         if s.notes is not None:
@@ -617,6 +625,7 @@ async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate) 
             due_date=s.due_date,
             paid_at=s.paid_at,
             notes=s.notes,
+            currency=ccy,
         )
     )
 
@@ -626,6 +635,7 @@ async def _upsert_installments(
     card_id: int,
     due_date: date_type,
     installments: list[InstallmentCreate],
+    default_currency: str = "TRY",
 ) -> int:
     """Ekstre import'undan taksitleri **çift sayımsız** kalıcılaştırır.
 
@@ -651,7 +661,7 @@ async def _upsert_installments(
         k = inst_in.installments_paid or 1
         remaining = n - k
         total = _calc_total(inst_in.monthly_amount, n)
-        currency = getattr(inst_in, "currency", None) or "TRY"
+        currency = inst_in.currency or default_currency or "TRY"
         norm = _norm_installment_desc(inst_in.description)
 
         # Aynı planı bul (ay-bağımsız anahtar: monthly DEĞİL — küsurat dengesi kayar).
@@ -742,12 +752,15 @@ async def preview_statement_import(
 
     try:
         parsed = parser.parse(text)
-    except ValueError as exc:
-        # Banka tanındı ama beklenen alanlar yok → format değişmiş olabilir.
+    except (ValueError, InvalidOperation) as exc:
+        # Banka tanındı ama beklenen alanlar yok / tutar ayrıştırılamadı → format
+        # değişmiş olabilir. InvalidOperation (ArithmeticError) ValueError'a düşmez,
+        # ayrıca yakalanmalı (yoksa generic 500). Ham PDF parçası içeren `exc`
+        # kullanıcıya YANSITILMAZ (PII/iç detay sızıntısı) — yalnız log'a.
         logger.warning("Ekstre parse başarısız (bank=%s): %s", parser.bank_key, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Ekstre okunamadı; banka formatı değişmiş olabilir. ({exc})",
+            detail="Ekstre okunamadı; banka formatı değişmiş olabilir.",
         )
 
     matched_card_id: int | None = None
@@ -817,6 +830,8 @@ async def commit_statement_import(
             card.last_4 = payload.last_4
         card.statement_day = payload.statement_day
         card.payment_due_day = payload.payment_due_day
+        if payload.currency:
+            card.currency = payload.currency
     else:
         card = CreditCard(
             user_id=current_user.id,
@@ -826,15 +841,18 @@ async def commit_statement_import(
             credit_limit=payload.credit_limit,
             statement_day=payload.statement_day,
             payment_due_day=payload.payment_due_day,
+            currency=payload.currency or "TRY",
         )
         db.add(card)
         await db.flush()  # card.id gerekli
 
     # 2) Ekstre upsert + 3) taksitler (çift sayımsız upsert: gelecek dilimler +
     #    plan eşleştir-ilerlet; due_date ayı + 1'den başlar) — helper'lara delege.
+    #    Kart para birimi ekstre + taksitlere devredilir (cash flow doğru çevirir).
+    card_currency = card.currency or "TRY"
     s = payload.statement
-    await _upsert_statement(db, card.id, s)
-    added_installments = await _upsert_installments(db, card.id, s.due_date, payload.installments)
+    await _upsert_statement(db, card.id, s, card_currency)
+    added_installments = await _upsert_installments(db, card.id, s.due_date, payload.installments, card_currency)
 
     # 4) Audit (best-effort, flush) + tek commit.
     await log_audit(
