@@ -22,13 +22,17 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Guvenlik: runtime'da npm gerekmez (CMD "node server.js"). Base image'in npm CLI
-# bundle'i (cross-spawn/glob/minimatch/tar transitive) HIGH/CRITICAL CVE tasiyor;
-# Trivy gate'ini gecmek + saldiri yuzeyini kucultmek icin global npm/npx kaldirilir.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+# Tek RUN katmanı (SonarQube docker:S7031): (1) OS paketlerini güncelle — Trivy
+# HIGH/CRITICAL gate; node:20-alpine'in pinlediği Alpine'de biriken OpenSSL vb.
+# CVE'leri yamalar (ör. CVE-2026-45447, libcrypto3/libssl3 3.5.6-r0 → 3.5.7-r0).
+# (2) Non-root nextjs user. (3) Global npm/npx kaldır — runtime'da gereksiz
+# (CMD "node server.js"); npm CLI bundle'ı (cross-spawn/glob/minimatch/tar
+# transitive) HIGH/CRITICAL CVE taşır, saldırı yüzeyini küçültür. root iken,
+# USER nextjs'ten ÖNCE.
+RUN apk upgrade --no-cache && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

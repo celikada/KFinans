@@ -6,6 +6,20 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.2] - 2026-06-11
+
+### Güvenlik
+
+- **Frontend image OpenSSL CVE yaması (Trivy HIGH/CRITICAL gate).** `node:20-alpine`
+  base image'inin pinlediği Alpine sürümünde biriken **CVE-2026-45447** (libcrypto3 /
+  libssl3 3.5.6-r0 → 3.5.7-r0, 2× HIGH) nedeniyle v0.8.1 tag pipeline'ı `trivy-image-scan`
+  aşamasında durdu (deploy'a geçemedi). `frontend/Dockerfile` runner stage'ine
+  `apk upgrade --no-cache` eklendi (OS paketleri yamandı); mevcut user-create + npm
+  kaldırma adımlarıyla tek RUN katmanında birleştirildi (docker:S7031). Yalnız
+  paketleme/güvenlik değişikliği — uygulama davranışı v0.8.1 ile aynı.
+
+---
+
 ## [0.8.1] - 2026-06-11
 
 ### Düzeltmeler
