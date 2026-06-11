@@ -196,11 +196,25 @@ async def _hard_delete_expired_users_job(session_factory=None) -> None:
     """
     sf = session_factory or AsyncSessionLocal
     cutoff = datetime.now(timezone.utc) - timedelta(days=_HARD_DELETE_RETENTION_DAYS)
+    # credit_transactions.user_id ON DELETE RESTRICT (TTK saklama). Tek set-based
+    # DELETE'te ledger'lı TEK kullanıcı tüm batch'i IntegrityError ile düşürürdü →
+    # KVKK hard-delete sessizce hiç çalışmazdı. Ledger'lı kullanıcıları hariç tut,
+    # ayrıca sayıp uyar (bunlar için anonimleştirme politikası gerekiyor — backlog).
+    from app.models.credit_transaction import CreditTransaction
+
+    has_ledger = select(CreditTransaction.id).where(CreditTransaction.user_id == User.id).exists()
     async with sf() as session:
+        blocked = (await session.execute(select(User.id).where(User.deleted_at.is_not(None), User.deleted_at < cutoff, has_ledger))).scalars().all()
+        if blocked:
+            logger.warning(
+                "COMP-004 hard-delete: %d kullanici kredi ledger (RESTRICT) nedeniyle fiziksel SILINEMEDI — anonimlestirme politikasi gerekli",
+                len(blocked),
+            )
         result = await session.execute(
             delete(User).where(
                 User.deleted_at.is_not(None),
                 User.deleted_at < cutoff,
+                ~has_ledger,
             )
         )
         await session.commit()

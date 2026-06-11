@@ -11,6 +11,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.schemas.credit_card import InstallmentCreate, StatementCreate
+from app.services.currency import CurrencyType
 
 
 class ParsedInstallmentOut(BaseModel):
@@ -59,5 +60,7 @@ class StatementImportCommitIn(BaseModel):
     credit_limit: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
     statement_day: int = Field(default=1, ge=1, le=28)
     payment_due_day: int = Field(default=10, ge=1, le=28)
+    # Kart para birimi — ekstre + taksitlere de devredilir (None → "TRY").
+    currency: Optional[CurrencyType] = None
     statement: StatementCreate
     installments: list[InstallmentCreate] = Field(default_factory=list)

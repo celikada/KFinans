@@ -777,24 +777,18 @@ async def compute_and_save_snapshot(
     from app.models.cash import CashHolding
     from app.models.commodity import CommodityHolding
 
-    intg_q, wallet_q, tefas_q, stock_q, bes_q, commodity_q, cash_q, manual_q = await asyncio.gather(
-        db.execute(select(Integration).where(Integration.user_id == user_id, Integration.is_active.is_(True))),
-        db.execute(select(WalletAddress).where(WalletAddress.user_id == user_id, WalletAddress.is_active.is_(True))),
-        db.execute(select(TefasHolding).where(TefasHolding.user_id == user_id)),
-        db.execute(select(StockHolding).where(StockHolding.user_id == user_id)),
-        db.execute(select(BesHolding).where(BesHolding.user_id == user_id)),
-        db.execute(select(CommodityHolding).where(CommodityHolding.user_id == user_id)),
-        db.execute(select(CashHolding).where(CashHolding.user_id == user_id)),
-        db.execute(select(ManualCryptoHolding).where(ManualCryptoHolding.user_id == user_id)),
-    )
-    integrations = intg_q.scalars().all()
-    wallets = wallet_q.scalars().all()
-    tefas_holdings = tefas_q.scalars().all()
-    stock_holdings = stock_q.scalars().all()
-    bes_holdings = bes_q.scalars().all()
-    commodity_holdings = commodity_q.scalars().all()
-    cash_holdings = cash_q.scalars().all()
-    manual_crypto_holdings = manual_q.scalars().all()
+    # NOT: Aynı AsyncSession (tek asyncpg bağlantısı) üzerinde EŞZAMANLI execute
+    # SQLAlchemy'de desteklenmez ("another operation is in progress" — rastgele
+    # patlama). Sorgular indexli + milisaniyelik; sıralı await yeterli (paralellik
+    # kazancı ~sıfır). Gerçek paralellik istenirse her sorguya ayrı session gerekir.
+    integrations = (await db.execute(select(Integration).where(Integration.user_id == user_id, Integration.is_active.is_(True)))).scalars().all()
+    wallets = (await db.execute(select(WalletAddress).where(WalletAddress.user_id == user_id, WalletAddress.is_active.is_(True)))).scalars().all()
+    tefas_holdings = (await db.execute(select(TefasHolding).where(TefasHolding.user_id == user_id))).scalars().all()
+    stock_holdings = (await db.execute(select(StockHolding).where(StockHolding.user_id == user_id))).scalars().all()
+    bes_holdings = (await db.execute(select(BesHolding).where(BesHolding.user_id == user_id))).scalars().all()
+    commodity_holdings = (await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == user_id))).scalars().all()
+    cash_holdings = (await db.execute(select(CashHolding).where(CashHolding.user_id == user_id))).scalars().all()
+    manual_crypto_holdings = (await db.execute(select(ManualCryptoHolding).where(ManualCryptoHolding.user_id == user_id))).scalars().all()
 
     # Doviz kurlari — aggregator TCMB -> exchangerate-api cascading fallback yapar.
     # USD/TL kritiktir (kripto + USD hisse + cuzdanlar); cekilemezse snapshot iptal.

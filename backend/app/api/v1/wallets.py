@@ -94,9 +94,14 @@ async def remove_wallet(
     current_user: CurrentUser,
     db: DbSession,
 ):
+    try:
+        wallet_uuid = uuid.UUID(wallet_id)
+    except (ValueError, TypeError):
+        # Geçersiz UUID path param → generic 500 yerine net 404.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cüzdan bulunamadı")
     result = await db.execute(
         select(WalletAddress).where(
-            WalletAddress.id == uuid.UUID(wallet_id),
+            WalletAddress.id == wallet_uuid,
             WalletAddress.user_id == current_user.id,
         )
     )
