@@ -58,6 +58,13 @@ frontend-lint:
   # allow_failure: kaldirildi (2026-05-21) — 27 error -> 0 (eslint.config.mjs
   # React 19 set-state-in-effect + exhaustive-deps warn'a indirildi; 31 warning
   # kaldi). Future Effect Event API ile (React Compiler) toplu refactor.
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+      prefix: npm
+    paths:
+      - .npm
   before_script:
     - cd frontend
     - npm ci --prefer-offline
@@ -88,6 +95,15 @@ backend-test:
     # CI-only test key'leri (production secret'lar GitLab CI/CD Variables uzerinden gelir, asla burada degil)
     SECRET_KEY: "c619440c6541a08596063b42b136897e4465b01c1cf10b54e9f5be85ef99946f"
     FERNET_KEY: "GIFo3aVen_zgPcKtJaF7ehO1nN7CucqXvZ3X5nU4mO8="
+  # Pip cache — pipeline'lar arası taşınır (pyproject değişince invalidate olur).
+  # PIP_CACHE_DIR zaten $CI_PROJECT_DIR/.cache/pip; bu blok onu kalıcı kılar.
+  cache:
+    key:
+      files:
+        - backend/pyproject.toml
+      prefix: pip
+    paths:
+      - .cache/pip
   before_script:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends curl gcc libpq-dev
     - cd backend
@@ -125,6 +141,13 @@ frontend-test:
   # allow_failure: kaldirildi (2026-05-21) — vitest threshold %30 -> %15 indirildi
   # (mevcut coverage ~%3-27, %15 kapsiyor). Test artirimi ayri PR'larla; threshold
   # tekrar %30+'a cikarilacak.
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+      prefix: npm
+    paths:
+      - .npm
   before_script:
     - cd frontend
     - npm ci --prefer-offline
@@ -199,6 +222,9 @@ backend-build:
   script:
     - >
       /kaniko/executor
+      --cache=true
+      --cache-repo=docker.io/celikada/kfinans-cache
+      --cache-ttl=168h
       --context "$CI_PROJECT_DIR/backend"
       --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile"
       --destination "$DOCKERHUB_IMAGE_BACKEND:$CI_COMMIT_SHORT_SHA"
@@ -215,6 +241,9 @@ frontend-build:
   script:
     - >
       /kaniko/executor
+      --cache=true
+      --cache-repo=docker.io/celikada/kfinans-cache
+      --cache-ttl=168h
       --context "$CI_PROJECT_DIR/frontend"
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
       --destination "$DOCKERHUB_IMAGE_FRONTEND:$CI_COMMIT_SHORT_SHA"
