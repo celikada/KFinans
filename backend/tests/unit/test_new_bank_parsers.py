@@ -238,6 +238,35 @@ def _strip_tr(s: str) -> str:
     return s.translate({ord(c): None for c in _TR_SPECIAL})
 
 
+def _cid_tr(s: str) -> str:
+    """pdfplumber davranışını taklit: her Türkçe-özel harf → "(cid:N)" token."""
+    return "".join(f"(cid:{ord(c) % 250})" if c in _TR_SPECIAL else c for c in s)
+
+
+def test_all_banks_pdfplumber_cid_tokens():
+    """pdfplumber Türkçe harfi (cid:N) token'ına çevirdiğinde de zorunlu alanlar
+    okunmalı — ay-adlı tarih (Mayıs→May(cid:N)s) dahil (asıl prod bug'ı)."""
+    g = GarantiParser().parse(_cid_tr(GARANTI_TEXT))
+    assert g.due_date == date(2026, 6, 11)
+    assert g.statement_amount == Decimal("17176.69")
+    assert g.last_4 == "4010"
+
+    q = QnbParser().parse(_cid_tr(QNB_TEXT))
+    assert q.due_date == date(2026, 5, 20)  # "20 May(cid:N)s 2026" → Mayıs
+    assert q.statement_amount == Decimal("85275.04")
+    assert q.last_4 == "8936"
+
+    y = YapiKrediParser().parse(_cid_tr(YAPIKREDI_TEXT))
+    assert y.due_date == date(2026, 6, 15)
+    assert y.statement_amount == Decimal("2000.00")
+    assert y.last_4 == "6593"
+
+    i = IsbankParser().parse(_cid_tr(ISBANK_TEXT))
+    assert i.due_date == date(2026, 6, 15)
+    assert i.statement_amount == Decimal("14589.28")
+    assert i.last_4 == "8014"
+
+
 def test_yapikredi_stripped_glyphs():
     p = YapiKrediParser().parse(_strip_tr(YAPIKREDI_TEXT))
     assert p.due_date == date(2026, 6, 15)  # "Bir Sonraki Ay" tuzağına düşmez

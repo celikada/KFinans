@@ -6,6 +6,27 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.3] - 2026-06-11
+
+### Düzeltmeler
+
+- **Ekstre PDF import — pdfplumber `(cid:N)` token'larına dayanıklılık (kritik).**
+  v0.8.1'deki glyph-toleransı, harness'in PDF okumasına göre yazılmıştı (Türkçe
+  harfler tamamen düşüyordu). Gerçek prod'da **pdfplumber** Türkçe-özel harfleri
+  `(cid:N)` token'larına çeviriyor ("Son Ödeme Tarihi" → "Son (cid:0)deme Tarihi",
+  "Mayıs" → "May(cid:0)s"). `\S{0,2}` 7-karakterlik `(cid:0)`'ı kapsayamadığı için
+  Enpara dahil ekstreler **hâlâ "format tanınmadı" hatası** veriyordu. Düzeltmeler:
+  - `tr_tolerant` tek-harf deseni artık `(cid:N)` token'ını da tanır (korunmuş /
+    düşmüş / cid üç biçim); boşluklar `\s{1,3}` (çoklu boşluk toleransı).
+  - Türkçe ay-adı tarihleri (`_TR_DATE_RE` + `parse_turkish_date` +
+    `search_labeled_date`) cid token'lı ay adını çözer ("May(cid:0)s" → Mayıs).
+  - Enpara `Son ödeme` / `Kart numarası`, Ziraat/Yapı Kredi taksit markerları
+    (`İşlemin`/`işlemin`) tr_tolerant'a taşındı.
+  - **Gerçek PDF'lerle doğrulandı:** Enpara, Ziraat (taksitli), QNB (Mayıs cid),
+    Garanti — hepsi doğru parse ediliyor. cid regresyon testleri eklendi.
+
+---
+
 ## [0.8.2] - 2026-06-11
 
 ### Güvenlik

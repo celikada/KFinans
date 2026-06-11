@@ -29,12 +29,15 @@ def _strip_tr(s: str) -> str:
     return s.translate({ord(c): None for c in _TR_SPECIAL})
 
 
-def test_tr_tolerant_matches_intact_and_stripped():
+def test_tr_tolerant_matches_intact_stripped_and_cid():
     pat = re.compile(tr_tolerant("Son Ödeme Tarihi") + r"\s{0,3}(\d{2}\.\d{2}\.\d{4})")
-    assert pat.search("Son Ödeme Tarihi 05.06.2026").group(1) == "05.06.2026"
-    assert pat.search("Son deme Tarihi 05.06.2026").group(1) == "05.06.2026"
-    # Türkçe-özel harf içermeyen etiket: re.escape ile birebir.
-    assert tr_tolerant("Hesap Kesim") == re.escape("Hesap Kesim")
+    assert pat.search("Son Ödeme Tarihi 05.06.2026").group(1) == "05.06.2026"  # korunmuş
+    assert pat.search("Son deme Tarihi 05.06.2026").group(1) == "05.06.2026"  # glyph düşmüş
+    # pdfplumber Türkçe harfi (cid:N) token'ına çevirir — bu da eşleşmeli (asıl bug):
+    assert pat.search("Son (cid:0)deme Tarihi 05.06.2026").group(1) == "05.06.2026"
+    # Boşluk → \s{1,3} (çoklu boşluk toleransı); Türkçe-özel harfsiz diğerleri re.escape.
+    assert tr_tolerant("HesapKesim") == re.escape("HesapKesim")
+    assert "\\s{1,3}" in tr_tolerant("Hesap Kesim")
 
 
 # ─── Ortak parse util ────────────────────────────────────────────────────────
@@ -145,6 +148,30 @@ def test_enpara_stripped_turkish_chars():
     assert p.statement_amount == Decimal("4915.01")
     assert p.statement_day == 10
     assert p.payment_due_day == 22
+
+
+# GERÇEK pdfplumber çıktısı: Enpara font'unda Türkçe-özel harf `(cid:N)` token'ı
+# olur ("Son ödeme" → "Son (cid:0)deme", "Çelikada" → "(cid:16)elikada").
+# İki sütunlu yerleşim → etiket+değer aynı satırda. (Asıl prod bug'ı — #v0.8.x.)
+ENPARA_TEXT_CID = """Kredi Kartı Ekstresi
+Ekstre tarihi 10/06/2026 Ad soyad Ozan (cid:16)elikada
+Ekstre borcu 4.915,01 TL Kart numarası 5269 11** **** 1104
+Minimum (cid:0)deme tutarı 984,00 TL Kart limiti 9.000,00 TL
+Son (cid:0)deme tarihi 22/06/2026 Kullanılabilir kart limiti 4.084,99 TL
+Bir sonraki ekstrenizin tarihi 10/07/2026, son (cid:7)deme tarihi ise 20/07/2026'dır.
+Enpara Bank A.. Büyük Mükellefler V.D. 3350917589
+"""
+
+
+def test_enpara_pdfplumber_cid_tokens():
+    """pdfplumber (cid:N) token'lı gerçek çıktı doğru parse edilmeli (regresyon)."""
+    p = EnparaParser().parse(ENPARA_TEXT_CID)
+    assert p.bank_name == "Enpara"
+    assert p.last_4 == "1104"
+    assert p.credit_limit == Decimal("9000.00")
+    assert p.statement_date == date(2026, 6, 10)
+    assert p.due_date == date(2026, 6, 22)  # "(cid:7)deme ... 20/07" tuzağına düşmez
+    assert p.statement_amount == Decimal("4915.01")
 
 
 # ─── VakıfBank ─────────────────────────────────────────────────────────────────
