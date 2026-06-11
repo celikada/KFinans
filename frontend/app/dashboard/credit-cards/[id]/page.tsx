@@ -6,8 +6,8 @@ import {
   StatementInput, InstallmentInput, CurrencyType, CURRENCIES,
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
-import { Money } from "@/app/_components/Money";
-import { fmtTL, INPUT_CLS } from "@/lib/format";
+import { Money, fmtCurrency } from "@/app/_components/Money";
+import { INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { StatementImport } from "../StatementImport";
@@ -89,7 +89,7 @@ export default function CreditCardDetailPage({ params }: Readonly<{ params: Prom
               <p className="text-xs text-gray-400 mb-1">{t("table.statementDue")}</p>
               <p className="text-sm text-gray-700">{t("content.creditCards.dayFlow").replace("{statement}", String(c.statement_day)).replace("{due}", String(c.payment_due_day))}</p>
               {limit !== null && (
-                <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.limitLabel")}: {fmtTL(limit)} ₺</p>
+                <p className="text-xs text-gray-400 mt-1">{t("content.creditCards.limitLabel")}: {fmtCurrency(limit, (c.currency ?? "TRY") as CurrencyType)}</p>
               )}
             </div>
             <div>
@@ -284,7 +284,7 @@ function StatementsSection({ cardId, cardCurrency, items, onChange }: Readonly<{
                 {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtTL(Number.parseFloat(s.statement_amount))} ₺</span>
+                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtCurrency(Number.parseFloat(s.statement_amount), s.currency ?? cardCurrency)}</span>
                 <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
                 <button onClick={() => handleDelete(s)} aria-label={t("content.creditCards.deleteStatementAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
               </div>
@@ -405,7 +405,7 @@ function InstallmentsSection({ cardId, cardCurrency, items, onChange }: Readonly
         </div>
         {totalPreview && (
           <p className="text-xs text-gray-500">
-            {t("content.creditCards.totalLabel")}: <span className="font-semibold text-gray-700">{totalPreview} ₺</span> · {t("content.creditCards.remainingAutoHint")}
+            {t("content.creditCards.totalLabel")}: <span className="font-semibold text-gray-700">{fmtCurrency(Number(totalPreview), currency)}</span> · {t("content.creditCards.remainingAutoHint")}
           </p>
         )}
         <input
@@ -436,10 +436,10 @@ function InstallmentsSection({ cardId, cardCurrency, items, onChange }: Readonly
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <p className="text-sm font-semibold text-rose-600 tabular-nums">
-                    {fmtTL(Number.parseFloat(i.monthly_amount))} {t("content.creditCards.perMonth")}
+                    {fmtCurrency(Number.parseFloat(i.monthly_amount), i.currency ?? cardCurrency)} {t("content.creditCards.perMonth")}
                   </p>
                   <p className="text-[10px] text-gray-400">
-                    {t("content.creditCards.totalLabel")}: {fmtTL(Number.parseFloat(i.total_amount))} ₺
+                    {t("content.creditCards.totalLabel")}: {fmtCurrency(Number.parseFloat(i.total_amount), i.currency ?? cardCurrency)}
                   </p>
                 </div>
                 <button onClick={() => startEdit(i)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>

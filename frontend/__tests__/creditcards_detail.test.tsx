@@ -467,8 +467,8 @@ describe("CreditCardDetailPage — taksitler", () => {
       screen.getByPlaceholderText("content.creditCards.monthlyInstallmentPlaceholder"),
       "500",
     );
-    // total varsayılan 12 → preview = 6000.00
-    expect(await screen.findByText("6000.00", { exact: false })).toBeInTheDocument();
+    // total varsayılan 12 → preview = 6.000,00 (fmtCurrency ile biçimli)
+    expect(await screen.findByText("6.000,00", { exact: false })).toBeInTheDocument();
   });
 
   it("geçerli taksit → createInstallment payload + refresh", async () => {

@@ -34,12 +34,18 @@ export default function CryptoPage() {
   }
 
   useEffect(() => {
-    api.getIntegrations().then((data) => {
-      const crypto = data.filter((i) => i.provider in PROVIDER_LABELS);
-      setIntegrations(crypto);
-      if (crypto.length > 0) fetchPositions();
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    api
+      .getIntegrations()
+      .then((data) => {
+        const crypto = data.filter((i) => i.provider in PROVIDER_LABELS);
+        setIntegrations(crypto);
+        if (crypto.length > 0) fetchPositions();
+      })
+      .catch((err) => {
+        // Sessiz hata yerine kullanıcıya göster (yoksa "bağlı borsa yok" sanılır).
+        setPosError(err instanceof Error ? err.message : t("content.crypto.positionsLoadFailed"));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchPositions() {
