@@ -6,6 +6,37 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.5] - 2026-06-14
+
+Dashboard'da blockchain cüzdan + TEFAS fon kartlarının "yükleniyor"da takılması
+giderildi (production loglarıyla teşhis: `GET /portfolio/wallets` 373 sn,
+TEFAS export geçici `ConnectTimeout`, frontend'de request timeout yokluğu).
+
+### Düzeltmeler
+
+- **Cüzdan dış-çağrı dayanıklılığı:** web3 (Ethereum/Sonic/Avalanche-C) RPC
+  isteklerine timeout + bounded multi-RPC fallback eklendi; cüzdan fetch'ine
+  per-wallet (25 sn) + toplam (60 sn) deadline. Bir ölü/yavaş RPC artık tüm
+  dashboard'u kilitleyemez. ETH varsayılan RPC `eth.llamarpc.com` (521 down) →
+  `publicnode`.
+- **TEFAS dayanıklılığı:** son-başarılı fiyat cache'i (TEFAS erişilemese bile fon
+  değeri ekranda kalır) + HTTP timeout 20→8 sn + single-flight. TEFAS erişim
+  kesintisi geçiciydi (aynı gün düzeldi); kalıcılaşırsa alternatifler
+  `docs/operations/tefas-erisim-notu.md`'de.
+- **Frontend request timeout:** api client'a `AbortController` timeout (30 sn) —
+  backend gecikse bile spinner sonsuz dönmez.
+
+### Eklenenler
+
+- **Sunucu-tarafı canlı portföy cache'i (`live_portfolio_cache`):** Ağır/dış-API
+  verisi (cüzdan/kripto/TEFAS/hisse/emtia/manuel kripto) her dashboard açılışında
+  değil, arka planda hesaplanıp cache'lenir. `GET /portfolio/live` hızlı DB
+  okumasıyla döner (stale-while-revalidate); `POST /portfolio/refresh` "Yenile"
+  butonu; login/MFA sonrası bayatsa arka planda tetik. Snapshot taze cache varsa
+  yeniden dış çağrı yapmadan üretilir.
+- **Dashboard "Yenile" butonu + "Son güncelleme" göstergesi** (ana sayfa + cüzdan/
+  TEFAS/kripto/hisse/emtia/manuel-kripto detay sayfaları).
+
 ## [0.8.4] - 2026-06-13
 
 9 paralel uzman ajan denetimi (backend/frontend/dba/security/devops/test/finance/ai/architect)

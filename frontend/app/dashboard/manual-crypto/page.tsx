@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback, useRef, FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { api, AssetCatalogItem, LinkedSource, ManualCryptoPositionDTO, ManualCryptoPriceSource, ManualCryptoSummaryDTO } from "@/lib/api";
+import { useEffect, useState, useRef, FormEvent } from "react";
+import { api, AssetCatalogItem, LinkedSource, ManualCryptoPositionDTO, ManualCryptoPriceSource } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { TLValue } from "@/app/_components/TLValue";
 import { fmtNum, fmtTL, INPUT_CLS, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
@@ -31,7 +32,6 @@ const EXCHANGE_VALUES: { value: string; label: string | null }[] = [
 ];
 
 export default function ManualCryptoPage() {
-  const router = useRouter();
   const { t } = useTranslation();
   const confirm = useConfirm();
 
@@ -59,13 +59,17 @@ export default function ManualCryptoPage() {
     tefas: "TEFAS",
     commodity: t("content.manualCrypto.linkedCommodity"),
   };
-  const [summary, setSummary] = useState<ManualCryptoSummaryDTO | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Manuel kripto özeti sunucu-cache'ten (/portfolio/live). CRUD/import sonrası
+  // live.refresh() arka planda yeniden hesaplatır.
+  const live = useLivePortfolio();
+  const summary = live.data?.sections.manual_crypto ?? null;
+  const loading = live.loading;
 
   // Düzenleme modu: null → yeni kayıt, sayı → o id'li pozisyonu güncelle
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -85,26 +89,6 @@ export default function ManualCryptoPage() {
   const [linkedResults, setLinkedResults] = useState<AssetCatalogItem[]>([]);
   const [linkedSelected, setLinkedSelected] = useState<AssetCatalogItem | null>(null);
   const [searching, setSearching] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setSummary(await api.listManualCrypto());
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("401")) {
-        router.replace("/login");
-        return;
-      }
-      setError(err instanceof Error ? err.message : t("content.manualCrypto.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, [router, t]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   // Linked arama — debounced (250ms)
   useEffect(() => {
@@ -197,7 +181,7 @@ export default function ManualCryptoPage() {
         await api.updateManualCrypto(editingId, payload);
       }
       resetForm();
-      await refresh();
+      await live.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("content.manualCrypto.saveFailed"));
     } finally {
@@ -209,7 +193,7 @@ export default function ManualCryptoPage() {
     if (!(await confirm(t("content.manualCrypto.confirmDelete").replace("{symbol}", sym)))) return;
     try {
       await api.deleteManualCrypto(id);
-      await refresh();
+      await live.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("content.manualCrypto.deleteFailed"));
     }
@@ -238,7 +222,7 @@ export default function ManualCryptoPage() {
             .replace("{errors}", result.errors.slice(0, 3).join("; ")),
         );
       }
-      await refresh();
+      await live.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("content.manualCrypto.importFailed"));
     } finally {
@@ -261,6 +245,15 @@ export default function ManualCryptoPage() {
       <PageHeader title={t("pages.manualCrypto")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex justify-end">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
+
         {/* Bilgi banner */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-900">
           <p className="font-medium mb-1">{t("content.manualCrypto.bannerTitle")}</p>
@@ -268,6 +261,10 @@ export default function ManualCryptoPage() {
             {t("content.manualCrypto.bannerText")}
           </p>
         </div>
+
+        {live.error && (
+          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl" role="alert">{live.error}</p>
+        )}
 
         {/* Bilinmeyen sembol uyarısı */}
         {unknownSymbols.length > 0 && (

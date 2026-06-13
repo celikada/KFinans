@@ -8,6 +8,7 @@ from web3 import AsyncWeb3
 from app.config import settings
 from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
+from app.services.blockchain._web3_utils import provider_request_kwargs, web3_with_fallback
 from app.services.blockchain.evm_tokens import AVALANCHE_C_TOKENS, fetch_token_balances
 
 logger = logging.getLogger(__name__)
@@ -171,23 +172,24 @@ _AVAX_FALLBACK_RPCS = (
 class AvalancheCChainService(BaseBlockchainIntegration):
     """C-Chain liquid AVAX (EVM) + ERC-20 tokens."""
 
+    @staticmethod
+    def _make_w3(rpc: str) -> AsyncWeb3:
+        # Modül-local AsyncWeb3 (monkeypatch uyumlu) + timeout.
+        return AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc, request_kwargs=provider_request_kwargs()))
+
     async def fetch(self) -> list[AssetData]:
         checksum = AsyncWeb3.to_checksum_address(self.address)
-        balance_wei = None
-        for rpc in (settings.avalanche_c_rpc_url, *_AVAX_FALLBACK_RPCS):
-            if not rpc:
-                continue
-            try:
-                w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc))
-                balance_wei = await w3.eth.get_balance(checksum)
-                self._w3 = w3
-                break
-            except Exception as exc:
-                logger.warning("AVAX C RPC %s başarısız: %s", rpc[:40], exc)
-
+        # Her RPC denemesi timeout + asyncio.wait_for ile bounded (ortak helper).
+        w3, balance_wei = await web3_with_fallback(
+            self._make_w3,
+            (settings.avalanche_c_rpc_url, *_AVAX_FALLBACK_RPCS),
+            lambda c: c.eth.get_balance(checksum),
+            label="AVAX C RPC",
+        )
         if balance_wei is None:
             logger.error("Tüm AVAX C RPC'leri başarısız [%s]", self.address[:12])
             return []
+        self._w3 = w3
 
         liquid = Decimal(balance_wei) / WEI
 

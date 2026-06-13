@@ -8,6 +8,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.config import settings
 from app.core.deps import get_db
 from app.core.limiter import limiter
 from app.main import app
@@ -26,6 +27,11 @@ if TEST_DB_URL.endswith("/kfinans") or TEST_DB_URL.endswith("/kfinans/"):
 
 # Test ortaminda slowapi rate limiter devre disi — testler arasi 429 patlamalarini onler
 limiter.enabled = False
+
+# Login/MFA sonrasi arka plan canli-cache refresh'i test ortaminda kapali:
+# kontrolsuz dis-API cagrisi + paylasilan fiyat cache'ini kirleterek diger
+# testleri flaky yapardi (test_wallet_positions_with_balance vb.).
+settings.live_cache_refresh_on_login = False
 
 # NullPool: her connection sonrasi kapanir; pytest-asyncio'nun event loop
 # yeniden olusturmasi nedeniyle olusan "different loop" hatalarini onler.
@@ -60,10 +66,14 @@ def _reset_tcmb_cache():
     """FIN-007 (FAZ H): TCMB rates modul-level cache (300s TTL) testler arasi
     paylasildigindan respx mock degisiklikleri etkisiz kaliyordu. Her test
     oncesi cache sifirla — testler izole.
+
+    TEFAS fiyat gridi cache'i (son-iyi fallback dahil) de modul-level + uzun
+    TTL oldugundan ayni izolasyon gerekir.
     """
-    from app.services import aggregator
+    from app.services import aggregator, tefas
 
     aggregator._tcmb_cache = None
+    tefas.reset_tefas_cache()
     yield
 
 

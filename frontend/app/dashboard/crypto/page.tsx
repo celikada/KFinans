@@ -1,7 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
-import { api, IntegrationDTO, CryptoPositionDTO } from "@/lib/api";
+import { useState, useEffect, useMemo } from "react";
+import { api, IntegrationDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { IntegrationList } from "./_components/IntegrationList";
 import { IntegrationForm } from "./_components/IntegrationForm";
 import { ProviderSummaryCards } from "./_components/ProviderSummaryCards";
@@ -12,8 +14,6 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function CryptoPage() {
   const { t } = useTranslation();
   const [integrations, setIntegrations] = useState<IntegrationDTO[]>([]);
-  const [positions, setPositions] = useState<CryptoPositionDTO[]>([]);
-  const [loadingPositions, setLoadingPositions] = useState(false);
   const [posError, setPosError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(new Set());
@@ -23,6 +23,21 @@ export default function CryptoPage() {
   const [exportErr, setExportErr] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+
+  // Pozisyon listesi sunucu-cache'ten (/portfolio/live). Borsa ekleme/silme/import
+  // sonrası live.refresh() arka planda yeniden hesaplatır.
+  const live = useLivePortfolio();
+  const positions = useMemo(
+    () => (live.data?.sections.crypto?.positions ?? []).filter((p) => Number.parseFloat(p.total_value_tl) > 0.01),
+    [live.data],
+  );
+  const loadingPositions = live.loading;
+  const sectionErrors = useMemo(() => {
+    const errs = live.data?.sections.crypto?.errors ?? {};
+    const keys = Object.keys(errs);
+    if (keys.length === 0) return "";
+    return keys.map((prov) => `${PROVIDER_LABELS[prov] ?? prov}: ${errs[prov]}`).join(" | ");
+  }, [live.data]);
 
   function toggleProvider(prov: string) {
     setHiddenProviders((prev) => {
@@ -37,39 +52,17 @@ export default function CryptoPage() {
     api
       .getIntegrations()
       .then((data) => {
-        const crypto = data.filter((i) => i.provider in PROVIDER_LABELS);
-        setIntegrations(crypto);
-        if (crypto.length > 0) fetchPositions();
+        setIntegrations(data.filter((i) => i.provider in PROVIDER_LABELS));
       })
       .catch((err) => {
         // Sessiz hata yerine kullanıcıya göster (yoksa "bağlı borsa yok" sanılır).
         setPosError(err instanceof Error ? err.message : t("content.crypto.positionsLoadFailed"));
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function fetchPositions() {
-    setLoadingPositions(true);
-    setPosError("");
-    try {
-      const { positions, errors } = await api.getCryptoPositions();
-      setPositions(positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01));
-      if (Object.keys(errors).length > 0) {
-        const msgs = Object.entries(errors)
-          .map(([prov, err]) => `${PROVIDER_LABELS[prov] ?? prov}: ${err}`)
-          .join(" | ");
-        setPosError(msgs);
-      }
-    } catch (err) {
-      setPosError(err instanceof Error ? err.message : t("content.crypto.positionsLoadFailed"));
-    } finally {
-      setLoadingPositions(false);
-    }
-  }
+  }, [t]);
 
   function handleAdded(added: IntegrationDTO) {
     setIntegrations((prev) => [...prev.filter((i) => i.provider !== added.provider), added]);
-    fetchPositions();
+    live.refresh();
   }
 
   async function handleRemove(prov: string) {
@@ -78,7 +71,7 @@ export default function CryptoPage() {
     try {
       await api.removeIntegration(prov);
       setIntegrations((prev) => prev.filter((i) => i.provider !== prov));
-      setPositions((prev) => prev.filter((p) => p.provider !== prov));
+      live.refresh();
     } catch (err) {
       setPosError(err instanceof Error ? err.message : t("content.crypto.removeFailed"));
     } finally {
@@ -120,7 +113,7 @@ export default function CryptoPage() {
       const imported = await api.importIntegrations(file);
       const crypto = imported.filter((i) => i.provider in PROVIDER_LABELS);
       setIntegrations(crypto);
-      if (crypto.length > 0) fetchPositions();
+      if (crypto.length > 0) live.refresh();
     } catch (err) {
       setPosError(err instanceof Error ? err.message : t("content.crypto.importFailed"));
     } finally {
@@ -136,6 +129,15 @@ export default function CryptoPage() {
       <PageHeader title={t("pages.crypto")} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex justify-end">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.crypto.connectedExchanges")}</h2>
           <IntegrationList
@@ -147,7 +149,7 @@ export default function CryptoPage() {
             hasIntegrations={integrations.length > 0}
             loadingPositions={loadingPositions}
             onAdded={handleAdded}
-            onRefresh={fetchPositions}
+            onRefresh={live.refresh}
           />
 
           <div className="flex gap-3 mt-4 items-center flex-wrap border-t border-gray-100 pt-4">
@@ -172,8 +174,8 @@ export default function CryptoPage() {
           </p>
         )}
 
-        {posError && (
-          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{posError}</p>
+        {(posError || live.error || sectionErrors) && (
+          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{posError || live.error || sectionErrors}</p>
         )}
 
         {!loadingPositions && positions.length > 0 && (

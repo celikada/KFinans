@@ -90,6 +90,17 @@
     "fund": "fon",
     "stock": "hisse",
     "position": "pozisyon",
+    "live": {
+      "refresh": "Yenile",
+      "refreshing": "Güncelleniyor…",
+      "lastUpdated": "Son güncelleme",
+      "justNow": "az önce",
+      "minutesAgo": "{n} dk önce",
+      "hoursAgo": "{n} sa önce",
+      "daysAgo": "{n} gün önce",
+      "never": "henüz yok",
+      "stale": "Veriler eski olabilir"
+    },
     "cards": {
       "creditCards": "Kredi Kartları (toplam borç)",
       "creditCardsHint": "Kart tanımı + ekstre + taksit",

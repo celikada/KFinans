@@ -21,6 +21,7 @@ _ISTANBUL = ZoneInfo("Europe/Istanbul")
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.security import decrypt_secret
 from app.models.bes import BesHolding
 from app.models.integration import Integration, WalletAddress
@@ -115,7 +116,8 @@ async def _gather_wallet_assets(
         svc_cls = globals().get(svc_cls.__name__, svc_cls)
         try:
             svc = svc_cls(wallet.address, wid)
-            assets = await svc.fetch()
+            # Per-wallet deadline — yavaş/ölü RPC snapshot'ı kilitlemesin.
+            assets = await asyncio.wait_for(svc.fetch(), timeout=settings.wallet_per_fetch_timeout)
             if not assets:
                 # Servis exception fırlatmadı ama 0 asset döndü — uyarı kaydet
                 issues.append(
@@ -129,14 +131,16 @@ async def _gather_wallet_assets(
                 )
             return assets
         except Exception as e:
-            logger.warning("Snapshot: cuzdan fetch hatasi [%s:%s]: %s", wallet.chain, wallet.address[:10], e)
+            is_timeout = isinstance(e, TimeoutError)
+            msg = "Zaman aşımı (ağ/RPC yavaş)" if is_timeout else str(e)[:200]
+            logger.warning("Snapshot: cuzdan fetch hatasi [%s:%s]: %s", wallet.chain, wallet.address[:10], msg)
             issues.append(
                 {
                     "source": "wallet",
                     "chain": wallet.chain,
                     "address": wallet.address[:14] + "…",
-                    "code": "fetch_failed",
-                    "msg": str(e)[:200],
+                    "code": "fetch_timeout" if is_timeout else "fetch_failed",
+                    "msg": msg,
                 }
             )
             return []

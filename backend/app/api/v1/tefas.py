@@ -78,6 +78,60 @@ def _calc_gain_loss(
     return cost_basis, gain_loss, gain_loss_pct
 
 
+def _build_tefas_position(h: TefasHolding, a) -> TefasPositionOut:
+    """Bir TEFAS holding + fiyatlanmış asset'ten pozisyon çıktısı üretir.
+
+    Preview endpoint (body-tabanlı) ve compute_tefas_positions (user/DB-tabanlı,
+    live cache) ortak kullanır — cost-basis hesabı tek yerde.
+    """
+    qty = a.liquid_quantity
+    total_value_tl = (qty * a.unit_price_tl).quantize(Decimal("0.01"))
+    avg_cost_raw = h.avg_cost_tl
+    avg_cost_dec = Decimal(str(avg_cost_raw)) if avg_cost_raw is not None else None
+    cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(total_value_tl, qty, avg_cost_raw)
+    return TefasPositionOut(
+        code=a.symbol,
+        name=a.name,
+        quantity=qty,
+        unit_price_tl=a.unit_price_tl,
+        total_value_tl=total_value_tl,
+        avg_cost_tl=avg_cost_dec,
+        cost_basis_tl=cost_basis,
+        gain_loss_tl=gain_loss,
+        gain_loss_pct=gain_loss_pct,
+        distributor=h.distributor,
+    )
+
+
+async def compute_tefas_positions(user_id, db: AsyncSession) -> list[TefasPositionOut]:
+    """Kullanıcının DB'deki TEFAS holding'lerini canlı fiyatlarla pozisyona çevirir.
+
+    Live cache refresh servisi kullanır. Preview endpoint'i (body-tabanlı,
+    cost-basis önizleme için) ayrıdır; bu fonksiyon DB kayıtlarını fiyatlar.
+    TEFAS fetch zaten Faz 1 timeout + last-known-good cache ile bounded.
+    """
+    from app.services.tefas import TefasService
+
+    result = await db.execute(select(TefasHoldingModel).where(TefasHoldingModel.user_id == user_id))
+    rows = result.scalars().all()
+    if not rows:
+        return []
+
+    holdings = [
+        TefasHolding(
+            code=r.code,
+            quantity=float(r.quantity),
+            name=r.name,
+            avg_cost_tl=float(r.avg_cost_tl) if r.avg_cost_tl is not None else None,
+            distributor=r.distributor,
+        )
+        for r in rows
+    ]
+    svc = TefasService([{"code": h.code, "quantity": h.quantity, "name": h.name} for h in holdings])
+    assets = await svc.fetch()
+    return [_build_tefas_position(h, a) for h, a in zip(holdings, assets)]
+
+
 @router.post("/preview", response_model=list[TefasPositionOut])
 @limiter.limit("30/minute")
 async def tefas_preview(
@@ -98,29 +152,7 @@ async def tefas_preview(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     # Servis holdings sırasını koruyarak asset döndürür → zip ile eşleştir
-    out = []
-    for h, a in zip(holdings, assets):
-        qty = a.liquid_quantity
-        total_value_tl = (qty * a.unit_price_tl).quantize(Decimal("0.01"))
-        avg_cost_raw = h.avg_cost_tl
-        avg_cost_dec = Decimal(str(avg_cost_raw)) if avg_cost_raw is not None else None
-        cost_basis, gain_loss, gain_loss_pct = _calc_gain_loss(total_value_tl, qty, avg_cost_raw)
-
-        out.append(
-            TefasPositionOut(
-                code=a.symbol,
-                name=a.name,
-                quantity=qty,
-                unit_price_tl=a.unit_price_tl,
-                total_value_tl=total_value_tl,
-                avg_cost_tl=avg_cost_dec,
-                cost_basis_tl=cost_basis,
-                gain_loss_tl=gain_loss,
-                gain_loss_pct=gain_loss_pct,
-                distributor=h.distributor,
-            )
-        )
-    return out
+    return [_build_tefas_position(h, a) for h, a in zip(holdings, assets)]
 
 
 async def _fetch_tefas_prices(rows) -> dict[str, Decimal]:

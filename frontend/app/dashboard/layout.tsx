@@ -34,6 +34,9 @@ export default function DashboardLayout({ children }: Readonly<{ children: React
     api.getMe()
       .then((u) => cacheDefaultCurrency(u.default_currency))
       .catch(() => {});
+    // Canlı portföy cache'i arka planda tazele (login/oturum tetiği). force=false →
+    // backend bayatlık kontrolünü kendi yapar (taze ise no-op). Best-effort: hata yut.
+    api.refreshPortfolio(false).catch(() => {});
   }, [router]);
 
   if (!authChecked) {

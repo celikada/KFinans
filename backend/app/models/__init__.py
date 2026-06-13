@@ -7,6 +7,7 @@ from app.models.credit_card import CreditCard, CreditCardInstallment, CreditCard
 from app.models.credit_transaction import CreditTransaction
 from app.models.daily_rate import DailyRate
 from app.models.integration import Integration, WalletAddress
+from app.models.live_cache import LivePortfolioCache
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.models.push_subscription import PushSubscription
@@ -36,4 +37,5 @@ __all__ = [
     "CreditCardInstallment",
     "CreditTransaction",
     "DailyRate",
+    "LivePortfolioCache",
 ]

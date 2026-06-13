@@ -84,6 +84,83 @@ async def save_stock_holdings(
     return holdings
 
 
+def _build_stock_position(h: StockHolding, q, usd_tl: Decimal, gbp_usd: Decimal) -> StockPositionOut:
+    """Bir hisse holding + quote'tan pozisyon çıktısı üretir (cost-basis dahil).
+
+    Preview endpoint ve compute_stock_positions (live cache) ortak kullanır.
+    """
+    ticker = h.ticker.upper()
+    price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd)
+
+    qty = Decimal(str(h.quantity))
+    total_value_tl = (qty * price_tl).quantize(Decimal("0.01"))
+
+    if h.avg_cost_tl is not None:
+        avg_cost = Decimal(str(h.avg_cost_tl))
+        cost_basis = (qty * avg_cost).quantize(Decimal("0.01"))
+        gain_loss = (total_value_tl - cost_basis).quantize(Decimal("0.01"))
+        gain_loss_pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
+    else:
+        avg_cost = cost_basis = gain_loss = None
+        gain_loss_pct = None
+
+    return StockPositionOut(
+        ticker=ticker,
+        name=h.name or q.name,
+        quantity=qty,
+        currency=q.currency,
+        unit_price_original=q.price,
+        unit_price_tl=price_tl,
+        total_value_tl=total_value_tl,
+        avg_cost_tl=avg_cost,
+        cost_basis_tl=cost_basis,
+        gain_loss_tl=gain_loss,
+        gain_loss_pct=gain_loss_pct,
+        distributor=h.distributor,
+        # FIN-004 (FAZ H): stale flag UI rozet icin
+        is_stale=q.is_stale,
+        market_state=q.market_state,
+    )
+
+
+async def compute_stock_positions(user_id, db: AsyncSession) -> list[StockPositionOut]:
+    """Kullanıcının DB'deki hisse holding'lerini canlı fiyatlarla pozisyona çevirir.
+
+    Live cache refresh servisi kullanır. Preview endpoint'i (body-tabanlı) ayrıdır.
+    Fiyatı çekilemeyen ticker'lar (preview 422 verir) burada sessizce atlanır —
+    tek bozuk ticker tüm cache section'ını düşürmesin.
+    """
+    result = await db.execute(select(StockHoldingModel).where(StockHoldingModel.user_id == user_id))
+    rows = result.scalars().all()
+    if not rows:
+        return []
+
+    holdings = [
+        StockHolding(
+            ticker=r.ticker,
+            quantity=float(r.quantity),
+            name=r.name,
+            avg_cost_tl=float(r.avg_cost_tl) if r.avg_cost_tl is not None else None,
+            distributor=r.distributor,
+        )
+        for r in rows
+    ]
+    tickers = [h.ticker.upper() for h in holdings]
+    quotes, usd_tl, gbp_usd = await asyncio.gather(
+        fetch_stock_quotes(tickers),
+        fetch_usd_to_tl(),
+        fetch_gbp_to_usd(),
+    )
+    out: list[StockPositionOut] = []
+    for h in holdings:
+        q = quotes.get(h.ticker.upper())
+        if not q:
+            logger.warning("Live cache: %s için hisse fiyatı alınamadı, atlandı", h.ticker.upper())
+            continue
+        out.append(_build_stock_position(h, q, usd_tl, gbp_usd))
+    return out
+
+
 @router.post("/preview", response_model=list[StockPositionOut])
 @limiter.limit("30/minute")
 async def stock_preview(
@@ -107,39 +184,7 @@ async def stock_preview(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"{ticker} için fiyat alınamadı. Yahoo Finance ticker'ını kontrol edin (ör. THYAO.IS, AAPL).",
             )
-        price_tl = convert_to_tl(q.price, q.currency, usd_tl, gbp_usd)
-
-        qty = Decimal(str(h.quantity))
-        total_value_tl = (qty * price_tl).quantize(Decimal("0.01"))
-
-        if h.avg_cost_tl is not None:
-            avg_cost = Decimal(str(h.avg_cost_tl))
-            cost_basis = (qty * avg_cost).quantize(Decimal("0.01"))
-            gain_loss = (total_value_tl - cost_basis).quantize(Decimal("0.01"))
-            gain_loss_pct = float(gain_loss / cost_basis * 100) if cost_basis > 0 else None
-        else:
-            avg_cost = cost_basis = gain_loss = None
-            gain_loss_pct = None
-
-        out.append(
-            StockPositionOut(
-                ticker=ticker,
-                name=h.name or q.name,
-                quantity=qty,
-                currency=q.currency,
-                unit_price_original=q.price,
-                unit_price_tl=price_tl,
-                total_value_tl=total_value_tl,
-                avg_cost_tl=avg_cost,
-                cost_basis_tl=cost_basis,
-                gain_loss_tl=gain_loss,
-                gain_loss_pct=gain_loss_pct,
-                distributor=h.distributor,
-                # FIN-004 (FAZ H): stale flag UI rozet icin
-                is_stale=q.is_stale,
-                market_state=q.market_state,
-            )
-        )
+        out.append(_build_stock_position(h, q, usd_tl, gbp_usd))
     return out
 
 

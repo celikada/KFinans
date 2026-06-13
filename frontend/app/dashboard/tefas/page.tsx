@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
 import { MkkHint } from "@/app/_components/MkkHint";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { TLValue } from "@/app/_components/TLValue";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
@@ -63,21 +65,34 @@ export default function TefasPage() {
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
-  useEffect(() => {
+  // Fiyatlı pozisyon listesi (`result`) artık sunucu-cache'ten (/portfolio/live)
+  // okunur — sayfa her açıldığında ağır TEFAS fiyat çekme tetiklenmez. "Fiyatları
+  // çek" butonu kullanıcı düzenlediği satırları yine canlı önizler; kaydet/import
+  // sonrası live.refresh() arka planda yeniden hesaplatır.
+  const live = useLivePortfolio();
 
+  useEffect(() => {
+    // Düzenleme formunu kayıtlı holding'lerle doldur (hafif endpoint).
     api.getTefasHoldings()
       .then((data) => {
         if (data.length > 0) {
           setHoldings(data.map((h) => ({ _key: newRowKey(), code: h.code, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
-          fetchPricesFor(data);
         }
       })
       .catch((err) => {
         if (err instanceof Error && err.message.includes("401")) handle401();
       })
       .finally(() => setInitialLoad(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handle401]);
+
+  // Live cache geldiğinde fiyatlı pozisyon tablosunu doldur (kullanıcı manuel
+  // "Fiyatları çek" yapmadıysa).
+  useEffect(() => {
+    const positions = live.data?.sections.tefas?.positions;
+    if (positions && positions.length > 0) {
+      setResult(positions);
+    }
+  }, [live.data]);
 
   async function fetchPricesFor(valid: TefasHoldingDTO[]) {
     setLoading(true);
@@ -107,6 +122,8 @@ export default function TefasPage() {
       await api.saveTefasHoldings(valid);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      // Kaydedilen holding'lerle sunucu-cache'i arka planda tazele.
+      live.refresh();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.tefas.errorSaveFailed"));
@@ -142,6 +159,7 @@ export default function TefasPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     fetchPricesFor(imported);
+    live.refresh();
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -155,6 +173,7 @@ export default function TefasPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
+      live.refresh();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.tefas.errorImportFailed"));
@@ -189,6 +208,14 @@ export default function TefasPage() {
           {t("common.back")}
         </button>
         <h1 className="text-lg font-semibold text-gray-900">{t("content.tefas.pageHeading")}</h1>
+        <div className="ml-auto">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">

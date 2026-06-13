@@ -80,6 +80,9 @@ const apiFns = vi.hoisted(() => ({
   getCreditCardReminders: vi.fn(),
   // Money/rates
   getRates: vi.fn(),
+  // Sunucu-cache canlı portföy (ağır kartlar)
+  getLivePortfolio: vi.fn(),
+  refreshPortfolio: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -153,17 +156,30 @@ beforeEach(() => {
   apiFns.getBudgetComparison.mockResolvedValue([]);
   apiFns.getGoal.mockResolvedValue({ progress_pct: null, passive_income_tl: null });
 
-  // Yatırım (TL) — sadece TEFAS dolu: 35000 TL → USD 1000.
-  apiFns.getTefasHoldings.mockResolvedValue([{ code: "AFA" }]);
-  apiFns.tefasPreview.mockResolvedValue([{ code: "AFA", total_value_tl: "35000" }]);
-  apiFns.getCryptoPositions.mockResolvedValue({ positions: [] });
-  apiFns.getStockHoldings.mockResolvedValue([]);
-  apiFns.stockPreview.mockResolvedValue([]);
-  apiFns.getWalletPositions.mockResolvedValue({ positions: [] });
+  // Yatırım (TL) — ağır kartlar artık /portfolio/live cache'inden gelir.
+  // Sadece TEFAS dolu: 35000 TL → USD 1000 (grand total / Money testi için).
+  apiFns.getLivePortfolio.mockResolvedValue({
+    status: "ok",
+    refreshed_at: "2026-06-13T10:00:00Z",
+    stale: false,
+    total_value_tl: "35000",
+    rates: { TRY: "1", USD: "35" },
+    health_issues: [],
+    error: null,
+    sections: {
+      tefas: { positions: [{ code: "AFA", total_value_tl: "35000" }] },
+      crypto: { positions: [], errors: {} },
+      wallets: { positions: [], errors: {} },
+      stocks: { positions: [] },
+      commodities: { positions: [], total_value_tl: "0" },
+      manual_crypto: { positions: [], total_value_tl: "0" },
+    },
+  });
+  apiFns.refreshPortfolio.mockResolvedValue({ status: "ok", refreshed_at: "2026-06-13T10:05:00Z" });
+
+  // Hafif kartlardan bazıları hâlâ ayrı endpoint'ten — boş döndür.
   apiFns.getBesHoldings.mockResolvedValue([]);
-  apiFns.getCommodities.mockResolvedValue({ positions: [], total_value_tl: "0" });
   apiFns.listCash.mockResolvedValue({ holdings: [], total_tl: "0" });
-  apiFns.listManualCrypto.mockResolvedValue({ positions: [], total_value_tl: "0" });
 
   apiFns.getPendingRealizations.mockResolvedValue({ items: [] });
   apiFns.getCreditCardReminders.mockResolvedValue({ pending_statements: [], due_payments: [] });
@@ -233,5 +249,40 @@ describe("DashboardPage — finans değerleri backend *_display'inden (çift-çe
     expect(apiFns.listCreditCards.mock.calls.length).toBeGreaterThan(ccBefore);
     // Reminders günde 1 kez popup için ayrı effect — currency dep'i yok (tekrar çağrılmaz).
     expect(apiFns.getCreditCardReminders.mock.calls.length).toBe(remindersBefore);
+  });
+});
+
+describe("DashboardPage — sunucu-cache canlı portföy (ağır kartlar)", () => {
+  it("ağır kart değerleri /portfolio/live section'ından gelir (TEFAS 35000 TL → 1.000,00 $)", async () => {
+    render(<DashboardPage />);
+    // Heavy card Money ile TL→USD: 35000/35 = 1000.
+    await waitFor(() =>
+      expect(screen.getAllByText("1.000,00 $").length).toBeGreaterThanOrEqual(1),
+    );
+    // Ağır kartlar için ayrı tefas/crypto/wallet endpoint'leri ARTIK çağrılmaz.
+    expect(apiFns.getTefasHoldings).not.toHaveBeenCalled();
+    expect(apiFns.getCryptoPositions).not.toHaveBeenCalled();
+    expect(apiFns.getWalletPositions).not.toHaveBeenCalled();
+    // Tek canlı çağrı yeterli (status ok → poll yok).
+    expect(apiFns.getLivePortfolio).toHaveBeenCalled();
+  });
+
+  it("mount'ta otomatik dış-refetch YOK — sadece getLivePortfolio okunur", async () => {
+    render(<DashboardPage />);
+    await waitFor(() => expect(apiFns.getLivePortfolio).toHaveBeenCalled());
+    // refreshPortfolio mount'ta tetiklenmez (login layout'ta tetiklenir, dashboard'da değil).
+    expect(apiFns.refreshPortfolio).not.toHaveBeenCalled();
+  });
+
+  it("'Yenile' butonu refreshPortfolio(true) çağırır", async () => {
+    render(<DashboardPage />);
+    await waitFor(() => expect(apiFns.getLivePortfolio).toHaveBeenCalled());
+
+    // LivePortfolioBar butonu i18n key'i gösterir (t stub identity).
+    const refreshBtn = await screen.findByText("dashboard.live.refresh");
+    await act(async () => {
+      refreshBtn.click();
+    });
+    await waitFor(() => expect(apiFns.refreshPortfolio).toHaveBeenCalledWith(true));
   });
 });

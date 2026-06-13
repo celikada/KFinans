@@ -6,6 +6,7 @@ from web3 import AsyncWeb3
 
 from app.config import settings
 from app.services.base import AssetData, BaseBlockchainIntegration
+from app.services.blockchain._web3_utils import provider_request_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,9 @@ _CONCURRENCY = 20  # paralel RPC çağrısı limiti
 class SonicService(BaseBlockchainIntegration):
     def __init__(self, address: str, wallet_address_id: str | None = None):
         super().__init__(address, wallet_address_id)
-        self._w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(settings.sonic_rpc_url))
+        # Timeout'lu provider — ölü RPC fetch'i kilitlemesin (modül-local
+        # AsyncWeb3 → testlerin monkeypatch'i çalışır).
+        self._w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(settings.sonic_rpc_url, request_kwargs=provider_request_kwargs()))
 
     async def fetch(self) -> list[AssetData]:
         checksum_addr = AsyncWeb3.to_checksum_address(self.address)

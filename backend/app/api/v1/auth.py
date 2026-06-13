@@ -41,6 +41,7 @@ from app.schemas.auth import (
 from app.schemas.mfa import MFALoginRequiredOut
 from app.services.audit import AuditAction, log_audit
 from app.services.email import send_password_reset_email, send_verification_email
+from app.services.live_cache import trigger_refresh_after_login
 
 _oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -191,6 +192,9 @@ async def login(request: Request, payload: LoginRequest, db: DB):
         user_id=user.id,
     )
     await db.commit()
+    # Best-effort: dashboard ilk açılışta hazır olsun diye canlı portföy cache'ini
+    # arka planda tazele (login'i bloke/bozma — fire-and-forget).
+    trigger_refresh_after_login(user.id)
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),
