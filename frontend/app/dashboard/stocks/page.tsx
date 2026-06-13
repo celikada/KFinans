@@ -1,8 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { api, StockPositionDTO, StockHoldingDTO } from "@/lib/api";
+import { api, StockHoldingDTO, StockPositionDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { HoldingsForm, StockHoldingRow } from "./_components/HoldingsForm";
 import { Toolbar } from "./_components/Toolbar";
 import { StockPositionsTable } from "./_components/StockPositionsTable";
@@ -36,20 +38,31 @@ export default function StocksPage() {
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
+  // Fiyatlı pozisyon listesi (`result`) sunucu-cache'ten (/portfolio/live) —
+  // sayfa açılışında ağır Yahoo fiyat çekme tetiklenmez. "Fiyatları çek" butonu
+  // düzenlenen satırları yine canlı önizler; kaydet/import sonrası live.refresh().
+  const live = useLivePortfolio();
+
   useEffect(() => {
     api.getStockHoldings()
       .then((data) => {
         if (data.length > 0) {
           setHoldings(data.map((h) => ({ ticker: h.ticker, quantity: h.quantity.toString(), name: h.name, avg_cost_tl: h.avg_cost_tl?.toString() ?? "", distributor: h.distributor ?? "" })));
-          fetchPricesFor(data);
         }
       })
       .catch((err) => {
         if (err instanceof Error && err.message.includes("401")) handle401();
       })
       .finally(() => setInitialLoad(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handle401]);
+
+  // Live cache geldiğinde fiyatlı pozisyon tablosunu doldur.
+  useEffect(() => {
+    const positions = live.data?.sections.stocks?.positions;
+    if (positions && positions.length > 0) {
+      setResult(positions);
+    }
+  }, [live.data]);
 
   async function fetchPricesFor(valid: StockHoldingDTO[]) {
     setLoading(true);
@@ -79,6 +92,7 @@ export default function StocksPage() {
       await api.saveStockHoldings(valid);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      live.refresh();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.stocks.errorSaveFailed"));
@@ -112,6 +126,7 @@ export default function StocksPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     fetchPricesFor(imported);
+    live.refresh();
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -125,6 +140,7 @@ export default function StocksPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       fetchPricesFor(imported);
+      live.refresh();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.stocks.errorImportFailed"));
@@ -145,6 +161,15 @@ export default function StocksPage() {
       <PageHeader title={t("pages.stocks")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex justify-end">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-1">{t("content.stocks.stockHoldings")}</h2>
           <p className="text-xs text-gray-400 mb-2">

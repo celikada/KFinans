@@ -257,6 +257,74 @@ describe("request() 401 → refresh + retry (tryRefresh kapsamı)", () => {
   });
 });
 
+describe("request() zaman aşımı (AbortController)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("timeoutMs aşılınca abort → anlamlı zaman aşımı hatası fırlatır", async () => {
+    vi.useFakeTimers();
+    // fetch hiç çözülmez ama signal.abort'a tepki verir (gerçek fetch davranışı).
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = request("/slow", {}, { timeoutMs: 5000 });
+    // Hata yakalanmazsa unhandled rejection olmasın diye assertion'ı bağla.
+    const expectation = expect(promise).rejects.toThrow(/zaman aşımına uğradı/);
+    // Timer'ı timeout süresine ilerlet → controller.abort() tetiklenir.
+    await vi.advanceTimersByTimeAsync(5000);
+    await expectation;
+  });
+
+  it("timeoutMs: null → abort yok, fetch sınırsız bekler (sonunda çözülür)", async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      // signal verilmemeli (timeoutMs null → fetchWithTimeout signal eklemez).
+      expect(init?.signal).toBeUndefined();
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await request<{ ok: boolean }>("/no-timeout", {}, { timeoutMs: null });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("zaman aşımından önce yanıt gelirse timer temizlenir (normal sonuç)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ value: 42 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await request<{ value: number }>("/fast", {}, { timeoutMs: 10000 });
+    expect(result).toEqual({ value: 42 });
+    // signal geçildi (varsayılan timeout yolu) ama abort olmadı.
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect((init.signal as AbortSignal).aborted).toBe(false);
+  });
+
+  it("varsayılan timeout (config verilmezse) signal ekler", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request("/default-timeout");
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
 describe("authedFetch()", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -284,6 +352,24 @@ describe("authedFetch()", () => {
     await authedFetch("/raw");
     const [, init] = fetchMock.mock.calls[0];
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it("varsayılan: zaman aşımı YOK (upload/download) → signal eklenmez", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await authedFetch("/upload", { method: "POST" });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeUndefined();
+  });
+
+  it("config.timeoutMs verilirse signal eklenir", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await authedFetch("/dl", {}, { timeoutMs: 60000 });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 });
 

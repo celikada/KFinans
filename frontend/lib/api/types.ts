@@ -136,6 +136,41 @@ export interface IntegrationDTO {
   last_synced_at: string | null;
 }
 
+// ─── Live Portfolio (sunucu-cache canlı portföy) ────────────────
+//
+// Dashboard + detay sayfaları ağır dış-API çağrılarını her açılışta
+// tetiklemek yerine backend'in per-user cache'inden okur. Backend cache'i
+// arka planda (login tetiği + scheduler + manuel "Yenile") günceller.
+// Cache yoksa status="refreshing" döner ve section'lar boş/eksik olabilir —
+// tüketici defensive okumalı (?? ile fallback).
+
+export type LivePortfolioStatus = "ok" | "refreshing" | "error";
+
+export interface LivePortfolioSections {
+  wallets?: { positions?: WalletPositionDTO[]; errors?: Record<string, string> };
+  crypto?: { positions?: CryptoPositionDTO[]; errors?: Record<string, string> };
+  tefas?: { positions?: TefasPosition[] };
+  stocks?: { positions?: StockPositionDTO[] };
+  commodities?: CommoditySummaryDTO;
+  manual_crypto?: ManualCryptoSummaryDTO;
+}
+
+export interface LivePortfolioOut {
+  status: LivePortfolioStatus;
+  refreshed_at: string | null; // ISO datetime
+  stale: boolean;
+  total_value_tl: string | null;
+  rates: Record<string, string> | null;
+  health_issues: SnapshotHealthIssue[] | null;
+  error: string | null;
+  sections: LivePortfolioSections;
+}
+
+export interface RefreshPortfolioOut {
+  status: string;
+  refreshed_at: string | null;
+}
+
 export interface CryptoPositionDTO {
   provider: string;
   symbol: string;

@@ -37,7 +37,10 @@ vi.mock("@/app/_components/TLValue", () => ({
 
 // lib/api — sadece `api` objesini stub'la; const'lari (BIGA_*, COIN_*) gercek
 // modulden koru (CommodityForm bunlara baglidir).
-const getCommodities = vi.fn();
+// NOT: Kıymetli maden özeti artık /portfolio/live cache'inden gelir
+// (getLivePortfolio); getCommodities ARTIK çağrılmaz.
+const getLivePortfolio = vi.fn();
+const refreshPortfolio = vi.fn();
 const createCommodity = vi.fn();
 const deleteCommodity = vi.fn();
 const exportCommodities = vi.fn();
@@ -47,7 +50,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     api: {
-      getCommodities: (...a: unknown[]) => getCommodities(...a),
+      getLivePortfolio: (...a: unknown[]) => getLivePortfolio(...a),
+      refreshPortfolio: (...a: unknown[]) => refreshPortfolio(...a),
       createCommodity: (...a: unknown[]) => createCommodity(...a),
       deleteCommodity: (...a: unknown[]) => deleteCommodity(...a),
       exportCommodities: (...a: unknown[]) => exportCommodities(...a),
@@ -57,6 +61,23 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 import CommoditiesPage from "@/app/dashboard/commodities/page";
+
+// Canlı portföy cevabını verilen commodities özetinden kur (sections.commodities).
+function liveWith(summary: unknown) {
+  return {
+    status: "ok",
+    refreshed_at: "2026-06-13T10:00:00Z",
+    stale: false,
+    total_value_tl: null,
+    rates: null,
+    health_issues: [],
+    error: null,
+    sections: { commodities: summary },
+  };
+}
+function mockLive(summary: unknown) {
+  getLivePortfolio.mockResolvedValue(liveWith(summary));
+}
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 function commPos(overrides: Record<string, unknown> = {}) {
@@ -92,14 +113,15 @@ function commSummary(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getCommodities.mockResolvedValue(commSummary());
+  mockLive(commSummary());
+  refreshPortfolio.mockResolvedValue({ status: "ok", refreshed_at: "x" });
 });
 
 // ─── Yukleme + ozet ─────────────────────────────────────────────────────
 describe("CommoditiesPage — yukleme ve ozet", () => {
   it("ilk render: ozet + form + bos liste mesaji", async () => {
     render(<CommoditiesPage />);
-    await waitFor(() => expect(getCommodities).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getLivePortfolio).toHaveBeenCalledTimes(1));
     expect(
       await screen.findByText("empty.noCommodity"),
     ).toBeInTheDocument();
@@ -109,7 +131,7 @@ describe("CommoditiesPage — yukleme ve ozet", () => {
   });
 
   it("altin + gumus pozisyonlari → altin/gumus toplamlari + anlik kurlar", async () => {
-    getCommodities.mockResolvedValue(
+    mockLive(
       commSummary({
         total_value_tl: "80000",
         total_gold_gram: "14.04",
@@ -141,32 +163,19 @@ describe("CommoditiesPage — yukleme ve ozet", () => {
     expect(screen.getByText("gumus notu")).toBeInTheDocument();
   });
 
-  it("401 hatasi → /login'e yonlendirir", async () => {
-    getCommodities.mockRejectedValue(new Error("Request failed 401"));
-    render(<CommoditiesPage />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/login"));
-  });
-
-  it("401 disi hata → hata mesaji, yonlendirme yok", async () => {
-    getCommodities.mockRejectedValue(new Error("sunucu hatasi 500"));
+  // NOT: 401 yönlendirmesi artık merkezi _client.ts'te (sayfa yapmaz). Canlı
+  // portföy okuma hatası live.error olarak gösterilir.
+  it("canlı portföy okuma hatası → hata mesaji gosterilir", async () => {
+    getLivePortfolio.mockRejectedValue(new Error("sunucu hatasi 500"));
     render(<CommoditiesPage />);
     expect(await screen.findByText("sunucu hatasi 500")).toBeInTheDocument();
-    expect(replaceMock).not.toHaveBeenCalled();
-  });
-
-  it("Error olmayan hata → loadFailed fallback", async () => {
-    getCommodities.mockRejectedValue("string hata");
-    render(<CommoditiesPage />);
-    expect(
-      await screen.findByText("content.commodities.loadFailed"),
-    ).toBeInTheDocument();
   });
 });
 
 // ─── Fiyat fallback (uyari banner'lari) ──────────────────────────────────
 describe("CommoditiesPage — fiyat fallback uyarilari", () => {
   it("altin fiyati cekilemiyor → goldUnavailable uyarisi", async () => {
-    getCommodities.mockResolvedValue(
+    mockLive(
       commSummary({
         gold_price_available: false,
         positions: [commPos({ id: 1, metal: "gold" })],
@@ -179,7 +188,7 @@ describe("CommoditiesPage — fiyat fallback uyarilari", () => {
   });
 
   it("gumus fiyati cekilemiyor (gumus pozisyonu varken) → silverUnavailable", async () => {
-    getCommodities.mockResolvedValue(
+    mockLive(
       commSummary({
         silver_price_available: false,
         positions: [
@@ -194,7 +203,7 @@ describe("CommoditiesPage — fiyat fallback uyarilari", () => {
   });
 
   it("hem altin hem gumus cekilemiyor → bothUnavailable", async () => {
-    getCommodities.mockResolvedValue(
+    mockLive(
       commSummary({
         gold_price_available: false,
         silver_price_available: false,
@@ -259,7 +268,8 @@ describe("CommoditiesPage — export / import", () => {
     );
 
     await waitFor(() => expect(importCommodities).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(getCommodities).toHaveBeenCalledTimes(2));
+    // Liste cache'ten geliyor → import sonrası live.refresh() (refreshPortfolio + re-read).
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
   });
 
   it("import hatasi → importFailed mesaji", async () => {
@@ -387,7 +397,7 @@ describe("CommodityForm — varlik ekleme", () => {
 // ─── CommodityList silme ──────────────────────────────────────────────────
 describe("CommodityList — silme", () => {
   beforeEach(() => {
-    getCommodities.mockResolvedValue(
+    mockLive(
       commSummary({
         total_value_tl: "50000",
         positions: [commPos({ id: 42, coin_type: "ceyrek", notes: "not" })],
@@ -408,6 +418,7 @@ describe("CommodityList — silme", () => {
     await user.click(delBtn);
 
     await waitFor(() => expect(deleteCommodity).toHaveBeenCalledWith(42));
-    await waitFor(() => expect(getCommodities).toHaveBeenCalledTimes(2));
+    // Liste cache'ten → silme sonrası live.refresh() tetiklenir.
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
   });
 });

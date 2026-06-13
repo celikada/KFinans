@@ -56,6 +56,7 @@ from app.schemas.mfa import (
     MFAVerifyIn,
 )
 from app.services.audit import AuditAction, log_audit
+from app.services.live_cache import trigger_refresh_after_login
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mfa", tags=["mfa"])
@@ -369,6 +370,8 @@ async def mfa_verify(
         mask_email(user.email),
         via_recovery,
     )
+    # Best-effort: login tamamlandı — dashboard için canlı cache'i arka planda tazele.
+    trigger_refresh_after_login(user.id)
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

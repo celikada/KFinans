@@ -237,24 +237,30 @@ async def _fetch_prices_safe(symbols: list[str]) -> tuple[dict[str, Decimal], De
     return prices, usd_tl
 
 
-@router.get("", response_model=ManualCryptoSummaryOut)
-async def list_manual_crypto(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    """Tüm manuel kripto pozisyonları + anlık fiyatla TL değer + kâr/zarar."""
+async def compute_manual_crypto(user_id, db: AsyncSession) -> ManualCryptoSummaryOut:
+    """Kullanıcının manuel kripto kayıtlarını anlık fiyatla pozisyona çevirir.
+
+    Endpoint (`GET /manual-crypto`) + live cache refresh servisi ortak kullanır.
+    """
     rows = (
         (
             await db.execute(
-                select(ManualCryptoHolding)
-                .where(ManualCryptoHolding.user_id == current_user.id)
-                .order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
+                select(ManualCryptoHolding).where(ManualCryptoHolding.user_id == user_id).order_by(ManualCryptoHolding.exchange, ManualCryptoHolding.symbol)
             )
         )
         .scalars()
         .all()
     )
     return await _enrich_positions(list(rows))
+
+
+@router.get("", response_model=ManualCryptoSummaryOut)
+async def list_manual_crypto(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Tüm manuel kripto pozisyonları + anlık fiyatla TL değer + kâr/zarar."""
+    return await compute_manual_crypto(current_user.id, db)
 
 
 @router.post("", response_model=ManualCryptoOut, status_code=status.HTTP_201_CREATED)

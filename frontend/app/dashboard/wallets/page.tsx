@@ -1,7 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
-import { api, WalletDTO, WalletPositionDTO } from "@/lib/api";
+import { useState, useEffect, useMemo } from "react";
+import { api, WalletDTO } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { WalletList } from "./_components/WalletList";
 import { WalletForm } from "./_components/WalletForm";
 import { WalletPositionsTable } from "./_components/WalletPositionsTable";
@@ -10,47 +12,40 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 export default function WalletsPage() {
   const { t } = useTranslation();
   const [wallets, setWallets] = useState<WalletDTO[]>([]);
-  const [positions, setPositions] = useState<WalletPositionDTO[]>([]);
-  const [loadingPositions, setLoadingPositions] = useState(false);
-  const [posError, setPosError] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [posError, setPosError] = useState("");
   // Tam-adres export: şifre doğrulama modalı
   const [showExportPw, setShowExportPw] = useState(false);
   const [exportPw, setExportPw] = useState("");
   const [exportErr, setExportErr] = useState("");
 
-  useEffect(() => {
-    api.getWallets().then((data) => {
-      setWallets(data);
-      if (data.length > 0) fetchPositions();
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Pozisyon listesi artık sunucu-cache'ten (/portfolio/live) okunur — her
+  // açılışta ağır zincir taraması tetiklenmez. Cüzdan ekleme/silme/import sonrası
+  // live.refresh() ile arka planda yeniden hesaplanır.
+  const live = useLivePortfolio();
+  const positions = useMemo(
+    () => (live.data?.sections.wallets?.positions ?? []).filter((p) => Number.parseFloat(p.total_value_tl) > 0.01),
+    [live.data],
+  );
+  const loadingPositions = live.loading;
 
-  async function fetchPositions() {
-    setLoadingPositions(true);
-    setPosError("");
-    try {
-      const { positions, errors } = await api.getWalletPositions();
-      setPositions(positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01));
-      if (Object.keys(errors).length > 0) {
-        const msgs = Object.entries(errors)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join(" | ");
-        setPosError(msgs);
-      }
-    } catch (err) {
-      setPosError(err instanceof Error ? err.message : t("content.wallets.errorPositions"));
-    } finally {
-      setLoadingPositions(false);
-    }
-  }
+  // Cache section'ındaki kaynak-bazlı hatalar (ör. RPC down) kullanıcıya gösterilir.
+  const sectionErrors = useMemo(() => {
+    const errs = live.data?.sections.wallets?.errors ?? {};
+    const keys = Object.keys(errs);
+    if (keys.length === 0) return "";
+    return keys.map((k) => `${k}: ${errs[k]}`).join(" | ");
+  }, [live.data]);
+
+  useEffect(() => {
+    api.getWallets().then(setWallets).catch(() => {});
+  }, []);
 
   function handleAdded(added: WalletDTO) {
     setWallets((prev) => [...prev, added]);
-    fetchPositions();
+    live.refresh();
   }
 
   // "Excel indir" → tam adres için şifre sor (xpub sızması koruması).
@@ -87,7 +82,7 @@ export default function WalletsPage() {
     try {
       const imported = await api.importWallets(file);
       setWallets(imported);
-      if (imported.length > 0) fetchPositions();
+      if (imported.length > 0) live.refresh();
     } catch (err) {
       setPosError(err instanceof Error ? err.message : t("content.wallets.errorImportFailed"));
     } finally {
@@ -102,7 +97,8 @@ export default function WalletsPage() {
     try {
       await api.removeWallet(walletId);
       setWallets((prev) => prev.filter((w) => w.id !== walletId));
-      setPositions((prev) => prev.filter((p) => p.wallet_id !== walletId));
+      // Pozisyon listesi cache'ten geliyor → arka planda yeniden hesaplat.
+      live.refresh();
     } catch (err) {
       // Sessiz yutma yok: silme hatası kullanıcıya gösterilir (ör. backend 500/OOM).
       setPosError(err instanceof Error ? err.message : t("content.wallets.errorRemoveFailed"));
@@ -116,6 +112,15 @@ export default function WalletsPage() {
       <PageHeader title={t("pages.wallets")} />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex justify-end">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.wallets.savedWallets")}</h2>
           <WalletList wallets={wallets} removing={removing} onRemove={handleRemove} />
@@ -125,7 +130,7 @@ export default function WalletsPage() {
             exporting={exporting}
             importing={importing}
             onAdded={handleAdded}
-            onRefresh={fetchPositions}
+            onRefresh={live.refresh}
             onExport={handleExport}
             onImport={handleImport}
           />
@@ -137,8 +142,8 @@ export default function WalletsPage() {
           </p>
         )}
 
-        {posError && (
-          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{posError}</p>
+        {(posError || live.error || sectionErrors) && (
+          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{posError || live.error || sectionErrors}</p>
         )}
 
         {!loadingPositions && positions.length > 0 && (

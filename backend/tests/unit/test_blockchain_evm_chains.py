@@ -93,7 +93,7 @@ def make_fake_web3_class(balance_wei=0, balance_exc=None, contract_resolver=None
 
         # web3 servisleri AsyncWeb3.AsyncHTTPProvider(...) cagirir
         @staticmethod
-        def AsyncHTTPProvider(url):  # noqa: N802
+        def AsyncHTTPProvider(url, request_kwargs=None):  # noqa: N802
             return ("provider", url)
 
         # to_checksum_address bir staticmethod; gercek implementasyonu kullan
@@ -197,7 +197,7 @@ async def test_ethereum_first_rpc_fails_fallback_succeeds(monkeypatch):
                 return _FakeContract(lambda n, a: 0)
 
         @staticmethod
-        def AsyncHTTPProvider(url):  # noqa: N802
+        def AsyncHTTPProvider(url, request_kwargs=None):  # noqa: N802
             return url
 
         to_checksum_address = staticmethod(real_checksum)

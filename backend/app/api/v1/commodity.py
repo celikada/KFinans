@@ -39,13 +39,12 @@ _VALID_BIGA = frozenset(BIGA_GRAM_WEIGHTS.keys())
 _VALID_COIN = frozenset(COIN_GRAM_WEIGHTS.keys())
 
 
-@router.get("")
-async def list_commodities(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> CommoditySummaryOut:
-    """Kullanıcının tüm kıymetli maden varlıklarını anlık fiyatlarla döndürür."""
-    result = await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == current_user.id).order_by(CommodityHolding.created_at))
+async def compute_commodities(user_id, db: AsyncSession) -> CommoditySummaryOut:
+    """Kullanıcının kıymetli maden varlıklarını anlık fiyatlarla pozisyona çevirir.
+
+    Endpoint (`GET /portfolio/commodities`) + live cache refresh servisi ortak kullanır.
+    """
+    result = await db.execute(select(CommodityHolding).where(CommodityHolding.user_id == user_id).order_by(CommodityHolding.created_at))
     holdings = result.scalars().all()
 
     prices = await fetch_metal_prices()
@@ -102,6 +101,15 @@ async def list_commodities(
         gold_price_available=gold_price_available,
         silver_price_available=silver_price_available,
     )
+
+
+@router.get("")
+async def list_commodities(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CommoditySummaryOut:
+    """Kullanıcının tüm kıymetli maden varlıklarını anlık fiyatlarla döndürür."""
+    return await compute_commodities(current_user.id, db)
 
 
 @router.post("", response_model=CommodityOut, status_code=status.HTTP_201_CREATED)

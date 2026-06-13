@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,10 +10,13 @@ import {
   type BudgetComparisonDTO,
   type PendingItemDTO,
   type CreditCardRemindersDTO,
+  type LivePortfolioOut,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/api/_client";
 import { getHiddenCards, type DashboardCardId } from "@/lib/format";
 import { deriveScope, loadCache, saveCache, type DashboardSnapshot } from "@/lib/dashboardCache";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
 import { KFinansLogo, MayotekLogo } from "@/app/_components/Logos";
 import { useUsdRate } from "@/app/_components/TLValue";
 import { Money, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
@@ -39,12 +42,62 @@ function top3<T>(items: T[], valueFn: (i: T) => number, labelFn: (i: T) => strin
     .map((i) => ({ label: labelFn(i), value: valueFn(i) }));
 }
 
-// Cache hit sonrasi yeniden cekilen (fetch task'i olan) tum kart id'leri.
-// Her kartin verisi gelince markFresh ile setten dusulur.
+// Cache hit sonrasi yeniden cekilen (kendi fetch task'i olan) HAFIF kart id'leri.
+// Ağır portföy kartları (tefas/crypto/stocks/wallets/manualCrypto/commodities)
+// artık tek `/portfolio/live` çağrısından (useLivePortfolio) beslenir; onların
+// "güncelleniyor" durumu live hook'un `refreshing` bayrağıyla yönetilir.
 const REFRESHABLE_CARDS: DashboardCardId[] = [
-  "tefas", "crypto", "stocks", "wallets", "bes", "manualCrypto", "commodities", "cash",
-  "creditCards", "income", "expenses", "planned", "budget", "goal",
+  "bes", "cash", "creditCards", "income", "expenses", "planned", "budget", "goal",
 ];
+
+// `/portfolio/live` section'larından ağır kartların (total + count + top3)
+// türetilmiş değerleri. Tüm okumalar defensive (cache yoksa section eksik olabilir).
+interface HeavyCardValues {
+  tefasTotal: number | null; tefasFundCount: number; tefasTop: TopItem[];
+  cryptoTotal: number | null; cryptoTop: TopItem[];
+  stockTotal: number | null; stockHoldingCount: number; stockTop: TopItem[];
+  walletTotal: number | null; walletTop: TopItem[];
+  manualCryptoTotal: number | null; manualCryptoCount: number; manualCryptoTop: TopItem[];
+  commodityTotal: number | null; commodityCount: number;
+}
+
+function deriveHeavyCards(live: LivePortfolioOut | null): HeavyCardValues | null {
+  if (!live) return null;
+  const s = live.sections ?? {};
+  const parse = (v: string) => Number.parseFloat(v);
+  const sum = <T extends { total_value_tl: string }>(arr: T[]) => arr.reduce((a, p) => a + parse(p.total_value_tl), 0);
+  const big = <T extends { total_value_tl: string }>(arr: T[]) => arr.filter((p) => parse(p.total_value_tl) > 0.01);
+
+  const tefasPos = s.tefas?.positions ?? [];
+  const cryptoPos = big(s.crypto?.positions ?? []);
+  const stockPos = s.stocks?.positions ?? [];
+  const walletPos = big(s.wallets?.positions ?? []);
+  const manualPos = s.manual_crypto?.positions ?? [];
+  const commodityPos = s.commodities?.positions ?? [];
+
+  return {
+    tefasTotal: tefasPos.length ? sum(tefasPos) : null,
+    tefasFundCount: tefasPos.length,
+    tefasTop: top3(tefasPos, (p) => parse(p.total_value_tl), (p) => p.code),
+
+    cryptoTotal: cryptoPos.length ? sum(cryptoPos) : null,
+    cryptoTop: top3(cryptoPos, (p) => parse(p.total_value_tl), (p) => p.symbol),
+
+    stockTotal: stockPos.length ? sum(stockPos) : null,
+    stockHoldingCount: stockPos.length,
+    stockTop: top3(stockPos, (p) => parse(p.total_value_tl), (p) => p.ticker),
+
+    walletTotal: walletPos.length ? sum(walletPos) : null,
+    walletTop: top3(walletPos, (p) => parse(p.total_value_tl), (p) => p.symbol),
+
+    manualCryptoTotal: manualPos.length ? parse(s.manual_crypto?.total_value_tl ?? "0") : null,
+    manualCryptoCount: manualPos.length,
+    manualCryptoTop: top3(manualPos, (p) => parse(p.total_value_tl), (p) => p.symbol),
+
+    commodityTotal: commodityPos.length ? parse(s.commodities?.total_value_tl ?? "0") : null,
+    commodityCount: commodityPos.length,
+  };
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -57,7 +110,6 @@ export default function DashboardPage() {
 
   // Kripto
   const [cryptoTotal, setCryptoTotal] = useState<number | null>(null);
-  const [cryptoLoading, setCryptoLoading] = useState(false);
   const [cryptoTop, setCryptoTop] = useState<TopItem[]>([]);
 
   // Hisse senedi
@@ -67,7 +119,6 @@ export default function DashboardPage() {
 
   // Blockchain (cüzdan)
   const [walletTotal, setWalletTotal] = useState<number | null>(null);
-  const [walletLoading, setWalletLoading] = useState(false);
   const [walletTop, setWalletTop] = useState<TopItem[]>([]);
 
   // BES
@@ -133,6 +184,12 @@ export default function DashboardPage() {
   const usdRate = useUsdRate();
   // Görüntüleme para birimi: finans toplamları backend *_display'inden (BÖLME YOK).
   const displayCurrency = useDisplayCurrency();
+
+  // Ağır portföy kartları: tek `/portfolio/live` çağrısı (sunucu-cache) + poll.
+  // Mount'ta otomatik dış-refetch YOK; sadece cache okunur (hızlı).
+  const live = useLivePortfolio();
+  const heavy = useMemo(() => deriveHeavyCards(live.data), [live.data]);
+
   const [prevSnapshot, setPrevSnapshot] = useState<number | null>(null);
   // Snapshot uyarı popup state
   const [pendingIssues, setPendingIssues] = useState<PendingIssues | null>(null);
@@ -148,6 +205,40 @@ export default function DashboardPage() {
   useEffect(() => {
     setHiddenCards(getHiddenCards());
   }, []);
+
+  // Ağır kartlar: `/portfolio/live` cache verisi geldikçe (veya poll güncelledikçe)
+  // state'i + dashboard cache'ini tazele. Cache hidrasyonu (aşağıdaki hafif-kart
+  // effect'i) anında gösterir; bu effect canlı kaynak geldiğinde üzerine yazar.
+  useEffect(() => {
+    if (!heavy) return;
+    setTefasTotal(heavy.tefasTotal);
+    setTefasFundCount(heavy.tefasFundCount);
+    setTefasTop(heavy.tefasTop);
+    setCryptoTotal(heavy.cryptoTotal);
+    setCryptoTop(heavy.cryptoTop);
+    setStockTotal(heavy.stockTotal);
+    setStockHoldingCount(heavy.stockHoldingCount);
+    setStockTop(heavy.stockTop);
+    setWalletTotal(heavy.walletTotal);
+    setWalletTop(heavy.walletTop);
+    setManualCryptoTotal(heavy.manualCryptoTotal);
+    setManualCryptoCount(heavy.manualCryptoCount);
+    setManualCryptoTop(heavy.manualCryptoTop);
+    setCommodityTotal(heavy.commodityTotal);
+    setCommodityCount(heavy.commodityCount);
+
+    // Ağır kart değerlerini kullanıcıya özel dashboard cache'ine yaz (sonraki
+    // açılışta anında gösterim). Top listeleri kompakt (label+value) saklanır.
+    const scope = deriveScope(getAccessToken());
+    saveCache(scope, {
+      tefasTotal: heavy.tefasTotal, tefasFundCount: heavy.tefasFundCount, tefasTop: heavy.tefasTop,
+      cryptoTotal: heavy.cryptoTotal, cryptoTop: heavy.cryptoTop,
+      stockTotal: heavy.stockTotal, stockHoldingCount: heavy.stockHoldingCount, stockTop: heavy.stockTop,
+      walletTotal: heavy.walletTotal, walletTop: heavy.walletTop,
+      manualCryptoTotal: heavy.manualCryptoTotal, manualCryptoCount: heavy.manualCryptoCount, manualCryptoTop: heavy.manualCryptoTop,
+      commodityTotal: heavy.commodityTotal, commodityCount: heavy.commodityCount,
+    });
+  }, [heavy]);
 
   // Girişte: tarihi geçmiş + işaretlenmemiş periyodik gelir/gider varsa popup aç
   useEffect(() => {
@@ -239,8 +330,6 @@ export default function DashboardPage() {
     // isaretler; fetch .then() callback'leri gibi async cagrilar guvenli).
     Promise.resolve().then(() => {
       if (cancelled) return;
-      setCryptoLoading(true);
-      setWalletLoading(true);
 
       // Cache hit → kartlari ANINDA cache degerleriyle doldur + "guncelleniyor".
       const cached = loadCache(scope);
@@ -293,57 +382,10 @@ export default function DashboardPage() {
       setUpdatingCards(new Set(REFRESHABLE_CARDS));
     });
 
+    // NOT: Ağır portföy kartları (tefas/crypto/stocks/wallets/commodities/
+    // manual-crypto) artık bu listede DEĞİL — tek `/portfolio/live` çağrısıyla
+    // (useLivePortfolio) sunucu-cache'ten okunur. Burada yalnız HAFİF kartlar var.
     const tasks: Promise<unknown>[] = [
-      // TEFAS: holdings -> preview chain
-      safe("tefas", async () => {
-        const holdings = await api.getTefasHoldings();
-        if (!holdings.length) return;
-        safeSet(setTefasFundCount)(holdings.length);
-        const positions = await api.tefasPreview(holdings);
-        const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
-        const tefasTop = top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.code);
-        safeSet(setTefasTotal)(total);
-        safeSet(setTefasTop)(tefasTop);
-        cachePatch({ tefasTotal: total, tefasFundCount: holdings.length, tefasTop });
-      }).finally(() => markFresh("tefas")),
-
-      // Kripto (Binance/iCrypex)
-      safe("crypto", async () => {
-        const { positions } = await api.getCryptoPositions();
-        const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
-        if (filtered.length === 0) return;
-        const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
-        const cryptoTop = top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol);
-        safeSet(setCryptoTotal)(total);
-        safeSet(setCryptoTop)(cryptoTop);
-        cachePatch({ cryptoTotal: total, cryptoTop });
-      }).finally(() => { if (!cancelled) { setCryptoLoading(false); markFresh("crypto"); } }),
-
-      // Hisse senedi: holdings -> preview chain
-      safe("stocks", async () => {
-        const holdings = await api.getStockHoldings();
-        if (!holdings.length) return;
-        safeSet(setStockHoldingCount)(holdings.length);
-        const positions = await api.stockPreview(holdings);
-        const total = positions.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
-        const stockTop = top3(positions, (p) => Number.parseFloat(p.total_value_tl), (p) => p.ticker);
-        safeSet(setStockTotal)(total);
-        safeSet(setStockTop)(stockTop);
-        cachePatch({ stockTotal: total, stockHoldingCount: holdings.length, stockTop });
-      }).finally(() => markFresh("stocks")),
-
-      // Blockchain cüzdanlar
-      safe("wallets", async () => {
-        const { positions } = await api.getWalletPositions();
-        const filtered = positions.filter((p) => Number.parseFloat(p.total_value_tl) > 0.01);
-        if (filtered.length === 0) return;
-        const total = filtered.reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
-        const walletTop = top3(filtered, (p) => Number.parseFloat(p.total_value_tl), (p) => p.symbol);
-        safeSet(setWalletTotal)(total);
-        safeSet(setWalletTop)(walletTop);
-        cachePatch({ walletTotal: total, walletTop });
-      }).finally(() => { if (!cancelled) { setWalletLoading(false); markFresh("wallets"); } }),
-
       // BES
       safe("bes", async () => {
         const holdings = await api.getBesHoldings();
@@ -428,17 +470,6 @@ export default function DashboardPage() {
         cachePatch({ creditCardTotal, creditCardPeriod, creditCardCount: s.cards.length });
       }).finally(() => markFresh("creditCards")),
 
-      // Kıymetli madenler
-      safe("commodities", async () => {
-        const s = await api.getCommodities();
-        const total = Number.parseFloat(s.total_value_tl);
-        if (s.positions.length > 0) {
-          safeSet(setCommodityTotal)(total);
-          safeSet(setCommodityCount)(s.positions.length);
-          cachePatch({ commodityTotal: total, commodityCount: s.positions.length });
-        }
-      }).finally(() => markFresh("commodities")),
-
       // Nakit / Banka
       safe("cash", async () => {
         const s = await api.listCash();
@@ -449,23 +480,6 @@ export default function DashboardPage() {
           cachePatch({ cashTotal: total, cashCount: s.holdings.length });
         }
       }).finally(() => markFresh("cash")),
-
-      // Manuel kripto
-      safe("manual-crypto", async () => {
-        const s = await api.listManualCrypto();
-        const total = Number.parseFloat(s.total_value_tl);
-        if (s.positions.length > 0) {
-          const manualCryptoTop = top3(
-            s.positions,
-            (p) => Number.parseFloat(p.total_value_tl),
-            (p) => p.symbol,
-          );
-          safeSet(setManualCryptoTotal)(total);
-          safeSet(setManualCryptoCount)(s.positions.length);
-          safeSet(setManualCryptoTop)(manualCryptoTop);
-          cachePatch({ manualCryptoTotal: total, manualCryptoCount: s.positions.length, manualCryptoTop });
-        }
-      }).finally(() => markFresh("manualCrypto")),
 
       // Bütçe karşılaştırma
       safe("budget", async () => {
@@ -636,7 +650,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {refreshing && (
+        {(refreshing || live.refreshing) && (
           <output
             aria-live="polite"
             className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 px-3 py-2 rounded-lg mb-4"
@@ -644,6 +658,11 @@ export default function DashboardPage() {
             <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
             {t("dashboard.refreshing")}
           </output>
+        )}
+        {live.error && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg mb-4" role="alert">
+            {live.error}
+          </p>
         )}
         <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
@@ -785,9 +804,15 @@ export default function DashboardPage() {
 
         {/* PORTFÖY GRUBU (asagida) */}
         <section className="space-y-3 mt-8">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">{t("dashboard.portfolio")}</h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center flex-wrap">
+              <LivePortfolioBar
+                refreshedAt={live.data?.refreshed_at ?? null}
+                stale={live.data?.stale ?? false}
+                refreshing={live.refreshing}
+                onRefresh={live.refresh}
+              />
               <button
                 onClick={() => router.push("/dashboard/history")}
                 className="text-sm border border-gray-200 text-gray-500 hover:text-gray-800 hover:border-gray-300 px-3 py-1.5 rounded-lg transition-colors"
@@ -822,7 +847,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("tefas") && (
               <Card
                 href="/dashboard/tefas"
-                updating={updatingCards.has("tefas")}
+                updating={live.refreshing}
                 icon="tefas"
                 color="blue"
                 title={t("dashboard.cards.tefas")}
@@ -837,7 +862,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("stocks") && (
               <Card
                 href="/dashboard/stocks"
-                updating={updatingCards.has("stocks")}
+                updating={live.refreshing}
                 icon="stocks"
                 color="indigo"
                 title={t("dashboard.cards.stocks")}
@@ -852,12 +877,12 @@ export default function DashboardPage() {
             {!hiddenCards.includes("wallets") && (
               <Card
                 href="/dashboard/wallets"
-                updating={updatingCards.has("wallets")}
+                updating={live.refreshing}
                 icon="wallets"
                 color="purple"
                 title={t("dashboard.cards.wallets")}
                 total={walletTotal}
-                loading={walletLoading}
+                loading={live.loading && walletTotal === null}
                 top={walletTop}
                 placeholder={t("dashboard.cards.walletsHint")}
               />
@@ -866,12 +891,12 @@ export default function DashboardPage() {
             {!hiddenCards.includes("crypto") && (
               <Card
                 href="/dashboard/crypto"
-                updating={updatingCards.has("crypto")}
+                updating={live.refreshing}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.crypto")}
                 total={cryptoTotal}
-                loading={cryptoLoading}
+                loading={live.loading && cryptoTotal === null}
                 top={cryptoTop}
                 placeholder={t("dashboard.cards.cryptoHint")}
               />
@@ -880,7 +905,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("manualCrypto") && (
               <Card
                 href="/dashboard/manual-crypto"
-                updating={updatingCards.has("manualCrypto")}
+                updating={live.refreshing}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.manualCrypto")}
@@ -895,7 +920,7 @@ export default function DashboardPage() {
             {!hiddenCards.includes("commodities") && (
               <Card
                 href="/dashboard/commodities"
-                updating={updatingCards.has("commodities")}
+                updating={live.refreshing}
                 icon="commodities"
                 color="amber"
                 title={t("dashboard.cards.commodities")}

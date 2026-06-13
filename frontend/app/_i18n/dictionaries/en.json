@@ -90,6 +90,17 @@
     "fund": "fund",
     "stock": "share",
     "position": "position",
+    "live": {
+      "refresh": "Refresh",
+      "refreshing": "Updating…",
+      "lastUpdated": "Last updated",
+      "justNow": "just now",
+      "minutesAgo": "{n} min ago",
+      "hoursAgo": "{n} h ago",
+      "daysAgo": "{n} d ago",
+      "never": "not yet",
+      "stale": "Data may be stale"
+    },
     "cards": {
       "creditCards": "Credit Cards (total debt)",
       "creditCardsHint": "Card details + statements + installments",

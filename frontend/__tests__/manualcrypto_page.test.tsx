@@ -49,7 +49,10 @@ vi.mock("@/app/_components/ConfirmDialog", () => ({
 }));
 
 // lib/api — manuel kripto + asset katalog metodlari.
-const listManualCrypto = vi.fn();
+// NOT: Manuel kripto özeti artık /portfolio/live cache'inden gelir
+// (getLivePortfolio); listManualCrypto ARTIK çağrılmaz.
+const getLivePortfolio = vi.fn();
+const refreshPortfolio = vi.fn();
 const createManualCrypto = vi.fn();
 const updateManualCrypto = vi.fn();
 const deleteManualCrypto = vi.fn();
@@ -58,7 +61,8 @@ const importManualCrypto = vi.fn();
 const searchAssetCatalog = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
-    listManualCrypto: (...a: unknown[]) => listManualCrypto(...a),
+    getLivePortfolio: (...a: unknown[]) => getLivePortfolio(...a),
+    refreshPortfolio: (...a: unknown[]) => refreshPortfolio(...a),
     createManualCrypto: (...a: unknown[]) => createManualCrypto(...a),
     updateManualCrypto: (...a: unknown[]) => updateManualCrypto(...a),
     deleteManualCrypto: (...a: unknown[]) => deleteManualCrypto(...a),
@@ -69,6 +73,20 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import ManualCryptoPage from "@/app/dashboard/manual-crypto/page";
+
+// Canlı portföy cevabını verilen manuel kripto özetinden kur.
+function mockLive(s: unknown) {
+  getLivePortfolio.mockResolvedValue({
+    status: "ok",
+    refreshed_at: "2026-06-13T10:00:00Z",
+    stale: false,
+    total_value_tl: null,
+    rates: null,
+    health_issues: [],
+    error: null,
+    sections: { manual_crypto: s },
+  });
+}
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 function pos(overrides: Record<string, unknown> = {}) {
@@ -106,7 +124,8 @@ function summary(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   confirmResult.value = true;
-  listManualCrypto.mockResolvedValue(summary());
+  mockLive(summary());
+  refreshPortfolio.mockResolvedValue({ status: "ok", refreshed_at: "x" });
 });
 
 // ─── Render + yukleme ─────────────────────────────────────────────────────
@@ -114,7 +133,7 @@ describe("ManualCryptoPage — yukleme ve liste", () => {
   it("ilk render: banner + form + bos liste mesaji gosterilir", async () => {
     render(<ManualCryptoPage />);
     await waitFor(() =>
-      expect(listManualCrypto).toHaveBeenCalledTimes(1),
+      expect(getLivePortfolio).toHaveBeenCalledTimes(1),
     );
     expect(
       await screen.findByText("empty.noManualCrypto"),
@@ -128,7 +147,7 @@ describe("ManualCryptoPage — yukleme ve liste", () => {
   });
 
   it("pozisyonlar tablo olarak render edilir (auto/manual/linked rozetleri + kar/zarar)", async () => {
-    listManualCrypto.mockResolvedValue(
+    mockLive(
       summary({
         total_value_tl: "1500000",
         positions: [
@@ -174,7 +193,7 @@ describe("ManualCryptoPage — yukleme ve liste", () => {
   });
 
   it("bilinmeyen semboller uyarisi gosterilir", async () => {
-    listManualCrypto.mockResolvedValue(
+    mockLive(
       summary({ unknown_symbols: ["FOO", "BAR"] }),
     );
     render(<ManualCryptoPage />);
@@ -184,25 +203,12 @@ describe("ManualCryptoPage — yukleme ve liste", () => {
     expect(screen.getByText("FOO, BAR")).toBeInTheDocument();
   });
 
-  it("401 hatasi → /login'e yonlendirir", async () => {
-    listManualCrypto.mockRejectedValue(new Error("Request failed 401"));
-    render(<ManualCryptoPage />);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/login"));
-  });
-
-  it("401 disi hata → hata mesaji gosterilir, yonlendirme yok", async () => {
-    listManualCrypto.mockRejectedValue(new Error("sunucu hatasi 500"));
+  // NOT: 401 yönlendirmesi artık merkezi _client.ts'te (sayfa yapmaz). Canlı
+  // portföy okuma hatası live.error olarak gösterilir.
+  it("canlı portföy okuma hatası → hata mesaji gosterilir", async () => {
+    getLivePortfolio.mockRejectedValue(new Error("sunucu hatasi 500"));
     render(<ManualCryptoPage />);
     expect(await screen.findByText("sunucu hatasi 500")).toBeInTheDocument();
-    expect(replaceMock).not.toHaveBeenCalled();
-  });
-
-  it("Error olmayan hata → loadFailed fallback", async () => {
-    listManualCrypto.mockRejectedValue("string hata");
-    render(<ManualCryptoPage />);
-    expect(
-      await screen.findByText("content.manualCrypto.loadFailed"),
-    ).toBeInTheDocument();
   });
 });
 
@@ -259,7 +265,7 @@ describe("ManualCryptoPage — kayit ekleme (auto mod)", () => {
       }),
     );
     // refresh ikinci kez cagrilir (ilk yukleme + submit sonrasi).
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
     // Form temizlendi.
     expect(
       (screen.getByPlaceholderText(
@@ -531,7 +537,7 @@ describe("ManualCryptoPage — linked mod + autocomplete", () => {
 // ─── Silme ────────────────────────────────────────────────────────────────
 describe("ManualCryptoPage — silme", () => {
   beforeEach(() => {
-    listManualCrypto.mockResolvedValue(
+    mockLive(
       summary({ total_value_tl: "1000000", positions: [pos({ id: 7, symbol: "BTC" })] }),
     );
   });
@@ -549,7 +555,7 @@ describe("ManualCryptoPage — silme", () => {
       }),
     );
     await waitFor(() => expect(deleteManualCrypto).toHaveBeenCalledWith(7));
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
   });
 
   it("onaylanmazsa deleteManualCrypto cagrilmaz", async () => {
@@ -561,8 +567,9 @@ describe("ManualCryptoPage — silme", () => {
     await user.click(
       screen.getByRole("button", { name: "content.manualCrypto.deleteAria" }),
     );
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(1));
+    // İptal → silme de refresh de yapılmaz.
     expect(deleteManualCrypto).not.toHaveBeenCalled();
+    expect(refreshPortfolio).not.toHaveBeenCalled();
   });
 
   it("delete hatasi → deleteFailed/hata mesaji gosterilir", async () => {
@@ -583,7 +590,7 @@ describe("ManualCryptoPage — silme", () => {
 describe("ManualCryptoPage — düzenleme", () => {
   it("düzenle butonu → form pozisyon değerleriyle dolar + güncelle ile updateManualCrypto", async () => {
     const user = userEvent.setup();
-    listManualCrypto.mockResolvedValue(
+    mockLive(
       summary({
         total_value_tl: "1000000",
         positions: [pos({ id: 7, symbol: "BTC", quantity: "0.5", label: "ana cuzdan" })],
@@ -622,7 +629,7 @@ describe("ManualCryptoPage — düzenleme", () => {
     );
     expect(createManualCrypto).not.toHaveBeenCalled();
     // Güncelleme sonrası liste yenilenir + form temizlenir (yeni kayıt moduna döner).
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
     expect(
       await screen.findByText("content.manualCrypto.newPositionTitle"),
     ).toBeInTheDocument();
@@ -630,7 +637,7 @@ describe("ManualCryptoPage — düzenleme", () => {
 
   it("iptal → düzenleme modundan çıkar, update çağrılmaz", async () => {
     const user = userEvent.setup();
-    listManualCrypto.mockResolvedValue(
+    mockLive(
       summary({ total_value_tl: "1000000", positions: [pos({ id: 3, symbol: "ETH" })] }),
     );
     render(<ManualCryptoPage />);
@@ -695,7 +702,7 @@ describe("ManualCryptoPage — export / import", () => {
     await user.upload(fileInput, file);
 
     await waitFor(() => expect(importManualCrypto).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
   });
 
   it("import kismi hatali → importResult dali calisir + liste yenilenir", async () => {
@@ -720,7 +727,7 @@ describe("ManualCryptoPage — export / import", () => {
     );
 
     await waitFor(() => expect(importManualCrypto).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(listManualCrypto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshPortfolio).toHaveBeenCalledWith(true));
   });
 
   it("import hatasi → importFailed/hata mesaji", async () => {

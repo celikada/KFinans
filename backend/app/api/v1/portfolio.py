@@ -10,12 +10,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.limiter import limiter
 from app.core.security import decrypt_secret
 from app.models.integration import Integration, WalletAddress
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
+from app.schemas.live_cache import LivePortfolioOut, RefreshAcceptedOut
 from app.schemas.portfolio import (
     CryptoPositionOut,
     CryptoResponse,
@@ -42,6 +44,12 @@ from app.services.blockchain.sonic import SonicService
 from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
+from app.services.live_cache import (
+    get_live_cache,
+    is_stale,
+    save_snapshot_from_cache,
+    trigger_background_refresh,
+)
 from app.services.snapshot import compute_and_save_snapshot
 
 logger = logging.getLogger(__name__)
@@ -90,6 +98,74 @@ async def get_rates(
     return {"rates": {k: str(v) for k, v in rates.items()}}
 
 
+@router.get("/live", response_model=LivePortfolioOut)
+async def get_live_portfolio(
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Sunucu-tarafı canlı portföy cache'ini döner (hızlı DB okuması).
+
+    Dashboard + detay sayfaları her açılışta dış-API çağrısı yapmak yerine
+    bu cache'i okur. Davranış:
+    - Cache satırı YOKSA: arka planda refresh tetiklenir, status='refreshing'
+      + boş sections döner (BLOKE ETMEZ — frontend kısa süre sonra tekrar çeker).
+    - Cache varsa: satır döner; bayatsa (live_cache_stale_minutes dışında) arka
+      planda refresh tetiklenir (stale-while-revalidate) ama mevcut veri hemen döner.
+    """
+    row = await get_live_cache(current_user.id, db)
+    stale_minutes = settings.live_cache_stale_minutes
+
+    if row is None:
+        trigger_background_refresh(current_user.id)
+        return LivePortfolioOut(
+            status="refreshing",
+            refreshed_at=None,
+            stale=True,
+            total_value_tl=None,
+            rates=None,
+            health_issues=None,
+            error=None,
+            sections={},
+        )
+
+    stale = is_stale(row, stale_minutes)
+    if stale:
+        # Stale-while-revalidate: eski veriyi hemen dön, arka planda tazele.
+        trigger_background_refresh(current_user.id)
+
+    return LivePortfolioOut(
+        status=row.status,
+        refreshed_at=row.refreshed_at,
+        stale=stale,
+        total_value_tl=row.total_value_tl,
+        rates=row.rates,
+        health_issues=row.health_issues,
+        error=row.error,
+        sections=row.payload or {},
+    )
+
+
+@router.post("/refresh", response_model=RefreshAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("30/hour")
+async def refresh_live_portfolio(
+    request: Request,
+    current_user: CurrentUser,
+    db: DbSession,
+    force: bool = False,
+):
+    """Canlı portföy cache'ini arka planda yeniden hesaplatır (fire-and-forget).
+
+    202 + mevcut cache durumunu döner. `force=true` taze cache'i de yeniden
+    hesaplar (kullanıcı "Yenile" butonu). force=false taze cache'i no-op geçer.
+    """
+    trigger_background_refresh(current_user.id, force=force)
+    row = await get_live_cache(current_user.id, db)
+    return RefreshAcceptedOut(
+        status="refreshing",
+        refreshed_at=row.refreshed_at if row else None,
+    )
+
+
 @router.post("/snapshot/preview", response_model=SnapshotPreviewOut)
 @limiter.limit("6/hour")
 async def preview_snapshot(
@@ -135,7 +211,24 @@ async def create_snapshot(
     `force=true` query parametresi: kullanıcı uyarıları onayladıktan sonra
     bu endpoint çağrılır. force=false (varsayılan) için preview endpoint'i
     önce çağrılmalı; issue varsa popup'ta onay alınır.
+
+    Performans: taze canlı portföy cache (live_portfolio_cache) varsa snapshot
+    yeniden dış-API çağrısı yapılmadan o cache'ten üretilir. Cache yok/bayatsa
+    klasik compute_and_save_snapshot (tüm kaynakları yeniden çeker) fallback'i.
     """
+    cache_row = await get_live_cache(current_user.id, db)
+    if cache_row is not None and not is_stale(cache_row, settings.live_cache_stale_minutes):
+        try:
+            snapshot = await save_snapshot_from_cache(current_user.id, db)
+            result = await db.execute(
+                select(PortfolioSnapshot).where(PortfolioSnapshot.id == snapshot.id).options(selectinload(PortfolioSnapshot.asset_positions))
+            )
+            return result.scalar_one()
+        except Exception:
+            # Cache'ten snapshot üretilemezse klasik yola düş (veri kaybı olmasın).
+            logger.exception("Snapshot cache'ten üretilemedi, compute fallback user_id=%s", current_user.id)
+            await db.rollback()
+
     try:
         snapshot = await compute_and_save_snapshot(current_user.id, db, force=force)
     except RuntimeError:
@@ -337,14 +430,14 @@ async def get_portfolio_breakdown(
     return calculate_breakdown(snapshot)
 
 
-@router.get("/crypto", response_model=CryptoResponse)
-async def get_crypto_positions(
-    current_user: CurrentUser,
-    db: DbSession,
-):
+async def compute_crypto_positions(user_id, db: AsyncSession) -> CryptoResponse:
+    """Kullanıcının borsa entegrasyonları için canlı kripto pozisyonları.
+
+    Endpoint (`GET /crypto`) + live cache refresh servisi ortak kullanır.
+    """
     result = await db.execute(
         select(Integration).where(
-            Integration.user_id == current_user.id,
+            Integration.user_id == user_id,
             Integration.provider.in_(["binance", "binancetr", "icrypex"]),
             Integration.is_active.is_(True),
         )
@@ -389,14 +482,23 @@ async def get_crypto_positions(
     return CryptoResponse(positions=positions, errors=errors)
 
 
-@router.get("/wallets", response_model=WalletResponse)
-async def get_wallet_positions(
+@router.get("/crypto", response_model=CryptoResponse)
+async def get_crypto_positions(
     current_user: CurrentUser,
     db: DbSession,
 ):
+    return await compute_crypto_positions(current_user.id, db)
+
+
+async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
+    """Kullanıcının aktif cüzdanları için canlı pozisyonları hesaplar.
+
+    Endpoint (`GET /wallets`) + live cache refresh servisi ortak kullanır.
+    Per-wallet + toplam deadline ile bounded (yavaş/ölü RPC kilitlemesin).
+    """
     result = await db.execute(
         select(WalletAddress).where(
-            WalletAddress.user_id == current_user.id,
+            WalletAddress.user_id == user_id,
             WalletAddress.is_active.is_(True),
         )
     )
@@ -453,21 +555,47 @@ async def get_wallet_positions(
         # Test monkeypatch destegi: "app.api.v1.portfolio.<Service>" modul
         # attribute'u yamali ise import-time dict referansi yerine onu kullan.
         svc_cls = globals().get(svc_cls.__name__, svc_cls)
+        key = f"{wallet.chain}:{wallet.address[:10]}"
         try:
             svc = svc_cls(wallet.address, wid)
-            assets = await svc.fetch()
+            # Per-wallet deadline: tek bir yavaş/ölü zincir tüm dashboard'u
+            # kilitlemesin (prod 2026-06-13: wallets 373s). Timeout → bu cüzdan
+            # errors'a, diğerleri etkilenmez.
+            assets = await asyncio.wait_for(svc.fetch(), timeout=settings.wallet_per_fetch_timeout)
             return [_build_position(wallet, wid, a) for a in assets]
+        except TimeoutError:
+            logger.warning("Cüzdan fetch timeout [%s] (%.0fs)", key, settings.wallet_per_fetch_timeout)
+            errors[key] = "Zaman aşımı (ağ/RPC yavaş)"
+            return []
         except Exception as e:
-            key = f"{wallet.chain}:{wallet.address[:10]}"
             logger.error("Cüzdan fetch hatası [%s]: %s", key, e)
             errors[key] = str(e)
             return []
 
-    results = await asyncio.gather(*[fetch_wallet(w) for w in wallets])
-    for r in results:
-        all_positions.extend(r)
+    # Toplam deadline (güvenlik ağı): per-wallet sınırı zaten paralelde ~tek
+    # cüzdan süresi verir; bu sınır çok sayıda cüzdanda event-loop tıkanmasına
+    # karşı korur. Süre dolarsa biten cüzdanlar döner, kalanlar timeout sayılır.
+    tasks = [asyncio.ensure_future(fetch_wallet(w)) for w in wallets]
+    done, pending = await asyncio.wait(tasks, timeout=settings.wallet_total_timeout)
+    for task in pending:
+        task.cancel()
+    if pending:
+        errors["_timeout"] = f"{len(pending)} cüzdan toplam süre sınırını aştı"
+    for task in done:
+        try:
+            all_positions.extend(task.result())
+        except Exception:  # cancelled/exception — fetch_wallet zaten yutuyor
+            pass
 
     return WalletResponse(positions=all_positions, errors=errors)
+
+
+@router.get("/wallets", response_model=WalletResponse)
+async def get_wallet_positions(
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    return await compute_wallet_positions(current_user.id, db)
 
 
 @router.get("/staking", response_model=list[StakingPosition])

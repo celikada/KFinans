@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { api, type CommoditySummaryDTO } from "@/lib/api";
+import { useState, useRef } from "react";
+import { api } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
+import { LivePortfolioBar } from "@/app/_components/LivePortfolioBar";
+import { useLivePortfolio } from "@/app/_hooks/useLivePortfolio";
 import { fmtTL, TOOLBAR_BTN_CLS } from "@/lib/format";
 import { TLValue } from "@/app/_components/TLValue";
 import { CommodityForm } from "./_components/CommodityForm";
@@ -10,30 +11,16 @@ import { CommodityList } from "./_components/CommodityList";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 export default function CommoditiesPage() {
-  const router = useRouter();
   const { t } = useTranslation();
-  const [summary, setSummary] = useState<CommoditySummaryDTO | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setSummary(await api.getCommodities());
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("401")) { router.replace("/login"); return; }
-      setError(err instanceof Error ? err.message : t("content.commodities.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, [router, t]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Kıymetli maden özeti sunucu-cache'ten (/portfolio/live). Ekleme/silme/import
+  // sonrası live.refresh() arka planda yeniden hesaplatır.
+  const live = useLivePortfolio();
+  const summary = live.data?.sections.commodities ?? null;
+  const loading = live.loading;
 
   async function handleExport() {
     try {
@@ -50,7 +37,7 @@ export default function CommoditiesPage() {
     setError("");
     try {
       await api.importCommodities(file);
-      await refresh();
+      await live.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("content.commodities.importFailed"));
     } finally {
@@ -59,11 +46,11 @@ export default function CommoditiesPage() {
     }
   }
 
-  const totalTL = summary ? Number.parseFloat(summary.total_value_tl) : 0;
+  const totalTL = Number.parseFloat(summary?.total_value_tl ?? "0");
   const sumMetal = (metal: string) =>
-    summary
-      ? summary.positions.filter(p => p.metal === metal).reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0)
-      : 0;
+    (summary?.positions ?? [])
+      .filter(p => p.metal === metal)
+      .reduce((s, p) => s + Number.parseFloat(p.total_value_tl), 0);
   const goldTotal = totalTL > 0 ? sumMetal("gold") : 0;
   const silverTotal = sumMetal("silver");
   const goldPrice = summary ? Number.parseFloat(summary.gold_price_tl) : null;
@@ -85,6 +72,15 @@ export default function CommoditiesPage() {
       <PageHeader title={t("pages.commodities")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <div className="flex justify-end">
+          <LivePortfolioBar
+            refreshedAt={live.data?.refreshed_at ?? null}
+            stale={live.data?.stale ?? false}
+            refreshing={live.refreshing}
+            onRefresh={live.refresh}
+          />
+        </div>
+
         {(showGoldWarning || showSilverWarning) && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5">
@@ -164,11 +160,11 @@ export default function CommoditiesPage() {
           )}
         </div>
 
-        <CommodityForm onAdded={refresh} />
+        <CommodityForm onAdded={live.refresh} />
 
-        {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+        {(error || live.error) && <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error || live.error}</p>}
         {loading && <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>}
-        {!loading && summary && <CommodityList positions={summary.positions} onDeleted={refresh} />}
+        {!loading && summary && <CommodityList positions={summary.positions} onDeleted={live.refresh} />}
       </main>
     </div>
   );

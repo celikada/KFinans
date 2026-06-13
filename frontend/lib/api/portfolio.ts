@@ -1,8 +1,23 @@
-import type { CryptoPositionDTO, SnapshotHealthIssue, SnapshotHistoryDTO } from "./types";
+import type {
+  CryptoPositionDTO,
+  LivePortfolioOut,
+  RefreshPortfolioOut,
+  SnapshotHealthIssue,
+  SnapshotHistoryDTO,
+} from "./types";
 import { request } from "./_client";
 
 export const portfolioApi = {
   getCryptoPositions: () => request<{ positions: CryptoPositionDTO[]; errors: Record<string, string> }>("/portfolio/crypto"),
+
+  // Sunucu-cache canlı portföy: ağır kartların verisini TEK çağrıyla (hızlı,
+  // cache'ten) okur. Cache yoksa status="refreshing" döner.
+  getLivePortfolio: () => request<LivePortfolioOut>("/portfolio/live"),
+
+  // Arka planda yeniden hesaplamayı tetikler (best-effort, 202). force=true →
+  // bayatlık kontrolünü atlayıp zorla yeniler.
+  refreshPortfolio: (force = false) =>
+    request<RefreshPortfolioOut>(`/portfolio/refresh${force ? "?force=1" : ""}`, { method: "POST" }),
 
   previewSnapshot: () =>
     request<{

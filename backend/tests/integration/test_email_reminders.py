@@ -9,7 +9,7 @@ send_payment_reminder_email mock'lanır (gerçek Resend çağrısı yok).
 """
 
 import secrets
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -18,7 +18,7 @@ import pytest
 
 from app.models.credit_card import CreditCard, CreditCardStatement
 from app.models.user import User
-from app.scheduler import _DUE_SOON_DAYS, _email_due_payments_job
+from app.scheduler import _DUE_SOON_DAYS, _ISTANBUL, _email_due_payments_job
 from tests.conftest import TestSession, make_user
 
 
@@ -47,7 +47,10 @@ async def _make_user_in_db(
 
 async def _add_due_statement(user_id, *, due_in_days: int) -> None:
     """Kullanıcıya ödenmemiş, ödemesi `due_in_days` gün sonra olan ekstre ekle."""
-    today = date.today()
+    # İş (_email_due_payments_job) days_until_due'yu İstanbul tarihiyle hesaplar;
+    # test de aynı tabanı kullanmalı (UTC date.today() ile gün-sınırı off-by-one
+    # → CI 21:00-24:00 UTC arası flaky'di). İstanbul tabanı deterministik.
+    today = datetime.now(_ISTANBUL).date()
     async with TestSession() as session:
         card = CreditCard(
             user_id=user_id,

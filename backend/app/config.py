@@ -38,6 +38,27 @@ class Settings(BaseSettings):
     avalanche_c_rpc_url: str = "https://api.avax.network/ext/bc/C/rpc"
     infura_api_key: str = ""
 
+    # ─── Dış-çağrı timeout/deadline (cüzdan + TEFAS dayanıklılık) ──────
+    # Prod'da GET /portfolio/wallets 373 sn sürmüştü: web3 RPC'lerinde timeout
+    # yoktu + cüzdan fetch'inde toplam deadline yoktu. Aşağıdaki sınırlar bir
+    # ölü/yavaş RPC'nin tüm dashboard'u kilitlemesini engeller.
+    blockchain_rpc_timeout: float = 8.0  # tek web3 HTTP isteği (saniye)
+    wallet_per_fetch_timeout: float = 25.0  # tek cüzdan svc.fetch() üst sınırı
+    wallet_total_timeout: float = 60.0  # tüm cüzdanların toplam deadline'ı
+    tefas_timeout: float = 8.0  # TEFAS HTTP isteği (önce 20'ydi)
+    tefas_cache_ttl_sec: float = 3600.0  # son-başarılı fiyat cache TTL (1 saat)
+
+    # ─── Canlı portföy cache (live_portfolio_cache) ───────────────────
+    # Arka planda hesaplanan portföy verisi bu süre içindeyse "taze" sayılır;
+    # GET /portfolio/live taze cache'i doğrudan döner, bayatsa arka planda
+    # yeniden hesaplatır (stale-while-revalidate). refresh_live_cache(force=False)
+    # taze satırı no-op geçer (gereksiz dış-API çağrısı yapmaz).
+    live_cache_stale_minutes: int = 15
+    # Login/MFA-verify sonrası arka plan cache tetikleme. Prod'da True (dashboard
+    # ilk açılışta hazır). Testlerde False (kontrolsüz dış-API çağrısı + paylaşılan
+    # fiyat cache'i kirletmesini önler — test izolasyonu).
+    live_cache_refresh_on_login: bool = True
+
     # CORS — production'da frontend domain'i ekle
     cors_origins: list[str] = ["http://localhost:3000"]
 
@@ -161,7 +182,9 @@ class Settings(BaseSettings):
     def ethereum_rpc_url(self) -> str:
         if self.infura_api_key:
             return f"https://mainnet.infura.io/v3/{self.infura_api_key}"
-        return "https://eth.llamarpc.com"
+        # eth.llamarpc.com 521 (Cloudflare origin down) döndürüyor — çalışan
+        # publicnode'a çevrildi (2026-06-13 wallets 373s prod sorunu).
+        return "https://ethereum.publicnode.com"
 
 
 settings = Settings()

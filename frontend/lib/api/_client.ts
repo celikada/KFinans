@@ -92,23 +92,77 @@ export function formatErrorDetail(detail: unknown): string {
   return String(detail); // NOSONAR
 }
 
-export async function request<T>(path: string, options: RequestInit = {}, _isRetry = false): Promise<T> {
+/** request()/authedFetch() icin ek (auth disi) ayarlar. */
+export interface RequestConfig {
+  /**
+   * İstek için zaman aşımı (ms). Aşılırsa istek iptal edilir + anlamlı hata
+   * fırlatılır. `null` → zaman aşımı yok (uzun süren upload/download için).
+   * Varsayılan: 30000 ms.
+   */
+  timeoutMs?: number | null;
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * `fetch`'i AbortController + setTimeout ile sarmalar. Zaman aşımı dolarsa
+ * controller.abort() çağrılır → fetch AbortError fırlatır; biz bunu anlamlı
+ * (Türkçe) bir hataya çeviririz. Çağıranın kendi `options.signal`'i varsa ona
+ * saygı duyulur (iki sinyal birleştirilir).
+ */
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number | null): Promise<Response> {
+  if (timeoutMs === null) {
+    return fetch(url, options);
+  }
+  const controller = new AbortController();
+  const callerSignal = options.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    // AbortError: çağıranın iptali mi yoksa zaman aşımı mı? Çağıran iptal
+    // ettiyse onun hatasını koru; aksi halde zaman aşımı mesajı ver.
+    if (err instanceof DOMException && err.name === "AbortError") {
+      if (callerSignal?.aborted) throw err;
+      throw new Error(`İstek zaman aşımına uğradı (${timeoutMs / 1000}s) — sunucuya ulaşılamadı.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  config: RequestConfig = {},
+  _isRetry = false,
+): Promise<T> {
   const token = getAccessToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+  const timeoutMs = config.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : config.timeoutMs;
+  const res = await fetchWithTimeout(
+    `${BASE}${path}`,
+    {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
     },
-  });
+    timeoutMs,
+  );
 
   // Access expired → bir kez refresh dene + retry (FAZ C4 rotation uyumlu).
   // /auth/refresh endpoint'inin kendisinde retry yapma (sonsuz döngü riski).
   if (res.status === 401 && globalThis.window !== undefined && !_isRetry && path !== "/auth/refresh") {
     const newToken = await tryRefresh();
     if (newToken) {
-      return request<T>(path, options, true);
+      return request<T>(path, options, config, true);
     }
     clearAuth();
     globalThis.location.replace("/login");
@@ -131,18 +185,30 @@ export async function request<T>(path: string, options: RequestInit = {}, _isRet
  * token süresi dolunca "Kimlik doğrulama başarısız" ile patlıyordu; artık şeffaf yenilenir.
  * Retry'de aynı `options` (FormData/JSON body) yeniden gönderilir — File/string tekrar okunabilir.
  */
-export async function authedFetch(path: string, options: RequestInit = {}, _isRetry = false): Promise<Response> {
+export async function authedFetch(
+  path: string,
+  options: RequestInit = {},
+  config: RequestConfig = {},
+  _isRetry = false,
+): Promise<Response> {
   const token = getAccessToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+  // Upload/download genelde büyük + yavaş olabilir → varsayılan zaman aşımı YOK.
+  // Çağıran isterse `{ timeoutMs }` ile sınır koyabilir.
+  const timeoutMs = config.timeoutMs === undefined ? null : config.timeoutMs;
+  const res = await fetchWithTimeout(
+    `${BASE}${path}`,
+    {
+      ...options,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
     },
-  });
+    timeoutMs,
+  );
   if (res.status === 401 && globalThis.window !== undefined && !_isRetry && path !== "/auth/refresh") {
     const newToken = await tryRefresh();
-    if (newToken) return authedFetch(path, options, true);
+    if (newToken) return authedFetch(path, options, config, true);
     clearAuth();
     globalThis.location.replace("/login");
   }
