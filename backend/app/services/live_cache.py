@@ -137,9 +137,15 @@ async def _save_result(
 # ---------------------------------------------------------------------------
 async def _gather_sections(
     user_id,
-    db: AsyncSession,
+    session_factory: async_sessionmaker,
 ) -> tuple[dict[str, Any], Decimal, list[dict[str, Any]]]:
-    """6 compute_* fonksiyonunu paralel çalıştırır; (sections, total_tl, issues) döner.
+    """6 compute_* fonksiyonunu HER BİRİ KENDİ SESSION'INDA paralel çalıştırır.
+
+    KRİTİK: Aynı AsyncSession üzerinde EŞZAMANLI `db.execute` SQLAlchemy'de
+    desteklenmez ("another operation is in progress" — ilk coroutine kazanır,
+    diğerleri patlar). Bu yüzden gather'da her bölüme AYRI session verilir
+    (gerçek paralellik + izolasyon). snapshot.py aynı nedenle sıralıya çevrildi;
+    burada arka plan task'ı olduğu için paralellik per-session ile korunur.
 
     Patlayan bölüm health_issues'a kaydedilir + sections'ta boş bırakılır
     (diğer bölümler etkilenmez).
@@ -151,16 +157,21 @@ async def _gather_sections(
     from app.api.v1.stocks import compute_stock_positions
     from app.api.v1.tefas import compute_tefas_positions
 
-    section_specs = [
-        ("wallets", compute_wallet_positions(user_id, db)),
-        ("crypto", compute_crypto_positions(user_id, db)),
-        ("tefas", compute_tefas_positions(user_id, db)),
-        ("stocks", compute_stock_positions(user_id, db)),
-        ("commodities", compute_commodities(user_id, db)),
-        ("manual_crypto", compute_manual_crypto(user_id, db)),
+    section_computers = [
+        ("wallets", compute_wallet_positions),
+        ("crypto", compute_crypto_positions),
+        ("tefas", compute_tefas_positions),
+        ("stocks", compute_stock_positions),
+        ("commodities", compute_commodities),
+        ("manual_crypto", compute_manual_crypto),
     ]
-    names = [name for name, _ in section_specs]
-    results = await asyncio.gather(*(coro for _, coro in section_specs), return_exceptions=True)
+
+    async def _run(fn) -> Any:
+        async with session_factory() as section_db:
+            return await fn(user_id, section_db)
+
+    names = [name for name, _ in section_computers]
+    results = await asyncio.gather(*(_run(fn) for _, fn in section_computers), return_exceptions=True)
 
     sections: dict[str, Any] = {}
     issues: list[dict[str, Any]] = []
@@ -246,8 +257,10 @@ async def _do_refresh(user_id, session_factory: async_sessionmaker) -> None:
 
     async with session_factory() as db:
         try:
+            # _gather_sections her bölüme AYRI session açar (aynı session'da
+            # eşzamanlı execute → "another operation is in progress" bug'ı).
             sections, total_tl, issues = await asyncio.wait_for(
-                _gather_sections(user_id, db),
+                _gather_sections(user_id, session_factory),
                 timeout=_REFRESH_TOTAL_TIMEOUT,
             )
         except TimeoutError:

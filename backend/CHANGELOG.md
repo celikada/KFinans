@@ -6,6 +6,30 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.6] - 2026-06-14
+
+v0.8.5 canlı portföy cache'inde prod'da çıkan hataların hotfix'i.
+
+### Düzeltmeler
+
+- **Canlı cache concurrency bug (kritik):** `refresh_live_cache` 6 bölümü (cüzdan/
+  kripto/TEFAS/hisse/emtia/manuel kripto) AYNI DB session'ında eşzamanlı çalıştırıyordu
+  → SQLAlchemy "another operation is in progress" (ilk bölüm kazanır, diğer 5 patlar) →
+  dashboard'da kartlar boş geliyordu. Her bölüme artık AYRI session verilir (paralellik
+  korunur). v0.8.4'te snapshot.py'de düzeltilen aynı hata.
+- **Cüzdan eksik toplam:** per-wallet timeout 25→45 sn, toplam 60→90 sn. BTC/LTC xpub
+  taraması + multi-RPC fallback döngüsü (avalanche_c/ethereum/sonic) 25 sn'yi aşıp
+  düşüyordu → toplam eksik görünüyordu. Cömert sınır (arka plan refresh kullanıcıyı
+  bloke etmez; zincirler paralel → toplam ≈ en yavaş zincir).
+- **Frontend poll bütçesi 10→20** (60 sn): ~45 sn süren arka plan refresh'i yakalar.
+
+### Eklenenler
+
+- **Kısmi-hata bildirimi:** Bazı cüzdan zincirleri veya bölümler çekilemediğinde
+  dashboard'da uyarı banner'ı ("Bazı veriler güncellenemedi: Bitcoin, Ethereum… —
+  görünen toplam eksik olabilir, Yenile ile tekrar deneyin"). Sessiz düşük-toplam yerine
+  kullanıcı hangi kaynağın eksik olduğunu görür.
+
 ## [0.8.5] - 2026-06-14
 
 Dashboard'da blockchain cüzdan + TEFAS fon kartlarının "yükleniyor"da takılması

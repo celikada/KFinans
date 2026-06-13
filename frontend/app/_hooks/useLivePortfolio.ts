@@ -24,7 +24,9 @@ import { api } from "@/lib/api";
 import type { LivePortfolioOut } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 3000;
-const MAX_POLLS = 10;
+// Arka plan refresh (paralel cüzdan zincirleri + dış API) ~45-60 sn sürebilir
+// (BTC/LTC xpub taraması, RPC fallback). Poll bütçesi bunu yakalamalı: 20×3s=60s.
+const MAX_POLLS = 20;
 
 export interface UseLivePortfolioResult {
   /** Son okunan canlı portföy (cache yoksa null). */
