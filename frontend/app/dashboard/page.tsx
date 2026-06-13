@@ -27,6 +27,7 @@ import { useTranslation } from "@/app/_i18n/I18nProvider";
 // snapshot uyari modal'i ayri _components/ modullerine tasindi.
 import { Card, GoalCard, BudgetCard, type TopItem } from "./_components/DashboardCard";
 import { SnapshotIssuesModal, type PendingIssues } from "./_components/SnapshotIssuesModal";
+import { CHAIN_LABELS } from "./wallets/_components/constants";
 import { PendingRealizeModal } from "./_components/PendingRealizeModal";
 import { CreditCardRemindersModal } from "./_components/CreditCardRemindersModal";
 
@@ -97,6 +98,38 @@ function deriveHeavyCards(live: LivePortfolioOut | null): HeavyCardValues | null
     commodityTotal: commodityPos.length ? parse(s.commodities?.total_value_tl ?? "0") : null,
     commodityCount: commodityPos.length,
   };
+}
+
+// Canlı portföy verisinde çekilemeyen kaynakları kullanıcıya gösterilecek okunur
+// etiketlere çevirir: tamamen çekilemeyen bölümler (health_issues section_failed) +
+// çekilemeyen cüzdan zincirleri (sections.wallets.errors) + borsa hataları
+// (sections.crypto.errors). Boş liste → uyarı gösterilmez. Görünen toplamın neden
+// eksik olabileceğini kullanıcıya bildirir.
+function collectLiveWarnings(
+  data: LivePortfolioOut | null,
+  cardLabel: (key: string) => string,
+): string[] {
+  if (!data) return [];
+  const labels = new Set<string>();
+  // section key → dashboard.cards.* anahtarı (manual_crypto → manualCrypto)
+  const sectionKey: Record<string, string> = {
+    crypto: "crypto", tefas: "tefas", stocks: "stocks",
+    commodities: "commodities", manual_crypto: "manualCrypto", wallets: "wallets",
+  };
+  for (const issue of data.health_issues ?? []) {
+    if (issue.code === "section_failed") {
+      labels.add(cardLabel(sectionKey[issue.source] ?? issue.source));
+    }
+  }
+  for (const key of Object.keys(data.sections?.wallets?.errors ?? {})) {
+    if (key === "_timeout") continue;
+    const chain = key.split(":")[0];
+    labels.add(CHAIN_LABELS[chain] ?? chain);
+  }
+  for (const key of Object.keys(data.sections?.crypto?.errors ?? {})) {
+    labels.add(key);
+  }
+  return [...labels];
 }
 
 export default function DashboardPage() {
@@ -664,6 +697,26 @@ export default function DashboardPage() {
             {live.error}
           </p>
         )}
+        {(() => {
+          // Kısmi hata: bazı cüzdan zincirleri / bölümler çekilemedi → toplam eksik
+          // olabilir. Kullanıcıya hangi kaynakların eksik olduğunu bildir (sessiz
+          // düşük-toplam yerine). Yenilenirken gösterme (geçici olabilir).
+          if (live.refreshing) return null;
+          const warnings = collectLiveWarnings(live.data, (k) => t(`dashboard.cards.${k}`));
+          if (warnings.length === 0) return null;
+          return (
+            <div
+              className="text-xs text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg mb-4 flex items-start gap-2"
+              role="alert"
+            >
+              <span aria-hidden="true">⚠</span>
+              <span>
+                {t("dashboard.live.partialFailure")}:{" "}
+                <span className="font-medium">{warnings.join(", ")}</span>. {t("dashboard.live.partialHint")}
+              </span>
+            </div>
+          );
+        })()}
         <div className="grid gap-6 sm:grid-cols-2 mb-6">
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">

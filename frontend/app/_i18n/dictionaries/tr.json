@@ -99,7 +99,9 @@
       "hoursAgo": "{n} sa önce",
       "daysAgo": "{n} gün önce",
       "never": "henüz yok",
-      "stale": "Veriler eski olabilir"
+      "stale": "Veriler eski olabilir",
+      "partialFailure": "Bazı veriler güncellenemedi",
+      "partialHint": "Görünen toplam eksik olabilir — Yenile ile tekrar deneyin."
     },
     "cards": {
       "creditCards": "Kredi Kartları (toplam borç)",

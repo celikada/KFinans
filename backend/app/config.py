@@ -43,8 +43,13 @@ class Settings(BaseSettings):
     # yoktu + cüzdan fetch'inde toplam deadline yoktu. Aşağıdaki sınırlar bir
     # ölü/yavaş RPC'nin tüm dashboard'u kilitlemesini engeller.
     blockchain_rpc_timeout: float = 8.0  # tek web3 HTTP isteği (saniye)
-    wallet_per_fetch_timeout: float = 25.0  # tek cüzdan svc.fetch() üst sınırı
-    wallet_total_timeout: float = 60.0  # tüm cüzdanların toplam deadline'ı
+    # Per-wallet üst sınır: BTC/LTC xpub gap-limit taraması + multi-RPC fallback
+    # döngüsü (avalanche_c/ethereum/sonic) meşru olarak 25-40 sn sürebilir; 25s
+    # çok agresifti (bu zincirler düşüp toplam eksik görünüyordu). Arka plan
+    # refresh'i kullanıcıyı bloke etmediği için cömert sınır güvenli. Zincirler
+    # paralel → toplam refresh ≈ en yavaş zincir, sum değil.
+    wallet_per_fetch_timeout: float = 45.0  # tek cüzdan svc.fetch() üst sınırı
+    wallet_total_timeout: float = 90.0  # tüm cüzdanların toplam deadline'ı
     tefas_timeout: float = 8.0  # TEFAS HTTP isteği (önce 20'ydi)
     tefas_cache_ttl_sec: float = 3600.0  # son-başarılı fiyat cache TTL (1 saat)
 

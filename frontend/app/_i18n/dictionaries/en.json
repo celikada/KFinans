@@ -99,7 +99,9 @@
       "hoursAgo": "{n} h ago",
       "daysAgo": "{n} d ago",
       "never": "not yet",
-      "stale": "Data may be stale"
+      "stale": "Data may be stale",
+      "partialFailure": "Some data couldn't be updated",
+      "partialHint": "The shown total may be incomplete — tap Refresh to retry."
     },
     "cards": {
       "creditCards": "Credit Cards (total debt)",
