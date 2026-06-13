@@ -6,6 +6,40 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.4] - 2026-06-13
+
+9 paralel uzman ajan denetimi (backend/frontend/dba/security/devops/test/finance/ai/architect)
+sonucu P0+P1 düzeltme turu (3 tematik MR: !49 backend, !50 frontend, !51 devops).
+
+### Düzeltmeler
+
+- **KK döviz para birimi (kritik):** Ekstre/taksit `currency` hiçbir yazma yolunda
+  set edilmiyordu — TRY-dışı kartın ekstresi cash flow'da TRY varsayılıp ~kur-kat
+  yanlış sayılıyordu, UI da tutarı `₺` ile gösteriyordu. Şemalara `currency` eklendi;
+  create/update/upsert + import commit kartın para birimini ekstre+taksitlere
+  devrediyor. Frontend kart detayı (ekstre/taksit/limit/önizleme) `fmtCurrency` ile
+  kalemin kendi para biriminde gösteriyor.
+- **Hard-delete cron (KVKK):** `credit_transactions` RESTRICT'ine takılıp TÜM
+  batch'i sessizce düşürüyordu — ledger'lı kullanıcılar hariç tutuluyor + uyarı.
+- **Snapshot concurrency:** Aynı AsyncSession'da 8 paralel `db.execute`
+  ("another operation is in progress" riski) → sıralı await.
+- **Parser hata yolu:** `InvalidOperation` yakalanmıyordu (fail-safe 422 yerine 500);
+  ham PDF metni hata mesajına sızıyordu → sabit kullanıcı mesajı.
+- **Web Push SSRF:** endpoint host allowlist'i eklendi (yalnız bilinen push
+  servisleri; iç ağa sunucu-taraflı POST engellendi).
+- **convert_forecast:** display kuru eksikse değer SIFIRLANIYORDU (kart toplamı 0
+  görünebilirdi) → TL fallback. **Wallet sil:** geçersiz UUID → 500 yerine 404.
+- **Crypto sayfası:** getIntegrations fetch hatası sessizce yutuluyordu → kullanıcıya
+  hata gösteriliyor.
+
+### CI/CD
+
+- pip + npm cache (pipeline'lar arası, ~2-4 dk kazanç) + **Kaniko layer cache**
+  (tag build süresi belirgin düşer) + backend Dockerfile `apt-get upgrade`
+  (OS CVE birikimi → Trivy gate koruması).
+
+---
+
 ## [0.8.3] - 2026-06-11
 
 ### Düzeltmeler
