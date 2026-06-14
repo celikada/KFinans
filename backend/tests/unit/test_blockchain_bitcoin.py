@@ -117,8 +117,9 @@ async def test_cache_expires_after_ttl():
     svc = BitcoinService(VALID_BTC_ADDR)
     await svc._cached_balance()
 
-    # Cache'i manuel eski'ye al — TTL gecmis sayilsin (private _cache dict'i ile)
-    _balance_cache._cache[VALID_BTC_ADDR] = (time.monotonic() - 999, Decimal("1.0"))
+    # Cache'i manuel eski'ye al — TTL gecmis sayilsin (private _cache dict'i ile).
+    # TTL 1800s (30 dk); bu degerin uzerinde bir yas ver.
+    _balance_cache._cache[VALID_BTC_ADDR] = (time.monotonic() - 9999, Decimal("1.0"))
 
     await svc._cached_balance()
     assert route.call_count == 2, "TTL gectikten sonra yeni HTTP cagrisi olmali"

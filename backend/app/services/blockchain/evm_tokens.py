@@ -7,6 +7,7 @@ Avalanche C: curated TokenDef listesi (Ethplorer ETH-only). En önemli
 sAVAX + popüler stablecoin'ler.
 """
 
+import asyncio
 import logging
 import re
 from decimal import Decimal
@@ -14,6 +15,8 @@ from typing import NamedTuple
 
 import httpx
 from web3 import AsyncWeb3
+
+from app.services.concurrency import gather_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +108,14 @@ async def fetch_token_balances(
     address: str,
     tokens: list[TokenDef],
 ) -> list[tuple[TokenDef, Decimal]]:
-    """Curated token listesi için bakiyeleri sırayla çeker. Avalanche için."""
-    import asyncio
+    """Curated token listesi için bakiyeleri BOUNDED-PARALLEL çeker (Avalanche).
 
+    RPC rate-limit'i (429) için limit=3 + token başına 3 retry/backoff. Eskiden
+    sıralı (+0.15s sleep) çekiliyordu; ortak gather_bounded pattern'i.
+    """
     checksum = AsyncWeb3.to_checksum_address(address)
-    out: list[tuple[TokenDef, Decimal]] = []
 
-    for token in tokens:
+    async def _one(token: TokenDef) -> tuple[TokenDef, Decimal] | None:
         contract = w3.eth.contract(
             address=AsyncWeb3.to_checksum_address(token.contract),
             abi=ERC20_ABI,
@@ -120,18 +124,18 @@ async def fetch_token_balances(
             try:
                 raw = await contract.functions.balanceOf(checksum).call()
                 amount = Decimal(raw) / Decimal(10**token.decimals)
-                if amount > Decimal("0.000001"):
-                    out.append((token, amount))
-                break
+                return (token, amount) if amount > Decimal("0.000001") else None
             except Exception as exc:
                 msg = str(exc).lower()
                 if "rate" in msg or "429" in msg or "header not found" in msg or "connection" in msg:
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
                 logger.debug("Token %s balanceOf hata: %s", token.symbol, exc)
-                break
-        await asyncio.sleep(0.15)
-    return out
+                return None
+        return None
+
+    results = await gather_bounded(tokens, _one, limit=3)
+    return [r for r in results if r is not None]
 
 
 async def fetch_ethereum_tokens_via_ethplorer(address: str) -> list[tuple[TokenDef, Decimal]]:

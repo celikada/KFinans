@@ -1,10 +1,11 @@
-import asyncio
 import logging
 import time
 from dataclasses import dataclass
 from decimal import Decimal
 
 import httpx
+
+from app.services.concurrency import gather_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,11 @@ async def _fetch_one(client: httpx.AsyncClient, ticker: str) -> StockQuote | Non
 
 
 async def fetch_stock_quotes(tickers: list[str]) -> dict[str, StockQuote | None]:
-    """Verilen ticker'lar için Yahoo Finance'ten anlık fiyat çeker."""
+    """Verilen ticker'lar için Yahoo Finance'ten anlık fiyat çeker.
+
+    Bounded-parallel (ortak gather_bounded, limit=8) — Yahoo'yu çok sayıda
+    ticker'da rate-limit'e takmadan paralel çeker (eskiden sınırsız gather'dı).
+    """
     async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(*[_fetch_one(client, t) for t in tickers])
+        results = await gather_bounded(tickers, lambda t: _fetch_one(client, t), limit=8)
     return dict(zip(tickers, results))

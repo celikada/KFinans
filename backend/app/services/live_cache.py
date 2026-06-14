@@ -523,6 +523,47 @@ def _assets_from_cache(sections: dict[str, Any]) -> list[AssetData]:
     )
 
 
+def _cache_issues(cache: LivePortfolioCache) -> list[dict[str, Any]]:
+    """Cache'teki TÜM sorunları tek issue listesine toplar: bölüm-seviyesi
+    (health_issues) + çekilemeyen cüzdan zincirleri (wallets.errors) + borsa
+    hataları (crypto.errors). Snapshot preview/save bunu kullanır → kullanıcı
+    'şu veriler eksik, yine de kaydet?' uyarısını görür (BTC timeout vb.)."""
+    issues: list[dict[str, Any]] = list(cache.health_issues or [])
+    payload = cache.payload or {}
+    for key, msg in ((payload.get("wallets") or {}).get("errors") or {}).items():
+        if key == "_timeout":
+            continue
+        issues.append({"source": "wallet", "chain": key.split(":")[0], "code": "fetch_failed", "msg": str(msg), "level": "warn"})
+    for key, msg in ((payload.get("crypto") or {}).get("errors") or {}).items():
+        issues.append({"source": "crypto", "provider": key, "code": "fetch_failed", "msg": str(msg), "level": "warn"})
+    return issues
+
+
+def _cache_asset_count(cache: LivePortfolioCache) -> int:
+    return sum(len(_iter_section_positions(s)) for s in (cache.payload or {}).values())
+
+
+async def preview_snapshot_from_cache(user_id, db: AsyncSession) -> dict[str, Any]:
+    """Taze live cache'ten snapshot ön-izlemesi (yeniden dış çağrı YOK → hızlı).
+
+    compute_and_save_snapshot(dry_run=True) ile AYNI sözleşme:
+    {total_value_tl, asset_count, issues, usd_try_rate, saved}. Snapshot preview
+    eskiden 45 sn full re-fetch yapıp frontend 30 sn timeout'una takılıyordu →
+    onay modal'ı açılmıyordu. Cache'ten anında döner.
+    """
+    cache = await get_live_cache(user_id, db)
+    if cache is None:
+        raise ValueError("Live cache bulunamadı")
+    usd_rate = str(cache.rates["usd_tl"]) if cache.rates and cache.rates.get("usd_tl") else None
+    return {
+        "total_value_tl": str((cache.total_value_tl or Decimal(0)).quantize(Decimal("0.01"))),
+        "asset_count": _cache_asset_count(cache),
+        "issues": _cache_issues(cache),
+        "usd_try_rate": usd_rate,
+        "saved": False,
+    }
+
+
 async def save_snapshot_from_cache(user_id, db: AsyncSession) -> PortfolioSnapshot:
     """Taze live cache'ten yeniden dış çağrı yapmadan PortfolioSnapshot üretir.
 
@@ -570,7 +611,7 @@ async def save_snapshot_from_cache(user_id, db: AsyncSession) -> PortfolioSnapsh
         snapshot_date=today,
         total_value_tl=Decimal(str(total_tl)).quantize(Decimal("0.01")),
         usd_try_rate=usd_tl.quantize(Decimal("0.000001")) if usd_tl > 0 else None,
-        health_issues=cache.health_issues if cache.health_issues else None,
+        health_issues=_cache_issues(cache) or None,
     )
     db.add(snapshot)
     await db.flush()
