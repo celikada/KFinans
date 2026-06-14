@@ -154,6 +154,34 @@ async def test_refresh_ok_writes_row(monkeypatch):
     assert row.payload["wallets"]["positions"][0]["symbol"] == "ETH"
 
 
+async def test_tefas_stocks_normalized_to_positions_object(monkeypatch):
+    """tefas/stocks compute DÜZ LİSTE döner → cache {positions: [...]} nesnesi saklamalı.
+
+    Frontend tüm bölümleri `sections.X.positions` ile okur; liste saklanırsa
+    `.positions` undefined olup kart boş görünür (v0.8.6 prod bug'ı).
+    """
+    uid = await _create_user("lc_shape@example.com")
+    _patch_all_compute(
+        monkeypatch,
+        tefas=[{"code": "YAC", "total_value_tl": "100.00"}],
+        stocks=[{"ticker": "SISE", "total_value_tl": "50.00"}],
+    )
+    _patch_usd_rate(monkeypatch)
+
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    assert row is not None
+    # Liste değil, {positions: [...]} nesnesi (frontend bunu bekler)
+    assert isinstance(row.payload["tefas"], dict)
+    assert row.payload["tefas"]["positions"][0]["code"] == "YAC"
+    assert isinstance(row.payload["stocks"], dict)
+    assert row.payload["stocks"]["positions"][0]["ticker"] == "SISE"
+    # Total normalize edilmiş pozisyonlardan toplanır
+    assert row.total_value_tl == Decimal("150.00")
+
+
 async def test_refresh_fresh_noop(monkeypatch):
     """force=False + taze satır → compute çağrılmaz (no-op)."""
     uid = await _create_user("lc_noop@example.com")

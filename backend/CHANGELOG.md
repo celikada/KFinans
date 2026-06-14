@@ -6,6 +6,17 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.7] - 2026-06-14
+
+### Düzeltmeler
+
+- **TEFAS + Hisse kartları boş (kontrat uyuşmazlığı):** `compute_tefas_positions` ve
+  `compute_stock_positions` düz LİSTE (`list[...PositionOut]`) dönüyordu; frontend ise
+  tüm bölümleri `sections.X.positions` (yani `{positions: [...]}` nesnesi) olarak okuyor.
+  Liste'nin `.positions`'ı olmadığından bu iki kart boş görünüyordu (backend veriyi 200 OK
+  ile çekmesine rağmen). Live cache artık liste dönen bölümleri `{"positions": [...]}` ile
+  normalize eder. Regresyon testi eklendi.
+
 ## [0.8.6] - 2026-06-14
 
 v0.8.5 canlı portföy cache'inde prod'da çıkan hataların hotfix'i.
