@@ -188,7 +188,13 @@ async def _gather_sections(
             )
             sections[name] = _empty_section(name)
         else:
-            sections[name] = jsonable_encoder(res)
+            encoded = jsonable_encoder(res)
+            # tefas/stocks compute'ları düz LİSTE döner (list[...PositionOut]);
+            # frontend tüm bölümleri {positions: [...]} nesnesi olarak okur. Liste
+            # → {"positions": liste} normalize et (yoksa kart boş görünür).
+            if isinstance(encoded, list):
+                encoded = {"positions": encoded}
+            sections[name] = encoded
 
     total_tl = _sum_sections_total(sections)
     return sections, total_tl, issues
@@ -199,7 +205,8 @@ def _empty_section(name: str) -> Any:
     if name in ("wallets", "crypto"):
         return {"positions": [], "errors": {}}
     if name in ("tefas", "stocks"):
-        return []
+        # Frontend {positions: [...]} bekler (compute düz liste döner → normalize edilir).
+        return {"positions": []}
     if name == "commodities":
         return {
             "positions": [],
