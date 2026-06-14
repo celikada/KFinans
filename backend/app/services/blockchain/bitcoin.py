@@ -24,6 +24,7 @@ from bip_utils import (
 
 from app.core.cache import AsyncTTLCache
 from app.services.base import AssetData, BaseBlockchainIntegration
+from app.services.concurrency import gather_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,16 @@ SATOSHI_PER_BTC = Decimal("100000000")
 _MEMPOOL_API = "https://mempool.space/api/address/{addr}"
 _XPUB_PREFIXES = ("xpub", "ypub", "zpub", "Xpub", "Ypub", "Zpub")
 _GAP_LIMIT = 20  # BIP-44 standardı: 20 ardışık boş adres → chain biter
+# xpub adres taraması bounded-parallel: bir pencerede _GAP_LIMIT adres en fazla
+# _SCAN_CONCURRENCY eşzamanlı sorgulanır (mempool.space rate-limit dengesi). Eski
+# sıralı tarama (adres-adres + 0.3s sleep) yüzlerce adreste 45s'yi aşıyordu.
+_SCAN_CONCURRENCY = 5
 
-# In-memory cache + single-flight: xpub/adres → btc_balance, 10 dk TTL.
+# In-memory cache + single-flight: xpub/adres → btc_balance, 30 dk TTL.
 # Dashboard mempool.space rate limit'ine takılmasın diye; paralel cache miss
-# çağrıları tek tarama paylaşır.
-_balance_cache: AsyncTTLCache[Decimal] = AsyncTTLCache(ttl_sec=600)
+# çağrıları tek tarama paylaşır. TTL 30 dk: BTC bakiyesi sık değişmez, yavaş
+# taramanın her 10 dk'da tekrarlanmasını önler (ilk başarılı tarama sonrası cache).
+_balance_cache: AsyncTTLCache[Decimal] = AsyncTTLCache(ttl_sec=1800)
 
 
 class BitcoinService(BaseBlockchainIntegration):
@@ -117,6 +123,30 @@ class BitcoinService(BaseBlockchainIntegration):
             return P2WPKHAddrEncoder.EncodeKey(pub_bytes, hrp="bc", net_ver=b"")
         return P2PKHAddrEncoder.EncodeKey(pub_bytes, net_ver=b"\x00")
 
+    @staticmethod
+    async def _query_address(client: httpx.AsyncClient, addr: str) -> tuple[int, Decimal]:
+        """Tek adresi sorgular → (tx_count, pozitif_bakiye_sat).
+
+        Hata/429-sonrası → (0, 0): adres gap-limit/bakiye açısından boş sayılır
+        (orijinal sıralı tarama da hatalı adresi boş kabul ederdi → davranış aynı).
+        """
+        for _ in range(2):  # 429'da 1 retry
+            try:
+                resp = await client.get(_MEMPOOL_API.format(addr=addr))
+                if resp.status_code == 429:
+                    await asyncio.sleep(2.0)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                logger.debug("xpub adres %s sorgulanamadı: %s", addr, exc)
+                return 0, Decimal(0)
+            cs = data.get("chain_stats", {})
+            tx_count = cs.get("tx_count", 0)
+            bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
+            return tx_count, (bal if bal > 0 else Decimal(0))
+        return 0, Decimal(0)
+
     async def _scan_chain(
         self,
         node: Bip32Secp256k1,
@@ -124,44 +154,37 @@ class BitcoinService(BaseBlockchainIntegration):
         segwit: bool,
         client: httpx.AsyncClient,
     ) -> tuple[Decimal, bool]:
-        """Bir chain'i (receive veya change) gap_limit'e kadar tarar.
+        """Bir chain'i (receive veya change) gap_limit'e kadar BOUNDED-PARALLEL tarar.
 
-        Dönüş: (chain_sat, had_any_tx) — had_any_tx, hiç işlemli adres bulundu mu?
-        Bu bilgi, SegWit'te aktivite varsa Legacy'yi atlamak için kullanılır.
+        Pencere = _GAP_LIMIT adres; her pencere en fazla _SCAN_CONCURRENCY eşzamanlı
+        sorgulanır (mempool rate-limit dengesi). Sonuçlar SIRAYLA işlenir → gap-limit
+        (20 ardışık boş) semantiği korunur. Eski adres-adres sıralı tarama (+0.3s sleep)
+        yüzlerce adreste 45 sn'yi aşıyordu.
+
+        Dönüş: (chain_sat, had_any_tx) — had_any_tx SegWit aktifse Legacy'yi atlamak için.
         """
-        empty_streak = 0
-        idx = 0
         chain_sat = Decimal(0)
         had_any_tx = False
-        while empty_streak < _GAP_LIMIT and idx < 100:
-            addr = self._derive_address(node, change, idx, segwit)
-            try:
-                resp = await client.get(_MEMPOOL_API.format(addr=addr))
-                if resp.status_code == 429:
-                    # Rate limit — bekle ve aynı index'i tekrar dene
-                    await asyncio.sleep(2.0)
-                    continue
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as exc:
-                logger.debug("xpub adres %s sorgulanamadı: %s", addr, exc)
-                empty_streak += 1
-                idx += 1
-                await asyncio.sleep(0.5)
-                continue
-
-            cs = data.get("chain_stats", {})
-            tx_count = cs.get("tx_count", 0)
-            if tx_count == 0:
-                empty_streak += 1
-            else:
-                empty_streak = 0
-                had_any_tx = True
-                bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
-                if bal > 0:
+        consecutive_empty = 0
+        idx = 0
+        while consecutive_empty < _GAP_LIMIT and idx < 100:
+            window = range(idx, min(idx + _GAP_LIMIT, 100))
+            addrs = [self._derive_address(node, change, i, segwit) for i in window]
+            results = await gather_bounded(
+                addrs,
+                lambda a: self._query_address(client, a),
+                limit=_SCAN_CONCURRENCY,
+            )
+            for tx_count, bal in results:  # sıra korunur → gap-limit doğru
+                if tx_count == 0:
+                    consecutive_empty += 1
+                else:
+                    consecutive_empty = 0
+                    had_any_tx = True
                     chain_sat += bal
-            idx += 1
-            await asyncio.sleep(0.3)  # mempool.space rate limit yumuşak ~1 req/s
+                if consecutive_empty >= _GAP_LIMIT:
+                    break
+            idx += len(addrs)
         return chain_sat, had_any_tx
 
     async def health_check(self) -> bool:

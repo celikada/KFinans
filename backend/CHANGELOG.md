@@ -6,7 +6,29 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
-## [0.8.7] - 2026-06-14
+## [0.8.8] - 2026-06-14
+
+### Düzeltmeler
+
+- **Snapshot onay modal'ı açılmıyordu / snapshot kaydolmuyordu (kritik):** "Snapshot al"
+  ön-izlemesi tüm kaynakları YENİDEN çekiyordu (~45 sn) ve frontend'in 30 sn request
+  timeout'una takılıp iptal oluyordu → onay modal'ı hiç açılmıyor, snapshot kaydedilemiyordu.
+  Snapshot preview + create artık **taze live cache'ten** üretilir (yeniden dış çağrı YOK,
+  anında). Snapshot = "şu an görüntülenen durumun" kaydı. Çekilemeyen kaynaklar (BTC vb.)
+  modal'da issue olarak gösterilir; kullanıcı "yine de kaydet" diyebilir.
+- **Bitcoin xpub taraması hızlandırıldı:** Adres taraması artık **bounded-parallel** (pencere
+  = gap_limit, en fazla 5 eşzamanlı sorgu) — eskiden adres-adres sıralıydı (+0.3s sleep) ve
+  45 sn'yi aşıp "Bitcoin çekilemedi" veriyordu. BTC bakiye cache TTL 10→30 dk (ilk başarılı
+  taramadan sonra tekrar tarama seyrekleşir).
+
+### İyileştirmeler
+
+- **Ortak bounded-parallel fan-out helper'ı (`services/concurrency.py::gather_bounded`):**
+  Sıralı kalan dış-çağrı döngüleri tek bir reusable pattern ile paralelleştirildi (her servis
+  rate-limit'ine uygun `limit` verir — sınırsız paralel 429 fırtınası yaratır). Uygulandığı
+  yerler: BTC xpub adres taraması, çoklu borsa (crypto), ERC-20 token (Avalanche), Yahoo hisse
+  ticker'ları. NOT: cüzdan zincirleri + bölümler ZATEN paralel; TEFAS tek toplu çağrı.
+
 
 ### Düzeltmeler
 

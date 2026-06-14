@@ -182,6 +182,42 @@ async def test_tefas_stocks_normalized_to_positions_object(monkeypatch):
     assert row.total_value_tl == Decimal("150.00")
 
 
+async def test_preview_snapshot_from_cache_surfaces_wallet_errors(monkeypatch):
+    """preview_snapshot_from_cache cache'ten anında döner + çekilemeyen cüzdan
+    zincirlerini (wallets.errors) issue olarak yüzeye çıkarır (snapshot onay modal'ı
+    BTC eksik uyarısını gösterebilsin → modal-not-opening prod bug'ı)."""
+    uid = await _create_user("lc_preview@example.com")
+    wallets = WalletResponse(
+        positions=[
+            WalletPositionOut(
+                wallet_id="w1",
+                chain="ethereum",
+                address="0xabc",
+                symbol="ETH",
+                liquid_quantity=Decimal("1"),
+                staked_quantity=Decimal("0"),
+                pending_rewards=Decimal("0"),
+                unit_price_usd=Decimal("2000"),
+                unit_price_tl=Decimal("70000"),
+                total_value_tl=Decimal("70000"),
+            )
+        ],
+        errors={"bitcoin:xpub6Cn": "Zaman aşımı (ağ/RPC yavaş)"},
+    )
+    _patch_all_compute(monkeypatch, wallets=wallets)
+    _patch_usd_rate(monkeypatch)
+
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    async with TestSession() as db:
+        preview = await lc.preview_snapshot_from_cache(uid, db)
+    assert preview["saved"] is False
+    assert preview["asset_count"] == 1
+    assert preview["total_value_tl"] == "70000.00"
+    # BTC timeout → issue olarak görünür (modal kullanıcıya gösterir)
+    assert any(i["source"] == "wallet" and i.get("chain") == "bitcoin" for i in preview["issues"])
+
+
 async def test_refresh_fresh_noop(monkeypatch):
     """force=False + taze satır → compute çağrılmaz (no-op)."""
     uid = await _create_user("lc_noop@example.com")

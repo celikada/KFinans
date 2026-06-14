@@ -41,12 +41,14 @@ from app.services.blockchain.litecoin import LitecoinService
 from app.services.blockchain.polkadot import PolkadotService
 from app.services.blockchain.solana import SolanaService
 from app.services.blockchain.sonic import SonicService
+from app.services.concurrency import gather_bounded
 from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
 from app.services.live_cache import (
     get_live_cache,
     is_stale,
+    preview_snapshot_from_cache,
     save_snapshot_from_cache,
     trigger_background_refresh,
 )
@@ -175,12 +177,22 @@ async def preview_snapshot(
 ):
     """Snapshot öncesi sağlık kontrolü.
 
-    Tüm kaynakları gather edip toplam + issues döndürür ama **DB'ye yazmaz**.
-    Frontend bunu kullanır: issue varsa kullanıcıya popup gösterip onay alır.
-    Onay sonrası `POST /portfolio/snapshot` (force=True) ile gerçek kayıt.
+    Toplam + issues döndürür ama **DB'ye yazmaz**. Frontend bunu kullanır:
+    issue varsa kullanıcıya popup gösterip onay alır; onay sonrası
+    `POST /portfolio/snapshot` (force=True) ile gerçek kayıt.
 
-    Issues yoksa frontend doğrudan kayıt yapabilir (popup atlanabilir).
+    Performans (KRİTİK): taze live cache varsa ön-izleme CACHE'ten anında
+    üretilir (yeniden dış çağrı YOK). Eskiden full re-fetch ~45 sn sürüp
+    frontend 30 sn timeout'una takılıyordu → onay modal'ı hiç açılmıyordu.
+    Cache yok/bayatsa compute_and_save_snapshot(dry_run) fallback'i.
     """
+    cache_row = await get_live_cache(current_user.id, db)
+    if cache_row is not None and not is_stale(cache_row, settings.live_cache_stale_minutes):
+        try:
+            return await preview_snapshot_from_cache(current_user.id, db)
+        except Exception:
+            logger.exception("Snapshot preview cache'ten üretilemedi, compute fallback user_id=%s", current_user.id)
+
     try:
         result = await compute_and_save_snapshot(current_user.id, db, dry_run=True)
     except RuntimeError:
@@ -450,7 +462,9 @@ async def compute_crypto_positions(user_id, db: AsyncSession) -> CryptoResponse:
     all_assets = []
     errors: dict[str, str] = {}
 
-    for intg in integrations:
+    async def _fetch_integration(intg):
+        """Tek borsa entegrasyonunu çeker → (assets, hata|None). Her borsa ayrı
+        API olduğundan bounded-parallel güvenli (gather_bounded, limit=3)."""
         try:
             api_key = decrypt_secret(intg.encrypted_key)
             api_secret = decrypt_secret(intg.encrypted_secret) if intg.encrypted_secret else ""
@@ -461,11 +475,15 @@ async def compute_crypto_positions(user_id, db: AsyncSession) -> CryptoResponse:
                 svc = BinanceTRService(api_key, api_secret, session_token)
             else:
                 svc = ICrypexService(api_key, api_secret)
-            assets = await svc.fetch()
-            all_assets.extend(assets)
+            return await svc.fetch(), None
         except Exception as e:
             logger.error("Kripto fetch hatası [%s]: %s", intg.provider, e)
-            errors[intg.provider] = str(e)
+            return [], (intg.provider, str(e))
+
+    for assets, err in await gather_bounded(integrations, _fetch_integration, limit=3):
+        all_assets.extend(assets)
+        if err is not None:
+            errors[err[0]] = err[1]
 
     positions = [
         CryptoPositionOut(
