@@ -15,9 +15,10 @@ import { PlannedPeriodsModal } from "./PlannedPeriodsModal";
 interface Props {
   readonly items: PlannedExpenseDTO[];
   readonly onDeleted: (id: number) => void;
+  readonly onEdit: (pe: PlannedExpenseDTO) => void;
 }
 
-export function PlannedList({ items, onDeleted }: Props) {
+export function PlannedList({ items, onDeleted, onEdit }: Props) {
   const confirm = useConfirm();
   const { t } = useTranslation();
   const [busy, setBusy] = useState<string | null>(null);
@@ -157,6 +158,14 @@ export function PlannedList({ items, onDeleted }: Props) {
                     title={t("content.planned.periods.manage")}
                   >
                     {t("content.planned.periods.manage")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEdit(pe)}
+                    className="text-xs px-2 py-1 rounded text-gray-600 border border-gray-200 hover:bg-gray-50"
+                    title={t("common.edit")}
+                  >
+                    {t("common.edit")}
                   </button>
                 </div>
                 <button

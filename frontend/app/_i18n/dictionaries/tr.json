@@ -580,7 +580,9 @@
       "cardBadge": "kart",
       "cardBadgeTitle": "Bu harcama kredi kartından yapıldı — gider toplamına dahil edilmez (kart borcuyla zaten sayılır)",
       "noCategoryData": "Kategori dağılımı için veri yok.",
-      "categoryBreakdown": "Kategori Dağılımı"
+      "categoryBreakdown": "Kategori Dağılımı",
+      "tabActual": "Gerçekleşen Harcamalar",
+      "tabPlanned": "Periyodik (Kira, Aidat...)"
     },
     "goal": {
       "loadFailed": "Yüklenemedi",
@@ -712,7 +714,10 @@
       "confirmRealizePast": "için geçmiş tüm dönemler gider olarak işaretlensin mi?",
       "pastResultPrefix": "dönem gerçekleştirildi,",
       "pastResultSuffix": "atlandı",
-      "opFailed": "İşlem başarısız"
+      "opFailed": "İşlem başarısız",
+      "tabHint": "Kira, ev aidatı gibi düzenli ödemeleri buradan yönetin; her kayıt düzenlenebilir.",
+      "categoryBreakdown": "Kategori Dağılımı",
+      "noCategoryData": "Kategori dağılımı için veri yok."
     },
     "bes": {
       "headerTitle": "BES — Bireysel Emeklilik",

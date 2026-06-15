@@ -580,7 +580,9 @@
       "cardBadge": "card",
       "cardBadgeTitle": "This expense was paid by credit card — excluded from the expense total (already counted as card debt)",
       "noCategoryData": "No data for category breakdown.",
-      "categoryBreakdown": "Category Breakdown"
+      "categoryBreakdown": "Category Breakdown",
+      "tabActual": "Actual Expenses",
+      "tabPlanned": "Recurring (Rent, Dues...)"
     },
     "goal": {
       "loadFailed": "Failed to load",
@@ -712,7 +714,10 @@
       "confirmRealizePast": "— mark all past periods as expenses?",
       "pastResultPrefix": "periods realized,",
       "pastResultSuffix": "skipped",
-      "opFailed": "Operation failed"
+      "opFailed": "Operation failed",
+      "tabHint": "Manage regular payments like rent and dues here; every record is editable.",
+      "categoryBreakdown": "Category Breakdown",
+      "noCategoryData": "No data for category breakdown."
     },
     "bes": {
       "headerTitle": "BES — Private Pension",

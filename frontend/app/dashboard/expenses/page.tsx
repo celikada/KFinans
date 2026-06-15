@@ -1,7 +1,10 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS } from "@/lib/api";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS,
+  PlannedExpenseDTO,
+} from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TOOLBAR_BTN_CLS } from "@/lib/format";
 import { DisplayMoney, fmtCurrency, useDisplayCurrency } from "@/app/_components/Money";
@@ -9,22 +12,37 @@ import { ExpenseForm } from "./_components/ExpenseForm";
 import { ExpenseTable } from "./_components/ExpenseTable";
 import { CategoryPieChart } from "./_components/CategoryPieChart";
 import { MonthSelector } from "./_components/MonthSelector";
+import { PlannedForm } from "@/app/dashboard/planned/_components/PlannedForm";
+import { PlannedList } from "@/app/dashboard/planned/_components/PlannedList";
+import { PlannedCategoryPieChart } from "@/app/dashboard/planned/_components/PlannedCategoryPieChart";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
-export default function ExpensesPage() {
+type Tab = "actual" | "periyodik";
+
+function ExpensesPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useTranslation();
   const displayCurrency = useDisplayCurrency();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const initialTab: Tab = searchParams.get("tab") === "periyodik" ? "periyodik" : "actual";
+  const [tab, setTab] = useState<Tab>(initialTab);
+
+  // Gerçekleşen harcamalar
   const [expenses, setExpenses] = useState<ExpenseDTO[]>([]);
   const [summary, setSummary] = useState<ExpenseSummaryDTO | null>(null);
+  const [overBudget, setOverBudget] = useState<BudgetComparisonDTO[]>([]);
+  const [editingExpense, setEditingExpense] = useState<ExpenseDTO | null>(null);
+
+  // Periyodik (planlı) harcamalar
+  const [planned, setPlanned] = useState<PlannedExpenseDTO[]>([]);
+  const [editingPlanned, setEditingPlanned] = useState<PlannedExpenseDTO | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [overBudget, setOverBudget] = useState<BudgetComparisonDTO[]>([]);
   const [importing, setImporting] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<ExpenseDTO | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
@@ -33,14 +51,16 @@ export default function ExpensesPage() {
     setLoading(true);
     setError("");
     try {
-      const [list, sum, comparison] = await Promise.all([
+      const [list, sum, comparison, plannedList] = await Promise.all([
         api.listExpenses({ year, month }),
         api.getExpenseSummary(year, month),
         api.getBudgetComparison(year, month),
+        api.listPlannedExpenses(),
       ]);
       setExpenses(list);
       setSummary(sum);
       setOverBudget(comparison.filter((r) => r.over_budget));
+      setPlanned(plannedList);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.expenses.loadFailed"));
@@ -61,6 +81,16 @@ export default function ExpensesPage() {
 
   function handleDeleted(id: number) {
     setExpenses((prev) => prev.filter((e) => e.id !== id));
+    refresh();
+  }
+
+  function handlePlannedSaved() {
+    setEditingPlanned(null);
+    refresh();
+  }
+
+  function handlePlannedDeleted(id: number) {
+    setPlanned((prev) => prev.filter((p) => p.id !== id));
     refresh();
   }
 
@@ -97,83 +127,141 @@ export default function ExpensesPage() {
       <PageHeader title={t("pages.expenses")} />
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        {/* Üst panel: ay seçici + toplam + toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
-          <div>
-            <p className="text-xs text-gray-400 mb-1">{t("content.expenses.monthTotal")}</p>
-            <DisplayMoney value={totalDisplay} currency={displayCurrency} className="text-3xl font-bold text-gray-900" />
-            {summary && (
-              <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.expenses.records")}</p>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
-            <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
-              {t("form.excelDownload")}
-            </button>
-            <button
-              onClick={() => importRef.current?.click()}
-              disabled={importing}
-              className={TOOLBAR_BTN_CLS}
-            >
-              {importing ? t("common.loading") : t("form.excelUpload")}
-            </button>
-            <input
-              ref={importRef}
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={handleImport}
-            />
-          </div>
+        {/* Sekmeler */}
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+          <button
+            onClick={() => setTab("actual")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              tab === "actual" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {t("content.expenses.tabActual")}
+          </button>
+          <button
+            onClick={() => setTab("periyodik")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              tab === "periyodik" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {t("content.expenses.tabPlanned")}
+          </button>
         </div>
 
-        {/* Bütçe aşım uyarısı */}
-        {overBudget.length > 0 && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4">
-            <p className="text-sm font-semibold text-red-700 mb-2">
-              {overBudget.length} {t("content.expenses.categoriesOverBudget")}
-            </p>
-            <ul className="space-y-1">
-              {overBudget.map((r) => {
-                // Faz B: actual=tarihsel, budget=güncel kur — backend *_display verir.
-                const actualD = Number.parseFloat(r.actual_amount_display);
-                const budgetD = Number.parseFloat(r.budget_amount_display ?? "0");
-                const excessD = actualD - budgetD;
-                const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
-                return (
-                  <li key={r.category} className="flex justify-between text-xs text-red-600">
-                    <span>{label}</span>
-                    <span className="font-medium">{fmtCurrency(budgetD, displayCurrency)} {t("content.expenses.limit")} · {fmtCurrency(excessD, displayCurrency)} {t("content.expenses.over")}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+        {tab === "actual" && (
+          <>
+            {/* Üst panel: ay seçici + toplam + toolbar */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-wrap items-center gap-4 justify-between">
+              <div>
+                <p className="text-xs text-gray-400 mb-1">{t("content.expenses.monthTotal")}</p>
+                <DisplayMoney value={totalDisplay} currency={displayCurrency} className="text-3xl font-bold text-gray-900" />
+                {summary && (
+                  <p className="text-xs text-gray-400 mt-1">{summary.count} {t("content.expenses.records")}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
+                <button onClick={handleExport} className={TOOLBAR_BTN_CLS}>
+                  {t("form.excelDownload")}
+                </button>
+                <button
+                  onClick={() => importRef.current?.click()}
+                  disabled={importing}
+                  className={TOOLBAR_BTN_CLS}
+                >
+                  {importing ? t("common.loading") : t("form.excelUpload")}
+                </button>
+                <input
+                  ref={importRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </div>
+            </div>
+
+            {/* Bütçe aşım uyarısı */}
+            {overBudget.length > 0 && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl px-5 py-4">
+                <p className="text-sm font-semibold text-red-700 mb-2">
+                  {overBudget.length} {t("content.expenses.categoriesOverBudget")}
+                </p>
+                <ul className="space-y-1">
+                  {overBudget.map((r) => {
+                    // Faz B: actual=tarihsel, budget=güncel kur — backend *_display verir.
+                    const actualD = Number.parseFloat(r.actual_amount_display);
+                    const budgetD = Number.parseFloat(r.budget_amount_display ?? "0");
+                    const excessD = actualD - budgetD;
+                    const label = EXPENSE_CATEGORY_LABELS[r.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? r.category;
+                    return (
+                      <li key={r.category} className="flex justify-between text-xs text-red-600">
+                        <span>{label}</span>
+                        <span className="font-medium">{fmtCurrency(budgetD, displayCurrency)} {t("content.expenses.limit")} · {fmtCurrency(excessD, displayCurrency)} {t("content.expenses.over")}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            <ExpenseForm
+              onSaved={handleSaved}
+              existing={editingExpense}
+              onCancel={() => setEditingExpense(null)}
+            />
+
+            {error && (
+              <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
+            )}
+
+            {loading && (
+              <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
+            )}
+
+            {!loading && summary && summary.by_category.length > 0 && (
+              <CategoryPieChart data={summary.by_category} total={totalDisplayNum} currency={displayCurrency} />
+            )}
+
+            {!loading && (
+              <ExpenseTable expenses={expenses} onDeleted={handleDeleted} onEdit={setEditingExpense} />
+            )}
+          </>
         )}
 
-        <ExpenseForm
-          onSaved={handleSaved}
-          existing={editingExpense}
-          onCancel={() => setEditingExpense(null)}
-        />
+        {tab === "periyodik" && (
+          <>
+            <p className="text-xs text-gray-500">{t("content.planned.tabHint")}</p>
 
-        {error && (
-          <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
-        )}
+            <PlannedForm
+              onSaved={handlePlannedSaved}
+              existing={editingPlanned}
+              onCancel={() => setEditingPlanned(null)}
+            />
 
-        {loading && (
-          <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
-        )}
+            {error && (
+              <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
+            )}
 
-        {!loading && summary && summary.by_category.length > 0 && (
-          <CategoryPieChart data={summary.by_category} total={totalDisplayNum} currency={displayCurrency} />
-        )}
+            {loading && (
+              <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
+            )}
 
-        {!loading && (
-          <ExpenseTable expenses={expenses} onDeleted={handleDeleted} onEdit={setEditingExpense} />
+            {!loading && planned.length > 0 && <PlannedCategoryPieChart items={planned} />}
+
+            {!loading && (
+              <PlannedList items={planned} onDeleted={handlePlannedDeleted} onEdit={setEditingPlanned} />
+            )}
+          </>
         )}
       </main>
     </div>
+  );
+}
+
+export default function ExpensesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-400">…</div>}>
+      <ExpensesPageInner />
+    </Suspense>
   );
 }
