@@ -186,8 +186,13 @@ async def preview_snapshot(
     frontend 30 sn timeout'una takılıyordu → onay modal'ı hiç açılmıyordu.
     Cache yok/bayatsa compute_and_save_snapshot(dry_run) fallback'i.
     """
+    # Cache VARSA (bayat olsa bile) ondan üret — snapshot = ekranda görünen durum
+    # (dashboard zaten cache'i "son güncelleme" göstergesiyle gösterir). Bayatlık
+    # kontrolü kaldırıldı: bayat cache 45 sn full re-fetch yoluna düşüp frontend
+    # 30 sn timeout'una takılıyordu → modal açılmıyor/kayıt olmuyordu. Taze isterse
+    # kullanıcı önce "Yenile" yapar. Cache HİÇ yoksa compute fallback.
     cache_row = await get_live_cache(current_user.id, db)
-    if cache_row is not None and not is_stale(cache_row, settings.live_cache_stale_minutes):
+    if cache_row is not None:
         try:
             return await preview_snapshot_from_cache(current_user.id, db)
         except Exception:
@@ -224,12 +229,13 @@ async def create_snapshot(
     bu endpoint çağrılır. force=false (varsayılan) için preview endpoint'i
     önce çağrılmalı; issue varsa popup'ta onay alınır.
 
-    Performans: taze canlı portföy cache (live_portfolio_cache) varsa snapshot
-    yeniden dış-API çağrısı yapılmadan o cache'ten üretilir. Cache yok/bayatsa
-    klasik compute_and_save_snapshot (tüm kaynakları yeniden çeker) fallback'i.
+    Performans: canlı portföy cache (live_portfolio_cache) VARSA snapshot yeniden
+    dış-API çağrısı yapılmadan o cache'ten üretilir (ekranda görünen durum; bayat
+    olsa bile — preview ile tutarlı, 45 sn timeout yolu kapalı). Cache HİÇ yoksa
+    klasik compute_and_save_snapshot fallback'i.
     """
     cache_row = await get_live_cache(current_user.id, db)
-    if cache_row is not None and not is_stale(cache_row, settings.live_cache_stale_minutes):
+    if cache_row is not None:
         try:
             snapshot = await save_snapshot_from_cache(current_user.id, db)
             result = await db.execute(

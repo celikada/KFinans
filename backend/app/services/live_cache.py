@@ -246,6 +246,88 @@ def _sum_sections_total(sections: dict[str, Any]) -> Decimal:
     return total.quantize(Decimal("0.01"))
 
 
+async def _manual_crypto_notes(user_id, db: AsyncSession, sections: dict[str, Any]) -> list[dict[str, Any]]:
+    """Manuel kripto linked fiyat-kaynağı notları (info) / fiyat çekilemedi (warn)."""
+    from app.models.manual_crypto import ManualCryptoHolding
+
+    linked = (
+        (
+            await db.execute(
+                select(ManualCryptoHolding).where(
+                    ManualCryptoHolding.user_id == user_id,
+                    ManualCryptoHolding.price_source == "linked",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not linked:
+        return []
+    pos_by_key = {(p.get("exchange"), p.get("symbol")): p for p in _iter_section_positions(sections.get("manual_crypto", {}))}
+    notes: list[dict[str, Any]] = []
+    for h in linked:
+        pos = pos_by_key.get((h.exchange, h.symbol))
+        price = Decimal(str(pos.get("unit_price_tl", "0"))) if pos else Decimal(0)
+        ls, lid = h.linked_source or "?", h.linked_id or "?"
+        if price > 0:
+            notes.append(
+                {
+                    "source": "manual_crypto",
+                    "exchange": h.exchange,
+                    "symbol": h.symbol,
+                    "code": "info_linked",
+                    "level": "info",
+                    "msg": f"{h.exchange} {h.symbol}: {ls}:{lid} fiyatına bağlı (anlık {price} ₺/birim)",
+                }
+            )
+        else:
+            notes.append(
+                {
+                    "source": "manual_crypto",
+                    "exchange": h.exchange,
+                    "symbol": h.symbol,
+                    "code": f"linked_{ls}_no_price",
+                    "level": "warn",
+                    "msg": f"{h.exchange} {h.symbol}: linked={ls}:{lid} fiyatı çekilemedi/bulunamadı",
+                }
+            )
+    return notes
+
+
+async def _derive_section_notes(user_id, db: AsyncSession, sections: dict[str, Any]) -> list[dict[str, Any]]:
+    """Section + DB verisinden veri-kalitesi notları türetir (yeniden çekim YOK).
+
+    snapshot.py `_gather_*` notlarının cache karşılığı: hisse stale_price, emtia
+    erişilemez, manuel kripto linked (info)/no_price (warn). Bu notlar cache
+    health_issues'a yazılır → snapshot preview modal'da gösterir + snapshot kaydında
+    saklanır (geçmiş listesindeki sarı ünlem).
+    """
+    notes: list[dict[str, Any]] = []
+    # Hisse: anlık fiyat alınamadı → son kapanış kullanıldı (is_stale)
+    for p in _iter_section_positions(sections.get("stocks", {})):
+        if p.get("is_stale"):
+            tk = p.get("ticker", "?")
+            notes.append(
+                {
+                    "source": "stocks",
+                    "symbol": tk,
+                    "code": "stale_price",
+                    "level": "warn",
+                    "msg": f"{tk}: anlık fiyat alınamadı, son bilinen kapanış kullanıldı",
+                }
+            )
+    # Emtia: altın/gümüş anlık fiyatı erişilemez
+    commodity = sections.get("commodities")
+    if isinstance(commodity, dict):
+        if commodity.get("gold_price_available") is False:
+            notes.append({"source": "commodities", "code": "gold_unavailable", "level": "warn", "msg": "Altın anlık fiyatı alınamadı"})
+        if commodity.get("silver_price_available") is False and commodity.get("positions"):
+            notes.append({"source": "commodities", "code": "silver_unavailable", "level": "warn", "msg": "Gümüş anlık fiyatı alınamadı"})
+    notes += await _manual_crypto_notes(user_id, db, sections)
+    return notes
+
+
 async def _do_refresh(user_id, session_factory: async_sessionmaker) -> None:
     """Tek bir refresh turunu yürütür (kendi session'ında). Hata yutulur — best-effort."""
     async with session_factory() as db:
@@ -281,6 +363,13 @@ async def _do_refresh(user_id, session_factory: async_sessionmaker) -> None:
 
         # Tüm bölümler patladıysa hata; refreshed_at korunur (eski veri gösterilsin).
         all_failed = len(issues) >= 6
+        # Veri-kalitesi notları (hisse stale / emtia / manuel kripto linked) — section+DB'den
+        # türetilir (yeniden çekim yok). health_issues'a eklenir → snapshot modal + kayıt (sarı ünlem).
+        if not all_failed:
+            try:
+                issues = issues + await _derive_section_notes(user_id, db, sections)
+            except Exception:
+                logger.exception("Live cache: veri-kalitesi notları türetilemedi user_id=%s", user_id)
         try:
             await _save_result(
                 db,
