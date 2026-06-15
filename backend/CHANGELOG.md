@@ -6,6 +6,21 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.9] - 2026-06-14
+
+### Düzeltmeler
+
+- **AsyncTTLCache zehirlenmiş inflight future (kritik — BTC kalıcı takılması):**
+  Single-flight cache'in owner coroutine'i CANCEL edildiğinde (ör. cüzdan per-wallet
+  45 sn timeout'u BTC taramasını keserken), cleanup `async with self._lock` (await)
+  içinde yapılıyordu; cancellation sırasında lock-await yeniden `CancelledError`
+  fırlatıp `_inflight.pop`'u atlatabiliyordu → ölü future dict'te kalıyor (TTL yok →
+  pod restart'a kadar kalıcı). Sonraki HER tarama bu ölü future'ı sonsuz bekliyor →
+  **0 HTTP isteği + sürekli 45 sn timeout** ("Bitcoin güncellenemedi" çözülemiyordu).
+  Cleanup artık await'siz `finally` bloğunda (dict.pop atomik) → owner cancel edilse
+  bile inflight temizlenir, sonraki çağrı taze başlar. Tüm blockchain single-flight
+  servislerini korur (BTC/Avalanche-P/Solana/Litecoin/Polkadot). Regresyon testi eklendi.
+
 ## [0.8.8] - 2026-06-14
 
 ### Düzeltmeler

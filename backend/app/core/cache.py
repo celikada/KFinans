@@ -65,18 +65,25 @@ class AsyncTTLCache[V]:
         try:
             value = await factory()
         except BaseException as exc:
-            async with self._lock:
-                self._inflight.pop(key, None)
+            # await YOK (cancellation sırasında lock-await re-raise olup cleanup'ı
+            # atlatabilir → inflight zehirlenir). set_exception sync; pop finally'de.
             if not inflight.done():
                 inflight.set_exception(exc)
             raise
         else:
             async with self._lock:
                 self._cache[key] = (time.monotonic(), value)
-                self._inflight.pop(key, None)
             if not inflight.done():
                 inflight.set_result(value)
             return value
+        finally:
+            # KRİTİK: inflight'i HER durumda (cancellation/timeout dahil) temizle.
+            # dict.pop atomik (await yok) → owner cancel edilse bile çalışır. Aksi
+            # halde ölü future dict'te kalıp sonraki çağrıları sonsuz bekletiyordu
+            # (prod: BTC scan kalıcı 45s timeout + 0 mempool isteği, pod restart'a
+            # kadar). AsyncTTLCache tüm blockchain servislerini (BTC/AVAX-P/SOL/LTC/
+            # DOT) korur.
+            self._inflight.pop(key, None)
 
     def invalidate(self, key: str | None = None) -> None:
         """Cache temizle. Test/admin için.
