@@ -1,7 +1,8 @@
-"""Bitcoin cüzdan bakiye servisi (mempool.space + xpub HD desteği).
+"""Bitcoin cüzdan bakiye servisi (Esplora API + xpub HD desteği).
 
 Tek adres veya xpub/ypub/zpub kabul eder:
-- Tek adres: doğrudan mempool.space `/api/address/{addr}` sorgulanır.
+- Tek adres: Esplora `/api/address/{addr}` sorgulanır (blockstream.info primary;
+  mempool.space Oracle datacenter IP'sini blokladığından fallback host'lar var).
 - Extended public key (xpub/ypub/zpub): BIP-44 (Legacy) ve BIP-84 (SegWit)
   derivation chain'leri (0=receive, 1=change) gap_limit=20 ile taranır,
   her bulunan adresin bakiyesi toplanır.
@@ -29,7 +30,37 @@ from app.services.concurrency import gather_bounded
 logger = logging.getLogger(__name__)
 
 SATOSHI_PER_BTC = Decimal("100000000")
-_MEMPOOL_API = "https://mempool.space/api/address/{addr}"
+# Esplora API host'ları (aynı /api/address/{addr} + chain_stats şeması). KRİTİK:
+# mempool.space Oracle Cloud datacenter IP'sini SYN-drop ediyor (Cloudflare;
+# prod'dan TCP connect kurulamıyor → BTC scan 0 istek + timeout). blockstream.info
+# Oracle'dan erişilebilir → primary. Sırayla denenir (ilk erişilebilen kullanılır).
+_ESPLORA_HOSTS = (
+    "https://blockstream.info/api/address/{addr}",
+    "https://mempool.emzy.de/api/address/{addr}",
+    "https://mempool.space/api/address/{addr}",
+)
+
+
+async def _esplora_get(client: httpx.AsyncClient, addr: str) -> dict:
+    """Adres bilgisini Esplora host'larından çeker (sırayla, ilk erişilebilen).
+
+    429 → tek retry. Tüm host'lar patlarsa son exception fırlatılır.
+    """
+    last_exc: Exception | None = None
+    for host in _ESPLORA_HOSTS:
+        try:
+            resp = await client.get(host.format(addr=addr))
+            if resp.status_code == 429:
+                await asyncio.sleep(2.0)
+                resp = await client.get(host.format(addr=addr))
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            last_exc = exc
+            continue
+    raise last_exc if last_exc else RuntimeError("Esplora host yok")
+
+
 _XPUB_PREFIXES = ("xpub", "ypub", "zpub", "Xpub", "Ypub", "Zpub")
 _GAP_LIMIT = 20  # BIP-44 standardı: 20 ardışık boş adres → chain biter
 # xpub adres taraması bounded-parallel: bir pencerede _GAP_LIMIT adres en fazla
@@ -77,9 +108,7 @@ class BitcoinService(BaseBlockchainIntegration):
 
     async def _fetch_single_balance(self, addr: str) -> Decimal:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(_MEMPOOL_API.format(addr=addr))
-            resp.raise_for_status()
-            data = resp.json()
+            data = await _esplora_get(client, addr)
         cs = data.get("chain_stats", {})
         balance_sat = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
         return balance_sat / SATOSHI_PER_BTC
@@ -125,27 +154,20 @@ class BitcoinService(BaseBlockchainIntegration):
 
     @staticmethod
     async def _query_address(client: httpx.AsyncClient, addr: str) -> tuple[int, Decimal]:
-        """Tek adresi sorgular → (tx_count, pozitif_bakiye_sat).
+        """Tek adresi Esplora'dan sorgular → (tx_count, pozitif_bakiye_sat).
 
-        Hata/429-sonrası → (0, 0): adres gap-limit/bakiye açısından boş sayılır
-        (orijinal sıralı tarama da hatalı adresi boş kabul ederdi → davranış aynı).
+        Host fallback (_esplora_get) içinde. Hata → (0, 0): adres gap-limit/bakiye
+        açısından boş sayılır (orijinal sıralı tarama da böyle yapardı).
         """
-        for _ in range(2):  # 429'da 1 retry
-            try:
-                resp = await client.get(_MEMPOOL_API.format(addr=addr))
-                if resp.status_code == 429:
-                    await asyncio.sleep(2.0)
-                    continue
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as exc:
-                logger.debug("xpub adres %s sorgulanamadı: %s", addr, exc)
-                return 0, Decimal(0)
-            cs = data.get("chain_stats", {})
-            tx_count = cs.get("tx_count", 0)
-            bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
-            return tx_count, (bal if bal > 0 else Decimal(0))
-        return 0, Decimal(0)
+        try:
+            data = await _esplora_get(client, addr)
+        except Exception as exc:
+            logger.debug("xpub adres %s sorgulanamadı: %s", addr, exc)
+            return 0, Decimal(0)
+        cs = data.get("chain_stats", {})
+        tx_count = cs.get("tx_count", 0)
+        bal = Decimal(str(cs.get("funded_txo_sum", 0))) - Decimal(str(cs.get("spent_txo_sum", 0)))
+        return tx_count, (bal if bal > 0 else Decimal(0))
 
     async def _scan_chain(
         self,
@@ -193,8 +215,7 @@ class BitcoinService(BaseBlockchainIntegration):
                 Bip32Secp256k1.FromExtendedKey(self.address)
                 return True
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(_MEMPOOL_API.format(addr=self.address))
-                resp.raise_for_status()
+                await _esplora_get(client, self.address)
             return True
         except Exception:
             return False

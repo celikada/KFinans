@@ -6,6 +6,20 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.10] - 2026-06-15
+
+### Düzeltmeler
+
+- **Bitcoin GERÇEK kök neden — mempool.space Oracle'dan erişilemiyor:** BTC scan
+  prod'da **0 HTTP isteği yapıp 45 sn timeout** veriyordu. Oracle VM'den test:
+  `mempool.space` → `connect=0, http=000` (TCP SYN-drop; Cloudflare datacenter IP
+  bloğu — TEFAS ile aynı desen). httpx istekler bağlanamadan asılıyor, hatalar
+  DEBUG'da görünmüyordu. **Çözüm:** BTC artık Esplora API'sini host-fallback ile
+  çağırır (`blockstream.info` primary — Oracle'dan erişilebilir; `mempool.emzy.de`
+  + `mempool.space` fallback). Aynı `/api/address/{addr}` + `chain_stats` şeması →
+  veri formatı değişmedi. (Litecoin `litecoinspace.org` benzer risk taşıyor →
+  follow-up.)
+
 ## [0.8.9] - 2026-06-14
 
 ### Düzeltmeler
