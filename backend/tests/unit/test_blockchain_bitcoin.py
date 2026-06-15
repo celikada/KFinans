@@ -36,7 +36,7 @@ VALID_BTC_ADDR = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
 @respx.mock
 async def test_fetch_single_address_balance():
     """funded_txo_sum - spent_txo_sum = balance (satoshi -> BTC)."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -57,7 +57,7 @@ async def test_fetch_single_address_balance():
 @respx.mock
 async def test_fetch_single_address_zero_balance():
     """funded == spent -> 0 BTC."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -73,8 +73,9 @@ async def test_fetch_single_address_zero_balance():
 @pytest.mark.asyncio
 @respx.mock
 async def test_fetch_single_address_500_raises():
-    """5xx HTTP yanit raise_for_status ile exception."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(500))
+    """Tüm Esplora host'ları 5xx verirse exception propagate olur (fallback tükenir)."""
+    # _esplora_get host'ları sırayla dener; hepsi 500 → son exception fırlatılır.
+    respx.get(url__regex=r"https://.+/api/address/.*").mock(return_value=httpx.Response(500))
     svc = BitcoinService(VALID_BTC_ADDR)
     with pytest.raises(httpx.HTTPStatusError):
         await svc._fetch_single_balance(VALID_BTC_ADDR)
@@ -87,7 +88,7 @@ async def test_fetch_single_address_500_raises():
 @respx.mock
 async def test_cache_hit_avoids_second_http_call():
     """Ayni address ikinci kez cagrildiginda cache'ten doner — HTTP cagrisi yok."""
-    route = respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    route = respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -106,7 +107,7 @@ async def test_cache_hit_avoids_second_http_call():
 @respx.mock
 async def test_cache_expires_after_ttl():
     """Cache TTL gecince yeni HTTP cagrisi yapilir."""
-    route = respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    route = respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -132,7 +133,7 @@ async def test_cache_expires_after_ttl():
 @respx.mock
 async def test_fetch_returns_asset_data_with_balance():
     """fetch() AssetData listesi doner; symbol=BTC, liquid_quantity=balance."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -184,7 +185,7 @@ async def test_xpub_all_empty_returns_zero(_no_sleep):
     """Tum turetilen adresler tx_count=0 -> gap_limit ile biter, 0 BTC.
 
     SegWit bos -> Legacy de taranir, ama hepsi bos."""
-    respx.get(url__regex=r"https://mempool\.space/api/address/.*").mock(
+    respx.get(url__regex=r"https://blockstream.info/api/address/.*").mock(
         return_value=httpx.Response(200, json={"chain_stats": {"tx_count": 0, "funded_txo_sum": 0, "spent_txo_sum": 0}})
     )
     svc = BitcoinService(VALID_XPUB)
@@ -209,7 +210,7 @@ async def test_xpub_segwit_active_with_balance(_no_sleep):
         # geri kalan adresler bos
         return httpx.Response(200, json={"chain_stats": {"tx_count": 0, "funded_txo_sum": 0, "spent_txo_sum": 0}})
 
-    respx.get(url__regex=r"https://mempool\.space/api/address/.*").mock(side_effect=_responder)
+    respx.get(url__regex=r"https://blockstream.info/api/address/.*").mock(side_effect=_responder)
     svc = BitcoinService(VALID_XPUB)
     bal = await svc._fetch_xpub_balance(VALID_XPUB)
     assert bal == Decimal("1.0")
@@ -227,7 +228,7 @@ async def test_xpub_scan_429_then_success(_no_sleep):
             return httpx.Response(429)
         return httpx.Response(200, json={"chain_stats": {"tx_count": 0}})
 
-    respx.get(url__regex=r"https://mempool\.space/api/address/.*").mock(side_effect=_responder)
+    respx.get(url__regex=r"https://blockstream.info/api/address/.*").mock(side_effect=_responder)
     svc = BitcoinService(VALID_XPUB)
     bal = await svc._fetch_xpub_balance(VALID_XPUB)
     assert bal == Decimal("0")
@@ -239,7 +240,7 @@ async def test_xpub_scan_429_then_success(_no_sleep):
 @respx.mock
 async def test_xpub_scan_http_error_counts_as_empty(_no_sleep):
     """Adres sorgusu 500 -> except dali empty_streak++ ile devam, 0 doner."""
-    respx.get(url__regex=r"https://mempool\.space/api/address/.*").mock(return_value=httpx.Response(500))
+    respx.get(url__regex=r"https://blockstream.info/api/address/.*").mock(return_value=httpx.Response(500))
     svc = BitcoinService(VALID_XPUB)
     bal = await svc._fetch_xpub_balance(VALID_XPUB)
     assert bal == Decimal("0")
@@ -261,7 +262,7 @@ async def test_fetch_xpub_via_fetch_returns_assetdata(_no_sleep):
             )
         return httpx.Response(200, json={"chain_stats": {"tx_count": 0}})
 
-    respx.get(url__regex=r"https://mempool\.space/api/address/.*").mock(side_effect=_responder)
+    respx.get(url__regex=r"https://blockstream.info/api/address/.*").mock(side_effect=_responder)
     svc = BitcoinService(VALID_XPUB)
     assets = await svc.fetch()
     assert len(assets) == 1
@@ -276,7 +277,7 @@ async def test_fetch_xpub_via_fetch_returns_assetdata(_no_sleep):
 @respx.mock
 async def test_fetch_returns_empty_on_http_error():
     """_cached_balance exception -> fetch() bos liste (snapshot bozulmasin)."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(503))
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(503))
     svc = BitcoinService(VALID_BTC_ADDR)
     assert await svc.fetch() == []
 
@@ -285,7 +286,7 @@ async def test_fetch_returns_empty_on_http_error():
 @respx.mock
 async def test_fetch_returns_empty_on_zero_balance():
     """Bakiye 0 -> fetch() bos liste."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(
         return_value=httpx.Response(200, json={"chain_stats": {"funded_txo_sum": 0, "spent_txo_sum": 0}})
     )
     svc = BitcoinService(VALID_BTC_ADDR)
@@ -327,7 +328,7 @@ async def test_health_check_invalid_xpub_false():
 @respx.mock
 async def test_health_check_single_address_ok():
     """Tek adres 200 -> True."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(200, json={"chain_stats": {}}))
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(200, json={"chain_stats": {}}))
     svc = BitcoinService(VALID_BTC_ADDR)
     assert await svc.health_check() is True
 
@@ -336,6 +337,6 @@ async def test_health_check_single_address_ok():
 @respx.mock
 async def test_health_check_single_address_500_false():
     """Tek adres 500 -> False."""
-    respx.get(f"https://mempool.space/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(500))
+    respx.get(f"https://blockstream.info/api/address/{VALID_BTC_ADDR}").mock(return_value=httpx.Response(500))
     svc = BitcoinService(VALID_BTC_ADDR)
     assert await svc.health_check() is False
