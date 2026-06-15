@@ -182,6 +182,27 @@ async def test_tefas_stocks_normalized_to_positions_object(monkeypatch):
     assert row.total_value_tl == Decimal("150.00")
 
 
+async def test_derive_section_notes_stale_stock(monkeypatch):
+    """Hisse is_stale → stale_price notu cache health_issues'a yazılır.
+
+    Regresyon: cache-snapshot info/warn notlarını (hisse stale, manuel kripto linked,
+    emtia) kaybediyordu → snapshot'ta sarı ünlem çıkmıyordu. Notlar artık section+DB'den
+    türetilip health_issues'a yazılır (snapshot preview modal + kayıtta saklama)."""
+    uid = await _create_user("lc_notes@example.com")
+    _patch_all_compute(
+        monkeypatch,
+        stocks=[{"ticker": "SISE", "is_stale": True, "total_value_tl": "100.00"}],
+    )
+    _patch_usd_rate(monkeypatch)
+
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    assert row.health_issues is not None
+    assert any(i["code"] == "stale_price" and i.get("symbol") == "SISE" for i in row.health_issues)
+
+
 async def test_preview_snapshot_from_cache_surfaces_wallet_errors(monkeypatch):
     """preview_snapshot_from_cache cache'ten anında döner + çekilemeyen cüzdan
     zincirlerini (wallets.errors) issue olarak yüzeye çıkarır (snapshot onay modal'ı

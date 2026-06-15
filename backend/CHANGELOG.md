@@ -6,7 +6,25 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
-## [0.8.11] - 2026-06-15
+## [0.8.12] - 2026-06-15
+
+### Düzeltmeler
+
+- **Snapshot bayat cache'te 45 sn timeout'a takılıyordu:** Snapshot preview + create
+  yalnız cache TAZE ise (≤15 dk) cache'ten üretiyordu; bayatsa eski full re-fetch
+  yoluna (~45 sn) düşüp frontend 30 sn timeout'una takılıyordu → onay modal'ı
+  açılmıyor/snapshot kaydedilemiyordu. Artık cache VARSA (bayat olsa bile) ondan
+  üretilir — snapshot = "ekranda görünen durum" (dashboard cache'i zaten "son
+  güncelleme" göstergesiyle gösterir; taze isteyen önce Yenile yapar). Cache HİÇ
+  yoksa compute fallback.
+- **Snapshot uyarıları (sarı ünlem) geri geldi:** Cache-tabanlı snapshot yalnız
+  "çekilemeyen kaynak" (warn) notlarını saklıyordu; info/warn veri-kalitesi notları
+  (hisse `stale_price`, manuel kripto `info_linked`/`no_price`, emtia erişilemez)
+  kayboluyordu → yeni snapshot'larda geçmiş listesindeki sarı ünlem çıkmıyordu.
+  Bu notlar artık cache refresh'inde section + DB verisinden TÜRETİLİR (yeniden
+  çekim yok) ve `health_issues`'a yazılır → snapshot preview onay modal'ında gösterilir
+  + snapshot kaydında saklanır + geçmişte sarı ünlemle görüntülenir (eski davranış).
+
 
 ### Düzeltmeler
 
