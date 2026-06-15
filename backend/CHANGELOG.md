@@ -6,7 +6,24 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
-## [0.8.10] - 2026-06-15
+## [0.8.11] - 2026-06-15
+
+### Düzeltmeler
+
+- **Snapshot BES + Nakit'i 0 kaydediyordu:** Cache'ten üretilen snapshot yalnız
+  live cache'in 6 ağır bölümünü (cüzdan/kripto/TEFAS/hisse/emtia/manuel-kripto)
+  içeriyordu; BES (emeklilik) + Nakit live cache'te yok (hafif/DB kartları,
+  dashboard'da ayrı çekilir) → snapshot'a hiç girmiyordu. `save_snapshot_from_cache`
+  + `preview_snapshot_from_cache` artık ortak `_full_snapshot_assets` helper'ı ile
+  BES + Nakit'i DB'den ekler (dış API yok; cash için TCMB kuru 5 dk cache'li) ve
+  toplamı tüm asset'lerden yeniden hesaplar (preview ile save tutarlı). Regresyon
+  testi eklendi.
+- **Geçmiş grafiği X ekseni zaman-ölçekli:** Snapshot trend grafiği eşit-aralıklı
+  kategori ekseni kullanıyordu (her snapshot arası 1 birim); düzensiz tarih aralıkları
+  (ör. 5→7 Haz = 2 gün) eşit görünüyordu. X ekseni artık `type=number scale=time` →
+  noktalar gerçek tarih aralıklarıyla orantılı dağılır (eksik günler boşluk olarak
+  doğru genişlikte görünür).
+
 
 ### Düzeltmeler
 

@@ -38,7 +38,7 @@ function fmtUSD(val: number) {
   return val.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string | number) {
   const d = new Date(iso);
   return d.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" });
 }
@@ -123,9 +123,13 @@ export default function HistoryPage() {
     }
   }
 
-  // Currency dönüşümlü grafik veri seti
+  // Currency dönüşümlü grafik veri seti. `ts`: snapshot tarihinin epoch ms'i —
+  // X ekseni ZAMAN ölçekli (type=number scale=time) olduğundan noktalar gerçek
+  // tarih aralıklarıyla orantılı dağılır (ör. 5→7 Haz arası 6 Haz ölçümü yok ama
+  // boşluk 2 gün genişliğinde; eski kategori ekseni her aralığı eşit gösteriyordu).
   const chartData = points.map((p) => ({
     ...p,
+    ts: new Date(p.date).getTime(),
     total: valueIn(p, "total", currency),
     crypto: valueIn(p, "crypto", currency),
     fund: valueIn(p, "fund", currency),
@@ -251,11 +255,11 @@ export default function HistoryPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis dataKey="date" tickFormatter={fmtDate} fontSize={11} stroke="#9ca3af" />
+                    <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} ticks={chartData.map((d) => d.ts)} tickFormatter={fmtDate} fontSize={11} stroke="#9ca3af" />
                     <YAxis tickFormatter={yAxisFmt} fontSize={11} stroke="#9ca3af" />
                     <Tooltip
                       formatter={(v) => fmtVal(v as number)}
-                      labelFormatter={(label) => fmtDate(label as string)}
+                      labelFormatter={(label) => fmtDate(label as number)}
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Line
@@ -279,11 +283,11 @@ export default function HistoryPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                    <XAxis dataKey="date" tickFormatter={fmtDate} fontSize={11} stroke="#9ca3af" />
+                    <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} ticks={chartData.map((d) => d.ts)} tickFormatter={fmtDate} fontSize={11} stroke="#9ca3af" />
                     <YAxis tickFormatter={yAxisFmt} fontSize={11} stroke="#9ca3af" />
                     <Tooltip
                       formatter={(v) => fmtVal(v as number)}
-                      labelFormatter={(label) => fmtDate(label as string)}
+                      labelFormatter={(label) => fmtDate(label as number)}
                       contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />

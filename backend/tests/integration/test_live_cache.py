@@ -380,6 +380,53 @@ async def test_save_snapshot_from_cache_total_matches(monkeypatch):
     assert pos_total == snapshot.total_value_tl
 
 
+async def test_save_snapshot_from_cache_includes_bes(monkeypatch):
+    """BES (+ Nakit) live cache'te YOK ama snapshot'a DB'den eklenmeli.
+
+    Regresyon: cache'ten üretilen snapshot BES'i 0 kaydediyordu (prod 14 Haz)."""
+    from app.models.bes import BesHolding
+
+    uid = await _create_user("lc_bes@example.com")
+    async with TestSession() as db:
+        db.add(BesHolding(user_id=uid, plan_name="Emeklilik", paid_principal=Decimal("50000")))
+        await db.commit()
+
+    wallets = WalletResponse(
+        positions=[
+            WalletPositionOut(
+                wallet_id="w1",
+                chain="ethereum",
+                address="0xabc",
+                symbol="ETH",
+                liquid_quantity=Decimal("1"),
+                staked_quantity=Decimal("0"),
+                pending_rewards=Decimal("0"),
+                unit_price_usd=Decimal("2000"),
+                unit_price_tl=Decimal("70000"),
+                total_value_tl=Decimal("70000"),
+            )
+        ],
+        errors={},
+    )
+    _patch_all_compute(monkeypatch, wallets=wallets)
+    _patch_usd_rate(monkeypatch)
+
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    async with TestSession() as db:
+        from sqlalchemy.orm import selectinload
+
+        snapshot = await lc.save_snapshot_from_cache(uid, db)
+        result = await db.execute(select(PortfolioSnapshot).where(PortfolioSnapshot.id == snapshot.id).options(selectinload(PortfolioSnapshot.asset_positions)))
+        snap = result.scalar_one()
+
+    bes_positions = [p for p in snap.asset_positions if p.asset_type == "pension"]
+    assert len(bes_positions) == 1
+    assert bes_positions[0].total_value_tl == Decimal("50000.00")
+    # Total = ETH (70000) + BES (50000) = 120000 — cache total'ı (70000) AŞAR
+    assert snapshot.total_value_tl == Decimal("120000.00")
+
+
 async def test_save_snapshot_from_cache_no_cache_raises():
     uid = await _create_user("lc_nocache@example.com")
     async with TestSession() as db:
