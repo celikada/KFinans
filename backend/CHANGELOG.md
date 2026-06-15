@@ -6,7 +6,23 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
-## [0.8.12] - 2026-06-15
+## [0.8.13] - 2026-06-15
+
+### Eklenenler / Değişiklikler
+
+- **Planlı harcamalar artık düzenlenebilir:** Kira, ev aidatı gibi planlı/periyodik
+  harcamalar bir kez girildikten sonra düzenlenebiliyor (gelirlerdeki periyodik gelir
+  deseni). `PlannedForm` edit modu (`existing` → `PUT /planned-expenses/{id}`) +
+  `PlannedList`'te "Düzenle" butonu.
+- **Harcamalar + Planlı Harcamalar tek sayfada (gelir simetrisi):** `/dashboard/expenses`
+  artık 2 sekme: **Gerçekleşen** (anlık harcamalar + kategori disk grafiği) ve
+  **Periyodik** (kira/aidat planlı harcamalar + düzenleme + dönemler). `/dashboard/planned`
+  → `?tab=periyodik`'e kalıcı redirect (eski linkler kırılmaz). Dashboard "Planlı Ödemeler"
+  kartı periyodik sekmesine yönlenir.
+- **Planlı sayfasında grafik değişti:** Nakit-akış tahmini (`YearlyForecast`) yerine
+  planlı harcamaların **kategori bazlı disk/donut grafiği** (`PlannedCategoryPieChart`,
+  harcamalar sayfasıyla aynı stil) — daha okunur dağılım gösterimi.
+
 
 ### Düzeltmeler
 

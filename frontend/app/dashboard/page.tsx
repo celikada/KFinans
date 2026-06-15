@@ -834,7 +834,7 @@ export default function DashboardPage() {
 
             {!hiddenCards.includes("planned") && (
               <Card
-                href="/dashboard/planned"
+                href="/dashboard/expenses?tab=periyodik"
                 updating={updatingCards.has("planned")}
                 icon="planned"
                 color="violet"
