@@ -107,6 +107,37 @@ async def test_exception_propagates_to_waiters():
 
 
 @pytest.mark.asyncio
+async def test_owner_cancellation_does_not_poison_inflight():
+    """Owner CANCEL edilirse inflight temizlenir → sonraki çağrı ölü future'ı
+    BEKLEMEDEN yeniden dener.
+
+    Regresyon: cleanup `async with self._lock` ile yapılınca, cancellation
+    sırasında lock-await re-raise olup pop atlanıyordu → inflight future
+    zehirleniyor, sonraki tüm çağrılar sonsuz bekliyordu (prod: BTC scan kalıcı
+    45s timeout + 0 mempool isteği, pod restart'a kadar)."""
+    cache: AsyncTTLCache[str] = AsyncTTLCache(ttl_sec=600)
+    started = asyncio.Event()
+
+    async def slow_factory() -> str:
+        started.set()
+        await asyncio.sleep(10)  # cancel edilecek
+        return "slow"
+
+    task = asyncio.create_task(cache.get_or_compute("k", slow_factory))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # inflight temizlenmiş olmalı → yeni çağrı yeni factory'yi çalıştırır (hang YOK)
+    async def fast_factory() -> str:
+        return "ok"
+
+    result = await asyncio.wait_for(cache.get_or_compute("k", fast_factory), timeout=1.0)
+    assert result == "ok"
+
+
+@pytest.mark.asyncio
 async def test_ttl_expiration_triggers_refetch():
     cache: AsyncTTLCache[int] = AsyncTTLCache(ttl_sec=0.05)
     call_count = 0
