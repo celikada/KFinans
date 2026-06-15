@@ -539,8 +539,68 @@ def _cache_issues(cache: LivePortfolioCache) -> list[dict[str, Any]]:
     return issues
 
 
-def _cache_asset_count(cache: LivePortfolioCache) -> int:
-    return sum(len(_iter_section_positions(s)) for s in (cache.payload or {}).values())
+def _usd_tl_from_cache(cache: LivePortfolioCache) -> Decimal:
+    """Cache.rates'ten usd_tl Decimal (yoksa/parse hatasında 0)."""
+    if cache.rates and cache.rates.get("usd_tl"):
+        try:
+            return Decimal(str(cache.rates["usd_tl"]))
+        except (ValueError, ArithmeticError):
+            return Decimal(0)
+    return Decimal(0)
+
+
+def _sum_asset_total(assets: list[AssetData], usd_tl: Decimal) -> Decimal:
+    """Tüm asset'lerin TL toplamı (compute_and_save_snapshot ile aynı formül)."""
+    total = Decimal(0)
+    for a in assets:
+        price_tl = a.unit_price_tl if a.unit_price_tl > 0 else a.unit_price_usd * usd_tl
+        qty = a.liquid_quantity + a.staked_quantity + a.pending_rewards
+        total += qty * price_tl
+    return total.quantize(Decimal("0.01"))
+
+
+async def _db_only_assets(user_id, db: AsyncSession, usd_tl: Decimal, issues: list[dict[str, Any]]) -> tuple[list[AssetData], Decimal]:
+    """BES + Nakit (live cache'te olmayan DB-only kartlar) → (assets, usd_tl).
+
+    usd_tl ≤0 ise (cash dönüşümü için) TCMB'den çekilir. Dış API yok dışında —
+    TCMB usd/rates 5 dk cache'li.
+    """
+    from app.models.bes import BesHolding
+    from app.models.cash import CashHolding
+    from app.services.aggregator import fetch_tcmb_rates, fetch_usd_to_tl
+    from app.services.snapshot import _gather_bes_assets, _gather_cash_assets
+
+    bes_holdings = (await db.execute(select(BesHolding).where(BesHolding.user_id == user_id))).scalars().all()
+    cash_holdings = (await db.execute(select(CashHolding).where(CashHolding.user_id == user_id))).scalars().all()
+    if not (bes_holdings or cash_holdings):
+        return [], usd_tl
+    if usd_tl <= 0:
+        try:
+            usd_tl = await fetch_usd_to_tl()
+        except Exception:
+            usd_tl = Decimal(0)
+    extras = list(_gather_bes_assets(bes_holdings))
+    if cash_holdings:
+        try:
+            tcmb_rates = await fetch_tcmb_rates()
+        except Exception:
+            tcmb_rates = {}
+        extras += await _gather_cash_assets(cash_holdings, usd_tl, tcmb_rates, issues)
+    return extras, usd_tl
+
+
+async def _full_snapshot_assets(user_id, db: AsyncSession, cache: LivePortfolioCache) -> tuple[list[AssetData], Decimal, Decimal, list[dict[str, Any]]]:
+    """Cache'in 6 ağır bölümü + DB-only BES/Nakit → (assets, total_tl, usd_tl, issues).
+
+    Snapshot preview + save ORTAK kullanır → ikisi de TAM (BES/Nakit dahil) ve
+    tutarlı toplam üretir. BES/Nakit eklenmezse snapshot bunları 0 kaydederdi.
+    """
+    assets = list(_assets_from_cache(cache.payload or {}))
+    issues = _cache_issues(cache)
+    usd_tl = _usd_tl_from_cache(cache)
+    extras, usd_tl = await _db_only_assets(user_id, db, usd_tl, issues)
+    assets += extras
+    return assets, _sum_asset_total(assets, usd_tl), usd_tl, issues
 
 
 async def preview_snapshot_from_cache(user_id, db: AsyncSession) -> dict[str, Any]:
@@ -549,17 +609,17 @@ async def preview_snapshot_from_cache(user_id, db: AsyncSession) -> dict[str, An
     compute_and_save_snapshot(dry_run=True) ile AYNI sözleşme:
     {total_value_tl, asset_count, issues, usd_try_rate, saved}. Snapshot preview
     eskiden 45 sn full re-fetch yapıp frontend 30 sn timeout'una takılıyordu →
-    onay modal'ı açılmıyordu. Cache'ten anında döner.
+    onay modal'ı açılmıyordu. Cache'ten (+ BES/Nakit) anında döner.
     """
     cache = await get_live_cache(user_id, db)
     if cache is None:
         raise ValueError("Live cache bulunamadı")
-    usd_rate = str(cache.rates["usd_tl"]) if cache.rates and cache.rates.get("usd_tl") else None
+    assets, total_tl, usd_tl, issues = await _full_snapshot_assets(user_id, db, cache)
     return {
-        "total_value_tl": str((cache.total_value_tl or Decimal(0)).quantize(Decimal("0.01"))),
-        "asset_count": _cache_asset_count(cache),
-        "issues": _cache_issues(cache),
-        "usd_try_rate": usd_rate,
+        "total_value_tl": str(total_tl),
+        "asset_count": len(assets),
+        "issues": issues,
+        "usd_try_rate": str(usd_tl) if usd_tl > 0 else None,
         "saved": False,
     }
 
@@ -594,30 +654,21 @@ async def save_snapshot_from_cache(user_id, db: AsyncSession) -> PortfolioSnapsh
         await db.delete(old)
     await db.flush()
 
-    sections = cache.payload or {}
-    assets = _assets_from_cache(sections)
-
-    usd_tl = Decimal(0)
-    if cache.rates and cache.rates.get("usd_tl"):
-        try:
-            usd_tl = Decimal(str(cache.rates["usd_tl"]))
-        except (ValueError, ArithmeticError):
-            usd_tl = Decimal(0)
-
-    total_tl = cache.total_value_tl if cache.total_value_tl is not None else _sum_sections_total(sections)
+    # 6 ağır bölüm + DB-only BES/Nakit (ortak helper → preview ile tutarlı, TAM).
+    assets, total_tl, usd_tl, snap_issues = await _full_snapshot_assets(user_id, db, cache)
 
     snapshot = PortfolioSnapshot(
         user_id=user_id,
         snapshot_date=today,
-        total_value_tl=Decimal(str(total_tl)).quantize(Decimal("0.01")),
+        total_value_tl=total_tl,
         usd_try_rate=usd_tl.quantize(Decimal("0.000001")) if usd_tl > 0 else None,
-        health_issues=_cache_issues(cache) or None,
+        health_issues=snap_issues or None,
     )
     db.add(snapshot)
     await db.flush()
 
     for asset in assets:
-        pos: AssetPosition = to_asset_position(asset, snapshot.id, usd_tl, Decimal(str(total_tl)))
+        pos: AssetPosition = to_asset_position(asset, snapshot.id, usd_tl, total_tl)
         db.add(pos)
 
     await db.commit()
