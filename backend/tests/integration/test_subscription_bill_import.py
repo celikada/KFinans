@@ -109,15 +109,33 @@ async def test_commit_idempotent_reimport(client: AsyncClient, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_preview_image_pdf_fail_safe(client: AsyncClient, monkeypatch):
-    """Metin katmanı yok (taranmış görüntü) → 422, asla tahmini veri."""
+async def test_preview_image_pdf_ocr_fallback(client: AsyncClient, monkeypatch):
+    """Metin katmanı yok → OCR fallback devreye girer (Osmangazi)."""
+    headers = await make_user(client, "bill_ocr@example.com")
+    import app.api.v1.subscriptions as sub_mod
+
+    monkeypatch.setattr(sub_mod, "extract_text", lambda _c: "")  # görüntü-PDF
+    monkeypatch.setattr(sub_mod, "ocr_pdf", lambda _c: _text("osmangazi_ocr"))  # OCR çıktısı
+    resp = await client.post("/api/v1/subscriptions/import-bill/preview", files=_upload(), headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["provider_code"] == "osmangazi_elektrik"
+    assert body["category"] == "electricity"
+    assert float(body["bill_amount"]) == 477.8
+    assert any("OCR" in w for w in body["warnings"])
+
+
+@pytest.mark.asyncio
+async def test_preview_image_ocr_fails_fail_safe(client: AsyncClient, monkeypatch):
+    """Metin yok + OCR de boş → 422, asla tahmini veri."""
     headers = await make_user(client, "bill_img@example.com")
     import app.api.v1.subscriptions as sub_mod
 
     monkeypatch.setattr(sub_mod, "extract_text", lambda _c: "")
+    monkeypatch.setattr(sub_mod, "ocr_pdf", lambda _c: "")
     resp = await client.post("/api/v1/subscriptions/import-bill/preview", files=_upload(), headers=headers)
     assert resp.status_code == 422
-    assert "metin" in resp.json()["detail"].lower()
+    assert "okunamadı" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

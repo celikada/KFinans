@@ -46,7 +46,7 @@ from app.schemas.subscription import (
 from app.services import currency as currency_svc
 from app.services import display_currency as display_svc
 from app.services.audit import AuditAction, log_audit
-from app.services.bill_import import detect_parser, extract_text
+from app.services.bill_import import detect_parser, extract_text, ocr_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -648,14 +648,22 @@ async def import_bill_preview(
     db: Annotated[AsyncSession, Depends(get_db)],
     file: Annotated[UploadFile, File(...)],
 ) -> ParsedBillOut:
-    """PDF faturayı ayrıştır (DB yazmaz) + eşleşen abonelik bilgisini döndür."""
+    """PDF faturayı ayrıştır (DB yazmaz) + eşleşen abonelik bilgisini döndür.
+
+    Metin katmanlı PDF → doğrudan parse. Taranmış görüntü-PDF (metin yok) → OCR
+    fallback (tesseract); OCR gürültülü olabilir → parser çıktısına uyarı eklenir,
+    kullanıcı önizlemede tutar/tarihleri onaylar/düzeltir.
+    """
     content = await validate_pdf_upload(file)
     text = extract_text(content)
     if len(text.strip()) < 20:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="PDF metin katmanı yok (taranmış görüntü olabilir) — faturayı elle girin",
-        )
+        # Taranmış görüntü-PDF → OCR dene
+        text = ocr_pdf(content)
+        if len(text.strip()) < 20:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="PDF okunamadı (metin katmanı yok, OCR de başarısız) — faturayı elle girin",
+            )
     parser = detect_parser(text)
     if parser is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Fatura kurumu tanınmadı")

@@ -19,14 +19,20 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
   değişmiş / **taranmış görüntü-PDF (metin katmanı yok)** → 422 "elle girin"; asla tahmini veri yazılmaz.
   Önizleme (`/subscriptions/import-bill/preview`) düzenlenebilir + onay (`commit`). Sayı formatı
   otomatik (Vodafone EN `1,077.00`, diğerleri TR `1.339,25`).
+- **Taranmış görüntü-PDF için OCR (Osmangazi/Zorlu Elektrik):** Metin katmanı olmayan faturalar
+  (ör. Osmangazi "Yazdır" PDF'i) için **Tesseract OCR fallback** (pypdfium2 render + pytesseract
+  Türkçe). OCR çıktısı yine deterministik parser'a (Osmangazi) gider; OCR gürültülü olabileceğinden
+  önizlemeye "OCR ile okundu — tutar/tarihleri kontrol edin" uyarısı eklenir, kullanıcı **kaydetmeden
+  önce tutar ve tarihleri onaylar/düzeltir**. OCR de okuyamazsa → 422 "elle girin". `tesseract-ocr` +
+  `tesseract-ocr-tur` backend Docker imajına eklendi.
 - **Abonelik başlangıç tarihi (`start_date`):** Aboneliğe başlangıç tarihi eklendi; bütçe yalnız o
   tarihten itibaren nakit-akışı forecast'ında + özetlerde sayılır (geçmiş aylar hariç).
 - **Bütçe planlı gider gibi görünür:** Aktif abonelik bütçeleri Giderler → Periyodik sekmesinde
   salt-okunur "🔁 abonelik" satırları olarak listelenir (düzenleme Abonelikler sekmesinde).
 
 Yeni migration `c5d6e7f8a9b0` (start_date + next_bill/due_date + bill_no). Audit `subscription.bill.import`.
-(Not: Osmangazi/Zorlu Elektrik gibi taranmış görüntü faturalar için AI-vision parser sonraki faza
-bırakıldı — şimdilik elle giriş.)
+4 parser: ESGAZ/Vodafone/TTNET (metin) + Osmangazi (OCR/metin). Parser'lar gerçek pdfplumber/OCR
+çıktısıyla test edildi (anonimleştirilmiş `tests/fixtures/bills/*.txt`).
 
 ---
 

@@ -61,6 +61,20 @@ def test_ttnet_parser():
     assert b.next_due_date == date(2026, 8, 3)
 
 
+def test_osmangazi_parser_ocr_text():
+    """Osmangazi (görüntü-PDF → OCR metni) parser'ı + OCR uyarısı."""
+    p = detect_parser(_text("osmangazi_ocr"))
+    assert p is not None and p.provider_code == "osmangazi_elektrik"
+    b = p.parse(_text("osmangazi_ocr"))
+    assert b.subscriber_no == "00000000000"
+    assert b.bill_amount == Decimal("477.80")
+    assert b.bill_date == date(2026, 6, 10)
+    assert b.due_date == date(2026, 6, 22)
+    assert (b.period_year, b.period_month) == (2026, 6)
+    assert b.next_bill_date == date(2026, 7, 10)
+    assert any("OCR" in w for w in b.warnings)
+
+
 def test_detect_unknown_returns_none():
     assert detect_parser("Rastgele bir metin, fatura değil") is None
 

@@ -15,17 +15,21 @@ import io
 
 import pdfplumber
 
+from ._ocr import ocr_pdf
 from .base import BillParser, ParsedBill
 from .esgaz import EsgazParser
+from .osmangazi import OsmangaziParser
 from .ttnet import TtnetParser
 from .vodafone import VodafoneParser
 
 # Desteklenen kurum parser'ları. Sıralama: ilk `matches()` true olan seçilir
-# (imzalar örtüşmemeli — esgaz/vodafone/ttnet ayrık anahtar kelimeler).
+# (imzalar örtüşmemeli — esgaz/vodafone/ttnet/osmangazi ayrık anahtar kelimeler).
+# Osmangazi metni genelde OCR'dan gelir (görüntü-PDF); diğerleri saf metin.
 PARSERS: list[BillParser] = [
     EsgazParser(),
     VodafoneParser(),
     TtnetParser(),
+    OsmangaziParser(),
 ]
 
 
@@ -52,4 +56,5 @@ __all__ = [
     "ParsedBill",
     "detect_parser",
     "extract_text",
+    "ocr_pdf",
 ]
