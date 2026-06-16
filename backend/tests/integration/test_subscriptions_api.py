@@ -338,3 +338,169 @@ async def test_idor_other_user_404(client: AsyncClient):
     assert resp.status_code == 404
     upd = await client.put(f"/api/v1/subscriptions/{sub['id']}", json={"budget_amount": 1}, headers=h2)
     assert upd.status_code == 404
+
+
+# ─── Ek error-path / kapsam ──────────────────────────────────────────────────
+
+
+async def _issue_current(client: AsyncClient, headers: dict, sub_id: int, amount: float = 200.0) -> int:
+    year, month = _this_month()
+    resp = await client.post(
+        f"/api/v1/subscriptions/{sub_id}/bills/issue",
+        json={
+            "period_year": year,
+            "period_month": month,
+            "bill_amount": amount,
+            "bill_date": date.today().isoformat(),
+            "due_date": date.today().isoformat(),
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_delete_bill_issued_to_budget(client: AsyncClient):
+    headers = await make_user(client, "sub_delbill@example.com")
+    sub = await _create_sub(client, headers, budget_amount=300)
+    bill_id = await _issue_current(client, headers, sub["id"])
+    dele = await client.delete(f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}", headers=headers)
+    assert dele.status_code == 204
+    # Dönem implicit budget'a döner: liste current_status budget
+    lst = await client.get("/api/v1/subscriptions", headers=headers)
+    assert lst.json()[0]["current_status"] == "budget"
+
+
+@pytest.mark.asyncio
+async def test_delete_paid_bill_conflict(client: AsyncClient):
+    headers = await make_user(client, "sub_delpaid@example.com")
+    sub = await _create_sub(client, headers)
+    bill_id = await _issue_current(client, headers, sub["id"])
+    await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}/pay",
+        json={"payment_method": "cash"},
+        headers=headers,
+    )
+    dele = await client.delete(f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}", headers=headers)
+    assert dele.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_pay_already_paid_conflict(client: AsyncClient):
+    headers = await make_user(client, "sub_doublepay@example.com")
+    sub = await _create_sub(client, headers)
+    bill_id = await _issue_current(client, headers, sub["id"])
+    await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}/pay",
+        json={"payment_method": "cash"},
+        headers=headers,
+    )
+    again = await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}/pay",
+        json={"payment_method": "cash"},
+        headers=headers,
+    )
+    assert again.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_pay_with_other_users_card_404(client: AsyncClient):
+    h1 = await make_user(client, "sub_cardowner@example.com")
+    h2 = await make_user(client, "sub_cardthief@example.com")
+    # h2'nin kartı
+    card = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Other", "statement_day": 1, "payment_due_day": 10},
+        headers=h2,
+    )
+    other_card_id = card.json()["id"]
+    sub = await _create_sub(client, h1)
+    bill_id = await _issue_current(client, h1, sub["id"])
+    resp = await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}/pay",
+        json={"payment_method": "credit_card", "credit_card_id": other_card_id},
+        headers=h1,
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_bills_periods(client: AsyncClient):
+    headers = await make_user(client, "sub_periods@example.com")
+    sub = await _create_sub(client, headers, budget_amount=150)
+    # Geçmiş dönem issued
+    await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/issue",
+        json={
+            "period_year": 2025,
+            "period_month": 3,
+            "bill_amount": 180,
+            "bill_date": "2025-03-10",
+            "due_date": "2025-03-20",
+        },
+        headers=headers,
+    )
+    bills = await client.get(f"/api/v1/subscriptions/{sub['id']}/bills", headers=headers)
+    assert bills.status_code == 200
+    statuses = {b["status"] for b in bills.json()}
+    # Sentezlenmiş bu-ay budget + geçmiş issued
+    assert "budget" in statuses
+    assert "issued" in statuses
+
+
+@pytest.mark.asyncio
+async def test_update_provider_rederives_category(client: AsyncClient):
+    headers = await make_user(client, "sub_provchange@example.com")
+    sub = await _create_sub(client, headers, provider_code="esgaz")  # gas
+    upd = await client.put(
+        f"/api/v1/subscriptions/{sub['id']}",
+        json={"provider_code": "ttnet"},  # internet
+        headers=headers,
+    )
+    assert upd.status_code == 200
+    assert upd.json()["category"] == "internet"
+    assert upd.json()["provider_name"] == "TTNET"
+
+
+@pytest.mark.asyncio
+async def test_update_unknown_provider_422(client: AsyncClient):
+    headers = await make_user(client, "sub_updbad@example.com")
+    sub = await _create_sub(client, headers)
+    upd = await client.put(
+        f"/api/v1/subscriptions/{sub['id']}",
+        json={"provider_code": "bogusco"},
+        headers=headers,
+    )
+    assert upd.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_summary_display_currency(client: AsyncClient):
+    headers = await make_user(client, "sub_dispccy@example.com")
+    await _create_sub(client, headers, budget_amount=600, currency="TRY")
+    resp = await client.get("/api/v1/subscriptions/summary?display=USD", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["display_currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_reminders_pending_bill(client: AsyncClient):
+    headers = await make_user(client, "sub_pending@example.com")
+    # billing_day=1 → bugün >= 1, bu ay fatura yok → pending_bills'e düşer
+    await _create_sub(client, headers, billing_day=1)
+    rem = await client.get("/api/v1/subscriptions/reminders", headers=headers)
+    assert rem.status_code == 200
+    assert len(rem.json()["pending_bills"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_subscription_cascades_bills(client: AsyncClient):
+    headers = await make_user(client, "sub_cascade@example.com")
+    sub = await _create_sub(client, headers)
+    await _issue_current(client, headers, sub["id"])
+    dele = await client.delete(f"/api/v1/subscriptions/{sub['id']}", headers=headers)
+    assert dele.status_code == 204
+    # Bills de gitmiş olmalı (404 abonelik)
+    bills = await client.get(f"/api/v1/subscriptions/{sub['id']}/bills", headers=headers)
+    assert bills.status_code == 404

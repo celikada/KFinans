@@ -99,7 +99,8 @@ export function SubscriptionPeriodsModal({
           <ul className="space-y-2 max-h-96 overflow-y-auto mb-4">
             {periods.map((p) => {
               const k = `${p.period_year}-${p.period_month}`;
-              const periodLabel = `${t(`months.${p.period_month}`)} ${p.period_year}`;
+              const monthName = t(`months.${p.period_month}`);
+              const periodLabel = `${monthName} ${p.period_year}`;
               return (
                 <li key={k} className="rounded-lg border border-gray-100 px-3 py-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">

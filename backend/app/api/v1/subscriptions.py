@@ -125,7 +125,7 @@ async def _get_bill(db: AsyncSession, sub: Subscription, bill_id: int) -> Subscr
 # --------------------------------------------------------------------------- #
 # Katalog
 # --------------------------------------------------------------------------- #
-@router.get("/providers", response_model=list[ProviderOut])
+@router.get("/providers")
 async def list_providers() -> list[ProviderOut]:
     return provider_catalog()
 
@@ -133,7 +133,7 @@ async def list_providers() -> list[ProviderOut]:
 # --------------------------------------------------------------------------- #
 # Abonelik CRUD
 # --------------------------------------------------------------------------- #
-@router.get("", response_model=list[SubscriptionOut])
+@router.get("")
 async def list_subscriptions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -154,7 +154,7 @@ async def list_subscriptions(
     return result
 
 
-@router.post("", response_model=SubscriptionOut, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_subscription(
     payload: SubscriptionCreate,
     request: Request,
@@ -188,7 +188,7 @@ async def create_subscription(
     return _sub_out(sub, status_="budget", amount=Decimal(sub.budget_amount), bill_id=None)
 
 
-@router.put("/{sub_id}", response_model=SubscriptionOut)
+@router.put("/{sub_id}")
 async def update_subscription(
     sub_id: int,
     payload: SubscriptionUpdate,
@@ -239,7 +239,7 @@ async def delete_subscription(
 # --------------------------------------------------------------------------- #
 # Özet (dashboard Giderler kartı + yıl sonu beklenti)
 # --------------------------------------------------------------------------- #
-@router.get("/summary", response_model=SubscriptionSummaryOut)
+@router.get("/summary")
 async def subscription_summary(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -278,7 +278,7 @@ async def subscription_summary(
 # --------------------------------------------------------------------------- #
 # Fatura dönemleri (lifecycle)
 # --------------------------------------------------------------------------- #
-@router.get("/{sub_id}/bills", response_model=list[SubscriptionPeriodOut])
+@router.get("/{sub_id}/bills")
 async def list_bills(
     sub_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -323,7 +323,7 @@ async def list_bills(
     return periods
 
 
-@router.post("/{sub_id}/bills/issue", response_model=SubscriptionBillOut)
+@router.post("/{sub_id}/bills/issue")
 async def issue_bill(
     sub_id: int,
     payload: SubscriptionBillIssue,
@@ -401,7 +401,7 @@ async def _create_expense_for_bill(
     return exp.id
 
 
-@router.post("/{sub_id}/bills/{bill_id}/pay", response_model=SubscriptionBillOut)
+@router.post("/{sub_id}/bills/{bill_id}/pay")
 async def pay_bill(
     sub_id: int,
     bill_id: int,
@@ -446,7 +446,7 @@ async def pay_bill(
     return _bill_out(bill)
 
 
-@router.post("/{sub_id}/bills/{bill_id}/unpay", response_model=SubscriptionBillOut)
+@router.post("/{sub_id}/bills/{bill_id}/unpay")
 async def unpay_bill(
     sub_id: int,
     bill_id: int,
@@ -504,7 +504,7 @@ async def delete_bill(
 # --------------------------------------------------------------------------- #
 # Hatırlatmalar (girişte popup + cron push/e-posta)
 # --------------------------------------------------------------------------- #
-@router.get("/reminders", response_model=SubscriptionRemindersOut)
+@router.get("/reminders")
 async def subscription_reminders(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
