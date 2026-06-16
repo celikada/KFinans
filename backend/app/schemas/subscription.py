@@ -47,6 +47,8 @@ class SubscriptionCreate(BaseModel):
     label: Optional[str] = Field(default=None, max_length=100)
     budget_amount: Decimal = Field(..., ge=0, le=_AMOUNT_MAX)
     currency: Optional[CurrencyType] = None
+    # Bütçenin forecast/planlı sayılmaya başladığı tarih (None → bugün).
+    start_date: Optional[date_type] = None
     billing_day: Optional[int] = Field(default=None, ge=1, le=28)
     due_day: Optional[int] = Field(default=None, ge=1, le=28)
     active: bool = True
@@ -59,6 +61,7 @@ class SubscriptionUpdate(BaseModel):
     label: Optional[str] = Field(default=None, max_length=100)
     budget_amount: Optional[Decimal] = Field(default=None, ge=0, le=_AMOUNT_MAX)
     currency: Optional[CurrencyType] = None
+    start_date: Optional[date_type] = None
     billing_day: Optional[int] = Field(default=None, ge=1, le=28)
     due_day: Optional[int] = Field(default=None, ge=1, le=28)
     active: Optional[bool] = None
@@ -74,8 +77,11 @@ class SubscriptionOut(BaseModel):
     label: Optional[str] = None
     budget_amount: Decimal
     currency: str = "TRY"
+    start_date: date_type
     billing_day: Optional[int] = None
     due_day: Optional[int] = None
+    next_bill_date: Optional[date_type] = None
+    next_due_date: Optional[date_type] = None
     active: bool
     notes: Optional[str] = None
     created_at: datetime
@@ -175,3 +181,45 @@ class SubscriptionPendingBill(BaseModel):
 class SubscriptionRemindersOut(BaseModel):
     due_payments: list[SubscriptionDuePayment] = []
     pending_bills: list[SubscriptionPendingBill] = []
+
+
+# --- PDF fatura import -----------------------------------------------------
+class ParsedBillOut(BaseModel):
+    """PDF'ten ayıklanmış fatura önizlemesi (DB'ye yazılmaz; kullanıcı onaylar)."""
+
+    provider_code: str
+    provider_name: str
+    category: str
+    subscriber_no: str
+    bill_amount: Decimal
+    currency: str = "TRY"
+    bill_date: date_type
+    due_date: date_type
+    period_year: int
+    period_month: int
+    next_bill_date: Optional[date_type] = None
+    next_due_date: Optional[date_type] = None
+    bill_no: Optional[str] = None
+    # Eşleşen mevcut abonelik (None → commit'te yeni oluşturulacak)
+    matched_subscription_id: Optional[int] = None
+    matched_label: Optional[str] = None
+    warnings: list[str] = []
+
+
+class BillImportCommit(BaseModel):
+    """Kullanıcının onayladığı/düzenlediği fatura → commit."""
+
+    provider_code: str = Field(..., min_length=1, max_length=40)
+    subscriber_no: str = Field(..., min_length=1, max_length=64)
+    bill_amount: Decimal = Field(..., ge=0, le=_AMOUNT_MAX)
+    currency: CurrencyType = "TRY"
+    bill_date: date_type
+    due_date: date_type
+    period_year: int = Field(..., ge=2000, le=2100)
+    period_month: int = Field(..., ge=1, le=12)
+    next_bill_date: Optional[date_type] = None
+    next_due_date: Optional[date_type] = None
+    bill_no: Optional[str] = Field(default=None, max_length=64)
+    # Varsa bu aboneliğe yaz; yoksa (None) yeni abonelik oluştur.
+    subscription_id: Optional[int] = None
+    label: Optional[str] = Field(default=None, max_length=100)

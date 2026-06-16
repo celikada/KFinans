@@ -1,0 +1,16 @@
+ESGAZ ESKİŞEHİR ŞEHİR İÇİ DOĞALGAZ DAĞITIM TİC.
+VE TAAH. A.Ş.
+SAYIN Özelleştirme No :TR1.2
+Senaryo :EARSIVFATURA
+AD SOYAD
+Fatura Tipi :SATIS
+Fatura No :EAN2026000000000
+Sektör Kodu: Mesken Fatura Tarihi :08-06-2026
+Düzenleme Tarihi :08-06-2026
+1 DOĞALGAZ FATURASI 1 Adet 837,09 TL %20,00 167,42 TL 837,09 TL
+Vergiler Dahil Toplam Tutar 1.004,51 TL
+Toplam Yuvarlama -0,51 TL
+Ödenecek Tutar 1.004,00 TL
+Hesap No: 1234567890 Sayaç Ölçüm Basıncı (mbar): 21
+Banka Talimatı Var Tüketim Bedeli: 837,09
+Toplam Tüketim: 51,77816 Son Ödeme Tarihi: 18.06.2026

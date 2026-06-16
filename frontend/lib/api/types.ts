@@ -1192,8 +1192,11 @@ export interface SubscriptionDTO {
   label?: string | null;
   budget_amount: string;
   currency: CurrencyType;
+  start_date: string; // ISO YYYY-MM-DD — bütçenin forecast sayılmaya başladığı tarih
   billing_day?: number | null;
   due_day?: number | null;
+  next_bill_date?: string | null; // ISO YYYY-MM-DD | null
+  next_due_date?: string | null; // ISO YYYY-MM-DD | null
   active: boolean;
   notes?: string | null;
   created_at: string;
@@ -1210,10 +1213,50 @@ export interface SubscriptionInput {
   budget_amount: number;
   currency?: CurrencyType;
   label?: string | null;
+  start_date?: string; // ISO YYYY-MM-DD; gönderilmezse backend bugünü kullanır
   billing_day?: number | null; // 1-28
   due_day?: number | null; // 1-28
   active?: boolean;
   notes?: string | null;
+}
+
+/** POST /subscriptions/import-bill/preview — PDF'ten ayıklanmış fatura (DB'ye yazılmaz). */
+export interface ParsedBillDTO {
+  provider_code: string;
+  provider_name: string;
+  category: string;
+  subscriber_no: string;
+  bill_amount: string;
+  currency: CurrencyType;
+  bill_date: string; // ISO YYYY-MM-DD
+  due_date: string; // ISO YYYY-MM-DD
+  period_year: number;
+  period_month: number;
+  next_bill_date?: string | null;
+  next_due_date?: string | null;
+  bill_no?: string | null;
+  // null → commit'te yeni abonelik oluşturulur
+  matched_subscription_id?: number | null;
+  matched_label?: string | null;
+  warnings: string[];
+}
+
+/** POST /subscriptions/import-bill/commit — kullanıcının onayladığı fatura. */
+export interface BillImportCommitInput {
+  provider_code: string;
+  subscriber_no: string;
+  bill_amount: number;
+  currency: CurrencyType;
+  bill_date: string; // ISO YYYY-MM-DD
+  due_date: string; // ISO YYYY-MM-DD
+  period_year: number;
+  period_month: number;
+  next_bill_date?: string | null;
+  next_due_date?: string | null;
+  bill_no?: string | null;
+  // null → eşleşme aranır / yoksa yeni abonelik oluşturulur
+  subscription_id?: number | null;
+  label?: string | null;
 }
 
 export interface SubscriptionSummaryDTO {

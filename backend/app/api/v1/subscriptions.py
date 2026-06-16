@@ -7,24 +7,28 @@ belirler → mevcut çift-sayım kuralı kartla ödenen faturayı gider toplamı
 """
 
 import logging
+import re
 from datetime import date as date_type
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user, get_db
+from app.core.upload_validation import validate_pdf_upload
 from app.models.credit_card import CreditCard
 from app.models.expense import Expense
 from app.models.subscription import Subscription, SubscriptionBill
 from app.models.user import User
 from app.schemas.subscription import (
     PROVIDERS,
+    BillImportCommit,
+    ParsedBillOut,
     ProviderOut,
     SubscriptionBillIssue,
     SubscriptionBillOut,
@@ -42,6 +46,7 @@ from app.schemas.subscription import (
 from app.services import currency as currency_svc
 from app.services import display_currency as display_svc
 from app.services.audit import AuditAction, log_audit
+from app.services.bill_import import detect_parser, extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +175,7 @@ async def create_subscription(
         label=payload.label.strip() if payload.label else None,
         budget_amount=payload.budget_amount,
         currency=payload.currency or current_user.default_currency or "TRY",
+        start_date=payload.start_date or _today(),
         billing_day=payload.billing_day,
         due_day=payload.due_day,
         active=payload.active,
@@ -201,7 +207,7 @@ async def update_subscription(
     if "provider_code" in data and data["provider_code"]:
         _name, category = _provider_or_422(data["provider_code"])
         sub.category = category
-    for field in ("provider_code", "subscriber_no", "label", "budget_amount", "currency", "billing_day", "due_day", "active", "notes"):
+    for field in ("provider_code", "subscriber_no", "label", "budget_amount", "currency", "start_date", "billing_day", "due_day", "active", "notes"):
         if field in data:
             value = data[field]
             if isinstance(value, str):
@@ -258,6 +264,8 @@ async def subscription_summary(
     for sub in subs:
         bills_by_month = {(b.period_year, b.period_month): b for b in sub.bills}
         for month in range(today.month, 13):
+            if (today.year, month) < (sub.start_date.year, sub.start_date.month):
+                continue  # başlangıçtan önce
             bill = bills_by_month.get((today.year, month))
             status_, amount, _bid = _forecast_amount(sub, bill)
             if status_ == "paid":
@@ -323,6 +331,45 @@ async def list_bills(
     return periods
 
 
+async def _upsert_bill(
+    db: AsyncSession,
+    sub: Subscription,
+    *,
+    period_year: int,
+    period_month: int,
+    bill_amount: Decimal,
+    bill_date: date_type,
+    due_date: date_type,
+    notes: Optional[str] = None,
+    bill_no: Optional[str] = None,
+) -> SubscriptionBill:
+    """budget → issued dönem faturasını upsert eder (issue + import ortak)."""
+    existing_q = await db.execute(
+        select(SubscriptionBill).where(
+            SubscriptionBill.subscription_id == sub.id,
+            SubscriptionBill.period_year == period_year,
+            SubscriptionBill.period_month == period_month,
+        )
+    )
+    bill = existing_q.scalar_one_or_none()
+    if bill is None:
+        bill = SubscriptionBill(
+            subscription_id=sub.id,
+            period_year=period_year,
+            period_month=period_month,
+            currency=sub.currency,
+        )
+        db.add(bill)
+    bill.bill_amount = bill_amount
+    bill.bill_date = bill_date
+    bill.due_date = due_date
+    if notes is not None:
+        bill.notes = notes.strip() or None
+    if bill_no is not None:
+        bill.bill_no = bill_no
+    return bill
+
+
 @router.post("/{sub_id}/bills/issue")
 async def issue_bill(
     sub_id: int,
@@ -333,26 +380,16 @@ async def issue_bill(
 ) -> SubscriptionBillOut:
     """budget → issued: fatura geldi (tutar + tarihler). Aynı dönem varsa günceller."""
     sub = await _get_sub(db, current_user.id, sub_id)
-    existing_q = await db.execute(
-        select(SubscriptionBill).where(
-            SubscriptionBill.subscription_id == sub.id,
-            SubscriptionBill.period_year == payload.period_year,
-            SubscriptionBill.period_month == payload.period_month,
-        )
+    bill = await _upsert_bill(
+        db,
+        sub,
+        period_year=payload.period_year,
+        period_month=payload.period_month,
+        bill_amount=payload.bill_amount,
+        bill_date=payload.bill_date,
+        due_date=payload.due_date,
+        notes=payload.notes,
     )
-    bill = existing_q.scalar_one_or_none()
-    if bill is None:
-        bill = SubscriptionBill(
-            subscription_id=sub.id,
-            period_year=payload.period_year,
-            period_month=payload.period_month,
-            currency=sub.currency,
-        )
-        db.add(bill)
-    bill.bill_amount = payload.bill_amount
-    bill.bill_date = payload.bill_date
-    bill.due_date = payload.due_date
-    bill.notes = payload.notes.strip() if payload.notes else None
     await log_audit(
         db,
         request,
@@ -556,17 +593,151 @@ def _collect_pending_bill(
     today: date_type,
     out: list[SubscriptionPendingBill],
 ) -> None:
-    """Tahmini kesim günü geçmiş ama bu ay fatura girilmemiş → 'fatura gir' hatırlatması."""
-    if sub.billing_day is None or today.day < sub.billing_day:
+    """Kesim/sonraki-fatura tarihi geçmiş ama o dönem fatura girilmemiş → 'fatura gir'.
+
+    Öncelik `next_bill_date` (PDF import'tan kesin tarih); yoksa `billing_day` fallback.
+    """
+    if sub.next_bill_date is not None:
+        if today < sub.next_bill_date:
+            return
+        period_year, period_month = sub.next_bill_date.year, sub.next_bill_date.month
+    elif sub.billing_day is not None and today.day >= sub.billing_day:
+        period_year, period_month = today.year, today.month
+    else:
         return
-    has_current = any(b.period_year == today.year and b.period_month == today.month for b in sub.bills)
-    if not has_current:
+    has_period = any(b.period_year == period_year and b.period_month == period_month for b in sub.bills)
+    if not has_period:
         out.append(
             SubscriptionPendingBill(
                 subscription_id=sub.id,
                 provider_name=provider_name,
                 label=sub.label,
-                period_year=today.year,
-                period_month=today.month,
+                period_year=period_year,
+                period_month=period_month,
             )
         )
+
+
+# --------------------------------------------------------------------------- #
+# PDF fatura import (kredi kartı ekstresi import'una benzer; fail-safe)
+# --------------------------------------------------------------------------- #
+def _normalize_subno(value: str) -> str:
+    """Abone no'yu eşleştirme için normalize et (boşluk/punct strip + lowercase)."""
+    return re.sub(r"[^0-9a-zA-Z]", "", value).lower()
+
+
+async def _find_matching_subscription(db: AsyncSession, user_id, provider_code: str, subscriber_no: str) -> Optional[Subscription]:
+    """Aynı kurum + normalize edilmiş abone no'ya sahip mevcut aboneliği bulur."""
+    q = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user_id,
+            Subscription.provider_code == provider_code,
+        )
+    )
+    target = _normalize_subno(subscriber_no)
+    for sub in q.scalars().all():
+        if _normalize_subno(sub.subscriber_no) == target:
+            return sub
+    return None
+
+
+@router.post("/import-bill/preview")
+async def import_bill_preview(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Annotated[UploadFile, File(...)],
+) -> ParsedBillOut:
+    """PDF faturayı ayrıştır (DB yazmaz) + eşleşen abonelik bilgisini döndür."""
+    content = await validate_pdf_upload(file)
+    text = extract_text(content)
+    if len(text.strip()) < 20:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="PDF metin katmanı yok (taranmış görüntü olabilir) — faturayı elle girin",
+        )
+    parser = detect_parser(text)
+    if parser is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Fatura kurumu tanınmadı")
+    try:
+        parsed = parser.parse(text)
+    except ValueError as e:
+        logger.warning("Fatura parse hatası (%s): %s", parser.provider_code, e)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+    name, category = PROVIDERS.get(parsed.provider_code, (parsed.provider_code, ""))
+    match = await _find_matching_subscription(db, current_user.id, parsed.provider_code, parsed.subscriber_no)
+    return ParsedBillOut(
+        provider_code=parsed.provider_code,
+        provider_name=name,
+        category=category,
+        subscriber_no=parsed.subscriber_no,
+        bill_amount=parsed.bill_amount,
+        currency=parsed.currency,
+        bill_date=parsed.bill_date,
+        due_date=parsed.due_date,
+        period_year=parsed.period_year,
+        period_month=parsed.period_month,
+        next_bill_date=parsed.next_bill_date,
+        next_due_date=parsed.next_due_date,
+        bill_no=parsed.bill_no,
+        matched_subscription_id=match.id if match else None,
+        matched_label=match.label if match else None,
+        warnings=parsed.warnings,
+    )
+
+
+@router.post("/import-bill/commit")
+async def import_bill_commit(
+    payload: BillImportCommit,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SubscriptionBillOut:
+    """Onaylanan faturayı işle: abonelik eşleş/oluştur + dönem faturası + sonraki tarihler."""
+    _name, category = _provider_or_422(payload.provider_code)
+    # 1) Aboneliği belirle
+    if payload.subscription_id is not None:
+        sub = await _get_sub(db, current_user.id, payload.subscription_id)
+    else:
+        sub = await _find_matching_subscription(db, current_user.id, payload.provider_code, payload.subscriber_no)
+        if sub is None:
+            sub = Subscription(
+                user_id=current_user.id,
+                provider_code=payload.provider_code,
+                category=category,
+                subscriber_no=payload.subscriber_no.strip(),
+                label=payload.label.strip() if payload.label else None,
+                budget_amount=payload.bill_amount,  # ilk tahmini bütçe = fatura tutarı
+                currency=payload.currency,
+                start_date=date_type(payload.period_year, payload.period_month, 1),
+                active=True,
+            )
+            db.add(sub)
+            await db.flush()
+    # 2) Dönem faturasını upsert et
+    bill = await _upsert_bill(
+        db,
+        sub,
+        period_year=payload.period_year,
+        period_month=payload.period_month,
+        bill_amount=payload.bill_amount,
+        bill_date=payload.bill_date,
+        due_date=payload.due_date,
+        bill_no=payload.bill_no,
+    )
+    # 3) Sonraki fatura/son ödeme tarihlerini aboneliğe yaz (hatırlatma)
+    sub.next_bill_date = payload.next_bill_date
+    sub.next_due_date = payload.next_due_date
+    sub.updated_at = datetime.now(_ISTANBUL)
+    await log_audit(
+        db,
+        request,
+        action=AuditAction.SUBSCRIPTION_BILL_IMPORT,
+        user_id=current_user.id,
+        resource=payload.provider_code,
+        extra={"period": f"{payload.period_year}-{payload.period_month:02d}", "subscription_id": sub.id},
+    )
+    await db.commit()
+    await db.refresh(bill)
+    return _bill_out(bill)

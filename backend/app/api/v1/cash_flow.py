@@ -314,7 +314,10 @@ async def _subscription_by_month(db: AsyncSession, user_id, year: int, rates: di
     for sub in sub_q.scalars().all():
         budget_tl = currency_svc.convert_to_tl(Decimal(sub.budget_amount), sub.currency, rates)
         bills = {(b.period_year, b.period_month): b for b in sub.bills if b.period_year == year}
+        start = sub.start_date
         for m in range(1, 13):
+            if (year, m) < (start.year, start.month):
+                continue  # abonelik başlangıcından önce bütçe sayılmaz
             bill = bills.get((year, m))
             if bill is None:
                 by_month[m] += budget_tl
@@ -815,6 +818,8 @@ async def _subscription_forecast_items(db: AsyncSession, user_id, year: int, mon
     )
     items: list[CashFlowItem] = []
     for sub in sub_q.scalars().all():
+        if (year, month) < (sub.start_date.year, sub.start_date.month):
+            continue  # başlangıçtan önce
         bill = next((b for b in sub.bills if b.period_year == year and b.period_month == month), None)
         if bill is not None and bill.paid_at is not None:
             continue  # ödenmiş → actual'da

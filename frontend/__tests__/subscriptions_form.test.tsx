@@ -59,6 +59,8 @@ describe("SubscriptionForm", () => {
     expect(payload.subscriber_no).toBe("98765");
     expect(payload.budget_amount).toBe(450);
     expect(payload.currency).toBe("TRY");
+    // Başlangıç ayı default'u (bugün) ISO YYYY-MM-DD olarak gönderilir.
+    expect(payload.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(onSaved).toHaveBeenCalledWith({ id: 5 });
   });
 });
