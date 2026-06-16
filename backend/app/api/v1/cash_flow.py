@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_user, get_db
 from app.models.credit_card import CreditCard, CreditCardInstallment, CreditCardStatement
@@ -29,7 +30,9 @@ from app.models.income import Income
 from app.models.planned_expense import PlannedExpense
 from app.models.recurring_income import RecurringIncome
 from app.models.recurring_skip import RecurringSkip
+from app.models.subscription import Subscription
 from app.models.user import User
+from app.schemas.subscription import PROVIDERS
 from app.services import currency as currency_svc
 from app.services import display_currency as display_svc
 
@@ -297,6 +300,30 @@ async def _planned_by_month(db: AsyncSession, user_id, year: int, rates: dict[st
     return by_month
 
 
+async def _subscription_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
+    """Abonelik faturaları forecast (aktif abonelikler, ödenmemiş tutarlar — güncel kur).
+
+    Her ay için: fatura yok → budget_amount; fatura var, ödenmemiş → bill_amount;
+    fatura var, ödenmiş → 0 (gerçekleşmiş; actual'a expense üzerinden girer). Kart/nakit
+    ödeme ayrımı Expense.credit_card_id ile actual tarafında çift-sayım filtresine takılır.
+    """
+    sub_q = await db.execute(
+        select(Subscription).where(Subscription.user_id == user_id, Subscription.active.is_(True)).options(selectinload(Subscription.bills))
+    )
+    by_month = _empty_month_map()
+    for sub in sub_q.scalars().all():
+        budget_tl = currency_svc.convert_to_tl(Decimal(sub.budget_amount), sub.currency, rates)
+        bills = {(b.period_year, b.period_month): b for b in sub.bills if b.period_year == year}
+        for m in range(1, 13):
+            bill = bills.get((year, m))
+            if bill is None:
+                by_month[m] += budget_tl
+            elif bill.paid_at is None:
+                by_month[m] += currency_svc.convert_to_tl(Decimal(bill.bill_amount), bill.currency, rates)
+            # ödenmiş → 0 (actual'da)
+    return by_month
+
+
 def _month_bounds(year: int, month: int) -> tuple[date_type, date_type]:
     last = calendar.monthrange(year, month)[1]
     return date_type(year, month, 1), date_type(year, month, last)
@@ -446,16 +473,18 @@ def _forecast_for_month(
     recurring_income: dict[int, Decimal],
     planned: dict[int, Decimal],
     installment: dict[int, Decimal],
+    subscription: dict[int, Decimal],
 ) -> tuple[Decimal, Decimal]:
     """Bir ay için (income_forecast, expense_forecast) — actual ekstre hariç.
 
-    Bu ay (current): pending periyodikler; geçmiş: 0; gelecek: tam periyodik forecast.
-    statement zaten actual sayılır (expense_actual'a girer)."""
+    Bu ay (current): pending periyodikler + abonelik; geçmiş: 0; gelecek: tam periyodik
+    forecast + abonelik. statement zaten actual sayılır (expense_actual'a girer).
+    Abonelik forecast'i current + gelecek aynıdır (ödenmemiş budget/issued tutar)."""
     if is_current:
-        return pending_income, pending_expense + installment[m]
+        return pending_income, pending_expense + installment[m] + subscription[m]
     if is_past:
         return Decimal(0), Decimal(0)
-    return recurring_income[m], planned[m] + installment[m]
+    return recurring_income[m], planned[m] + installment[m] + subscription[m]
 
 
 def _build_month_row(
@@ -470,6 +499,7 @@ def _build_month_row(
     recurring_income: dict[int, Decimal],
     planned: dict[int, Decimal],
     installment: dict[int, Decimal],
+    subscription: dict[int, Decimal],
     display_maps: dict | None = None,
 ) -> CashFlowMonth:
     """Tek bir ay satırını üretir (actual + forecast birleştirme).
@@ -479,7 +509,7 @@ def _build_month_row(
     income_actual = actual_income[m]
     expense_actual = actual_expense[m] + statement[m]
     income_forecast, expense_forecast = _forecast_for_month(
-        m, is_past, is_current, pending_income, pending_expense, statement, recurring_income, planned, installment
+        m, is_past, is_current, pending_income, pending_expense, statement, recurring_income, planned, installment, subscription
     )
     income_total = income_actual + income_forecast
     expense_total = expense_actual + expense_forecast
@@ -501,6 +531,7 @@ def _build_month_row(
             display_maps["recurring_income"],
             display_maps["planned"],
             display_maps["installment"],
+            display_maps["subscription"],
         )
         income_actual_d = display_svc.quantize_tl(display_maps["actual_income"][m])
         income_forecast_d = display_svc.quantize_tl(d_inc_f)
@@ -542,6 +573,7 @@ async def _build_display_maps(db: AsyncSession, uid, year: int, current_year: in
     installment_tl = await _installment_by_month(db, uid, year, rates)
     recurring_tl = await _recurring_income_by_month(db, uid, year, rates)
     planned_tl = await _planned_by_month(db, uid, year, rates)
+    subscription_tl = await _subscription_by_month(db, uid, year, rates)
     pending_income_d = Decimal(0)
     pending_expense_d = Decimal(0)
     if year == current_year:
@@ -556,6 +588,7 @@ async def _build_display_maps(db: AsyncSession, uid, year: int, current_year: in
         "installment": _to_display_map(installment_tl, display, rates),
         "recurring_income": _to_display_map(recurring_tl, display, rates),
         "planned": _to_display_map(planned_tl, display, rates),
+        "subscription": _to_display_map(subscription_tl, display, rates),
         "pending_income": pending_income_d,
         "pending_expense": pending_expense_d,
     }
@@ -584,6 +617,7 @@ async def get_cash_flow(
     installment = await _installment_by_month(db, uid, year, rates)
     recurring_income = await _recurring_income_by_month(db, uid, year, rates)
     planned = await _planned_by_month(db, uid, year, rates)
+    subscription = await _subscription_by_month(db, uid, year, rates)
 
     # Bu ay (current month) için henüz gerçekleşmemiş periyodik forecast (kira/aidat
     # gibi ödeme günü ay içinde ileride olanlar). Yalnızca görüntülenen yıl bu yılsa.
@@ -619,6 +653,7 @@ async def get_cash_flow(
             recurring_income,
             planned,
             installment,
+            subscription,
             display_maps,
         )
         total_income += row.income_total
@@ -769,6 +804,37 @@ async def _expense_items_for_month(
     if is_current or not is_past:
         items.extend(await _planned_forecast_items(db, user_id, year, month, is_current, rates))
         items.extend(await _installment_forecast_items(db, user_id, year, month, card_names, rates))
+        items.extend(await _subscription_forecast_items(db, user_id, year, month, rates))
+    return items
+
+
+async def _subscription_forecast_items(db: AsyncSession, user_id, year: int, month: int, rates: dict[str, Decimal]) -> list[CashFlowItem]:
+    """Abonelik fatura forecast kalemleri (aktif + ödenmemiş; budget veya issued tutar)."""
+    sub_q = await db.execute(
+        select(Subscription).where(Subscription.user_id == user_id, Subscription.active.is_(True)).options(selectinload(Subscription.bills))
+    )
+    items: list[CashFlowItem] = []
+    for sub in sub_q.scalars().all():
+        bill = next((b for b in sub.bills if b.period_year == year and b.period_month == month), None)
+        if bill is not None and bill.paid_at is not None:
+            continue  # ödenmiş → actual'da
+        provider_name = PROVIDERS.get(sub.provider_code, (sub.provider_code, sub.category))[0]
+        if bill is None:
+            amount, ccy, sub_label = Decimal(sub.budget_amount), sub.currency, "bütçe (tahmini)"
+        else:
+            amount, ccy, sub_label = Decimal(bill.bill_amount), bill.currency, "fatura geldi"
+        items.append(
+            CashFlowItem(
+                kind="forecast",
+                category="subscription",
+                label=sub.label or provider_name,
+                sub_label=f"{provider_name} · {sub_label}",
+                date=None,
+                amount=amount,
+                currency=ccy,
+                amount_tl=currency_svc.convert_to_tl(amount, ccy, rates),
+            )
+        )
     return items
 
 

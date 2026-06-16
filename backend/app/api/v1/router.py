@@ -25,6 +25,7 @@ from app.api.v1 import (
     recurring,
     release,
     stocks,
+    subscriptions,
     tefas,
     user,
     wallets,
@@ -58,3 +59,4 @@ api_router.include_router(advice.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(metrics.router)
 api_router.include_router(push.router)
+api_router.include_router(subscriptions.router)

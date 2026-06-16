@@ -78,6 +78,9 @@ const apiFns = vi.hoisted(() => ({
   // Popup'lar
   getPendingRealizations: vi.fn(),
   getCreditCardReminders: vi.fn(),
+  getSubscriptionReminders: vi.fn(),
+  // Abonelikler (Giderler footer'ı yıl sonu beklentisi)
+  getSubscriptionSummary: vi.fn(),
   // Money/rates
   getRates: vi.fn(),
   // Sunucu-cache canlı portföy (ağır kartlar)
@@ -183,6 +186,13 @@ beforeEach(() => {
 
   apiFns.getPendingRealizations.mockResolvedValue({ items: [] });
   apiFns.getCreditCardReminders.mockResolvedValue({ pending_statements: [], due_payments: [] });
+  apiFns.getSubscriptionReminders.mockResolvedValue({ pending_bills: [], due_payments: [] });
+  apiFns.getSubscriptionSummary.mockResolvedValue({
+    display_currency: "TRY",
+    this_month_estimate: "0",
+    remaining_year_estimate: "0",
+    active_count: 0,
+  });
 });
 
 afterEach(() => {
