@@ -15,6 +15,7 @@ from app.models.audit_log import AuditLog
 from app.models.credit_card import CreditCard, CreditCardStatement
 from app.models.push_subscription import PushSubscription
 from app.models.revoked_token import RevokedToken
+from app.models.subscription import Subscription, SubscriptionBill
 from app.models.user import User
 from app.services.email import send_payment_reminder_email
 from app.services.historical_rates import ensure_date_cached
@@ -250,6 +251,27 @@ async def _due_statements_for_user(session, user_id, today) -> list[CreditCardSt
     return list(result.scalars().all())
 
 
+async def _due_subscription_bills_for_user(session, user_id, today) -> list[SubscriptionBill]:
+    """DRY: bir kullanıcının ödemesi yaklaşan/gecikmiş abonelik faturaları.
+
+    `paid_at IS NULL` + `due_date <= bugün + _DUE_SOON_DAYS` olan, kullanıcının
+    aktif aboneliklerine bağlı `SubscriptionBill` kayıtları. Kart ekstreleriyle
+    aynı hatırlatma pencerelerinde (push 09:00 + e-posta 09:05) kullanılır.
+    """
+    cutoff = today + timedelta(days=_DUE_SOON_DAYS)
+    result = await session.execute(
+        select(SubscriptionBill)
+        .join(Subscription, Subscription.id == SubscriptionBill.subscription_id)
+        .where(
+            Subscription.user_id == user_id,
+            Subscription.active.is_(True),
+            SubscriptionBill.paid_at.is_(None),
+            SubscriptionBill.due_date <= cutoff,
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def _push_due_payments_job(session_factory=None) -> None:
     """Her gün 09:00 Europe/Istanbul: ödemesi yaklaşan kart borçları için push.
 
@@ -276,6 +298,7 @@ async def _push_due_payments_job(session_factory=None) -> None:
                 total_sent = 0
                 for user_id in user_ids:
                     n = len(await _due_statements_for_user(session, user_id, today))
+                    n += len(await _due_subscription_bills_for_user(session, user_id, today))
                     if n == 0:
                         continue
                     sent = await send_to_user(
@@ -301,6 +324,36 @@ def _statement_to_reminder_item(stmt: CreditCardStatement, card_name: str, today
         "due_date": stmt.due_date.isoformat(),
         "days_until_due": (stmt.due_date - today).days,
     }
+
+
+def _subscription_bill_to_reminder_item(bill: SubscriptionBill, name: str, today) -> dict:
+    """Abonelik faturası → e-posta hatırlatma satırı (kart ekstresiyle aynı şekil)."""
+    return {
+        "card_name": name,
+        "amount": f"{bill.bill_amount:,.2f}",
+        "currency": bill.currency,
+        "due_date": bill.due_date.isoformat(),
+        "days_until_due": (bill.due_date - today).days,
+    }
+
+
+async def _subscription_reminder_items(session, sub_bills: list[SubscriptionBill], today) -> list[dict]:
+    """Abonelik faturalarını e-posta hatırlatma satırlarına çevirir (provider/label adıyla)."""
+    if not sub_bills:
+        return []
+    from app.schemas.subscription import PROVIDERS
+
+    sub_ids = {b.subscription_id for b in sub_bills}
+    subs = (await session.execute(select(Subscription).where(Subscription.id.in_(sub_ids)))).scalars().all()
+    sub_by_id = {s.id: s for s in subs}
+    items: list[dict] = []
+    for bill in sub_bills:
+        sub = sub_by_id.get(bill.subscription_id)
+        if sub is None:
+            continue
+        name = sub.label or PROVIDERS.get(sub.provider_code, (sub.provider_code, sub.category))[0]
+        items.append(_subscription_bill_to_reminder_item(bill, name, today))
+    return items
 
 
 async def _email_due_payments_job(session_factory=None) -> None:
@@ -342,13 +395,15 @@ async def _email_due_payments_job(session_factory=None) -> None:
                 total_sent = 0
                 for user in users:
                     statements = await _due_statements_for_user(session, user.id, today)
-                    if not statements:
+                    sub_bills = await _due_subscription_bills_for_user(session, user.id, today)
+                    if not statements and not sub_bills:
                         continue
                     # Kart adlarını tek sorguda çek (N+1 önle).
                     card_ids = {s.card_id for s in statements}
                     cards = (await session.execute(select(CreditCard).where(CreditCard.id.in_(card_ids)))).scalars().all()
                     card_names = {c.id: c.name for c in cards}
                     items = [_statement_to_reminder_item(s, card_names.get(s.card_id, "-"), today) for s in statements]
+                    items.extend(await _subscription_reminder_items(session, sub_bills, today))
                     try:
                         if await send_payment_reminder_email(to=user.email, items=items):
                             total_sent += 1

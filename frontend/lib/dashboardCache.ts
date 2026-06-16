@@ -53,6 +53,8 @@ export interface DashboardSnapshot {
   expenseTop: CachedTopItem[];
 
   plannedTotal: number | null;
+  // Abonelik (utility) yıllık kalan tahmini — Giderler footer'ında planlı ile toplanır.
+  subscriptionYearTotal: number | null;
 
   incomeTotal: number | null;
   incomeCount: number;

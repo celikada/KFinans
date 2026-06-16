@@ -98,6 +98,14 @@ class AuditAction(str, Enum):
     MFA_RECOVERY_USED = "auth.mfa.recovery_used"
     LOGIN_MFA_REQUIRED = "auth.login_mfa_required"
 
+    # Abonelik (fatura/utility) modülü
+    SUBSCRIPTION_ADD = "subscription.add"
+    SUBSCRIPTION_UPDATE = "subscription.update"
+    SUBSCRIPTION_DELETE = "subscription.delete"
+    SUBSCRIPTION_BILL_ISSUE = "subscription.bill.issue"
+    SUBSCRIPTION_BILL_PAY = "subscription.bill.pay"
+    SUBSCRIPTION_BILL_UNPAY = "subscription.bill.unpay"
+
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
     """SEC-004 (FAZ H): Sadece `request.client.host` kullan.

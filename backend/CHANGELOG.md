@@ -6,6 +6,27 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0] - 2026-06-16
+
+### Eklenenler
+
+- **Abonelikler modülü (fatura/utility takip):** Elektrik/doğalgaz/internet/telefon
+  faturalarının **abone no** ile manuel takibi — Giderler altında yeni "Abonelikler" sekmesi.
+  İlk kapsam 5 kurum (ESGAZ, Zorlu Enerji, Osmangazi Elektrik, TTNET, Vodafone; katalog
+  genişletilebilir). **3 durumlu yaşam döngüsü:** budget (aylık tahmini/bütçe değeri) →
+  issued (fatura geldi, gerçek tutar, ödenmemiş) → paid (ödendi, gerçek gider oluşur).
+  - **Ödeme şekli çift sayım:** ödeme nakit/banka ise gider toplamına girer; kredi kartı ise
+    oluşan gider kaydına `credit_card_id` set edilip mevcut çift-sayım kuralıyla toplamdan
+    çıkarılır (kart ekstresinde sayılır); ödenmemiş faturalar cash-flow forecast'ında kalır.
+  - **Cash flow + dashboard:** abonelik forecast'ı aylık projeksiyona + Giderler kartı yıl sonu
+    beklentisine eklenir.
+  - **Hatırlatmalar:** son ödeme yaklaşan fatura için giriş popup + push (09:00) + e-posta (09:05);
+    ayrıca "kesim günü geçti, fatura gir" hatırlatması.
+  - Yeni tablolar `subscriptions` + `subscription_bills` (migration `b4c5d6e7f8a9`); yeni router
+    `/subscriptions`; audit `subscription.add/update/delete` + `subscription.bill.issue/pay/unpay`.
+
+---
+
 ## [0.8.15] - 2026-06-16
 
 ### Güvenlik

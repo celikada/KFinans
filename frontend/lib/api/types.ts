@@ -1160,3 +1160,136 @@ export interface PushSubscriptionInput {
 export interface PushTestResultDTO {
   sent: number; // number of test notifications dispatched
 }
+
+// ─── Abonelikler / fatura takibi (feature/subscriptions-utility) ──────
+//
+// Her abonelik aylık bir BÜTÇE (tahmini) taşır. Dönem yaşam döngüsü:
+//   budget  → fatura çıkmamış, değer = budget_amount
+//   issued  → fatura geldi (değer = bill_amount), ödenmedi
+//   paid    → ödendi → gerçek gidere döner (nakit ise; kredi kartı ise ekstrede sayılır)
+
+/** Abonelik kurum kategorileri (provider.category + ikon/renk haritası anahtarı). */
+export type SubscriptionCategory = "gas" | "electricity" | "internet" | "phone";
+
+/** Dönem durumu — budget → issued → paid. */
+export type SubscriptionStatus = "budget" | "issued" | "paid";
+
+/** Fatura ödeme şekli — nakit gidere katılır, kredi kartı ekstrede sayılır. */
+export type SubscriptionPaymentMethod = "cash" | "credit_card";
+
+export interface ProviderDTO {
+  code: string;
+  name: string;
+  category: SubscriptionCategory;
+}
+
+export interface SubscriptionDTO {
+  id: number;
+  provider_code: string;
+  provider_name: string;
+  category: SubscriptionCategory;
+  subscriber_no: string;
+  label?: string | null;
+  budget_amount: string;
+  currency: CurrencyType;
+  billing_day?: number | null;
+  due_day?: number | null;
+  active: boolean;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Bu-ay durumu (server-side hesaplanır)
+  current_status: SubscriptionStatus;
+  current_amount: string;
+  current_bill_id?: number | null;
+}
+
+export interface SubscriptionInput {
+  provider_code: string;
+  subscriber_no: string;
+  budget_amount: number;
+  currency?: CurrencyType;
+  label?: string | null;
+  billing_day?: number | null; // 1-28
+  due_day?: number | null; // 1-28
+  active?: boolean;
+  notes?: string | null;
+}
+
+export interface SubscriptionSummaryDTO {
+  display_currency: CurrencyType;
+  this_month_estimate: string;
+  remaining_year_estimate: string;
+  active_count: number;
+}
+
+/** GET /subscriptions/{id}/bills — dönem listesi (en yeni üstte). */
+export interface SubscriptionPeriodDTO {
+  period_year: number;
+  period_month: number;
+  status: SubscriptionStatus;
+  amount: string;
+  currency: CurrencyType;
+  bill_id?: number | null;
+  bill_date?: string | null;
+  due_date?: string | null;
+  paid_at?: string | null;
+  payment_method?: SubscriptionPaymentMethod | null;
+}
+
+/** issue / pay / unpay sonrası dönen tekil fatura kaydı. */
+export interface SubscriptionBillDTO {
+  id: number;
+  subscription_id: number;
+  period_year: number;
+  period_month: number;
+  status: SubscriptionStatus;
+  bill_amount: string;
+  currency: CurrencyType;
+  bill_date?: string | null;
+  due_date?: string | null;
+  paid_at?: string | null;
+  payment_method?: SubscriptionPaymentMethod | null;
+  credit_card_id?: number | null;
+  notes?: string | null;
+}
+
+export interface SubscriptionBillIssueInput {
+  period_year: number;
+  period_month: number;
+  bill_amount: number;
+  bill_date: string; // ISO YYYY-MM-DD
+  due_date: string; // ISO YYYY-MM-DD
+  notes?: string | null;
+}
+
+export interface SubscriptionBillPayInput {
+  payment_method: SubscriptionPaymentMethod;
+  credit_card_id?: number | null; // payment_method=credit_card ise ZORUNLU
+  paid_at?: string | null;
+}
+
+// Girişte hatırlatma popup'ı — ödenecek faturalar + fatura girilecek dönemler.
+export interface SubscriptionDuePaymentDTO {
+  subscription_id: number;
+  bill_id: number;
+  provider_name: string;
+  label?: string | null;
+  bill_amount: string;
+  currency: CurrencyType;
+  due_date: string;
+  days_until_due: number;
+}
+
+export interface SubscriptionPendingBillDTO {
+  subscription_id: number;
+  provider_name: string;
+  label?: string | null;
+  period_year: number;
+  period_month: number;
+}
+
+export interface SubscriptionRemindersDTO {
+  due_payments: SubscriptionDuePaymentDTO[];
+  pending_bills: SubscriptionPendingBillDTO[];
+}
