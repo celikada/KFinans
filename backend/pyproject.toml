@@ -8,6 +8,10 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    # starlette FastAPI'nin alt katmanı (transitif). CVE-2026-54283 (HIGH,
+    # request.form() limitleri sessizce yok sayılıyor) 1.3.1'de fix'lendi →
+    # Trivy image gate'i 1.3.0'da kırmızıydı. Açık alt sınır.
+    "starlette>=1.3.1",
     "uvicorn[standard]",
     "sqlalchemy[asyncio]>=2.0",
     "alembic",

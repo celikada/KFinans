@@ -6,6 +6,19 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.8.15] - 2026-06-16
+
+### Güvenlik
+
+- **starlette CVE-2026-54283 (HIGH) → Trivy image gate fix:** v0.8.14 tag pipeline'ı
+  `trivy-image-scan` aşamasında kırmızıydı; backend imajındaki transitif `starlette 1.3.0`
+  HIGH zafiyet (`request.form()` boyut/sayı limitleri sessizce yok sayılıyor) taşıyordu.
+  `pyproject.toml`'a açık `starlette>=1.3.1` alt sınırı eklendi (fastapi 0.136.3 ile uyumlu,
+  import doğrulandı). Trivy gate'i yeşile döner → v0.8.14'teki "Giderler" kart birleşmesi +
+  bellek limiti 2Gi fix'i nihayet deploy edilebilir.
+
+---
+
 ## [0.8.14] - 2026-06-16
 
 ### Düzeltmeler
