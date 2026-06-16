@@ -495,6 +495,26 @@ async def test_reminders_pending_bill(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_start_date_create_and_out(client: AsyncClient):
+    headers = await make_user(client, "sub_start@example.com")
+    sub = await _create_sub(client, headers, start_date="2026-03-01")
+    assert sub["start_date"] == "2026-03-01"
+
+
+@pytest.mark.asyncio
+async def test_start_date_future_excludes_from_cashflow(client: AsyncClient):
+    """Başlangıcı gelecekte olan abonelik bütçesi bu ay forecast'a girmez."""
+    headers = await make_user(client, "sub_startfut@example.com")
+    year, month = _this_month()
+    # Başlangıç = gelecek yıl → bu yılın hiçbir ayında forecast yok
+    await _create_sub(client, headers, budget_amount=400, start_date=f"{year + 1}-01-01")
+    cf = await client.get(f"/api/v1/cash-flow?year={year}", headers=headers)
+    this_month = next(m for m in cf.json()["months"] if m["month"] == month)
+    # Abonelik forecast'a katkı yok (başlangıçtan önce)
+    assert float(this_month["expense_forecast"]) == 0.0
+
+
+@pytest.mark.asyncio
 async def test_delete_subscription_cascades_bills(client: AsyncClient):
     headers = await make_user(client, "sub_cascade@example.com")
     sub = await _create_sub(client, headers)

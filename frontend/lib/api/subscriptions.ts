@@ -1,4 +1,6 @@
 import type {
+  BillImportCommitInput,
+  ParsedBillDTO,
   ProviderDTO,
   SubscriptionBillDTO,
   SubscriptionBillIssueInput,
@@ -9,7 +11,7 @@ import type {
   SubscriptionRemindersDTO,
   SubscriptionSummaryDTO,
 } from "./types";
-import { request } from "./_client";
+import { request, uploadForm } from "./_client";
 import { getDefaultCurrency } from "@/lib/defaultCurrency";
 
 export const subscriptionsApi = {
@@ -58,4 +60,15 @@ export const subscriptionsApi = {
 
   // Girişte hatırlatmalar: ödenecek faturalar + fatura girilecek dönemler
   getSubscriptionReminders: () => request<SubscriptionRemindersDTO>("/subscriptions/reminders"),
+
+  // PDF fatura import — multipart (alan adı `file`); DB'ye yazmadan önizleme döner.
+  previewBillImport: (file: File) =>
+    uploadForm<ParsedBillDTO>("/subscriptions/import-bill/preview", file),
+
+  // Onaylanan fatura → issued kayıt (subscription_id null ise eşleşme aranır / oluşturulur).
+  commitBillImport: (payload: BillImportCommitInput) =>
+    request<SubscriptionBillDTO>("/subscriptions/import-bill/commit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

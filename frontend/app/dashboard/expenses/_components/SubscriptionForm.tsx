@@ -13,6 +13,11 @@ import { getDefaultCurrency } from "@/lib/defaultCurrency";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { categoryMeta } from "./subscriptionMeta";
 
+/** Bugünün tarihini ISO `YYYY-MM-DD` döndürür (date input default'u). */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 interface Props {
   /** Create modunda yeni kayıt; edit modunda güncellenmiş kayıt döner. */
   readonly onSaved: (sub: SubscriptionDTO) => void;
@@ -35,6 +40,7 @@ export function SubscriptionForm({ onSaved, existing, onCancel }: Props) {
   const [budgetAmount, setBudgetAmount] = useState(existing?.budget_amount ?? "");
   const [currency, setCurrency] = useState<CurrencyType>(existing?.currency ?? getDefaultCurrency());
   const [label, setLabel] = useState(existing?.label ?? "");
+  const [startDate, setStartDate] = useState(existing?.start_date ?? todayIso());
   const [billingDay, setBillingDay] = useState(existing?.billing_day?.toString() ?? "");
   const [dueDay, setDueDay] = useState(existing?.due_day?.toString() ?? "");
   const [active, setActive] = useState(existing?.active ?? true);
@@ -52,6 +58,7 @@ export function SubscriptionForm({ onSaved, existing, onCancel }: Props) {
       setBudgetAmount(existing.budget_amount);
       setCurrency(existing.currency ?? getDefaultCurrency());
       setLabel(existing.label ?? "");
+      setStartDate(existing.start_date ?? todayIso());
       setBillingDay(existing.billing_day?.toString() ?? "");
       setDueDay(existing.due_day?.toString() ?? "");
       setActive(existing.active);
@@ -62,6 +69,7 @@ export function SubscriptionForm({ onSaved, existing, onCancel }: Props) {
 
   function resetForm() {
     setProviderCode(""); setSubscriberNo(""); setBudgetAmount(""); setLabel("");
+    setStartDate(todayIso());
     setBillingDay(""); setDueDay(""); setActive(true); setNotes("");
     setCurrency(getDefaultCurrency());
   }
@@ -77,6 +85,7 @@ export function SubscriptionForm({ onSaved, existing, onCancel }: Props) {
         budget_amount: Number.parseFloat(budgetAmount),
         currency,
         label: label.trim() || null,
+        start_date: startDate || undefined,
         billing_day: billingDay ? Number.parseInt(billingDay) : null,
         due_day: dueDay ? Number.parseInt(dueDay) : null,
         active,
@@ -176,6 +185,19 @@ export function SubscriptionForm({ onSaved, existing, onCancel }: Props) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               maxLength={100}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="sub_start_date" className="block text-xs text-gray-500 mb-1">
+              {t("content.subscriptions.startDateLabel")}
+            </label>
+            <input
+              id="sub_start_date"
+              type="date"
+              className={INPUT_CLS}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
 
