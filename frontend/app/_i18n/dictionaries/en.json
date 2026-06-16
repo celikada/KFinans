@@ -600,6 +600,9 @@
       "budgetLabel": "Monthly budget (estimate)",
       "budgetShort": "Budget",
       "labelLabel": "Label (e.g. Home, Summer house)",
+      "startDateLabel": "Start month",
+      "asPlannedTitle": "Subscriptions (monthly estimate)",
+      "asPlannedBadge": "subscription",
       "billingDayLabel": "Billing day (1-28)",
       "dueDayLabel": "Payment due day (1-28)",
       "dueDayShort": "Due day",
@@ -647,6 +650,24 @@
         "deleteBill": "Delete bill",
         "undoPay": "Undo payment",
         "confirmDeleteBill": "Are you sure you want to delete this bill record?"
+      },
+      "import": {
+        "title": "Upload bill PDF",
+        "hint": "Upload the provider's PDF bill; amount, date and period are filled in automatically. Scanned (image) PDFs cannot be read; enter the details manually in that case.",
+        "uploadBtn": "Select PDF",
+        "uploading": "Uploading…",
+        "previewTitle": "Bill preview",
+        "matchedSubscription": "Will be added to existing subscription",
+        "newSubscription": "A new subscription will be created",
+        "amount": "Bill amount",
+        "billDate": "Bill date",
+        "dueDate": "Due date",
+        "nextBillDate": "Next bill date",
+        "nextDueDate": "Next due date",
+        "save": "Confirm and add",
+        "subscriberRequired": "Subscriber number is required.",
+        "previewFailed": "Could not read the bill.",
+        "saveFailed": "Could not save the bill."
       }
     },
     "subReminders": {

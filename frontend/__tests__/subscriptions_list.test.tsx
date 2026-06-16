@@ -32,6 +32,7 @@ function makeSub(over: Partial<SubscriptionDTO> = {}): SubscriptionDTO {
     label: "Ev",
     budget_amount: "500",
     currency: "TRY",
+    start_date: "2026-01-01",
     billing_day: null,
     due_day: 20,
     active: true,

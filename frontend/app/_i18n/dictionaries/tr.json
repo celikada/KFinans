@@ -600,6 +600,9 @@
       "budgetLabel": "Aylık bütçe (tahmini)",
       "budgetShort": "Bütçe",
       "labelLabel": "Etiket (ör. Ev, Yazlık)",
+      "startDateLabel": "Başlangıç ayı",
+      "asPlannedTitle": "Abonelikler (aylık tahmini)",
+      "asPlannedBadge": "abonelik",
       "billingDayLabel": "Fatura kesim günü (1-28)",
       "dueDayLabel": "Son ödeme günü (1-28)",
       "dueDayShort": "Son ödeme günü",
@@ -647,6 +650,24 @@
         "deleteBill": "Faturayı sil",
         "undoPay": "Ödemeyi geri al",
         "confirmDeleteBill": "Bu fatura kaydını silmek istediğine emin misin?"
+      },
+      "import": {
+        "title": "PDF fatura yükle",
+        "hint": "Kurumun PDF faturasını yükleyin; tutar, tarih ve dönem otomatik doldurulur. Görüntü (taranmış) PDF'ler okunamaz; bu durumda elle girin.",
+        "uploadBtn": "PDF seç",
+        "uploading": "Yükleniyor…",
+        "previewTitle": "Fatura önizlemesi",
+        "matchedSubscription": "Mevcut aboneliğe eklenecek",
+        "newSubscription": "Yeni abonelik oluşturulacak",
+        "amount": "Fatura tutarı",
+        "billDate": "Fatura tarihi",
+        "dueDate": "Son ödeme tarihi",
+        "nextBillDate": "Sonraki fatura tarihi",
+        "nextDueDate": "Sonraki son ödeme tarihi",
+        "save": "Onayla ve ekle",
+        "subscriberRequired": "Abone numarası zorunludur.",
+        "previewFailed": "Fatura okunamadı.",
+        "saveFailed": "Fatura kaydedilemedi."
       }
     },
     "subReminders": {

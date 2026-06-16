@@ -17,6 +17,8 @@ import { PlannedList } from "@/app/dashboard/planned/_components/PlannedList";
 import { PlannedCategoryPieChart } from "@/app/dashboard/planned/_components/PlannedCategoryPieChart";
 import { SubscriptionForm } from "./_components/SubscriptionForm";
 import { SubscriptionList } from "./_components/SubscriptionList";
+import { SubscriptionBillImport } from "./_components/SubscriptionBillImport";
+import { SubscriptionsAsPlanned } from "./_components/SubscriptionsAsPlanned";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
 type Tab = "actual" | "periyodik" | "abonelikler";
@@ -58,6 +60,15 @@ function ExpensesPageInner() {
   const importRef = useRef<HTMLInputElement>(null);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
+
+  // Sekme değiştir + URL'i (?tab=) güncelle (paylaşılabilir/derin link).
+  const goToTab = useCallback(
+    (next: Tab) => {
+      setTab(next);
+      router.replace(`/dashboard/expenses?tab=${next}`, { scroll: false });
+    },
+    [router],
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -154,7 +165,7 @@ function ExpensesPageInner() {
         {/* Sekmeler */}
         <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-sm">
           <button
-            onClick={() => setTab("actual")}
+            onClick={() => goToTab("actual")}
             className={`px-4 py-2 font-medium transition-colors ${
               tab === "actual" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
             }`}
@@ -162,7 +173,7 @@ function ExpensesPageInner() {
             {t("content.expenses.tabActual")}
           </button>
           <button
-            onClick={() => setTab("periyodik")}
+            onClick={() => goToTab("periyodik")}
             className={`px-4 py-2 font-medium transition-colors ${
               tab === "periyodik" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
             }`}
@@ -170,7 +181,7 @@ function ExpensesPageInner() {
             {t("content.expenses.tabPlanned")}
           </button>
           <button
-            onClick={() => setTab("abonelikler")}
+            onClick={() => goToTab("abonelikler")}
             className={`px-4 py-2 font-medium transition-colors ${
               tab === "abonelikler" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
             }`}
@@ -283,6 +294,13 @@ function ExpensesPageInner() {
             {!loading && (
               <PlannedList items={planned} onDeleted={handlePlannedDeleted} onEdit={setEditingPlanned} />
             )}
+
+            {!loading && (
+              <SubscriptionsAsPlanned
+                items={subscriptions}
+                onGoToSubscriptions={() => goToTab("abonelikler")}
+              />
+            )}
           </>
         )}
 
@@ -295,6 +313,8 @@ function ExpensesPageInner() {
               existing={editingSubscription}
               onCancel={() => setEditingSubscription(null)}
             />
+
+            <SubscriptionBillImport onImported={refresh} />
 
             {error && (
               <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>

@@ -55,9 +55,14 @@ class Subscription(Base):
     # Aylık tahmini/bütçe değeri ("henüz gerçekleşmemiş" taban)
     budget_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="TRY")
+    # Abonelik başlangıcı — bütçe bu tarihten itibaren forecast/planlı gider olarak sayılır.
+    start_date: Mapped[date_type] = mapped_column(Date, nullable=False, server_default=func.current_date())
     # Tahmini kesim günü (hatırlatma: "fatura gir") ve son ödeme günü
     billing_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     due_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # PDF fatura import'tan gelen sonraki beklenen fatura + son ödeme tarihleri (hatırlatma).
+    next_bill_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
+    next_due_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -100,6 +105,8 @@ class SubscriptionBill(Base):
     bill_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     bill_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
+    # PDF import'tan gelen fatura no (referans + ileride dedup).
+    bill_no: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     paid_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # Ödeme şekli: cash | credit_card (ödendiğinde set edilir)
     payment_method: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)

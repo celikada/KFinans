@@ -7,6 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl \
     fonts-dejavu fonts-dejavu-core \
+    tesseract-ocr tesseract-ocr-tur \
     && rm -rf /var/lib/apt/lists/*
 
 # DEVOPS-002 (FAZ H): Non-root user (CIS Docker Benchmark 4.1)

@@ -105,6 +105,7 @@ class AuditAction(str, Enum):
     SUBSCRIPTION_BILL_ISSUE = "subscription.bill.issue"
     SUBSCRIPTION_BILL_PAY = "subscription.bill.pay"
     SUBSCRIPTION_BILL_UNPAY = "subscription.bill.unpay"
+    SUBSCRIPTION_BILL_IMPORT = "subscription.bill.import"
 
 
 def _client_ip(request: Optional[Request]) -> Optional[str]:
