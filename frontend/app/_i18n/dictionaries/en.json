@@ -109,7 +109,7 @@
       "income": "Income (this month)",
       "incomeHint": "Salary, rent, dividend...",
       "expenses": "Expenses (this month)",
-      "expensesHint": "Monthly spending tracker",
+      "expensesHint": "This month's spending + year-end planned",
       "planned": "Planned Expenses (this year)",
       "plannedHint": "Loan, tax, utility plan",
       "bes": "Pension (BES)",
