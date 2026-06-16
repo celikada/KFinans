@@ -13,12 +13,12 @@ from app.services.statement_import._utils import parse_amount, parse_date, searc
 
 from .base import ParsedBill
 
-_ACCOUNT_RE = re.compile(r"HESAP NUMARASI\s*:?\s*(\d+)")
-_AMOUNT_RE = re.compile(r"ÖDENECEK TUTAR\s*:?\s*([\d.,]+)\s*TL")
-_BILL_DATE_RE = re.compile(r"FATURA TARİHİ\s*:?\s*(\d{2}/\d{2}/\d{4})")
-_NEXT_BILL_RE = re.compile(r"Bir Sonraki Fatura Düzenleme Tarihi\s*:?\s*(\d{2}/\d{2}/\d{4})")
-_NEXT_DUE_RE = re.compile(r"Bir Sonraki Son Ödeme Tarihi\s*:?\s*(\d{2}/\d{2}/\d{4})")
-_BILL_NO_RE = re.compile(r"FATURA NO\s*:?\s*(\d+)")
+_ACCOUNT_RE = re.compile(r"HESAP NUMARASI\s{0,3}:?\s{0,3}(\d+)")
+_AMOUNT_RE = re.compile(r"ÖDENECEK TUTAR\s{0,3}:?\s{0,3}([\d.,]+)\s{0,3}TL")
+_BILL_DATE_RE = re.compile(r"FATURA TARİHİ\s{0,3}:?\s{0,3}(\d{2}/\d{2}/\d{4})")
+_NEXT_BILL_RE = re.compile(r"Bir Sonraki Fatura Düzenleme Tarihi\s{0,3}:?\s{0,3}(\d{2}/\d{2}/\d{4})")
+_NEXT_DUE_RE = re.compile(r"Bir Sonraki Son Ödeme Tarihi\s{0,3}:?\s{0,3}(\d{2}/\d{2}/\d{4})")
+_BILL_NO_RE = re.compile(r"FATURA NO\s{0,3}:?\s{0,3}(\d+)")
 
 
 class TtnetParser:

@@ -14,12 +14,12 @@ from app.services.statement_import._utils import parse_amount, parse_date, searc
 
 from .base import ParsedBill
 
-_GSM_RE = re.compile(r"GSM NO:\s*([\d ]+?)\s+Abonelik")
-_AMOUNT_RE = re.compile(r"FATURA TUTARI:\s*([\d.,]+)\s*TL")
-_BILL_DATE_RE = re.compile(r"Fatura Tarihi:\s*(\d{2}[./]\d{2}[./]\d{4})")
-_NEXT_BILL_RE = re.compile(r"BİR SONRAKİ FATURA TARİHİ:\s*(\d{2}[./]\d{2}[./]\d{4})")
-_NEXT_DUE_RE = re.compile(r"BİR SONRAKİ SON ÖDEME TARİHİ:\s*(\d{2}[./]\d{2}[./]\d{4})")
-_BILL_NO_RE = re.compile(r"Fatura ID:\s*(\S+)")
+_GSM_RE = re.compile(r"GSM NO:\s{0,3}([\d ]{1,20}?)\s{1,3}Abonelik")
+_AMOUNT_RE = re.compile(r"FATURA TUTARI:\s{0,3}([\d.,]+)\s{0,3}TL")
+_BILL_DATE_RE = re.compile(r"Fatura Tarihi:\s{0,3}(\d{2}[./]\d{2}[./]\d{4})")
+_NEXT_BILL_RE = re.compile(r"BİR SONRAKİ FATURA TARİHİ:\s{0,3}(\d{2}[./]\d{2}[./]\d{4})")
+_NEXT_DUE_RE = re.compile(r"BİR SONRAKİ SON ÖDEME TARİHİ:\s{0,3}(\d{2}[./]\d{2}[./]\d{4})")
+_BILL_NO_RE = re.compile(r"Fatura ID:\s{0,3}(\S+)")
 
 
 class VodafoneParser:

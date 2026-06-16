@@ -14,10 +14,10 @@ from app.services.statement_import._utils import parse_amount
 from .base import ParsedBill, add_one_month, parse_flex_date
 
 _SUBSCRIBER_RE = re.compile(r"Hesap No:\s*(\d+)")
-_AMOUNT_RE = re.compile(r"Ödenecek Tutar\s*:?\s*([\d.,]+)\s*T[LR]")
-_BILL_DATE_RE = re.compile(r"Fatura Tarihi\s*:?\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})")
-_DUE_DATE_RE = re.compile(r"Son Ödeme Tarihi\s*:?\s*(\d{1,2}[-./]\d{1,2}[-./]\d{4})")
-_BILL_NO_RE = re.compile(r"Fatura No\s*:?\s*(\S+)")
+_AMOUNT_RE = re.compile(r"Ödenecek Tutar\s{0,3}:?\s{0,3}([\d.,]+)\s{0,3}T[LR]")
+_BILL_DATE_RE = re.compile(r"Fatura Tarihi\s{0,3}:?\s{0,3}(\d{1,2}[-./]\d{1,2}[-./]\d{4})")
+_DUE_DATE_RE = re.compile(r"Son Ödeme Tarihi\s{0,3}:?\s{0,3}(\d{1,2}[-./]\d{1,2}[-./]\d{4})")
+_BILL_NO_RE = re.compile(r"Fatura No\s{0,3}:?\s{0,3}(\S+)")
 
 
 class EsgazParser:
