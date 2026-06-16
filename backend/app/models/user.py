@@ -100,3 +100,4 @@ class User(Base):
     credit_cards: Mapped[list["CreditCard"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
     manual_crypto_holdings: Mapped[list["ManualCryptoHolding"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
     push_subscriptions: Mapped[list["PushSubscription"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)
+    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="user", cascade=_CASCADE_ALL_DELETE_ORPHAN)

@@ -13,6 +13,7 @@ from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.models.push_subscription import PushSubscription
 from app.models.recurring_income import RecurringIncome
 from app.models.recurring_skip import RecurringSkip
+from app.models.subscription import Subscription, SubscriptionBill
 from app.models.tefas import TefasHolding
 from app.models.user import User
 
@@ -38,4 +39,6 @@ __all__ = [
     "CreditTransaction",
     "DailyRate",
     "LivePortfolioCache",
+    "Subscription",
+    "SubscriptionBill",
 ]

@@ -32,6 +32,7 @@ import { recurringApi } from "./api/recurring";
 import { releaseApi } from "./api/release";
 import { reportsApi } from "./api/reports";
 import { stocksApi } from "./api/stocks";
+import { subscriptionsApi } from "./api/subscriptions";
 import { tefasApi } from "./api/tefas";
 import { userApi } from "./api/user";
 import { walletsApi } from "./api/wallets";
@@ -56,6 +57,7 @@ export const api = {
   ...releaseApi,
   ...reportsApi,
   ...stocksApi,
+  ...subscriptionsApi,
   ...tefasApi,
   ...userApi,
   ...walletsApi,

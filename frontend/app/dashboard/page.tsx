@@ -10,6 +10,7 @@ import {
   type BudgetComparisonDTO,
   type PendingItemDTO,
   type CreditCardRemindersDTO,
+  type SubscriptionRemindersDTO,
   type LivePortfolioOut,
 } from "@/lib/api";
 import { getAccessToken } from "@/lib/api/_client";
@@ -30,6 +31,7 @@ import { SnapshotIssuesModal, type PendingIssues } from "./_components/SnapshotI
 import { CHAIN_LABELS } from "./wallets/_components/constants";
 import { PendingRealizeModal } from "./_components/PendingRealizeModal";
 import { CreditCardRemindersModal } from "./_components/CreditCardRemindersModal";
+import { SubscriptionRemindersModal } from "./_components/SubscriptionRemindersModal";
 
 
 function fmtTL(val: number) {
@@ -166,6 +168,8 @@ export default function DashboardPage() {
 
   // Planlı ödemeler (bu yıl)
   const [plannedTotal, setPlannedTotal] = useState<number | null>(null);
+  // Abonelik (utility) yıllık kalan tahmini — Giderler footer'ında planlı ile toplanır.
+  const [subscriptionYearTotal, setSubscriptionYearTotal] = useState<number | null>(null);
 
   // Gelir (bu ay)
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
@@ -230,6 +234,8 @@ export default function DashboardPage() {
   const [pendingRealize, setPendingRealize] = useState<PendingItemDTO[]>([]);
   // Kredi kartı hatırlatma popup (ekstre yükleme + ödeme yaklaşan) state
   const [ccReminders, setCcReminders] = useState<CreditCardRemindersDTO | null>(null);
+  // Abonelik hatırlatma popup (fatura gir + ödeme yaklaşan) state
+  const [subReminders, setSubReminders] = useState<SubscriptionRemindersDTO | null>(null);
 
   // Snapshot tetikleyici
   const [snapshotting, setSnapshotting] = useState(false);
@@ -302,6 +308,29 @@ export default function DashboardPage() {
         if (cancelled) return;
         if (res.pending_statements.length > 0 || res.due_payments.length > 0) {
           setCcReminders(res);
+          localStorage.setItem(STORAGE_KEY, todayStr);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Abonelik hatırlatması: kredi kartıyla aynı mantık (günde 1 kez, ayrı throttle key).
+  // Fatura girilecek dönem veya ödemesi yaklaşan/geçmiş fatura varsa popup aç.
+  useEffect(() => {
+    const STORAGE_KEY = "kfinans-sub-reminders-shown";
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(STORAGE_KEY) === todayStr) return; // bugün zaten gösterildi
+
+    let cancelled = false;
+    api
+      .getSubscriptionReminders()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.pending_bills.length > 0 || res.due_payments.length > 0) {
+          setSubReminders(res);
           localStorage.setItem(STORAGE_KEY, todayStr);
         }
       })
@@ -388,6 +417,7 @@ export default function DashboardPage() {
       set(setExpenseCount, c.expenseCount);
       set(setExpenseTop, c.expenseTop);
       set(setPlannedTotal, c.plannedTotal);
+      set(setSubscriptionYearTotal, c.subscriptionYearTotal);
       set(setIncomeTotal, c.incomeTotal);
       set(setIncomeCount, c.incomeCount);
       set(setIncomeTop, c.incomeTop);
@@ -549,6 +579,17 @@ export default function DashboardPage() {
         }
       }).finally(() => markFresh("expenses")),
 
+      // Abonelikler (utility) yıllık kalan tahmini — Giderler footer'ında
+      // planlı ile toplanır (yıl sonu beklentisi = planlı + abonelik).
+      safe("subscriptions", async () => {
+        const sum = await api.getSubscriptionSummary(displayCurrency);
+        const total = Number.parseFloat(sum.remaining_year_estimate);
+        if (Number.isFinite(total) && total > 0) {
+          safeSet(setSubscriptionYearTotal)(total);
+          cachePatch({ subscriptionYearTotal: total });
+        }
+      }).finally(() => markFresh("expenses")),
+
       // Harcama özeti (bu ay)
       safe("expenses", async () => {
         const sum = await api.getExpenseSummary(yyyy, mm);
@@ -664,6 +705,9 @@ export default function DashboardPage() {
     (commodityTotal ?? 0) +
     (cashTotal ?? 0) +
     (manualCryptoTotal ?? 0);
+
+  // Giderler kartı "yıl sonu beklentisi" footer'ı = planlı ödemeler + abonelikler.
+  const expenseYearEnd = (plannedTotal ?? 0) + (subscriptionYearTotal ?? 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -833,8 +877,8 @@ export default function DashboardPage() {
                 countLabel={t("dashboard.record")}
                 top={expenseTop}
                 placeholder={t("dashboard.cards.expensesHint")}
-                footer={plannedTotal !== null && plannedTotal > 0 && (
-                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtCurrency(plannedTotal, displayCurrency)}</span></span>
+                footer={expenseYearEnd > 0 && (
+                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtCurrency(expenseYearEnd, displayCurrency)}</span></span>
                 )}
               />
             )}
@@ -1015,6 +1059,11 @@ export default function DashboardPage() {
       {/* Kredi kartı ekstre/ödeme hatırlatma popup'ı */}
       {ccReminders && (
         <CreditCardRemindersModal data={ccReminders} onClose={() => setCcReminders(null)} />
+      )}
+
+      {/* Abonelik fatura/ödeme hatırlatma popup'ı */}
+      {subReminders && (
+        <SubscriptionRemindersModal data={subReminders} onClose={() => setSubReminders(null)} />
       )}
 
       <footer className="mt-auto py-4 flex flex-col items-center gap-2">

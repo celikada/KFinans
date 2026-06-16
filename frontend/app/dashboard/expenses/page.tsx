@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   api, ExpenseDTO, ExpenseSummaryDTO, BudgetComparisonDTO, EXPENSE_CATEGORY_LABELS,
-  PlannedExpenseDTO,
+  PlannedExpenseDTO, SubscriptionDTO,
 } from "@/lib/api";
 import { PageHeader } from "@/app/_components/PageHeader";
 import { TOOLBAR_BTN_CLS } from "@/lib/format";
@@ -15,9 +15,17 @@ import { MonthSelector } from "./_components/MonthSelector";
 import { PlannedForm } from "@/app/dashboard/planned/_components/PlannedForm";
 import { PlannedList } from "@/app/dashboard/planned/_components/PlannedList";
 import { PlannedCategoryPieChart } from "@/app/dashboard/planned/_components/PlannedCategoryPieChart";
+import { SubscriptionForm } from "./_components/SubscriptionForm";
+import { SubscriptionList } from "./_components/SubscriptionList";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
-type Tab = "actual" | "periyodik";
+type Tab = "actual" | "periyodik" | "abonelikler";
+
+function initialTabFrom(param: string | null): Tab {
+  if (param === "periyodik") return "periyodik";
+  if (param === "abonelikler") return "abonelikler";
+  return "actual";
+}
 
 function ExpensesPageInner() {
   const router = useRouter();
@@ -27,7 +35,7 @@ function ExpensesPageInner() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const initialTab: Tab = searchParams.get("tab") === "periyodik" ? "periyodik" : "actual";
+  const initialTab: Tab = initialTabFrom(searchParams.get("tab"));
   const [tab, setTab] = useState<Tab>(initialTab);
 
   // Gerçekleşen harcamalar
@@ -40,6 +48,10 @@ function ExpensesPageInner() {
   const [planned, setPlanned] = useState<PlannedExpenseDTO[]>([]);
   const [editingPlanned, setEditingPlanned] = useState<PlannedExpenseDTO | null>(null);
 
+  // Abonelikler (utility / fatura takibi)
+  const [subscriptions, setSubscriptions] = useState<SubscriptionDTO[]>([]);
+  const [editingSubscription, setEditingSubscription] = useState<SubscriptionDTO | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
@@ -51,16 +63,18 @@ function ExpensesPageInner() {
     setLoading(true);
     setError("");
     try {
-      const [list, sum, comparison, plannedList] = await Promise.all([
+      const [list, sum, comparison, plannedList, subList] = await Promise.all([
         api.listExpenses({ year, month }),
         api.getExpenseSummary(year, month),
         api.getBudgetComparison(year, month),
         api.listPlannedExpenses(),
+        api.listSubscriptions(),
       ]);
       setExpenses(list);
       setSummary(sum);
       setOverBudget(comparison.filter((r) => r.over_budget));
       setPlanned(plannedList);
+      setSubscriptions(subList);
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
       setError(err instanceof Error ? err.message : t("content.expenses.loadFailed"));
@@ -91,6 +105,16 @@ function ExpensesPageInner() {
 
   function handlePlannedDeleted(id: number) {
     setPlanned((prev) => prev.filter((p) => p.id !== id));
+    refresh();
+  }
+
+  function handleSubscriptionSaved() {
+    setEditingSubscription(null);
+    refresh();
+  }
+
+  function handleSubscriptionDeleted(id: number) {
+    setSubscriptions((prev) => prev.filter((s) => s.id !== id));
     refresh();
   }
 
@@ -144,6 +168,14 @@ function ExpensesPageInner() {
             }`}
           >
             {t("content.expenses.tabPlanned")}
+          </button>
+          <button
+            onClick={() => setTab("abonelikler")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              tab === "abonelikler" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {t("content.expenses.tabSubscriptions")}
           </button>
         </div>
 
@@ -250,6 +282,35 @@ function ExpensesPageInner() {
 
             {!loading && (
               <PlannedList items={planned} onDeleted={handlePlannedDeleted} onEdit={setEditingPlanned} />
+            )}
+          </>
+        )}
+
+        {tab === "abonelikler" && (
+          <>
+            <p className="text-xs text-gray-500">{t("content.subscriptions.tabHint")}</p>
+
+            <SubscriptionForm
+              onSaved={handleSubscriptionSaved}
+              existing={editingSubscription}
+              onCancel={() => setEditingSubscription(null)}
+            />
+
+            {error && (
+              <p className="text-sm text-red-500 bg-red-50 px-4 py-3 rounded-xl">{error}</p>
+            )}
+
+            {loading && (
+              <p className="text-sm text-gray-400 text-center py-4">{t("common.loading")}</p>
+            )}
+
+            {!loading && (
+              <SubscriptionList
+                items={subscriptions}
+                onChanged={refresh}
+                onDeleted={handleSubscriptionDeleted}
+                onEdit={setEditingSubscription}
+              />
             )}
           </>
         )}
