@@ -158,13 +158,16 @@ spec:
           resources:
             requests:
               cpu: 100m
-              # 256Mi->512Mi: 10-zincir paralel wallet taramasi (web3/ccxt) + portfolio
-              # toplama bellek tepe noktasi 512Mi limitini asip OOMKilled veriyordu
-              # (Oracle Always Free Ampere 24GB VM'de bol bos RAM var, ek maliyet yok).
-              memory: 512Mi
+              # 256Mi->512Mi->768Mi: live cache + arka plan refresh (6 bolum paralel,
+              # her biri ayri session + httpx/web3 client) bellek tabani yukseldi.
+              memory: 768Mi
             limits:
               cpu: 500m
-              memory: 1Gi
+              # 1Gi->2Gi: v0.8.x live cache + login-tetikli arka plan refresh, BTC xpub
+              # taramasi + 6 paralel section bellek tepesini ~850Mi-1Gi'ye cikariyor ->
+              # 1Gi limitinde OOMKilled (2026-06-16, login penceresinde kesinti). Node'da
+              # bol bos RAM var (Oracle Always Free Ampere 24GB, %18 kullanim) -> ek maliyet yok.
+              memory: 2Gi
           # FAZ C3 TrustedHostMiddleware ALLOWED_HOSTS=["kfinans.app","www.kfinans.app"]
           # ile sikilastirilmis durumda. Kubelet probe'lari default'ta `Host: <pod-ip>`
           # gonderir; whitelist'te olmadigi icin 400 doner. httpHeaders.Host override

@@ -44,8 +44,7 @@ export const DASHBOARD_CARDS = [
   // Finans grubu
   { id: "creditCards",  label: "Kredi Kartları",             group: "finance" },
   { id: "income",       label: "Gelirler",                  group: "finance" },
-  { id: "expenses",     label: "Harcamalar",                group: "finance" },
-  { id: "planned",      label: "Planlı Harcamalar",         group: "finance" },
+  { id: "expenses",     label: "Giderler",                  group: "finance" },
   { id: "budget",       label: "Bütçe Takibi",              group: "finance" },
   { id: "goal",         label: "Finansal Hedef",            group: "finance" },
 ] as const;

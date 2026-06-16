@@ -6,7 +6,23 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
-## [0.8.13] - 2026-06-15
+## [0.8.14] - 2026-06-16
+
+### Düzeltmeler
+
+- **Backend OOMKilled → login kesintisi (bellek limiti 1Gi→2Gi):** Live cache + login-tetikli
+  arka plan refresh (6 paralel bölüm + BTC xpub taraması, her biri ayrı session/httpx/web3
+  client) bellek tepesini ~850Mi-1Gi'ye çıkarıyordu → 1Gi limitinde pod OOMKilled olup
+  restart ediyor, o pencerede login erişilemiyordu. Limit 2Gi'ye (request 512Mi→768Mi)
+  çıkarıldı (Oracle Ampere 24GB node'da %18 kullanım, ek maliyet yok). `k8s/backend.yaml`.
+
+### Değişiklikler
+
+- **Dashboard "Giderler" tek kartı (gelir simetrisi):** Ayrı "Harcamalar" + "Planlı Ödemeler"
+  kartları tek **Giderler** kartında birleşti — gelir kartı gibi anlık (bu ay gerçekleşen)
+  toplam + footer'da yıl sonu planlı beklenti. Tıklayınca `/dashboard/expenses` (2 sekme).
+  Ayarlardaki öksüz "Planlı Harcamalar" görünürlük toggle'ı kaldırıldı.
+
 
 ### Eklenenler / Değişiklikler
 

@@ -48,7 +48,7 @@ function top3<T>(items: T[], valueFn: (i: T) => number, labelFn: (i: T) => strin
 // artık tek `/portfolio/live` çağrısından (useLivePortfolio) beslenir; onların
 // "güncelleniyor" durumu live hook'un `refreshing` bayrağıyla yönetilir.
 const REFRESHABLE_CARDS: DashboardCardId[] = [
-  "bes", "cash", "creditCards", "income", "expenses", "planned", "budget", "goal",
+  "bes", "cash", "creditCards", "income", "expenses", "budget", "goal",
 ];
 
 // `/portfolio/live` section'larından ağır kartların (total + count + top3)
@@ -538,7 +538,8 @@ export default function DashboardPage() {
         cachePatch(patch);
       }).finally(() => markFresh("goal")),
 
-      // Planlı ödemeler (yıllık tahmin)
+      // Planlı ödemeler (yıllık tahmin) — Giderler kartının "yıl sonu beklentisi"
+      // footer'ını besler (ayrı kart kaldırıldı → markFresh expenses).
       safe("planned", async () => {
         const fc = await api.getForecast(yyyy);
         const total = Number.parseFloat(fc.year_total);
@@ -546,7 +547,7 @@ export default function DashboardPage() {
           safeSet(setPlannedTotal)(total);
           cachePatch({ plannedTotal: total });
         }
-      }).finally(() => markFresh("planned")),
+      }).finally(() => markFresh("expenses")),
 
       // Harcama özeti (bu ay)
       safe("expenses", async () => {
@@ -816,6 +817,9 @@ export default function DashboardPage() {
               />
             )}
 
+            {/* Giderler: anlık (bu ay) gerçekleşen + footer'da yıl sonu planlı beklenti
+                (gelir kartı simetrisi). Eski ayrı "Planlı Ödemeler" kartı buraya birleşti;
+                tek "Giderler" kartı → tıklayınca /dashboard/expenses (2 sekme). */}
             {!hiddenCards.includes("expenses") && (
               <Card
                 href="/dashboard/expenses"
@@ -829,19 +833,9 @@ export default function DashboardPage() {
                 countLabel={t("dashboard.record")}
                 top={expenseTop}
                 placeholder={t("dashboard.cards.expensesHint")}
-              />
-            )}
-
-            {!hiddenCards.includes("planned") && (
-              <Card
-                href="/dashboard/expenses?tab=periyodik"
-                updating={updatingCards.has("planned")}
-                icon="planned"
-                color="violet"
-                title={t("dashboard.cards.planned")}
-                total={plannedTotal}
-                top={[]}
-                placeholder={t("dashboard.cards.plannedHint")}
+                footer={plannedTotal !== null && plannedTotal > 0 && (
+                  <span>{t("dashboard.yearEndExpectation")}: <span className="font-semibold text-gray-700">{fmtCurrency(plannedTotal, displayCurrency)}</span></span>
+                )}
               />
             )}
 
