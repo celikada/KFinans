@@ -499,6 +499,18 @@
         "previewFailed": "Ekstre okunamadı",
         "saveFailed": "İçe aktarma başarısız"
       },
+      "pay": {
+        "title": "Ekstre ödemesi",
+        "statementAmount": "Ekstre tutarı",
+        "full": "Tam ödeme",
+        "partial": "Kısmi ödeme",
+        "amountLabel": "Ödenen tutar",
+        "remainderNote": "Kalan {amount} kartın dönem-içi borcuna eklenecek.",
+        "submit": "Öde",
+        "amountInvalid": "Tutar 0 ile ekstre tutarı arasında olmalı.",
+        "failed": "Ödeme başarısız",
+        "partialBadge": "kısmi: {paid} / {total} ödendi"
+      },
       "loadFailed": "Yüklenemedi",
       "saveFailed": "Kayıt başarısız",
       "deleteFailed": "Silme başarısız",

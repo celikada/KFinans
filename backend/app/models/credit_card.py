@@ -82,6 +82,9 @@ class CreditCardStatement(Base):
     statement_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
     paid_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # Ödenen tutar (kısmi ödeme). NULL + paid_at set → tam ödeme (= statement_amount);
+    # < statement_amount → kısmi (kalan kartın current_period_debt'ine taşınır).
+    paid_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
