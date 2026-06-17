@@ -810,7 +810,12 @@ async def _expense_items_for_month(
     for st in stmt_q.scalars().all():
         effective = _statement_effective_amount(st.statement_amount, st.paid_at, st.paid_amount)
         partial = st.paid_at is not None and st.paid_amount is not None and Decimal(st.paid_amount) < Decimal(st.statement_amount)
-        paid_label = " · kısmi ödendi" if partial else ("" if st.paid_at is None else " · ödendi")
+        if st.paid_at is None:
+            paid_label = ""
+        elif partial:
+            paid_label = " · kısmi ödendi"
+        else:
+            paid_label = " · ödendi"
         items.append(
             CashFlowItem(
                 kind="actual",

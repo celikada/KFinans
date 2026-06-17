@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/credit-cards", tags=["credit-cards"])
 
 _CARD_NOT_FOUND = "Kart bulunamadı"
+_STATEMENT_NOT_FOUND = "Ekstre bulunamadı"
 _ISTANBUL = ZoneInfo("Europe/Istanbul")
 # Son ödeme tarihi bu kadar gün içindeyse "yaklaşıyor" sayılır (girişte hatırlat).
 _DUE_SOON_DAYS = 5
@@ -425,7 +426,7 @@ async def update_statement(
     )
     stmt = result.scalar_one_or_none()
     if not stmt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_STATEMENT_NOT_FOUND)
     for attr in ("statement_amount", "statement_date", "due_date", "paid_at", "paid_amount", "notes", "currency"):
         v = getattr(payload, attr)
         if v is not None:
@@ -458,7 +459,7 @@ async def pay_statement(
     )
     stmt = result.scalar_one_or_none()
     if not stmt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_STATEMENT_NOT_FOUND)
     if payload.paid_amount > Decimal(stmt.statement_amount):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -493,7 +494,7 @@ async def delete_statement(
     )
     stmt = result.scalar_one_or_none()
     if not stmt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_STATEMENT_NOT_FOUND)
     await db.delete(stmt)
     await db.commit()
 
