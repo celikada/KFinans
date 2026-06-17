@@ -499,6 +499,18 @@
         "previewFailed": "Could not read statement",
         "saveFailed": "Import failed"
       },
+      "pay": {
+        "title": "Statement payment",
+        "statementAmount": "Statement amount",
+        "full": "Full payment",
+        "partial": "Partial payment",
+        "amountLabel": "Amount paid",
+        "remainderNote": "The remaining {amount} will be added to the card's current-period debt.",
+        "submit": "Pay",
+        "amountInvalid": "Amount must be between 0 and the statement amount.",
+        "failed": "Payment failed",
+        "partialBadge": "partial: {paid} / {total} paid"
+      },
       "loadFailed": "Failed to load",
       "saveFailed": "Save failed",
       "deleteFailed": "Delete failed",

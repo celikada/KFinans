@@ -228,14 +228,32 @@ async def _actual_expense_by_month(db: AsyncSession, user_id, year: int) -> dict
     return by_month
 
 
+def _statement_effective_amount(statement_amount: Decimal, paid_at, paid_amount) -> Decimal:
+    """Ekstrenin nakit-akışına giren efektif tutarı.
+
+    Kısmi ödenmişse (paid_at + paid_amount set) o ay yalnız ÖDENEN sayılır; kalan
+    kartın dönem-içi borcuna taşınıp sonraki ekstrede görünür (çift sayım yok).
+    Ödenmemiş veya tam ödenmiş → statement_amount.
+    """
+    if paid_at is not None and paid_amount is not None:
+        return Decimal(paid_amount)
+    return Decimal(statement_amount)
+
+
 async def _statement_by_month(db: AsyncSession, user_id, year: int, rates: dict[str, Decimal]) -> dict[int, Decimal]:
     """Kredi kartı ekstreleri (due_date hangi aya denkse o ayın gideri).
 
     Çoklu para birimi (v0.3.0): forecast → ekstrenin para birimi güncel kurla
-    TL'ye çevrilir.
+    TL'ye çevrilir. Kısmi ödenen ekstre o ay yalnız ödeneni sayar (`_statement_effective_amount`).
     """
     stmt_q = await db.execute(
-        select(CreditCardStatement.due_date, CreditCardStatement.statement_amount, CreditCardStatement.currency)
+        select(
+            CreditCardStatement.due_date,
+            CreditCardStatement.statement_amount,
+            CreditCardStatement.currency,
+            CreditCardStatement.paid_at,
+            CreditCardStatement.paid_amount,
+        )
         .join(CreditCard, CreditCardStatement.card_id == CreditCard.id)
         .where(
             CreditCard.user_id == user_id,
@@ -244,8 +262,9 @@ async def _statement_by_month(db: AsyncSession, user_id, year: int, rates: dict[
         )
     )
     by_month = _empty_month_map()
-    for due_date, amount, ccy in stmt_q.all():
-        by_month[due_date.month] += currency_svc.convert_to_tl(Decimal(amount), ccy, rates)
+    for due_date, amount, ccy, paid_at, paid_amount in stmt_q.all():
+        effective = _statement_effective_amount(amount, paid_at, paid_amount)
+        by_month[due_date.month] += currency_svc.convert_to_tl(effective, ccy, rates)
     return by_month
 
 
@@ -789,16 +808,19 @@ async def _expense_items_for_month(
         .order_by(CreditCardStatement.due_date)
     )
     for st in stmt_q.scalars().all():
+        effective = _statement_effective_amount(st.statement_amount, st.paid_at, st.paid_amount)
+        partial = st.paid_at is not None and st.paid_amount is not None and Decimal(st.paid_amount) < Decimal(st.statement_amount)
+        paid_label = " · kısmi ödendi" if partial else ("" if st.paid_at is None else " · ödendi")
         items.append(
             CashFlowItem(
                 kind="actual",
                 category="statement",
                 label=card_names.get(st.card_id, "Kredi kartı"),
-                sub_label=f"{st.period_month:02d}/{st.period_year} ekstresi" + ("" if st.paid_at is None else " · ödendi"),
+                sub_label=f"{st.period_month:02d}/{st.period_year} ekstresi" + paid_label,
                 date=st.due_date,
-                amount=Decimal(st.statement_amount),
+                amount=effective,
                 currency=st.currency,
-                amount_tl=currency_svc.convert_to_tl(Decimal(st.statement_amount), st.currency, rates),
+                amount_tl=currency_svc.convert_to_tl(effective, st.currency, rates),
             )
         )
 

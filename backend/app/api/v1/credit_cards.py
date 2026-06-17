@@ -33,6 +33,7 @@ from app.schemas.credit_card import (
     PendingStatementCard,
     StatementCreate,
     StatementOut,
+    StatementPayIn,
     StatementUpdate,
 )
 from app.schemas.statement_import import (
@@ -400,6 +401,8 @@ async def create_statement(
         currency=payload.currency or card.currency or "TRY",
     )
     db.add(stmt)
+    # Elle eklenen ekstre de dönemine kadarki taksit dilimlerini kapsar → uzlaştır.
+    await _reconcile_card_installments(db, card_id, payload.due_date)
     await db.commit()
     await db.refresh(stmt)
     return stmt
@@ -423,10 +426,52 @@ async def update_statement(
     stmt = result.scalar_one_or_none()
     if not stmt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
-    for attr in ("statement_amount", "statement_date", "due_date", "paid_at", "notes", "currency"):
+    for attr in ("statement_amount", "statement_date", "due_date", "paid_at", "paid_amount", "notes", "currency"):
         v = getattr(payload, attr)
         if v is not None:
             setattr(stmt, attr, v)
+    await db.commit()
+    await db.refresh(stmt)
+    return stmt
+
+
+@router.post("/{card_id}/statements/{statement_id}/pay", response_model=StatementOut)
+async def pay_statement(
+    card_id: int,
+    statement_id: int,
+    payload: StatementPayIn,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Ekstreyi ödendi işaretle (tam veya kısmi).
+
+    Kısmi ödemede (paid_amount < statement_amount) kalan, kartın dönem-içi borcuna
+    (`current_period_debt`) eklenir → sonraki ekstreye taşınır. Carry yalnız İLK
+    ödemede uygulanır (paid_at null→set); tekrar çağrıda çift eklenmez.
+    """
+    card = await _get_owned_card(card_id, current_user, db)
+    result = await db.execute(
+        select(CreditCardStatement).where(
+            CreditCardStatement.id == statement_id,
+            CreditCardStatement.card_id == card_id,
+        )
+    )
+    stmt = result.scalar_one_or_none()
+    if not stmt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ekstre bulunamadı")
+    if payload.paid_amount > Decimal(stmt.statement_amount):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Ödenen tutar ekstre tutarından büyük olamaz",
+        )
+    already_paid = stmt.paid_at is not None
+    stmt.paid_at = payload.paid_at or datetime.now(_ISTANBUL)
+    stmt.paid_amount = payload.paid_amount
+    # Kısmi ödeme: kalanı dönem-içi borca taşı — yalnız ilk ödemede (çift-carry önle).
+    if not already_paid:
+        remainder = Decimal(stmt.statement_amount) - Decimal(payload.paid_amount)
+        if remainder > 0:
+            card.current_period_debt = Decimal(card.current_period_debt) + remainder
     await db.commit()
     await db.refresh(stmt)
     return stmt
@@ -628,6 +673,36 @@ async def _upsert_statement(db: AsyncSession, card_id: int, s: StatementCreate, 
             currency=ccy,
         )
     )
+
+
+async def _reconcile_card_installments(db: AsyncSession, card_id: int, due_date: date_type) -> int:
+    """Bir ekstre kaydedilince kartın TÜM taksitlerini ekstre dönemine göre uzlaştırır.
+
+    Ekstre TOPLAMI, dilimi due_date ayına **veya öncesine** düşen taksitleri zaten
+    içerir → bu dilimler "kapsanmış" sayılıp projeksiyondan düşülür. Böylece parser'ın
+    (değişken format nedeniyle) ekstreden çıkaramadığı taksitler bile stale kalmaz:
+    first_due ≤ ekstre ayı olan her taksit ilerletilir (`first_due = ekstre ayı + 1`),
+    kapsanan dilim kadar `installments_remaining` azaltılır, ≤0 olan silinir.
+    `_upsert_installments`'tan ÖNCE çağrılır (parser-listeli olanları o kesin set eder).
+    Dokunulan kayıt sayısını döner.
+    """
+    m_year, m_month = due_date.year, due_date.month
+    next_first_due = _add_months(date_type(m_year, m_month, 1), 1)
+    existing = (await db.execute(select(CreditCardInstallment).where(CreditCardInstallment.card_id == card_id))).scalars().all()
+    touched = 0
+    for inst in existing:
+        fd = inst.first_due_date
+        if (fd.year, fd.month) > (m_year, m_month):
+            continue  # tüm dilimler gelecekte → ekstre kapsamaz
+        covered = min((m_year - fd.year) * 12 + (m_month - fd.month) + 1, inst.installments_remaining)
+        new_remaining = inst.installments_remaining - covered
+        if new_remaining <= 0:
+            await db.delete(inst)
+        else:
+            inst.installments_remaining = new_remaining
+            inst.first_due_date = next_first_due
+        touched += 1
+    return touched
 
 
 async def _upsert_installments(
@@ -852,6 +927,9 @@ async def commit_statement_import(
     card_currency = card.currency or "TRY"
     s = payload.statement
     await _upsert_statement(db, card.id, s, card_currency)
+    # Önce TÜM taksitleri ekstre dönemine göre uzlaştır (parser çıkaramayan stale
+    # dilimleri de temizler) — sonra parser-listelenenleri kesin set et.
+    await _reconcile_card_installments(db, card.id, s.due_date)
     added_installments = await _upsert_installments(db, card.id, s.due_date, payload.installments, card_currency)
 
     # 4) Audit (best-effort, flush) + tek commit.

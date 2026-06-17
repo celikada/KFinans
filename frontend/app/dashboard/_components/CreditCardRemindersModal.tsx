@@ -10,8 +10,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { api, CreditCardRemindersDTO, DuePaymentItemDTO } from "@/lib/api";
+import { CreditCardRemindersDTO, DuePaymentItemDTO } from "@/lib/api";
 import { Modal } from "@/app/_components/Modal";
+import { StatementPayModal } from "@/app/dashboard/credit-cards/_components/StatementPayModal";
 import { fmtTL } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 
@@ -52,28 +53,20 @@ export function CreditCardRemindersModal({
   // Ödeme satırları aksiyon sonrası değişir (state); ekstre-yükleme listesi sabit.
   const pendingStatements = data.pending_statements;
   const [duePayments, setDuePayments] = useState(data.due_payments);
-  const [busy, setBusy] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  // Ödeme (tam/kısmi) modal'ı için seçili satır.
+  const [paying, setPaying] = useState<DuePaymentItemDTO | null>(null);
 
   function openCard(cardId: number) {
     onClose();
     router.push(`/dashboard/credit-cards/${cardId}`);
   }
 
-  /** Ödeme satırını "ödendi" işaretle (statement.paid_at = now) → listeden düş. */
-  async function markPaid(d: DuePaymentItemDTO) {
-    setBusy(d.statement_id);
-    setError("");
-    try {
-      await api.updateStatement(d.card_id, d.statement_id, { paid_at: new Date().toISOString() });
-      const next = duePayments.filter((x) => x.statement_id !== d.statement_id);
-      setDuePayments(next);
-      if (next.length === 0 && pendingStatements.length === 0) onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("content.ccReminders.markPaidFailed"));
-    } finally {
-      setBusy(null);
-    }
+  /** Ödeme tamamlanınca satırı listeden düş; liste boşaldıysa popup'ı kapat. */
+  function handlePaid(d: DuePaymentItemDTO) {
+    setPaying(null);
+    const next = duePayments.filter((x) => x.statement_id !== d.statement_id);
+    setDuePayments(next);
+    if (next.length === 0 && pendingStatements.length === 0) onClose();
   }
 
   return (
@@ -85,8 +78,6 @@ export function CreditCardRemindersModal({
         <p id="cc-reminders-desc" className="text-xs text-gray-600 mb-4">
           {t("content.ccReminders.desc")}
         </p>
-
-        {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>}
 
         {/* 1) Ekstresi yüklenmemiş kartlar */}
         {pendingStatements.length > 0 && (
@@ -162,8 +153,7 @@ export function CreditCardRemindersModal({
                     <div className="flex items-center gap-3 mt-1.5">
                       <button
                         type="button"
-                        disabled={busy === d.statement_id}
-                        onClick={() => markPaid(d)}
+                        onClick={() => setPaying(d)}
                         className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
                         ✓ {t("content.ccReminders.markPaid")}
@@ -201,6 +191,18 @@ export function CreditCardRemindersModal({
           </button>
         </div>
       </div>
+
+      {paying && (
+        <StatementPayModal
+          cardId={paying.card_id}
+          statement={{
+            id: paying.statement_id,
+            statement_amount: paying.statement_amount,
+          }}
+          onClose={() => setPaying(null)}
+          onPaid={() => handlePaid(paying)}
+        />
+      )}
     </Modal>
   );
 }

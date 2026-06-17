@@ -113,8 +113,20 @@ class StatementUpdate(BaseModel):
     statement_date: Optional[date_type] = None
     due_date: Optional[date_type] = None
     paid_at: Optional[datetime] = None
+    paid_amount: Optional[Decimal] = Field(default=None, ge=0, le=Decimal("999999999999.99"))
     notes: Optional[str] = Field(default=None, max_length=500)
     currency: Optional[CurrencyType] = None
+
+
+class StatementPayIn(BaseModel):
+    """Ekstreyi ödendi işaretle (tam veya kısmi).
+
+    `paid_amount` < statement_amount → kısmi; kalan kartın current_period_debt'ine
+    eklenir + nakit-akışında o ay yalnız ödenen sayılır.
+    """
+
+    paid_amount: Decimal = Field(..., ge=0, le=Decimal("999999999999.99"))
+    paid_at: Optional[datetime] = None
 
 
 class StatementOut(BaseModel):
@@ -126,6 +138,7 @@ class StatementOut(BaseModel):
     statement_date: date_type
     due_date: date_type
     paid_at: Optional[datetime] = None
+    paid_amount: Optional[Decimal] = None
     notes: Optional[str] = None
     currency: str = "TRY"
     created_at: datetime

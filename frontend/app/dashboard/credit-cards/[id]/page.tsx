@@ -11,6 +11,7 @@ import { INPUT_CLS } from "@/lib/format";
 import { useTranslation } from "@/app/_i18n/I18nProvider";
 import { useConfirm } from "@/app/_components/ConfirmDialog";
 import { StatementImport } from "../StatementImport";
+import { StatementPayModal } from "../_components/StatementPayModal";
 
 const MONTH_KEYS = [
   "monthJan", "monthFeb", "monthMar", "monthApr", "monthMay", "monthJun",
@@ -159,6 +160,7 @@ function StatementsSection({ cardId, cardCurrency, items, onChange }: Readonly<{
   const confirm = useConfirm();
   const now = new Date();
   const [editing, setEditing] = useState<StatementDTO | null>(null);
+  const [paying, setPaying] = useState<StatementDTO | null>(null);
   const [year, setYear] = useState(now.getFullYear().toString());
   const [month, setMonth] = useState((now.getMonth() + 1).toString());
   const [amount, setAmount] = useState("");
@@ -273,24 +275,51 @@ function StatementsSection({ cardId, cardCurrency, items, onChange }: Readonly<{
         <p className="text-sm text-gray-400 text-center py-4">{t("empty.noStatement")}</p>
       ) : (
         <ul className="divide-y divide-gray-50">
-          {items.map((s) => (
-            <li key={s.id} className="py-3 flex items-center justify-between gap-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">
-                  {s.period_year} · {t("content.creditCards." + MONTH_KEYS[s.period_month - 1])}
-                  {s.paid_at && <span className="ml-2 text-[10px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{t("content.creditCards.paidBadge")}</span>}
-                </p>
-                <p className="text-xs text-gray-500">{t("content.creditCards.statementShort")}: {s.statement_date} · {t("content.creditCards.dueShort")}: {s.due_date}</p>
-                {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtCurrency(Number.parseFloat(s.statement_amount), s.currency ?? cardCurrency)}</span>
-                <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
-                <button onClick={() => handleDelete(s)} aria-label={t("content.creditCards.deleteStatementAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
-              </div>
-            </li>
-          ))}
+          {items.map((s) => {
+            const ccy = s.currency ?? cardCurrency;
+            const total = Number.parseFloat(s.statement_amount);
+            const paidAmt = s.paid_amount == null ? null : Number.parseFloat(s.paid_amount);
+            // Kısmi: ödenmiş + tutar ekstre tutarından az. Tam: ödenmiş + eksik değil.
+            const isPartial = !!s.paid_at && paidAmt != null && paidAmt < total;
+            const isFull = !!s.paid_at && !isPartial;
+            return (
+              <li key={s.id} className="py-3 flex items-center justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">
+                    {s.period_year} · {t("content.creditCards." + MONTH_KEYS[s.period_month - 1])}
+                    {isFull && <span className="ml-2 text-[10px] font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">{t("content.creditCards.paidBadge")} ✓</span>}
+                    {isPartial && (
+                      <span className="ml-2 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        {t("content.creditCards.pay.partialBadge")
+                          .replace("{paid}", fmtCurrency(paidAmt, ccy))
+                          .replace("{total}", fmtCurrency(total, ccy))}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500">{t("content.creditCards.statementShort")}: {s.statement_date} · {t("content.creditCards.dueShort")}: {s.due_date}</p>
+                  {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-rose-600 tabular-nums">{fmtCurrency(total, ccy)}</span>
+                  {!s.paid_at && (
+                    <button onClick={() => setPaying(s)} className="text-xs px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700">✓ {t("content.creditCards.paid")}</button>
+                  )}
+                  <button onClick={() => startEdit(s)} className="text-xs text-gray-500 hover:text-gray-800">{t("common.edit")}</button>
+                  <button onClick={() => handleDelete(s)} aria-label={t("content.creditCards.deleteStatementAria")} className="text-xs text-red-400 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"><span aria-hidden="true">✕</span></button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {paying && (
+        <StatementPayModal
+          cardId={cardId}
+          statement={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => { setPaying(null); onChange(); }}
+        />
       )}
     </section>
   );
