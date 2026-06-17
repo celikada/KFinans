@@ -1148,6 +1148,115 @@ export interface BudgetComparisonDTO {
   remaining_display: string | null;
 }
 
+// ─── Budget v2 (hibrit: 3-kova + ızgara) ────────────────────────
+
+export type BudgetBucket = "fundamental" | "fun" | "future";
+
+export interface BudgetGridCell {
+  month: number;
+  planned: string | null; // orijinal para biriminde
+  planned_currency: string | null;
+  planned_display: string | null;
+  actual_display: string;
+}
+
+export interface BudgetGridRow {
+  category: string;
+  bucket: BudgetBucket;
+  cells: BudgetGridCell[];
+  planned_total_display: string;
+  actual_total_display: string;
+}
+
+export interface BudgetGridResponse {
+  year: number;
+  display_currency: CurrencyType;
+  rows: BudgetGridRow[];
+  monthly_planned_display: string[];
+  monthly_actual_display: string[];
+  planned_total_display: string;
+  actual_total_display: string;
+}
+
+export interface BucketCategoryRow {
+  category: string;
+  budget_display: string;
+  actual_display: string;
+  difference_display: string;
+  pct_used: number | null;
+  over_budget: boolean;
+  weighted: boolean;
+}
+
+export interface BucketBlock {
+  bucket: BudgetBucket;
+  target_ratio: number;
+  budget_total_display: string;
+  actual_total_display: string;
+  difference_display: string;
+  actual_ratio: number | null;
+  categories: BucketCategoryRow[];
+}
+
+export interface MonthlyBudgetResponse {
+  year: number;
+  month: number;
+  display_currency: CurrencyType;
+  income_display: string;
+  expense_total_display: string;
+  net_display: string;
+  buckets: BucketBlock[];
+}
+
+export interface BudgetSettingsDTO {
+  fundamental_ratio: number;
+  fun_ratio: number;
+  future_ratio: number;
+  category_buckets: Record<string, BudgetBucket>;
+}
+
+export interface MonthNoteDTO {
+  year: number;
+  month: number;
+  analysis: string | null;
+  action_plan: string | null;
+}
+
+// ─── Kişisel borç/alacak ────────────────────────────────────────
+
+export type DebtKind = "debt" | "receivable";
+
+export interface PersonalDebtInput {
+  counterparty: string;
+  kind: DebtKind;
+  amount: number;
+  currency?: CurrencyType;
+  due_date?: string | null;
+  note?: string | null;
+}
+
+export interface PersonalDebtDTO {
+  id: number;
+  counterparty: string;
+  kind: DebtKind;
+  amount: string;
+  currency: CurrencyType;
+  due_date: string | null;
+  note: string | null;
+  settled_at: string | null;
+  amount_display: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalDebtListDTO {
+  display_currency: CurrencyType;
+  items: PersonalDebtDTO[];
+  total_debt_display: string;
+  total_receivable_display: string;
+  net_display: string;
+}
+
 // ─── Web Push (feat/web-push) ───────────────────────────────────
 
 export interface VapidPublicKeyDTO {

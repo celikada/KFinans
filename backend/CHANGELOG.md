@@ -6,6 +6,35 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.0] - 2026-06-18
+
+### Eklenenler
+
+- **Bütçe modülü v2 — hibrit (3-kova + 12 aylık ızgara):** Kullanıcının iki gerçek bütçe
+  Excel'inden (`butce26.xlsx` 12 aylık projeksiyon ızgarası + aylık-olmayan gider
+  ağırlıklandırma; `Budget empty.xlsx` Fundamental/Fun/Future You 3-kova zero-based ≈50/30/20)
+  türetilen birleşik planlama katmanı. Actual veri **her zaman mevcut tablolardan**
+  (expenses/incomes/planned_expenses) türetilir; yeni tablolar yalnız plan/hedef/meta tutar.
+  `/dashboard/budget` 4 sekme: **(1) Aylık (kovalar)** budget-vs-actual + gelir/NET +
+  ağırlıklı periyodik satırlar + aylık analiz/aksiyon notu, **(2) Yıllık ızgara** her
+  (kategori, ay) için düzenlenebilir planlanan + gerçekleşen, **(3) Projeksiyon** (mevcut
+  nakit-akışı + kümülatif yıl-sonu bakiye), **(4) Borç/Alacak** kredi-kartı dışı kişisel
+  borç/alacak takibi. Kova hedef oranları ve kategori→kova eşlemesi ayarlanabilir
+  (`budget_settings`). Yeni endpoint'ler `/budgets/grid|monthly|settings|notes` +
+  `/personal-debts` router; yeni tablolar `budget_lines`, `budget_settings`,
+  `budget_month_notes`, `personal_debts` (migration `e7f8a9b0c1d2`).
+- **Aylık-olmayan gider ağırlıklandırma:** Yıllık/6-aylık/3-aylık planlı giderler (kasko,
+  sigorta, MTV, okul) yıllık toplamı 12'ye bölünerek aylık-eşdeğer "⚖️ ağırlıklı" yük olarak
+  bütçeye dahil edilir (butce26 mantığı; yeni tablo yok, `planned_expenses` üzerinden).
+
+### Notlar
+
+- Eski düz `budgets` tablosu + `GET /budgets/comparison` korunur (dashboard ve Giderler'deki
+  "X kategori aşıldı" uyarılarını besler); Aylık sekmede daraltılabilir "Kategori limitleri"
+  bölümünden yönetilir — geriye dönük uyumlu, regresyon yok.
+
+---
+
 ## [0.10.1] - 2026-06-17
 
 ### Eklenenler

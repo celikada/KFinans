@@ -19,6 +19,7 @@ from app.api.v1 import (
     manual_crypto,
     metrics,
     mfa,
+    personal_debts,
     planned_expenses,
     portfolio,
     push,
@@ -60,3 +61,4 @@ api_router.include_router(audit_logs.router)
 api_router.include_router(metrics.router)
 api_router.include_router(push.router)
 api_router.include_router(subscriptions.router)
+api_router.include_router(personal_debts.router)

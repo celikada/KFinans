@@ -4,12 +4,20 @@ Yaşam döngüsü budget → issued → paid; ödeme şekli çift sayım (kart h
 cash_flow forecast entegrasyonu; hatırlatma; IDOR.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
 
 from tests.conftest import make_user
+
+
+# /subscriptions/reminders endpoint'i "bugün"ü Europe/Istanbul ile hesaplar
+# (days_until_due). Container UTC'de koştuğu için gece yarısı civarı UTC date.today()
+# ile server tarihi 1 gün kayabilir → tarih-bağımlı testlerde aynı tz kullan.
+def _ist_today() -> date:
+    return datetime.now(ZoneInfo("Europe/Istanbul")).date()
 
 
 def _sub_payload(
@@ -315,8 +323,8 @@ async def test_reminders_due_payment(client: AsyncClient):
             "period_year": year,
             "period_month": month,
             "bill_amount": 250,
-            "bill_date": date.today().isoformat(),
-            "due_date": (date.today() + timedelta(days=2)).isoformat(),
+            "bill_date": _ist_today().isoformat(),
+            "due_date": (_ist_today() + timedelta(days=2)).isoformat(),
         },
         headers=headers,
     )
