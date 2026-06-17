@@ -251,8 +251,24 @@ describe("CreditCardDetailPage — ekstreler", () => {
     );
     renderDetail();
 
-    expect(await screen.findByText("content.creditCards.paidBadge")).toBeInTheDocument();
+    expect(await screen.findByText("content.creditCards.paidBadge", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("tamam")).toBeInTheDocument();
+  });
+
+  it("kısmi ödenmiş ekstre → kısmi rozet gösterir (paidBadge yok)", async () => {
+    getCreditCardDetail.mockResolvedValue(
+      makeDetail({
+        statements: [
+          makeStatement({ paid_at: "2026-03-20T00:00:00Z", paid_amount: "500.00" }),
+        ],
+      }),
+    );
+    renderDetail();
+
+    expect(
+      await screen.findByText("content.creditCards.pay.partialBadge", { exact: false }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("content.creditCards.paidBadge", { exact: false })).not.toBeInTheDocument();
   });
 
   it("tutar boşsa → amountRequired, createStatement çağrılmaz", async () => {

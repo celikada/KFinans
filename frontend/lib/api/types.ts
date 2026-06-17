@@ -689,9 +689,17 @@ export interface StatementDTO {
   statement_date: string;
   due_date: string;
   paid_at: string | null;
+  paid_amount: string | null; // kısmi ödeme (null = ödenmedi; < statement_amount = kısmi)
   notes: string | null;
   created_at: string;
   currency?: CurrencyType; // v0.3.0
+}
+
+// Ekstre ödeme (tam veya kısmi). paid_amount < statement_amount → kalan
+// kartın dönem-içi borcuna eklenir (backend yapar). > statement_amount → 422.
+export interface StatementPayInput {
+  paid_amount: number;
+  paid_at?: string; // ISO datetime; gönderilmezse backend now() kullanır
 }
 
 // Girişte kredi kartı hatırlatmaları (ekstre yükleme + ödeme)

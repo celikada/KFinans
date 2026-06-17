@@ -10,8 +10,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }) }));
 const i18nStub = { t: (key: string) => key, locale: "tr", setLocale: vi.fn() };
 vi.mock("@/app/_i18n/I18nProvider", () => ({ useTranslation: () => i18nStub }));
 
-const updateStatement = vi.fn();
-vi.mock("@/lib/api", () => ({ api: { updateStatement: (...a: unknown[]) => updateStatement(...a) } }));
+const payStatement = vi.fn();
+vi.mock("@/lib/api", () => ({ api: { payStatement: (...a: unknown[]) => payStatement(...a) } }));
 
 import { CreditCardRemindersModal } from "@/app/dashboard/_components/CreditCardRemindersModal";
 import type { CreditCardRemindersDTO } from "@/lib/api";
@@ -28,7 +28,7 @@ const DATA: CreditCardRemindersDTO = {
 describe("CreditCardRemindersModal", () => {
   beforeEach(() => {
     routerPush.mockReset();
-    updateStatement.mockReset().mockResolvedValue({});
+    payStatement.mockReset().mockResolvedValue({ id: 9, statement_amount: "1704.50", paid_at: "x", paid_amount: "1704.50" });
     HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
       this.open = true;
     });
@@ -62,12 +62,20 @@ describe("CreditCardRemindersModal", () => {
     expect(link?.getAttribute("href")).toContain("20260609"); // end (next day)
   });
 
-  it("'Ödendi' → updateStatement(paid_at) çağrılır + satır düşer", async () => {
+  it("'Ödendi' → ödeme modal'ı açılır; tam ödeme payStatement çağırır + satır düşer", async () => {
     render(<CreditCardRemindersModal data={DATA} onClose={vi.fn()} />);
     const user = userEvent.setup({ delay: null });
+    // "Ödendi" → StatementPayModal aç (henüz payStatement çağrılmaz)
     await user.click(screen.getByText(/content\.ccReminders\.markPaid/));
+    expect(payStatement).not.toHaveBeenCalled();
+    // Modal başlığı görünür; tam ödeme varsayılan → "Öde" ile gönder
+    expect(await screen.findByText("content.creditCards.pay.title")).toBeInTheDocument();
+    await user.click(screen.getByText("content.creditCards.pay.submit"));
     await waitFor(() =>
-      expect(updateStatement).toHaveBeenCalledWith(2, 9, { paid_at: expect.any(String) }),
+      expect(payStatement).toHaveBeenCalledWith(2, 9, {
+        paid_amount: 1704.5,
+        paid_at: expect.any(String),
+      }),
     );
     // Ödeme satırı (Akbank Axess) listeden düşer
     await waitFor(() => expect(screen.queryByText("Akbank Axess")).not.toBeInTheDocument());

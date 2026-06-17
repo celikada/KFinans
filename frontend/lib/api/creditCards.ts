@@ -1,4 +1,4 @@
-import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardRemindersDTO, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput } from "./types";
+import type { CreditCardDetailDTO, CreditCardDTO, CreditCardInput, CreditCardRemindersDTO, CreditCardSummaryDTO, InstallmentDTO, InstallmentInput, ParsedStatementDTO, StatementDTO, StatementImportCommitInput, StatementInput, StatementPayInput } from "./types";
 import { request, uploadForm } from "./_client";
 import { getDefaultCurrency } from "@/lib/defaultCurrency";
 
@@ -23,6 +23,13 @@ export const creditCardsApi = {
   updateStatement: (cardId: number, statementId: number, payload: Partial<StatementInput>) =>
     request<StatementDTO>(`/credit-cards/${cardId}/statements/${statementId}`, {
       method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  // Ekstre ödemesi (tam/kısmi). paid_amount < statement_amount ise backend
+  // kalanı kartın dönem-içi borcuna ekler; > statement_amount ise 422 döner.
+  payStatement: (cardId: number, statementId: number, payload: StatementPayInput) =>
+    request<StatementDTO>(`/credit-cards/${cardId}/statements/${statementId}/pay`, {
+      method: "POST",
       body: JSON.stringify(payload),
     }),
   deleteStatement: (cardId: number, statementId: number) =>

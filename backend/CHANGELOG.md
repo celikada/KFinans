@@ -6,6 +6,30 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.10.1] - 2026-06-17
+
+### Eklenenler
+
+- **Kredi kartı ekstresi kısmi ödeme:** Bir ekstreyi "Ödendi" işaretlerken **tam mı / ne kadarı
+  ödendi** girilebilir. Kısmi ödemede (`paid_amount < statement_amount`) kalan tutar kartın
+  **dönem-içi borcuna** (`current_period_debt`) eklenir → sonraki ekstreye taşınır. Nakit-akışında
+  ekstrenin düştüğü ay **yalnız ödenen tutar** sayılır (kalan iki kez sayılmaz). Yeni endpoint
+  `POST /credit-cards/{card}/statements/{id}/pay` (idempotent — çift-carry yok), yeni alan
+  `credit_card_statements.paid_amount` (migration `d6e7f8a9b0c1`). Frontend `StatementPayModal`.
+
+### Düzeltmeler
+
+- **Taksit forecast'ında stale/çift-sayım (VakıfBank vb.):** Ekstre yüklendiğinde artık o kartın
+  **TÜM** taksitleri ekstre dönemine göre uzlaştırılır (`_reconcile_card_installments`): dilimi
+  ekstre ayına veya öncesine düşen taksitler ilerletilir/silinir — **parser'ın değişken format
+  nedeniyle ekstreden çıkaramadığı** taksitler bile stale kalmaz. Önceden yalnızca parser'ın
+  listelediği taksitler uzlaştırılıyordu; çıkarılamayan eski kayıt forecast'ta kalıp ekstre
+  tutarıyla çift sayılıyordu (ör. "HEPSIPAY (1/3) ilk vade Haziran 439 ₺" Haziran ekstresinde
+  olmasına rağmen duruyordu). Mevcut stale kayıtlar ilgili dönemin ekstresi yeniden import edilince
+  otomatik temizlenir.
+
+---
+
 ## [0.10.0] - 2026-06-16
 
 ### Eklenenler
