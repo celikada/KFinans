@@ -436,6 +436,90 @@
       "remaining": "left",
       "noBudgetDefined": "No budget set — spending only"
     },
+    "budgetV2": {
+      "tabMonthly": "Monthly (Buckets)",
+      "tabGrid": "Yearly Grid",
+      "tabProjection": "Projection",
+      "tabDebts": "Debts / Receivables",
+      "loadFailed": "Could not load",
+      "saveFailed": "Save failed",
+      "savings": "Savings",
+      "income": "Income",
+      "expenses": "Expenses",
+      "net": "Net",
+      "budget": "Budget",
+      "actual": "Actual",
+      "difference": "Difference",
+      "target": "Target",
+      "weighted": "weighted",
+      "weightedHint": "Monthly-equivalent share of non-monthly costs",
+      "over": "over",
+      "noData": "No data for this month.",
+      "buckets": {
+        "fundamental": "Fundamental",
+        "fun": "Fun",
+        "future": "Future You (Savings)"
+      },
+      "grid": {
+        "category": "Category",
+        "yearTotal": "Year Total",
+        "planned": "Planned",
+        "actual": "Actual",
+        "monthlyTotal": "Monthly Total",
+        "editHint": "Click a cell to enter the planned amount",
+        "save": "Save",
+        "clear": "Clear"
+      },
+      "projection": {
+        "income": "Income",
+        "expense": "Expense",
+        "net": "Net",
+        "cumulative": "Cumulative Balance",
+        "yearEnd": "Projected Year-End Balance",
+        "month": "Month"
+      },
+      "debts": {
+        "add": "Add Debt / Receivable",
+        "counterparty": "Person / Entity",
+        "kind": "Type",
+        "debt": "Debt",
+        "receivable": "Receivable",
+        "amount": "Amount",
+        "dueDate": "Due",
+        "note": "Note",
+        "settle": "Settle",
+        "settled": "Settled",
+        "showSettled": "Show settled",
+        "totalDebt": "Total Debt",
+        "totalReceivable": "Total Receivable",
+        "netLabel": "Net (Receivable − Debt)",
+        "empty": "No debts/receivables recorded.",
+        "delete": "Delete",
+        "confirmDelete": "Delete this record?"
+      },
+      "notes": {
+        "title": "Analysis of the Month & Action Plan",
+        "analysis": "Analysis of the Month",
+        "actionPlan": "Action Plan",
+        "placeholder": "How did this month go, what did you learn?",
+        "actionPlaceholder": "What is your plan for next month?",
+        "save": "Save Note",
+        "saved": "Saved"
+      },
+      "settings": {
+        "title": "Bucket Settings",
+        "ratiosHint": "Target ratios must sum to 100%",
+        "fundamental": "Fundamental (%)",
+        "fun": "Fun (%)",
+        "future": "Future You (%)",
+        "save": "Save Settings",
+        "sumError": "Ratios must sum to 100%"
+      },
+      "classic": {
+        "title": "Category limits (alert thresholds)",
+        "hint": "Simple monthly category limit — feeds the \"over budget\" alerts on the dashboard and Expenses."
+      }
+    },
     "cash": {
       "loadFailed": "Could not load",
       "saveFailed": "Save failed",

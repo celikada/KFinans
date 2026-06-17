@@ -436,6 +436,90 @@
       "remaining": "kaldı",
       "noBudgetDefined": "Bütçe tanımlanmamış — yalnızca harcama var"
     },
+    "budgetV2": {
+      "tabMonthly": "Aylık (Kovalar)",
+      "tabGrid": "Yıllık Izgara",
+      "tabProjection": "Projeksiyon",
+      "tabDebts": "Borç / Alacak",
+      "loadFailed": "Yüklenemedi",
+      "saveFailed": "Kayıt başarısız",
+      "savings": "Birikim",
+      "income": "Gelir",
+      "expenses": "Giderler",
+      "net": "Net",
+      "budget": "Bütçe",
+      "actual": "Gerçekleşen",
+      "difference": "Fark",
+      "target": "Hedef",
+      "weighted": "ağırlıklı",
+      "weightedHint": "Aylık-olmayan giderlerin aylık eşdeğer payı",
+      "over": "aşım",
+      "noData": "Bu ay için veri yok.",
+      "buckets": {
+        "fundamental": "Temel İhtiyaçlar",
+        "fun": "Keyif",
+        "future": "Gelecek (Birikim)"
+      },
+      "grid": {
+        "category": "Kategori",
+        "yearTotal": "Yıl Toplamı",
+        "planned": "Planlanan",
+        "actual": "Gerçekleşen",
+        "monthlyTotal": "Aylık Toplam",
+        "editHint": "Hücreye tıklayıp planlanan tutarı girin",
+        "save": "Kaydet",
+        "clear": "Temizle"
+      },
+      "projection": {
+        "income": "Gelir",
+        "expense": "Gider",
+        "net": "Net",
+        "cumulative": "Kümülatif Bakiye",
+        "yearEnd": "Yıl Sonu Tahmini Bakiye",
+        "month": "Ay"
+      },
+      "debts": {
+        "add": "Borç / Alacak Ekle",
+        "counterparty": "Kişi / Kurum",
+        "kind": "Tür",
+        "debt": "Borç",
+        "receivable": "Alacak",
+        "amount": "Tutar",
+        "dueDate": "Vade",
+        "note": "Not",
+        "settle": "Kapat",
+        "settled": "Kapatıldı",
+        "showSettled": "Kapatılanları göster",
+        "totalDebt": "Toplam Borç",
+        "totalReceivable": "Toplam Alacak",
+        "netLabel": "Net (Alacak − Borç)",
+        "empty": "Kayıtlı borç/alacak yok.",
+        "delete": "Sil",
+        "confirmDelete": "Bu kayıt silinsin mi?"
+      },
+      "notes": {
+        "title": "Ayın Analizi & Aksiyon Planı",
+        "analysis": "Ayın Analizi",
+        "actionPlan": "Aksiyon Planı",
+        "placeholder": "Bu ay nasıl geçti, ne öğrendin?",
+        "actionPlaceholder": "Gelecek ay için planın ne?",
+        "save": "Notu Kaydet",
+        "saved": "Kaydedildi"
+      },
+      "settings": {
+        "title": "Kova Ayarları",
+        "ratiosHint": "Hedef oranlar toplamı %100 olmalı",
+        "fundamental": "Temel İhtiyaçlar (%)",
+        "fun": "Keyif (%)",
+        "future": "Gelecek (%)",
+        "save": "Ayarları Kaydet",
+        "sumError": "Oranlar toplamı %100 olmalı"
+      },
+      "classic": {
+        "title": "Kategori limitleri (uyarı eşikleri)",
+        "hint": "Basit aylık kategori limiti — panodaki ve Giderler'deki \"aşıldı\" uyarılarını besler."
+      }
+    },
     "cash": {
       "loadFailed": "Yüklenemedi",
       "saveFailed": "Kayıt başarısız",

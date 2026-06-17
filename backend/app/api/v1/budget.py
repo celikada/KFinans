@@ -4,17 +4,29 @@ from datetime import date as date_type
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
-from app.models.budget import Budget
+from app.models.budget import Budget, BudgetLine, BudgetMonthNote, BudgetSettings
 from app.models.expense import Expense
 from app.models.user import User
-from app.schemas.budget import BudgetComparison, BudgetOut, BudgetUpsert
+from app.schemas.budget import (
+    BudgetComparison,
+    BudgetGridResponse,
+    BudgetLineUpsert,
+    BudgetOut,
+    BudgetSettingsOut,
+    BudgetSettingsUpdate,
+    BudgetUpsert,
+    MonthlyBudgetResponse,
+    MonthNoteOut,
+    MonthNoteUpdate,
+)
 from app.schemas.expense import EXPENSE_CATEGORIES
+from app.services import budget_planner
 from app.services import currency as currency_svc
 from app.services import display_currency as display_svc
 
@@ -29,6 +41,191 @@ async def list_budgets(
 ):
     result = await db.execute(select(Budget).where(Budget.user_id == current_user.id).order_by(Budget.category))
     return result.scalars().all()
+
+
+# ─────────────────────────── Bütçe v2 (hibrit) ───────────────────────────
+
+
+@router.get("/settings", response_model=BudgetSettingsOut)
+async def get_budget_settings(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    ratios, bucket_map = await budget_planner.get_settings_resolved(db, current_user.id)
+    return BudgetSettingsOut(
+        fundamental_ratio=ratios["fundamental"],
+        fun_ratio=ratios["fun"],
+        future_ratio=ratios["future"],
+        category_buckets=bucket_map,
+    )
+
+
+@router.put("/settings", response_model=BudgetSettingsOut)
+async def update_budget_settings(
+    payload: BudgetSettingsUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    stmt = (
+        pg_insert(BudgetSettings)
+        .values(
+            user_id=current_user.id,
+            fundamental_ratio=payload.fundamental_ratio,
+            fun_ratio=payload.fun_ratio,
+            future_ratio=payload.future_ratio,
+            category_buckets=payload.category_buckets,
+        )
+        .on_conflict_do_update(
+            index_elements=[BudgetSettings.user_id],
+            set_={
+                "fundamental_ratio": payload.fundamental_ratio,
+                "fun_ratio": payload.fun_ratio,
+                "future_ratio": payload.future_ratio,
+                "category_buckets": payload.category_buckets,
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await db.execute(stmt)
+    await db.commit()
+    ratios, bucket_map = await budget_planner.get_settings_resolved(db, current_user.id)
+    return BudgetSettingsOut(
+        fundamental_ratio=ratios["fundamental"],
+        fun_ratio=ratios["fun"],
+        future_ratio=ratios["future"],
+        category_buckets=bucket_map,
+    )
+
+
+@router.get("/grid", response_model=BudgetGridResponse)
+async def get_budget_grid(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    display: Annotated[str | None, Query()] = None,
+):
+    return await budget_planner.build_grid(db, current_user, year, display)
+
+
+@router.put("/grid/{year}/{month}/{category}", response_model=BudgetOut)
+async def upsert_budget_line(
+    year: Annotated[int, Path(ge=2020, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    category: str,
+    payload: BudgetLineUpsert,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if category not in budget_planner.ALL_CATEGORIES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Geçersiz kategori: {category}",
+        )
+    currency = payload.currency or current_user.default_currency or "TRY"
+    stmt = (
+        pg_insert(BudgetLine)
+        .values(
+            user_id=current_user.id,
+            year=year,
+            month=month,
+            category=category,
+            amount=payload.amount,
+            currency=currency,
+        )
+        .on_conflict_do_update(
+            constraint="uq_budget_line_period_cat",
+            set_={"amount": payload.amount, "currency": currency, "updated_at": func.now()},
+        )
+        .returning(BudgetLine)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    row = result.scalar_one()
+    await db.refresh(row)
+    return BudgetOut(id=row.id, category=row.category, amount=row.amount, currency=row.currency, updated_at=row.updated_at)
+
+
+@router.delete("/grid/{year}/{month}/{category}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_budget_line(
+    year: Annotated[int, Path(ge=2020, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    category: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(
+        select(BudgetLine).where(
+            BudgetLine.user_id == current_user.id,
+            BudgetLine.year == year,
+            BudgetLine.month == month,
+            BudgetLine.category == category,
+        )
+    )
+    line = result.scalar_one_or_none()
+    if not line:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bütçe hücresi bulunamadı")
+    await db.delete(line)
+    await db.commit()
+
+
+@router.get("/monthly", response_model=MonthlyBudgetResponse)
+async def get_monthly_budget(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    year: Annotated[int, Query(ge=2020, le=2100)],
+    month: Annotated[int, Query(ge=1, le=12)],
+    display: Annotated[str | None, Query()] = None,
+):
+    return await budget_planner.monthly_buckets(db, current_user, year, month, display)
+
+
+@router.get("/notes/{year}/{month}", response_model=MonthNoteOut)
+async def get_month_note(
+    year: Annotated[int, Path(ge=2020, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    row = (
+        await db.execute(
+            select(BudgetMonthNote).where(
+                BudgetMonthNote.user_id == current_user.id,
+                BudgetMonthNote.year == year,
+                BudgetMonthNote.month == month,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return MonthNoteOut(year=year, month=month, analysis=None, action_plan=None)
+    return row
+
+
+@router.put("/notes/{year}/{month}", response_model=MonthNoteOut)
+async def upsert_month_note(
+    year: Annotated[int, Path(ge=2020, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    payload: MonthNoteUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    stmt = (
+        pg_insert(BudgetMonthNote)
+        .values(
+            user_id=current_user.id,
+            year=year,
+            month=month,
+            analysis=payload.analysis,
+            action_plan=payload.action_plan,
+        )
+        .on_conflict_do_update(
+            constraint="uq_budget_note_period",
+            set_={"analysis": payload.analysis, "action_plan": payload.action_plan, "updated_at": func.now()},
+        )
+        .returning(BudgetMonthNote)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.scalar_one()
 
 
 @router.put("/{category}", response_model=BudgetOut)
