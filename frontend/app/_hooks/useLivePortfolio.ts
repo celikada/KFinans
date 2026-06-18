@@ -55,6 +55,8 @@ export function useLivePortfolio(): UseLivePortfolioResult {
   // Cleanup için: aktif poll timer + unmount bayrağı.
   const cancelledRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Aktif manuel yenileme (global/section) varken yeni tetiklemeyi engeller.
+  const inFlightRef = useRef(false);
   // Recursive poll zincirini ref üzerinden çözer (callback kendini deklarasyondan
   // önce referanslayamaz → ref-indirection TDZ/eslint sorununu giderir). Ref bir
   // effect içinde güncellenir (render sırasında ref yazımı yapılmaz).
@@ -111,7 +113,12 @@ export function useLivePortfolio(): UseLivePortfolioResult {
   }, [loop]);
 
   const refresh = useCallback(async () => {
+    // Çakışma engeli: bir yenileme/kart-yenileme zaten koşuyorsa yenisini başlatma
+    // (iki loop aynı timerRef'i paylaşıp birbirini iptal etmesin).
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setRefreshing(true);
+    setRefreshingSection(null); // global yenileme tek-kart spinner'ını süpürür
     setError("");
     try {
       await api.refreshPortfolio(true);
@@ -123,9 +130,12 @@ export function useLivePortfolio(): UseLivePortfolioResult {
     }
     // Backend arka planda hesaplar → poll ile sonucu yakala.
     await loop(MAX_POLLS);
+    inFlightRef.current = false;
   }, [loop]);
 
   const refreshSection = useCallback(async (section: string) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setRefreshingSection(section);
     setError("");
     try {
@@ -138,6 +148,7 @@ export function useLivePortfolio(): UseLivePortfolioResult {
     // Bölüm arka planda hesaplanır → poll ile sonucu yakala, sonra spinner'ı kapat.
     await loop(MAX_POLLS);
     if (!cancelledRef.current) setRefreshingSection(null);
+    inFlightRef.current = false;
   }, [loop]);
 
   return { data, loading, refreshing, refreshingSection, error, refresh, refreshSection };

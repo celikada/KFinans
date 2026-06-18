@@ -231,7 +231,9 @@ async def convert_realized_grouped(
     by_key_tls: dict[str, list[Decimal]] = {}
     for key, amount, currency, on, amount_tl in rows:
         by_key_items.setdefault(key, []).append((Decimal(amount), currency, on))
-        by_key_tls.setdefault(key, []).append(Decimal(amount_tl))
+        # amount_tl None olabilir (legacy/NULL kayıt) → tekil convert_realized yoluyla
+        # simetri için None'u koru (Decimal(None) TypeError'ı yerine).
+        by_key_tls.setdefault(key, []).append(Decimal(amount_tl) if amount_tl is not None else None)
     out: dict[str, Decimal] = {}
     total = Decimal(0)
     for key, items in by_key_items.items():

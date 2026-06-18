@@ -177,8 +177,11 @@ async def tefas_preview(
         logger.info("TEFAS validation failed: %s", e)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
-    # Servis holdings sırasını koruyarak asset döndürür → zip ile eşleştir
-    return [_build_tefas_position(h, a) for h, a in zip(holdings, assets)]
+    # Koda göre eşleştir (sıra varsayımına güvenme — fetch davranışı değişse bile
+    # yanlış fon-miktar eşleşmesi olmaz). skip_missing=False olduğundan tüm holding'ler
+    # fiyatlı; yine de defansif map.
+    asset_by_code = {a.symbol: a for a in assets}
+    return [_build_tefas_position(h, asset_by_code[h.code.upper()]) for h in holdings]
 
 
 async def _fetch_tefas_prices(rows) -> dict[str, Decimal]:

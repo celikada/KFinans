@@ -6,6 +6,41 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.4] - 2026-06-18
+
+### Düzeltmeler (6 paralel uzman-ajan denetimi bulguları)
+
+- **CoinGecko `/coins/list` demo key + retry kullanmıyordu:** `_get_coingecko_id_map` anonim
+  çağrı yapıyordu (diğer CoinGecko çağrıları demo key + 429-retry kullanırken) → id-map cache
+  boşken 429 olursa tüm symbol-bazlı fallback çökerdi. Artık `_coingecko_get` (header + retry) ile.
+- **`models/__init__.py` 9+ modeli kaydetmiyordu** (budget v2, personal_debt, expense, income,
+  planned_expense, bes, stock, revoked_token). `alembic env.py` `from app.models import Base`
+  ile metadata'yı doldurduğundan, `--autogenerate` çalıştırılsa bu tablolar için yanlışlıkla
+  `DROP TABLE` üretebilirdi (runtime güvendeydi, router'lar import ediyordu). Hepsi kaydedildi.
+- **`/budgets/settings` `category_buckets` anahtarları doğrulanmıyordu:** kullanıcı keyfi/sınırsız
+  anahtar (storage abuse) yazabiliyordu. Artık anahtarlar geçerli kategori whitelist'ine bağlı.
+- **`/manual-crypto/import` rate-limit'siz** (replace-all + openpyxl parse, pahalı): `10/hour` eklendi.
+- **`convert_realized_grouped` `amount_tl=None`'da çökerdi** (`Decimal(None)` TypeError); tekil
+  `convert_realized` yoluyla simetri için None korunuyor (legacy NULL kayıt güvenliği).
+- **Tek-kart yenileme görsel güncellemiyordu (frontend):** `useLivePortfolio` global ve tek-kart
+  yenilemesi ortak poll/timer'ı paylaşıp çakışabiliyordu → in-flight guard; global yenileme tek-kart
+  spinner'ını temizler.
+- **TEFAS detay sayfası "Fiyatları çek" önizlemesini canlı-poll eziyordu:** manuel önizleme açıkken
+  arka plan cache senkronu bastırılır, kayıt sonrası tekrar açılır.
+- **`live_cache` "tüm bölümler patladı" eşiği sabit `>=6`'ydı** → içerik-bazlı (section_failed sayısı
+  == bölüm sayısı). TEFAS preview kod-bazlı eşleme (sıra varsayımı kaldırıldı). DashboardCard
+  "yükleniyor" metinleri i18n'e taşındı. Test sağlamlığı: CoinGecko 429-backoff test fixture'ı
+  (gerçek sleep yok), TEFAS dar exception assertion'ı.
+
+### Dokümantasyon
+
+- CLAUDE.md router sayısı (27→29, release+credits), migration sayısı (41→51); `docs/02-mimari.md`
+  migration head güncellendi (39/e2f3a4b5c6d7 → 51/e7f8a9b0c1d2); `docs/03-api-referansi.md`
+  "credits router yok" düzeltildi (ledger mevcut, yalnız iyzico backlog). CLAUDE.md'deki çürümüş
+  "TEFAS IP-block / TR-proxy" teşhisine düzeltme notu.
+
+---
+
 ## [0.11.3] - 2026-06-18
 
 ### Düzeltmeler

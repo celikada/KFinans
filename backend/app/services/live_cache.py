@@ -385,7 +385,10 @@ async def _do_refresh(user_id, session_factory: async_sessionmaker) -> None:
             return
 
         # Tüm bölümler patladıysa hata; refreshed_at korunur (eski veri gösterilsin).
-        all_failed = len(issues) >= 6
+        # İçerik-bazlı: section_failed sayısı == toplam bölüm sayısı (sabit 6 eşik
+        # kırılgandı — bölüm eklenir/çıkarılırsa yanlış olurdu). Bu noktada issues
+        # yalnız section-failure içerir (derive notları henüz eklenmedi).
+        all_failed = sum(1 for i in issues if i.get("code") == "section_failed") >= len(VALID_SECTIONS)
         # Veri-kalitesi notları (hisse stale / emtia / manuel kripto linked) — section+DB'den
         # türetilir (yeniden çekim yok). health_issues'a eklenir → snapshot modal + kayıt (sarı ünlem).
         if not all_failed:

@@ -160,9 +160,9 @@ export function Card({
       ? <DisplayMoney value={total} currency={displayCurrency} className={`text-base font-bold tabular-nums ${c.text}`} />
       : <Money tl={total} className={`text-base font-bold tabular-nums ${c.text}`} />;
   } else if ((count ?? 0) > 0) {
-    body = <p className="text-xs text-gray-400">{count} {countLabel} · yükleniyor...</p>;
+    body = <p className="text-xs text-gray-400">{count} {countLabel} · {t("common.loading")}</p>;
   } else if (loading) {
-    body = <p className="text-xs text-gray-400">Yükleniyor...</p>;
+    body = <p className="text-xs text-gray-400">{t("common.loading")}</p>;
   } else {
     body = <p className="text-xs text-gray-400">{placeholder}</p>;
   }

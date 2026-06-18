@@ -743,7 +743,7 @@ INDEX ix_credit_transactions_created_at (created_at DESC)
 
 ## 6. Mevcut Migration'lar
 
-> **Toplam 39 migration. Head: `e2f3a4b5c6d7`** (MFA TOTP `user.totp_*` kolonları). Yeni migration `down_revision = "e2f3a4b5c6d7"`. Aşağıdaki tablo kronolojik özet; tam zincir `backend/alembic/versions/`.
+> **Toplam 51 migration. Head: `e7f8a9b0c1d2`** (bütçe v2 hibrit: budget_lines/budget_settings/budget_month_notes/personal_debts). Yeni migration `down_revision = "e7f8a9b0c1d2"`. Aşağıdaki tablo ESKİ bir kronolojik özettir (Faz 3 — credit_cards, subscriptions, çoklu para birimi, budget v2 — eksik); güncel head + tam zincir için `CLAUDE.md` "Migration head" satırı ve `backend/alembic/versions/` esastır.
 
 | Revision       | Açıklama                                                                                                                                                        |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |

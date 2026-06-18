@@ -126,7 +126,7 @@ async def test_fetch_raises_on_http_error():
     with respx.mock:
         respx.post(_EXPORT_URL).mock(return_value=Response(503))
         svc = TefasService([{"code": "YAC", "quantity": 10.0, "name": "Test"}])
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             await svc.fetch()
 
 

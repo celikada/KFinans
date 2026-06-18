@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api, TefasPosition, TefasHoldingDTO } from "@/lib/api";
 import { MkkHint } from "@/app/_components/MkkHint";
@@ -62,6 +62,9 @@ export default function TefasPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  // Kullanıcı "Fiyatları çek" ile manuel önizleme yaptıysa, arka plan canlı-poll'ü
+  // bu önizlemeyi EZMESİN. Kaydetme sonrası tekrar açılır (cache güncel veriyi gösterir).
+  const previewedRef = useRef(false);
 
   const handle401 = useCallback(() => router.replace("/login"), [router]);
 
@@ -88,6 +91,7 @@ export default function TefasPage() {
   // Live cache geldiğinde fiyatlı pozisyon tablosunu doldur (kullanıcı manuel
   // "Fiyatları çek" yapmadıysa).
   useEffect(() => {
+    if (previewedRef.current) return; // manuel önizleme açıkken cache ile ezme
     const positions = live.data?.sections.tefas?.positions;
     if (positions && positions.length > 0) {
       setResult(positions);
@@ -98,6 +102,7 @@ export default function TefasPage() {
     setLoading(true);
     setError("");
     try {
+      previewedRef.current = true; // manuel önizleme → canlı-poll ezmesin
       setResult(await api.tefasPreview(valid));
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
@@ -122,7 +127,9 @@ export default function TefasPage() {
       await api.saveTefasHoldings(valid);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      // Kaydedilen holding'lerle sunucu-cache'i arka planda tazele.
+      // Kaydedildi → manuel-önizleme bastırmasını kaldır; refresh'le gelen güncel
+      // cache tabloyu doldursun (kaydedilen holding'lerle).
+      previewedRef.current = false;
       live.refresh();
     } catch (err) {
       if (err instanceof Error && err.message.includes("401")) { handle401(); return; }
