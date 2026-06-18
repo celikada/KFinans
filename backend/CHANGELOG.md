@@ -6,6 +6,27 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.3] - 2026-06-18
+
+### Düzeltmeler
+
+- **Manuel kripto/bağlı fiyatlar refresh sırasında 0'a düşüyordu (CoinGecko 429):** Prod
+  loglarında doğrulandı — portföy yenilemesi aynı anda birçok CoinGecko çağrısı yapınca
+  ücretsiz API **429 Too Many Requests** veriyor (datacenter IP'de paylaşımlı limit) →
+  fiyat boş → ilgili pozisyon (ör. iCrypex **XAGX** linked=silver-rstock, **ICPX** auto=
+  icrypex-token) **0 ₺** olarak cache'leniyordu. **Çözüm:** CoinGecko fiyat fetch'lerine
+  (1) **429'da kısa backoff'lu tek retry**, (2) **son-iyi fiyat fallback** (TEFAS deseni —
+  geçici hata/429'da son bilinen fiyatı koru, 0'a düşürme), (3) **opsiyonel CoinGecko Demo
+  API key** desteği (`COINGECKO_API_KEY` env → `x-cg-demo-api-key` header; verilirse kararlı
+  ~30 istek/dk, 429'lar büyük ölçüde biter). **Not:** Demo key ÜCRETSİZ'dir (coingecko.com);
+  K8s secret'a eklenirse prod'da rate-limit kalkar.
+- **`unknown_symbols` tutarsız mesaj:** Fiyatı 0 olan **linked/manuel** kayıtlar da
+  "Binance USDT paritesi bulunamadı" listesine (auto-kaynak mesajı) giriyordu. Artık
+  `unknown_symbols` **yalnız AUTO** kaynaklı semboller içindir; linked/manuel 0-değerler
+  bu listeye girmez (linked uyarısı dashboard'da ayrı gösterilir).
+
+---
+
 ## [0.11.2] - 2026-06-18
 
 ### Eklenenler

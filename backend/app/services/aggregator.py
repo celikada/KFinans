@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import xml.etree.ElementTree as ET
@@ -5,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 import httpx
 
+from app.config import settings
 from app.models.portfolio import AssetPosition, PortfolioSnapshot
 from app.schemas.portfolio import PortfolioBreakdown, PortfolioChanges, StakingPosition
 from app.services.base import AssetData
@@ -156,6 +158,38 @@ COINGECKO_SYMBOL_OVERRIDES: dict[str, str] = {
     # eklemek için: https://api.coingecko.com/api/v3/search?query=XAGX
 }
 
+# Son-başarılı CoinGecko USD fiyatları (datacenter IP'lerde refresh sırasında 429
+# Too Many Requests sık → fiyat 0'a düşmesin diye TEFAS deseni). Modül-seviye,
+# pod yaşam süresi boyunca; başarılı çekimde güncellenir, 429/hata'da fallback.
+_CG_ID_LAST_GOOD: dict[str, Decimal] = {}
+_CG_SYM_LAST_GOOD: dict[str, Decimal] = {}
+_CG_RETRY_BACKOFF_SEC = 1.5  # 429'da tek retry öncesi bekleme
+
+
+def reset_coingecko_caches() -> None:
+    """Test izolasyonu: CoinGecko son-iyi fiyat + id-map cache'lerini temizle."""
+    global _coingecko_list_cache
+    _CG_ID_LAST_GOOD.clear()
+    _CG_SYM_LAST_GOOD.clear()
+    _coingecko_list_cache = None
+
+
+def _coingecko_headers() -> dict[str, str]:
+    """Demo API key varsa header ekle (rate-limit ↓). Yoksa boş (anonim)."""
+    key = settings.coingecko_api_key
+    return {"x-cg-demo-api-key": key} if key else {}
+
+
+async def _coingecko_get(url: str, params: dict) -> dict:
+    """CoinGecko GET — 429'da bir kez backoff'lu retry. raise_for_status."""
+    async with httpx.AsyncClient(timeout=15, headers=_coingecko_headers()) as client:
+        resp = await client.get(url, params=params)
+        if resp.status_code == 429:
+            await asyncio.sleep(_CG_RETRY_BACKOFF_SEC)
+            resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
 
 async def _get_coingecko_id_map() -> dict[str, str]:
     """CoinGecko /coins/list → uppercase symbol → coin id mapping. 24 saat cache."""
@@ -189,22 +223,22 @@ async def fetch_coingecko_prices_by_ids(ids: list[str]) -> dict[str, Decimal]:
         return {}
     unique = ",".join(sorted(set(ids)))
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                _COINGECKO_PRICE_URL,
-                params={"ids": unique, "vs_currencies": "usd"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        data = await _coingecko_get(_COINGECKO_PRICE_URL, {"ids": unique, "vs_currencies": "usd"})
     except Exception as e:
-        logger.warning("CoinGecko ID-bazlı fiyat çekilemedi: %s", e)
-        return {}
+        # 429/hata → son-iyi fiyatlara düş (0'a düşürmek yerine son bilineni koru).
+        logger.warning("CoinGecko ID-bazlı fiyat çekilemedi (%s) — son-iyi fiyatlar kullanılıyor", e)
+        return {cg_id: _CG_ID_LAST_GOOD[cg_id] for cg_id in ids if cg_id in _CG_ID_LAST_GOOD}
 
     result: dict[str, Decimal] = {}
     for cg_id in ids:
         usd = data.get(cg_id, {}).get("usd")
         if usd:
-            result[cg_id] = Decimal(str(usd))
+            price = Decimal(str(usd))
+            result[cg_id] = price
+            _CG_ID_LAST_GOOD[cg_id] = price  # son-iyi güncelle
+        elif cg_id in _CG_ID_LAST_GOOD:
+            # Bu çağrıda gelmedi ama daha önce bilinen fiyat var → koru.
+            result[cg_id] = _CG_ID_LAST_GOOD[cg_id]
     return result
 
 
@@ -231,22 +265,21 @@ async def fetch_coingecko_prices(symbols: list[str]) -> dict[str, Decimal]:
 
     unique_ids = ",".join(sorted(set(symbol_to_id.values())))
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                _COINGECKO_PRICE_URL,
-                params={"ids": unique_ids, "vs_currencies": "usd"},
-            )
-            resp.raise_for_status()
-            prices = resp.json()
+        prices = await _coingecko_get(_COINGECKO_PRICE_URL, {"ids": unique_ids, "vs_currencies": "usd"})
     except Exception as e:
-        logger.warning("CoinGecko fiyat çekilemedi: %s", e)
-        return {}
+        # 429/hata → son-iyi sembol fiyatlarına düş.
+        logger.warning("CoinGecko fiyat çekilemedi (%s) — son-iyi fiyatlar kullanılıyor", e)
+        return {sym: _CG_SYM_LAST_GOOD[sym] for sym in symbol_to_id if sym in _CG_SYM_LAST_GOOD}
 
     result: dict[str, Decimal] = {}
     for sym, cg_id in symbol_to_id.items():
         usd = prices.get(cg_id, {}).get("usd")
         if usd:
-            result[sym] = Decimal(str(usd))
+            price = Decimal(str(usd))
+            result[sym] = price
+            _CG_SYM_LAST_GOOD[sym] = price  # son-iyi güncelle
+        elif sym in _CG_SYM_LAST_GOOD:
+            result[sym] = _CG_SYM_LAST_GOOD[sym]  # bu çağrıda gelmedi → son bilineni koru
     return result
 
 

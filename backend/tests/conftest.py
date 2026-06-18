@@ -73,6 +73,7 @@ def _reset_tcmb_cache():
     from app.services import aggregator, tefas
 
     aggregator._tcmb_cache = None
+    aggregator.reset_coingecko_caches()
     tefas.reset_tefas_cache()
     yield
 
