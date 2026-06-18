@@ -934,9 +934,9 @@ Kullanıcının tavsiye geçmişi (en yeniden eskiye, default limit=10).
 
 ---
 
-## 10. Krediler (`/api/v1/credits`) — Faz 3 (HENÜZ IMPLEMENTE EDİLMEDİ)
+## 10. Krediler (`/api/v1/credits`) — Faz 3 (LEDGER KISMI İMPLEMENTE EDİLDİ)
 
-> ⚠️ Bu bölüm **planlanan** kredi/ödeme akışıdır; `credits.py` router'ı ve iyzico entegrasyonu henüz kodda **yok** (backlog). `users.credit_balance` kolonu mevcut ve `/advice/generate` tarafından okunup düşülür, ancak kredi satın alma akışı eklenmemiştir. Aşağıdaki sözleşme referans/taslaktır.
+> ⚠️ **Güncelleme:** `credits.py` router'ı **mevcut ve kayıtlı** (`router.py`); `GET /credits` ledger endpoint'i çalışıyor (`credit_transactions` tablosu + `core/credits.py`; atomik kredi düşümü `advice.generate` ile entegre). **Yalnız iyzico checkout/webhook (kredi satın alma) akışı backlog'da.** `users.credit_balance` okunup düşülür. Aşağıdaki sözleşme satın-alma kısmı için taslaktır.
 
 ### `GET /credits`
 Bakiye + son işlemler.

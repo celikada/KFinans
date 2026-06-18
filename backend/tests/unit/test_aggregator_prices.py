@@ -27,8 +27,12 @@ from app.services.aggregator import (
 @pytest.fixture(autouse=True)
 def _clear_cg_cache():
     aggregator._coingecko_list_cache = None
+    # 429 retry backoff'unu testlerde 0'la (gerçek sleep(1.5) yavaşlatmasın) + sakla/geri-yükle.
+    _saved_backoff = aggregator._CG_RETRY_BACKOFF_SEC
+    aggregator._CG_RETRY_BACKOFF_SEC = 0
     yield
     aggregator._coingecko_list_cache = None
+    aggregator._CG_RETRY_BACKOFF_SEC = _saved_backoff
 
 
 # ─── fetch_spot_prices ────────────────────────────────────────────────────────
@@ -145,10 +149,7 @@ class TestCoinGeckoPricesByIds:
 
     @pytest.mark.asyncio
     async def test_429_then_retry_succeeds(self):
-        """İlk 429, retry'da 200 → fiyat döner (backoff'lu tek retry)."""
-        import app.services.aggregator as agg
-
-        agg._CG_RETRY_BACKOFF_SEC = 0  # testte beklemeyi sıfırla
+        """İlk 429, retry'da 200 → fiyat döner (backoff fixture'da 0'lanmış)."""
         with respx.mock(assert_all_called=False) as rsx:
             rsx.get(_COINGECKO_PRICE_URL).mock(side_effect=[Response(429), Response(200, json={"ripple": {"usd": 0.6}})])
             out = await fetch_coingecko_prices_by_ids(["ripple"])

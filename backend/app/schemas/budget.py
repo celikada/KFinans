@@ -131,6 +131,21 @@ class BudgetSettingsUpdate(BaseModel):
     # Yalnız override edilen kategoriler; boş → kod-içi default.
     category_buckets: Optional[dict[str, BucketType]] = None
 
+    @field_validator("category_buckets")
+    @classmethod
+    def _valid_category_keys(cls, v: Optional[dict[str, "BucketType"]]):
+        """Override anahtarları geçerli kategori olmalı (rastgele/sınırsız anahtar
+        saklanmasını engelle — storage abuse + tutarsız kova map'i)."""
+        if not v:
+            return v
+        from app.schemas.expense import EXPENSE_CATEGORIES
+
+        valid = set(EXPENSE_CATEGORIES) | {"savings"}
+        invalid = [k for k in v if k not in valid]
+        if invalid:
+            raise ValueError(f"Geçersiz kategori anahtarı: {', '.join(invalid[:5])}")
+        return v
+
     @model_validator(mode="after")
     def _ratios_sum_to_one(self):
         total = self.fundamental_ratio + self.fun_ratio + self.future_ratio

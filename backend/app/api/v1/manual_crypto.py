@@ -6,12 +6,13 @@ from io import BytesIO
 from typing import Annotated
 
 import openpyxl
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
+from app.core.limiter import limiter
 from app.core.upload_validation import validate_excel_upload
 from app.models.manual_crypto import ManualCryptoHolding
 from app.models.user import User
@@ -520,7 +521,9 @@ def _parse_import_row(row, idx: int, user_id, errors: list[str]) -> ManualCrypto
 
 
 @router.post("/import")
+@limiter.limit("10/hour")
 async def import_manual_crypto(
+    request: Request,
     file: Annotated[UploadFile, File()],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],

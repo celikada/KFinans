@@ -180,9 +180,9 @@ def _coingecko_headers() -> dict[str, str]:
     return {"x-cg-demo-api-key": key} if key else {}
 
 
-async def _coingecko_get(url: str, params: dict) -> dict:
-    """CoinGecko GET — 429'da bir kez backoff'lu retry. raise_for_status."""
-    async with httpx.AsyncClient(timeout=15, headers=_coingecko_headers()) as client:
+async def _coingecko_get(url: str, params: dict | None = None, timeout_sec: float = 15) -> dict | list:
+    """CoinGecko GET — demo key header + 429'da bir kez backoff'lu retry. raise_for_status."""
+    async with httpx.AsyncClient(timeout=timeout_sec, headers=_coingecko_headers()) as client:
         resp = await client.get(url, params=params)
         if resp.status_code == 429:
             await asyncio.sleep(_CG_RETRY_BACKOFF_SEC)
@@ -198,10 +198,8 @@ async def _get_coingecko_id_map() -> dict[str, str]:
     if _coingecko_list_cache and now - _coingecko_list_cache[0] < _COINGECKO_LIST_TTL_SEC:
         return _coingecko_list_cache[1]
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(_COINGECKO_LIST_URL)
-        resp.raise_for_status()
-        data = resp.json()
+    # Demo key header + 429 retry (diğer CoinGecko çağrılarıyla tutarlı).
+    data = await _coingecko_get(_COINGECKO_LIST_URL, timeout_sec=30)
 
     # Çoklu eşleşmelerde ilkini al (CoinGecko sıralaması market cap odaklı değil ama
     # popüler coinler genelde önce gelir). Override map ile ezilebilir.
