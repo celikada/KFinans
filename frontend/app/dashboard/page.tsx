@@ -134,6 +134,30 @@ function collectLiveWarnings(
   return [...labels];
 }
 
+// Bir portföy bölümünün (kartının) son güncellemedeki uyarı mesajları. Kart üstündeki
+// ⚠ ikonu bunları gösterir. health_issues (level=warn) + cüzdan/kripto bölüm hataları.
+function warningsForSection(data: LivePortfolioOut | null, section: string): string[] {
+  if (!data) return [];
+  const out: string[] = [];
+  for (const issue of data.health_issues ?? []) {
+    if (issue.source === section && (issue.level ?? "warn") === "warn" && issue.msg) {
+      out.push(issue.msg);
+    }
+  }
+  if (section === "wallets") {
+    for (const [k, v] of Object.entries(data.sections?.wallets?.errors ?? {})) {
+      if (k === "_timeout") continue;
+      out.push(String(v));
+    }
+  }
+  if (section === "crypto") {
+    for (const [k, v] of Object.entries(data.sections?.crypto?.errors ?? {})) {
+      out.push(`${k}: ${String(v)}`);
+    }
+  }
+  return out;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -940,6 +964,7 @@ export default function DashboardPage() {
                 href="/dashboard/tefas"
                 updating={live.refreshing || live.refreshingSection === "tefas"}
                 onRefresh={() => live.refreshSection("tefas")}
+                warnings={warningsForSection(live.data, "tefas")}
                 icon="tefas"
                 color="blue"
                 title={t("dashboard.cards.tefas")}
@@ -956,6 +981,7 @@ export default function DashboardPage() {
                 href="/dashboard/stocks"
                 updating={live.refreshing || live.refreshingSection === "stocks"}
                 onRefresh={() => live.refreshSection("stocks")}
+                warnings={warningsForSection(live.data, "stocks")}
                 icon="stocks"
                 color="indigo"
                 title={t("dashboard.cards.stocks")}
@@ -972,6 +998,7 @@ export default function DashboardPage() {
                 href="/dashboard/wallets"
                 updating={live.refreshing || live.refreshingSection === "wallets"}
                 onRefresh={() => live.refreshSection("wallets")}
+                warnings={warningsForSection(live.data, "wallets")}
                 icon="wallets"
                 color="purple"
                 title={t("dashboard.cards.wallets")}
@@ -987,6 +1014,7 @@ export default function DashboardPage() {
                 href="/dashboard/crypto"
                 updating={live.refreshing || live.refreshingSection === "crypto"}
                 onRefresh={() => live.refreshSection("crypto")}
+                warnings={warningsForSection(live.data, "crypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.crypto")}
@@ -1002,6 +1030,7 @@ export default function DashboardPage() {
                 href="/dashboard/manual-crypto"
                 updating={live.refreshing || live.refreshingSection === "manual_crypto"}
                 onRefresh={() => live.refreshSection("manual_crypto")}
+                warnings={warningsForSection(live.data, "manual_crypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.manualCrypto")}
@@ -1018,6 +1047,7 @@ export default function DashboardPage() {
                 href="/dashboard/commodities"
                 updating={live.refreshing || live.refreshingSection === "commodities"}
                 onRefresh={() => live.refreshSection("commodities")}
+                warnings={warningsForSection(live.data, "commodities")}
                 icon="commodities"
                 color="amber"
                 title={t("dashboard.cards.commodities")}

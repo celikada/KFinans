@@ -81,11 +81,16 @@ yazar.
 - **Tek-kart yenileme (🔄):** Her yatırım kartının **sağ üst köşesindeki yenileme
   ikonu**, yalnız o kartı yeniden çeker — tüm sayfayı yenilemeden tek bir kaynağı
   tazelemek için idealdir (ör. TEFAS geçici hata verdiyse yalnız TEFAS kartını yenileyin).
+  İkona bastığınızda ikon döner; güncel değer gelince kart kendiliğinden tazelenir.
 
-### 3.2 Uyarılar
-Bir veri kaynağı geçici erişilemezse kart boş kalmaz; ilgili uyarı gösterilir
-(ör. "TEFAS fiyatı şu an alınamıyor", "altın anlık fiyatı alınamadı"). Diğer kartlar
-bundan etkilenmez.
+### 3.2 Uyarılar (⚠)
+Bir veri kaynağı geçici erişilemezse kart boş kalmaz; o kartın **sağ üstünde, yenile
+ikonunun yanında ⚠ işareti** belirir. Üzerine gelince (veya tıklayınca) uyarının
+ayrıntısını okursunuz — ör. *"XAGX: fiyatı alınamadı"*, *"TEFAS fiyatı şu an alınamıyor"*,
+*"altın anlık fiyatı alınamadı"*. Diğer kartlar bu durumdan etkilenmez.
+
+> Çoğu uyarı **geçici**dir (dış servisin o anki hız sınırı / erişim boşluğu). Genellikle
+> kartı **🔄 ile yenilediğinizde** değer güncellenir ve ⚠ kaybolur.
 
 ---
 
@@ -323,8 +328,20 @@ Bir fon TEFAS'ta o an fiyatlanamıyorsa (genelde gün içi değerleme yayınlanm
 yayınlanınca otomatik düzelir. Diğer fonlarınız etkilenmez. Dilerseniz TEFAS kartının
 **🔄 yenileme ikonuyla** tek başına tazeleyin.
 
+**Kartta ⚠ işareti var, ne demek?**
+O kartın son güncellemesinde bir sorun (ör. bir varlığın fiyatı alınamadı) oluştu.
+İkonun üzerine gelin/tıklayın → ayrıntıyı okuyun. Genelde geçicidir; kartı **🔄 ile
+yenileyince** düzelir.
+
+**Manuel kripto / bir varlık değeri 0,00 ₺ görünüyor?**
+Genellikle fiyat kaynağının (ör. CoinGecko ücretsiz API) o anki **hız sınırı** nedeniyle
+son güncellemede fiyat boş dönmüştür ve eski (0) değer önbellekte kalmıştır. İlgili kartı
+**🔄 ile yenileyin** — fiyat erişilebilirse değer güncellenir. (Bağlı fiyat kaynağı
+gerçekten geçersizse, kaydı düzenleyip doğru kaynağı seçin.)
+
 **Tek bir kartı nasıl yenilerim?**
 Yatırım kartının sağ üstündeki **🔄** ikonuna basın — yalnız o kart yeniden çekilir.
+İkon dönerken bekleyin; güncel değer gelince kart tazelenir.
 
 **BES'te birden çok ödemeyi nasıl tek seferde girerim?**
 Tutar alanına `100+150+200` gibi yazın; kayıtta otomatik toplanır (550).

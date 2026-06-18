@@ -77,6 +77,7 @@
     "refreshing": "Refreshing values…",
     "updating": "updating",
     "refreshCard": "refresh card",
+    "cardWarning": "Warning on last update",
     "snapshot": "Take snapshot",
     "snapshotting": "Saving...",
     "history": "History",

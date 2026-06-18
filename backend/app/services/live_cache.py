@@ -535,6 +535,15 @@ async def refresh_one_section(user_id, section: str, session_factory: async_sess
     if computer is None:
         return
 
+    # Durumu HEMEN "refreshing" yap — frontend hook'u yalnız status=="refreshing"
+    # iken poll eder; bunu set etmezsek frontend tek okumada eski veriyle durur ve
+    # yeni değer görünmezdi (tam-refresh ile aynı desen). refreshed_at korunur.
+    async with session_factory() as db:
+        try:
+            await _set_status_refreshing(db, user_id)
+        except Exception:
+            logger.exception("Live cache: tek bölüm '%s' status=refreshing yazılamadı user_id=%s", section, user_id)
+
     encoded: Any
     try:
         async with session_factory() as section_db:
