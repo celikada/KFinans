@@ -5,6 +5,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 const apiFns = vi.hoisted(() => ({
   getLivePortfolio: vi.fn(),
   refreshPortfolio: vi.fn(),
+  refreshPortfolioSection: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -31,15 +32,17 @@ function okLive(overrides: Record<string, unknown> = {}) {
 
 // Hook'u DOM'a yansıtan minik test bileşeni.
 function Harness() {
-  const { data, loading, refreshing, error, refresh } = useLivePortfolio();
+  const { data, loading, refreshing, refreshingSection, error, refresh, refreshSection } = useLivePortfolio();
   return (
     <div>
       <span data-testid="status">{data?.status ?? "—"}</span>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="refreshing">{String(refreshing)}</span>
+      <span data-testid="refreshing-section">{refreshingSection ?? "—"}</span>
       <span data-testid="error">{error}</span>
       <span data-testid="wallet-count">{data?.sections.wallets?.positions?.length ?? 0}</span>
       <button onClick={() => refresh()}>refresh</button>
+      <button onClick={() => refreshSection("tefas")}>refresh-section</button>
     </div>
   );
 }
@@ -109,5 +112,21 @@ describe("useLivePortfolio", () => {
     await waitFor(() => expect(apiFns.refreshPortfolio).toHaveBeenCalledWith(true));
     // refresh içinde tekrar okuma yapılır (mount + refresh = en az 2).
     expect(apiFns.getLivePortfolio.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("refreshSection(section) → refreshPortfolioSection(section) + poll + spinner kapanır", async () => {
+    apiFns.getLivePortfolio.mockResolvedValue(okLive());
+    apiFns.refreshPortfolioSection.mockResolvedValue({ status: "ok", refreshed_at: "x" });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("ok"));
+
+    await act(async () => {
+      screen.getByText("refresh-section").click();
+    });
+
+    await waitFor(() => expect(apiFns.refreshPortfolioSection).toHaveBeenCalledWith("tefas"));
+    // status ok → poll tek okumada durur; refreshingSection tekrar null'a döner.
+    await waitFor(() => expect(screen.getByTestId("refreshing-section").textContent).toBe("—"));
   });
 });

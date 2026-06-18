@@ -512,3 +512,75 @@ async def test_post_refresh_returns_202(client, monkeypatch):
     assert resp.status_code == 202
     assert resp.json()["status"] == "refreshing"
     assert triggered["n"] == 1
+
+
+# ---------------------------------------------------------------------------
+# refresh_one_section — tek-kart (per-bölüm) yenileme
+# ---------------------------------------------------------------------------
+async def test_refresh_one_section_updates_only_that_section(monkeypatch):
+    """Tek bölüm yenileme: yalnız o bölümün payload'u değişir, diğerleri korunur."""
+    from app.schemas.tefas import TefasPositionOut
+
+    uid = await _create_user("lc_one_section@example.com")
+    _patch_usd_rate(monkeypatch)
+    # Önce tüm bölümleri boş yaz (cache satırı oluşsun).
+    _patch_all_compute(monkeypatch)
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    # Şimdi yalnız TEFAS'ı dolu veriyle yenile.
+    tefas_pos = [
+        TefasPositionOut(
+            code="YAC",
+            name="Yapı Kredi Fon",
+            quantity=Decimal("100"),
+            unit_price_tl=Decimal("2"),
+            total_value_tl=Decimal("200"),
+        )
+    ]
+
+    async def _t(_uid, _db):
+        return tefas_pos
+
+    monkeypatch.setattr("app.api.v1.tefas.compute_tefas_positions", _t)
+    await lc.refresh_one_section(uid, "tefas", session_factory=TestSession)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    assert row is not None
+    assert row.payload["tefas"]["positions"][0]["code"] == "YAC"
+    # Diğer bölümler hâlâ mevcut (silinmedi).
+    assert "wallets" in row.payload
+    assert row.total_value_tl == Decimal("200.00")
+
+
+async def test_refresh_one_section_invalid_noop(monkeypatch):
+    """Geçersiz bölüm adı → no-op (çağrı sessizce döner, hata fırlatmaz)."""
+    uid = await _create_user("lc_one_invalid@example.com")
+    # Hata fırlatmamalı
+    await lc.refresh_one_section(uid, "bilinmeyen", session_factory=TestSession)
+
+
+async def test_post_refresh_section_returns_202(client, monkeypatch):
+    triggered = {"section": None}
+
+    def _fake(_uid, section):
+        triggered["section"] = section
+
+    monkeypatch.setattr("app.api.v1.portfolio.trigger_section_refresh", _fake)
+    headers = await make_user(client, "lc_section_ep@example.com")
+
+    resp = await client.post("/api/v1/portfolio/refresh/tefas", headers=headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "refreshing"
+    assert triggered["section"] == "tefas"
+
+
+async def test_post_refresh_section_invalid_404(client):
+    headers = await make_user(client, "lc_section_bad@example.com")
+    resp = await client.post("/api/v1/portfolio/refresh/bilinmeyen", headers=headers)
+    assert resp.status_code == 404
+
+
+async def test_post_refresh_section_unauthenticated(client):
+    resp = await client.post("/api/v1/portfolio/refresh/tefas")
+    assert resp.status_code == 401

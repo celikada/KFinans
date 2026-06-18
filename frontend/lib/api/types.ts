@@ -260,6 +260,9 @@ export interface TefasPosition {
   gain_loss_tl: string | null;
   gain_loss_pct: number | null;
   distributor: string | null;
+  // TEFAS'ta o an fiyatlanamayan fon (geçici 0 portföy değeri vb.) → false.
+  // Pozisyon listede kalır ama fiyat/değer 0; tek fiyatsız fon kartı çökertmez.
+  price_available?: boolean;
 }
 
 // ─── Expense ────────────────────────────────────────────────────

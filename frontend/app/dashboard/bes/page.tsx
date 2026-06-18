@@ -40,12 +40,27 @@ function fmtTL(val: number) {
   return val.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/**
+ * Tutar alanına "A+B+C" girilirse (ör. "100+150+200+100") parçaları toplar (→ 550).
+ * Tek sayı normal parse edilir. TR/EN ondalık (virgül/nokta) desteklenir; geçersiz
+ * parçalar 0 sayılır. Binlik ayraç beklenmez (kullanıcı ham sayı girer).
+ */
+function sumAmounts(raw: string): number {
+  if (!raw) return 0;
+  return raw
+    .split("+")
+    .reduce((acc, part) => {
+      const n = Number.parseFloat(part.trim().replace(",", "."));
+      return acc + (Number.isFinite(n) ? n : 0);
+    }, 0);
+}
+
 function rowTotal(h: Holding): number {
   return (
-    (Number.parseFloat(h.paid_principal) || 0) +
-    (Number.parseFloat(h.paid_returns) || 0) +
-    (Number.parseFloat(h.govt_contribution) || 0) +
-    (Number.parseFloat(h.govt_returns) || 0)
+    sumAmounts(h.paid_principal) +
+    sumAmounts(h.paid_returns) +
+    sumAmounts(h.govt_contribution) +
+    sumAmounts(h.govt_returns)
   );
 }
 
@@ -55,10 +70,11 @@ function toDTO(holdings: Holding[]): BesHoldingDTO[] {
     .map((h) => ({
       plan_name: h.plan_name.trim(),
       contract_number: h.contract_number.trim() || null,
-      paid_principal: Number.parseFloat(h.paid_principal) || 0,
-      paid_returns: Number.parseFloat(h.paid_returns) || 0,
-      govt_contribution: Number.parseFloat(h.govt_contribution) || 0,
-      govt_returns: Number.parseFloat(h.govt_returns) || 0,
+      // "100+150+200" gibi toplam ifadeleri değerlendirilerek kaydedilir.
+      paid_principal: sumAmounts(h.paid_principal),
+      paid_returns: sumAmounts(h.paid_returns),
+      govt_contribution: sumAmounts(h.govt_contribution),
+      govt_returns: sumAmounts(h.govt_returns),
     }));
 }
 
@@ -312,18 +328,23 @@ function NumField({
   value: string;
   onChange: (v: string) => void;
 }>) {
+  // "100+150+200" gibi toplam ifadesi girilince canlı toplam ipucu göster.
+  const isSum = value.includes("+");
   return (
     <div>
       <label className="block text-xs text-gray-500 mb-1">{label} {suffix}</label>
       <input
-        type="number"
-        min="0"
-        step="0.01"
+        type="text"
+        inputMode="text"
+        // type=text → "+" ile A+B+C toplama girilebilir; kayıtta sumAmounts ile toplanır.
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="0,00"
+        placeholder="0,00  (100+150+200)"
         className={`w-full text-right ${INPUT_CLS}`}
       />
+      {isSum && (
+        <p className="mt-0.5 text-right text-xs text-green-600 tabular-nums">= {fmtTL(sumAmounts(value))} {suffix}</p>
+      )}
     </div>
   );
 }

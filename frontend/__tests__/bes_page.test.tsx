@@ -142,7 +142,7 @@ describe("BesPage — satir CRUD + toplam hesabi", () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Test Plan");
-    const numInputs = screen.getAllByPlaceholderText("0,00");
+    const numInputs = screen.getAllByPlaceholderText(/0,00/);
     // 4 sayisal alan (paid_principal, paid_returns, govt_contribution, govt_returns)
     expect(numInputs).toHaveLength(4);
     fireEvent.change(numInputs[0], { target: { value: "500" } });
@@ -160,7 +160,7 @@ describe("BesPage — kaydetme akisi", () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan A");
-    const numInputs = screen.getAllByPlaceholderText("0,00");
+    const numInputs = screen.getAllByPlaceholderText(/0,00/);
     fireEvent.change(numInputs[0], { target: { value: "1000" } });
 
     await user.click(screen.getByRole("button", { name: "common.save" }));
@@ -174,6 +174,24 @@ describe("BesPage — kaydetme akisi", () => {
     expect(await screen.findByText("content.bes.saved")).toBeInTheDocument();
   });
 
+  it("tutar 'A+B+C' girilince toplami kaydedilir (100+150+200 → 450)", async () => {
+    render(<BesPage />);
+    expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Toplam Plan");
+    const numInputs = screen.getAllByPlaceholderText(/0,00/);
+    fireEvent.change(numInputs[0], { target: { value: "100+150+200" } });
+
+    // Canli toplam ipucu gorunur.
+    await waitFor(() => expect(screen.getByText(/= 450/)).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(saveBesHoldings).toHaveBeenCalledTimes(1));
+    const payload = saveBesHoldings.mock.calls[0][0];
+    expect(payload[0]).toMatchObject({ plan_name: "Toplam Plan", paid_principal: 450 });
+  });
+
   it("save 401 → login'e yonlendirir, hata gosterilmez", async () => {
     saveBesHoldings.mockRejectedValue(new Error("got 401 here"));
     render(<BesPage />);
@@ -181,7 +199,7 @@ describe("BesPage — kaydetme akisi", () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan B");
-    fireEvent.change(screen.getAllByPlaceholderText("0,00")[0], { target: { value: "5" } });
+    fireEvent.change(screen.getAllByPlaceholderText(/0,00/)[0], { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "common.save" }));
 
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/login"));
@@ -194,7 +212,7 @@ describe("BesPage — kaydetme akisi", () => {
     const user = userEvent.setup();
 
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan C");
-    fireEvent.change(screen.getAllByPlaceholderText("0,00")[0], { target: { value: "5" } });
+    fireEvent.change(screen.getAllByPlaceholderText(/0,00/)[0], { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "common.save" }));
 
     expect(await screen.findByText("kaydetme reddedildi")).toBeInTheDocument();
@@ -206,7 +224,7 @@ describe("BesPage — kaydetme akisi", () => {
     expect(await screen.findByPlaceholderText("content.bes.planNamePlaceholder")).toBeInTheDocument();
     const user = userEvent.setup();
 
-    fireEvent.change(screen.getAllByPlaceholderText("0,00")[0], { target: { value: "5" } });
+    fireEvent.change(screen.getAllByPlaceholderText(/0,00/)[0], { target: { value: "5" } });
     await user.type(screen.getByPlaceholderText("content.bes.planNamePlaceholder"), "Plan D");
     await user.click(screen.getByRole("button", { name: "common.save" }));
 

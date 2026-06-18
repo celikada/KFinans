@@ -39,12 +39,17 @@ export interface UseLivePortfolioResult {
   error: string;
   /** Manuel "Yenile": backend'i zorla yeniden hesaplat + poll et. */
   refresh: () => Promise<void>;
+  /** Tek bir kartı (bölümü) yeniden hesaplat + poll et (per-kart yenile ikonu). */
+  refreshSection: (section: string) => Promise<void>;
+  /** Şu an tek-kart yenilemesi süren bölüm (null = yok) — yalnız o kart spinner gösterir. */
+  refreshingSection: string | null;
 }
 
 export function useLivePortfolio(): UseLivePortfolioResult {
   const [data, setData] = useState<LivePortfolioOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingSection, setRefreshingSection] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   // Cleanup için: aktif poll timer + unmount bayrağı.
@@ -120,5 +125,20 @@ export function useLivePortfolio(): UseLivePortfolioResult {
     await loop(MAX_POLLS);
   }, [loop]);
 
-  return { data, loading, refreshing, error, refresh };
+  const refreshSection = useCallback(async (section: string) => {
+    setRefreshingSection(section);
+    setError("");
+    try {
+      await api.refreshPortfolioSection(section);
+    } catch (err) {
+      if (!cancelledRef.current) {
+        setError(err instanceof Error ? err.message : "Yenileme tetiklenemedi");
+      }
+    }
+    // Bölüm arka planda hesaplanır → poll ile sonucu yakala, sonra spinner'ı kapat.
+    await loop(MAX_POLLS);
+    if (!cancelledRef.current) setRefreshingSection(null);
+  }, [loop]);
+
+  return { data, loading, refreshing, refreshingSection, error, refresh, refreshSection };
 }

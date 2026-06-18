@@ -124,14 +124,27 @@ class TefasService(BaseIntegration):
 
     def __init__(self, holdings: list[dict]):
         self.holdings = holdings
+        # skip_missing=True çağrısında fiyatlanamayan fon kodları (uyarı için).
+        self.missing_codes: list[str] = []
 
-    async def fetch(self) -> list[AssetData]:
+    async def fetch(self, *, skip_missing: bool = False) -> list[AssetData]:
+        """Holding'leri canlı fiyatlarla AssetData'ya çevirir.
+
+        ``skip_missing=False`` (preview/validation): fiyatlanamayan fon → ValueError.
+        ``skip_missing=True`` (dashboard/live cache): fiyatlanamayan fon ATLANIR
+        (``self.missing_codes``'a eklenir) → tek geçici fiyatsız fon (ör. 0 portföy
+        değerli) tüm TEFAS kartını çökertmez. Caller eksik kodları uyarıya çevirir.
+        """
         prices = await self._fetch_prices()
         assets = []
+        self.missing_codes = []
         for h in self.holdings:
             code = h["code"].upper()
             price_tl = prices.get(code)
             if price_tl is None:
+                if skip_missing:
+                    self.missing_codes.append(code)
+                    continue
                 raise ValueError(f"TEFAS'ta fon bulunamadı: {code}")
             assets.append(
                 AssetData(

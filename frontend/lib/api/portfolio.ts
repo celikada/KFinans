@@ -19,6 +19,11 @@ export const portfolioApi = {
   refreshPortfolio: (force = false) =>
     request<RefreshPortfolioOut>(`/portfolio/refresh${force ? "?force=1" : ""}`, { method: "POST" }),
 
+  // Tek bir bölümü (kartı) yeniden hesaplatır (per-kart yenile ikonu).
+  // section ∈ {wallets, crypto, tefas, stocks, commodities, manual_crypto}
+  refreshPortfolioSection: (section: string) =>
+    request<RefreshPortfolioOut>(`/portfolio/refresh/${section}`, { method: "POST" }),
+
   previewSnapshot: () =>
     request<{
       total_value_tl: string;

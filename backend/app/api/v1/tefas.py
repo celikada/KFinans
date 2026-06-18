@@ -128,8 +128,34 @@ async def compute_tefas_positions(user_id, db: AsyncSession) -> list[TefasPositi
         for r in rows
     ]
     svc = TefasService([{"code": h.code, "quantity": h.quantity, "name": h.name} for h in holdings])
-    assets = await svc.fetch()
-    return [_build_tefas_position(h, a) for h, a in zip(holdings, assets)]
+    # skip_missing: tek fiyatsız fon (ör. AFO geçici 0 portföy değerli) tüm kartı
+    # çökertmesin — fiyatlananlar pozisyon olur, fiyatlanamayan price_available=False.
+    assets = await svc.fetch(skip_missing=True)
+    asset_by_code = {a.symbol: a for a in assets}
+    positions: list[TefasPositionOut] = []
+    for h in holdings:
+        asset = asset_by_code.get(h.code.upper())
+        if asset is not None:
+            positions.append(_build_tefas_position(h, asset))
+        else:
+            positions.append(_build_unpriced_tefas_position(h))
+    return positions
+
+
+def _build_unpriced_tefas_position(h: TefasHolding) -> TefasPositionOut:
+    """TEFAS'ta o an fiyatlanamayan fon için 0-değerli pozisyon (price_available=False).
+
+    Holding listede görünür (kullanıcı sahip olduğunu görür) ama toplam'ı etkilemez."""
+    return TefasPositionOut(
+        code=h.code.upper(),
+        name=h.name or h.code.upper(),
+        quantity=Decimal(str(h.quantity)),
+        unit_price_tl=Decimal("0"),
+        total_value_tl=Decimal("0"),
+        avg_cost_tl=Decimal(str(h.avg_cost_tl)) if h.avg_cost_tl is not None else None,
+        distributor=h.distributor,
+        price_available=False,
+    )
 
 
 @router.post("/preview", response_model=list[TefasPositionOut])

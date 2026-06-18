@@ -46,11 +46,13 @@ from app.services.exchange.binance import BinanceService
 from app.services.exchange.binancetr import BinanceTRService
 from app.services.exchange.icrypex import ICrypexService
 from app.services.live_cache import (
+    VALID_SECTIONS,
     get_live_cache,
     is_stale,
     preview_snapshot_from_cache,
     save_snapshot_from_cache,
     trigger_background_refresh,
+    trigger_section_refresh,
 )
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -161,6 +163,30 @@ async def refresh_live_portfolio(
     hesaplar (kullanıcı "Yenile" butonu). force=false taze cache'i no-op geçer.
     """
     trigger_background_refresh(current_user.id, force=force)
+    row = await get_live_cache(current_user.id, db)
+    return RefreshAcceptedOut(
+        status="refreshing",
+        refreshed_at=row.refreshed_at if row else None,
+    )
+
+
+@router.post("/refresh/{section}", response_model=RefreshAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("60/hour")
+async def refresh_one_portfolio_section(
+    request: Request,
+    section: str,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Tek bir portföy bölümünü (kartı) arka planda yeniden hesaplatır (per-kart yenile).
+
+    `section ∈ {wallets, crypto, tefas, stocks, commodities, manual_crypto}`. Yalnız o
+    bölüm yeniden çekilir + cache'in o anahtarı yamalanır; diğer kartlar etkilenmez.
+    202 + mevcut cache durumunu döner (frontend poll ile günceller).
+    """
+    if section not in VALID_SECTIONS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Geçersiz bölüm")
+    trigger_section_refresh(current_user.id, section)
     row = await get_live_cache(current_user.id, db)
     return RefreshAcceptedOut(
         status="refreshing",
