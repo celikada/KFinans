@@ -6,6 +6,28 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.2] - 2026-06-18
+
+### Eklenenler
+
+- **Kart üstü uyarı göstergesi (⚠):** Portföy kartlarında (cüzdan/kripto/TEFAS/hisse/emtia/
+  manuel kripto) son güncellemede bir sorun oluştuysa (ör. "X fiyatı alınamadı", çekilemeyen
+  zincir/borsa) yenile ikonunun yanında **⚠ ikonu** belirir; üzerine gelince/tıklayınca uyarı
+  mesajları gösterilir. Önceden bu uyarılar yalnız snapshot ekranında görünüyordu.
+
+### Düzeltmeler
+
+- **Tek-kart yenileme görsel olarak güncellemiyordu:** Kartın 🔄 ikonuna basınca backend o
+  bölümü yeniden hesaplıyordu ama frontend yeni değeri göstermiyordu — çünkü `refresh_one_section`
+  cache durumunu hiç "refreshing" yapmıyordu; frontend hook'u yalnız `status=="refreshing"` iken
+  poll ettiğinden tek okumada eski veriyle duruyordu. Artık tek-kart yenileme de (tam yenileme
+  gibi) durumu "refreshing" yapar → frontend güncel değeri görene kadar poll eder.
+- **Not — manuel kripto "fiyat alınamadı" (ör. iCrypex XAGX → CoinGecko):** Bu uyarı genelde
+  CoinGecko ücretsiz API'sinin **geçici hız sınırı** (snapshot anında çok sayıda fiyat çekimi)
+  kaynaklıdır; fiyat erişilebilir olduğunda **kartı 🔄 ile yenilemek** değeri günceller.
+
+---
+
 ## [0.11.1] - 2026-06-18
 
 ### Düzeltmeler

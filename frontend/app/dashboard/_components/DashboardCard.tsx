@@ -41,6 +41,10 @@ export interface CardProps {
   // Verilirse kartın sağ-üstüne "yenile" ikonu konur (yalnız bu kartı yeniden
   // çekmek için). Karta tıklayıp detaya gitmeyi engeller (stopPropagation).
   readonly onRefresh?: () => void;
+  // Bu kartın bölümünde son güncellemede oluşan uyarı mesajları (ör. "X fiyatı
+  // alınamadı"). Doluysa yenile ikonunun yanına ⚠ konur; üzerine gelince/tıklayınca
+  // mesajlar gösterilir.
+  readonly warnings?: readonly string[];
 }
 
 
@@ -64,6 +68,61 @@ function RefreshIcon({ spinning }: { readonly spinning?: boolean }) {
 }
 
 
+/** Uyarı (⚠) üçgen ikonu. */
+function WarningIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+/** Kartın sağ-üstünde, yenile ikonunun yanındaki uyarı (⚠) göstergesi + popover. */
+function CardWarning({ warnings, title, offset }: { readonly warnings: readonly string[]; readonly title: string; readonly offset: boolean }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`absolute top-3 ${offset ? "right-12" : "right-3"} z-20`}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        title={warnings.join("\n")}
+        aria-label={`${title}: ${t("dashboard.cardWarning")}`}
+        className="p-1.5 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors"
+      >
+        <WarningIcon />
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          className="absolute top-9 right-0 w-64 max-w-[80vw] bg-white border border-amber-200 rounded-xl shadow-lg p-3 text-left"
+        >
+          <p className="text-xs font-semibold text-amber-700 mb-1">⚠ {t("dashboard.cardWarning")}</p>
+          <ul className="space-y-1">
+            {warnings.map((w) => (
+              <li key={w} className="text-xs text-gray-600 leading-snug">{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 /** Kart ustunde "guncelleniyor" gostergesi (kucuk spinner + metin). */
 export function UpdatingBadge() {
   const { t } = useTranslation();
@@ -80,10 +139,11 @@ export function UpdatingBadge() {
 
 
 export function Card({
-  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating, displayValue, onRefresh,
+  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating, displayValue, onRefresh, warnings,
 }: CardProps) {
   const router = useRouter();
   const { t } = useTranslation();
+  const hasWarnings = (warnings?.length ?? 0) > 0;
   const c = COLOR_MAP[color];
   // Görüntüleme para birimi dönüşümü (top3 satırları için; total Money kullanır).
   const rates = useRates();
@@ -109,6 +169,7 @@ export function Card({
 
   return (
     <div className="relative">
+      {hasWarnings && warnings && <CardWarning warnings={warnings} title={title} offset={!!onRefresh} />}
       {onRefresh && (
         <button
           type="button"
