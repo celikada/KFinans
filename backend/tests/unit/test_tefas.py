@@ -9,7 +9,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.services.tefas import _EXPORT_URL, TefasService, fetch_tefas_prices_by_codes
+from app.services.tefas import _EXPORT_URL, TefasService, fetch_tefas_prices_by_codes, reset_tefas_cache
 
 
 def _make_row(kod: str, portfoy: float, pay: float) -> dict:
@@ -85,6 +85,40 @@ async def test_fetch_skips_rows_with_zero_pay():
         assets = await svc.fetch()
 
     assert all(a.symbol != "BAD" for a in assets)
+
+
+@pytest.mark.asyncio
+async def test_fetch_skip_missing_does_not_raise():
+    """skip_missing=True: fiyatlanamayan fon (0 portföy değerli AFO benzeri) ATLANIR,
+    raise ETMEZ — tek fiyatsız fon tüm TEFAS kartını çökertmesin (prod AFO bug'ı)."""
+    reset_tefas_cache()
+    # AFO: portföy/pay = 0 → grid'e girmez (pay>0 filtresi) → "fiyatlanamaz"
+    rows = SAMPLE_ROWS + [{"fonKodu": "AFO", "sonPortfoyDegeri": 0, "sonPayAdedi": 0}]
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(200, json=rows))
+        svc = TefasService(
+            [
+                {"code": "YAC", "quantity": 10.0, "name": "Yapı Kredi Fon"},
+                {"code": "AFO", "quantity": 5.0, "name": "Ak Portföy Altın Fonu"},
+            ]
+        )
+        assets = await svc.fetch(skip_missing=True)
+
+    # YAC fiyatlandı, AFO atlandı (raise yok)
+    assert [a.symbol for a in assets] == ["YAC"]
+    assert svc.missing_codes == ["AFO"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_default_still_raises_for_missing():
+    """skip_missing=False (varsayılan, preview/validation): eksik fon → ValueError korunur."""
+    reset_tefas_cache()
+    rows = SAMPLE_ROWS + [{"fonKodu": "AFO", "sonPortfoyDegeri": 0, "sonPayAdedi": 0}]
+    with respx.mock:
+        respx.post(_EXPORT_URL).mock(return_value=Response(200, json=rows))
+        svc = TefasService([{"code": "AFO", "quantity": 5.0, "name": "Altın Fonu"}])
+        with pytest.raises(ValueError, match="TEFAS'ta fon bulunamadı: AFO"):
+            await svc.fetch()
 
 
 @pytest.mark.asyncio

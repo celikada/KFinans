@@ -938,7 +938,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("tefas") && (
               <Card
                 href="/dashboard/tefas"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "tefas"}
+                onRefresh={() => live.refreshSection("tefas")}
                 icon="tefas"
                 color="blue"
                 title={t("dashboard.cards.tefas")}
@@ -953,7 +954,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("stocks") && (
               <Card
                 href="/dashboard/stocks"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "stocks"}
+                onRefresh={() => live.refreshSection("stocks")}
                 icon="stocks"
                 color="indigo"
                 title={t("dashboard.cards.stocks")}
@@ -968,7 +970,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("wallets") && (
               <Card
                 href="/dashboard/wallets"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "wallets"}
+                onRefresh={() => live.refreshSection("wallets")}
                 icon="wallets"
                 color="purple"
                 title={t("dashboard.cards.wallets")}
@@ -982,7 +985,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("crypto") && (
               <Card
                 href="/dashboard/crypto"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "crypto"}
+                onRefresh={() => live.refreshSection("crypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.crypto")}
@@ -996,7 +1000,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("manualCrypto") && (
               <Card
                 href="/dashboard/manual-crypto"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "manual_crypto"}
+                onRefresh={() => live.refreshSection("manual_crypto")}
                 icon="crypto"
                 color="orange"
                 title={t("dashboard.cards.manualCrypto")}
@@ -1011,7 +1016,8 @@ export default function DashboardPage() {
             {!hiddenCards.includes("commodities") && (
               <Card
                 href="/dashboard/commodities"
-                updating={live.refreshing}
+                updating={live.refreshing || live.refreshingSection === "commodities"}
+                onRefresh={() => live.refreshSection("commodities")}
                 icon="commodities"
                 color="amber"
                 title={t("dashboard.cards.commodities")}

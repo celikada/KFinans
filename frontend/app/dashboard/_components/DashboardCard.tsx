@@ -38,6 +38,29 @@ export interface CardProps {
   // `*_display`, tarihsel kur)? true → DisplayMoney/fmtCurrency (BÖLME YOK).
   // false/undefined → Money/formatTlAs (TL → güncel kur; canlı yatırım kartları).
   readonly displayValue?: boolean;
+  // Verilirse kartın sağ-üstüne "yenile" ikonu konur (yalnız bu kartı yeniden
+  // çekmek için). Karta tıklayıp detaya gitmeyi engeller (stopPropagation).
+  readonly onRefresh?: () => void;
+}
+
+
+/** Kartın sağ-üstündeki tek-kart yenileme ikonu (dönen ok). */
+function RefreshIcon({ spinning }: { readonly spinning?: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 ${spinning ? "animate-spin" : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  );
 }
 
 
@@ -57,9 +80,10 @@ export function UpdatingBadge() {
 
 
 export function Card({
-  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating, displayValue,
+  href, icon, color, title, total, count, countLabel, loading, top, placeholder, footer, updating, displayValue, onRefresh,
 }: CardProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const c = COLOR_MAP[color];
   // Görüntüleme para birimi dönüşümü (top3 satırları için; total Money kullanır).
   const rates = useRates();
@@ -84,38 +108,52 @@ export function Card({
   }
 
   return (
-    <button
-      onClick={() => router.push(href)}
-      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md ${c.border} transition-all group`}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} group-hover:opacity-80 transition-opacity`}>
-          {ICONS[icon]}
-        </div>
-        {updating && <UpdatingBadge />}
-      </div>
-      <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
-
-      {body}
-
-      {top.length > 0 && (
-        <ul className="mt-3 pt-3 border-t border-gray-50 space-y-1.5">
-          {top.map((it) => (
-            <li key={it.label} className="flex justify-between items-center text-xs">
-              <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
-              <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">
-                {displayValue ? fmtCurrency(it.value, displayCurrency) : formatTlAs(it.value, displayCurrency, rates)}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <div className="relative">
+      {onRefresh && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+          disabled={updating}
+          title={t("dashboard.refreshCard")}
+          aria-label={`${title} ${t("dashboard.refreshCard")}`}
+          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg text-gray-300 hover:text-blue-600 hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-blue-400 disabled:opacity-60 transition-colors"
+        >
+          <RefreshIcon spinning={updating} />
+        </button>
       )}
-      {footer && (
-        <div className="mt-3 pt-3 border-t border-gray-50 text-xs text-gray-500">
-          {footer}
+      <button
+        onClick={() => router.push(href)}
+        className={`w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md ${c.border} transition-all group`}
+      >
+        <div className="flex items-start justify-between mb-3">
+          <div className={`w-9 h-9 ${c.bg} rounded-xl flex items-center justify-center ${c.text} group-hover:opacity-80 transition-opacity`}>
+            {ICONS[icon]}
+          </div>
+          {updating && !onRefresh && <UpdatingBadge />}
         </div>
-      )}
-    </button>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">{title}</h3>
+
+        {body}
+
+        {top.length > 0 && (
+          <ul className="mt-3 pt-3 border-t border-gray-50 space-y-1.5">
+            {top.map((it) => (
+              <li key={it.label} className="flex justify-between items-center text-xs">
+                <span className="truncate text-gray-500 font-mono max-w-[60%]">{it.label}</span>
+                <span className="font-semibold tabular-nums text-gray-700 ml-2 shrink-0">
+                  {displayValue ? fmtCurrency(it.value, displayCurrency) : formatTlAs(it.value, displayCurrency, rates)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {footer && (
+          <div className="mt-3 pt-3 border-t border-gray-50 text-xs text-gray-500">
+            {footer}
+          </div>
+        )}
+      </button>
+    </div>
   );
 }
 

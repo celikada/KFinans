@@ -177,7 +177,16 @@ async def _gather_sections(
     issues: list[dict[str, Any]] = []
     for name, res in zip(names, results):
         if isinstance(res, BaseException):
-            logger.exception("Live cache: '%s' bölümü hesaplanamadı user_id=%s", name, user_id)
+            # gather(return_exceptions=True) → res except bloğunda DEĞİL; logger.exception
+            # burada sys.exc_info()=None okur ("NoneType: None"). Gerçek hatayı görmek
+            # için exc_info=res ver (traceback + tip loglanır).
+            logger.error(
+                "Live cache: '%s' bölümü hesaplanamadı user_id=%s: %r",
+                name,
+                user_id,
+                res,
+                exc_info=res,
+            )
             issues.append(
                 {
                     "source": name,
@@ -304,6 +313,20 @@ async def _derive_section_notes(user_id, db: AsyncSession, sections: dict[str, A
     saklanır (geçmiş listesindeki sarı ünlem).
     """
     notes: list[dict[str, Any]] = []
+    # TEFAS: o an fiyatlanamayan fon (geçici 0 portföy değeri vb.) — pozisyon
+    # listede price_available=False ile kalır; tek fiyatsız fon kartı çökertmez.
+    for p in _iter_section_positions(sections.get("tefas", {})):
+        if p.get("price_available") is False:
+            code = p.get("code", "?")
+            notes.append(
+                {
+                    "source": "tefas",
+                    "symbol": code,
+                    "code": "price_unavailable",
+                    "level": "warn",
+                    "msg": f"{code}: TEFAS fiyatı şu an alınamıyor (fon geçici olarak fiyatlanamıyor)",
+                }
+            )
     # Hisse: anlık fiyat alınamadı → son kapanış kullanıldı (is_stale)
     for p in _iter_section_positions(sections.get("stocks", {})):
         if p.get("is_stale"):
@@ -470,6 +493,117 @@ def trigger_background_refresh(user_id, *, force: bool = False) -> None:
     task = loop.create_task(refresh_live_cache(user_id, force=force))
     _BG_TASKS.add(task)
     task.add_done_callback(_BG_TASKS.discard)
+
+
+# ---------------------------------------------------------------------------
+# Tek-bölüm (per-kart) yenileme
+# ---------------------------------------------------------------------------
+# Dashboard'da tek bir kartın (cüzdan/kripto/TEFAS/hisse/emtia/manuel kripto)
+# "yenile" ikonu: yalnız o bölümü yeniden hesaplar + cache payload'unu yamalar
+# (diğer bölümlere dokunmaz). Tüm portföyü yeniden çekmeden hızlı retry sağlar.
+VALID_SECTIONS: tuple[str, ...] = ("wallets", "crypto", "tefas", "stocks", "commodities", "manual_crypto")
+
+# Tek-bölüm single-flight: aynı (user, section) için aynı anda tek refresh.
+_SECTION_TASKS: dict[str, asyncio.Task] = {}
+
+
+def _section_computer(section: str):
+    """Bölüm adından compute_* fonksiyonunu döner (geç import — döngü engeli)."""
+    from app.api.v1.commodity import compute_commodities
+    from app.api.v1.manual_crypto import compute_manual_crypto
+    from app.api.v1.portfolio import compute_crypto_positions, compute_wallet_positions
+    from app.api.v1.stocks import compute_stock_positions
+    from app.api.v1.tefas import compute_tefas_positions
+
+    return {
+        "wallets": compute_wallet_positions,
+        "crypto": compute_crypto_positions,
+        "tefas": compute_tefas_positions,
+        "stocks": compute_stock_positions,
+        "commodities": compute_commodities,
+        "manual_crypto": compute_manual_crypto,
+    }.get(section)
+
+
+async def refresh_one_section(user_id, section: str, session_factory: async_sessionmaker = AsyncSessionLocal) -> None:
+    """Tek bir bölümü yeniden hesaplar ve cache payload'unun yalnız o anahtarını yamalar.
+
+    Diğer bölümler ve health_issues'ları korunur (yalnız bu bölümün notları yenilenir);
+    toplam (`total_value_tl`) tüm bölümlerden yeniden toplanır. `refreshed_at` güncellenir.
+    """
+    computer = _section_computer(section)
+    if computer is None:
+        return
+
+    encoded: Any
+    try:
+        async with session_factory() as section_db:
+            res = await asyncio.wait_for(computer(user_id, section_db), timeout=_REFRESH_TOTAL_TIMEOUT)
+        encoded = jsonable_encoder(res)
+        if isinstance(encoded, list):
+            encoded = {"positions": encoded}
+        failed = False
+    except Exception as exc:
+        # Best-effort: hata yutulur, cache'e "section_failed" notu olarak yansır.
+        logger.error("Live cache: tek bölüm '%s' yenilenemedi user_id=%s: %r", section, user_id, exc, exc_info=exc)
+        encoded = _empty_section(section)
+        failed = True
+
+    async with session_factory() as db:
+        existing = await get_live_cache(user_id, db)
+        payload = dict(existing.payload) if existing and existing.payload else {}
+        payload[section] = encoded
+        total = _sum_sections_total(payload)
+        # Diğer bölümlerin notlarını koru; bu bölümünkileri yenile.
+        prior = [i for i in (existing.health_issues or []) if i.get("source") != section] if existing else []
+        section_notes: list[dict[str, Any]] = []
+        if failed:
+            section_notes.append({"source": section, "code": "section_failed", "msg": "Bu bölüm geçici olarak hesaplanamadı.", "level": "warn"})
+        else:
+            try:
+                derived = await _derive_section_notes(user_id, db, payload)
+                section_notes = [n for n in derived if n.get("source") == section]
+            except Exception:
+                logger.exception("Live cache: tek bölüm '%s' notları türetilemedi user_id=%s", section, user_id)
+        issues = prior + section_notes
+        try:
+            await _save_result(
+                db,
+                user_id,
+                payload=payload,
+                total_value_tl=total,
+                rates=existing.rates if existing else None,
+                health_issues=issues or None,
+                status="ok",
+                error=None,
+                update_refreshed_at=True,
+            )
+        except Exception:
+            logger.exception("Live cache: tek bölüm '%s' sonucu yazılamadı user_id=%s", section, user_id)
+
+
+def trigger_section_refresh(user_id, section: str) -> None:
+    """Best-effort fire-and-forget tek-bölüm yenileme (per-kart yenile ikonu).
+
+    Aynı (user, section) için koşan task varsa yenisini başlatmaz (single-flight)."""
+    if section not in VALID_SECTIONS:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    key = f"{user_id}:{section}"
+    existing = _SECTION_TASKS.get(key)
+    if existing is not None and not existing.done():
+        return
+    task = loop.create_task(refresh_one_section(user_id, section))
+    _SECTION_TASKS[key] = task
+
+    def _cleanup(_t: asyncio.Task, k: str = key) -> None:
+        if _SECTION_TASKS.get(k) is _t:
+            _SECTION_TASKS.pop(k, None)
+
+    task.add_done_callback(_cleanup)
 
 
 # ---------------------------------------------------------------------------

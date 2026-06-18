@@ -30,3 +30,8 @@ class TefasPositionOut(BaseModel):
     gain_loss_tl: Decimal | None = None
     gain_loss_pct: float | None = None
     distributor: str | None = None
+    # TEFAS export'ta o an fiyatlanamayan fon (ör. geçici 0 portföy değeri):
+    # pozisyon listede kalır (kullanıcı holding'ini görür) ama fiyat/değer 0 +
+    # bu bayrak False → dashboard "fiyat alınamadı" uyarısı gösterir. Tek fiyatsız
+    # fon ARTIK tüm TEFAS kartını çökertmez (fault-tolerance).
+    price_available: bool = True

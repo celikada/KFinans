@@ -6,6 +6,37 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.1] - 2026-06-18
+
+### Düzeltmeler
+
+- **TEFAS kartı tek fiyatsız fonda komple çöküyordu (kritik):** Kullanıcının fonlarından biri
+  TEFAS export'unda o an fiyatlanamıyorsa (ör. **AFO** — Ak Portföy Altın Fonu, geçici 0 portföy
+  değeri) `TefasService.fetch` ilk eksik fonda `ValueError` fırlatıp **tüm TEFAS bölümünü**
+  çökertiyordu (kart boş, "yüklenemedi"). Artık `compute_tefas_positions` **tolerant**: fiyatlanan
+  fonlar normal gösterilir, fiyatlanamayan fon `price_available=false` ile listede kalır (değer 0,
+  toplamı etkilemez) + dashboard'da "fiyat alınamadı" uyarısı. **Bu bir ağ/IP-block sorunu DEĞİLDİ**
+  (prod TEFAS'a erişebiliyor — pod içinden doğrulandı). `fetch(skip_missing=True)` yeni mod; preview/
+  validation yolu (`skip_missing=False`) eskisi gibi raise eder.
+- **Canlı cache hata logu sağırdı:** `_gather_sections` patlayan bölümün gerçek hatasını
+  `logger.exception` ile loglarken `gather(return_exceptions=True)` bağlamında `NoneType: None`
+  yazıyordu (gerçek istisna kaybolurdu). Artık `exc_info=res` ile tip + traceback loglanır.
+
+### Eklenenler
+
+- **Tek-kart yenileme (per-kart "yenile" ikonu):** Portföy kartlarının (cüzdan/kripto/TEFAS/hisse/
+  emtia/manuel kripto) sağ-üstüne yenileme ikonu eklendi — yalnız o kartın verisini arka planda
+  yeniden çeker (tüm portföyü değil). Yeni endpoint `POST /portfolio/refresh/{section}` +
+  `refresh_one_section` (cache'in yalnız o anahtarını yamalar, diğer kartlar etkilenmez,
+  single-flight). Frontend `useLivePortfolio.refreshSection` + kart başına spinner. TEFAS gibi
+  geçici hata veren kart, tüm sayfayı yenilemeden tek tıkla retry edilebilir.
+- **BES tutar alanlarında toplama ifadesi:** BES ekranındaki tutar alanlarına `100+150+200` gibi
+  toplama ifadesi girilebilir — kayıtta otomatik toplanır (→ 450). Girerken canlı `= 450` ipucu
+  gösterilir. Birden çok ödeme/katkıyı elde toplamadan girmeyi kolaylaştırır (4 alan: ana para,
+  getiri, devlet katkısı, devlet getirisi).
+
+---
+
 ## [0.11.0] - 2026-06-18
 
 ### Eklenenler

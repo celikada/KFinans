@@ -349,6 +349,11 @@ export default function TefasPage() {
                         {pos.distributor && (
                           <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full font-medium">{pos.distributor}</span>
                         )}
+                        {pos.price_available === false && (
+                          <span className="ml-2 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-medium" title="TEFAS bu fonu şu an fiyatlandıramıyor">
+                            ⚠ fiyat yok
+                          </span>
+                        )}
                         {pos.name && (
                           <p className="text-xs text-gray-400 mt-0.5 truncate max-w-48">{pos.name}</p>
                         )}
