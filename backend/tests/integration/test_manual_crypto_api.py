@@ -369,7 +369,8 @@ async def test_linked_binance_eth(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_manual_without_price_zero(client: AsyncClient):
-    """price_source='manual' ama manual_unit_price_tl boş → 0 değer + unknown_symbols'da."""
+    """price_source='manual' ama manual_unit_price_tl boş → 0 değer; unknown_symbols'a
+    GİRMEZ (unknown_symbols yalnız AUTO 'Binance paritesi bulunamadı' içindir)."""
     headers = await make_user(client, "mc_manual_empty@example.com")
     payload = {
         "exchange": "other",
@@ -381,7 +382,7 @@ async def test_manual_without_price_zero(client: AsyncClient):
     resp = await client.get(BASE, headers=headers)
     pos = resp.json()["positions"][0]
     assert float(pos["unit_price_tl"]) == 0.0
-    assert "FAKECOIN" in resp.json()["unknown_symbols"]
+    assert "FAKECOIN" not in resp.json()["unknown_symbols"]
 
 
 @pytest.mark.asyncio
@@ -615,7 +616,8 @@ async def test_update_linked_fields(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_linked_coingecko_dispatch(client: AsyncClient):
-    """linked=coingecko:ID — fiyat bulunamazsa 0 + unknown (dispatch dali calisir)."""
+    """linked=coingecko:ID — fiyat bulunamazsa 0 (dispatch dali calisir). Linked
+    holding unknown_symbols'a GİRMEZ (auto-mesajiyla karismaz)."""
     headers = await make_user(client, "mc_linked_cg@example.com")
     payload = {
         "exchange": "other",
@@ -629,14 +631,15 @@ async def test_linked_coingecko_dispatch(client: AsyncClient):
     assert create.status_code == 201
     resp = await client.get(BASE, headers=headers)
     pos = resp.json()["positions"][0]
-    # Mock simple/price bos doner -> 0 -> unknown
+    # Mock simple/price bos doner -> 0; linked → unknown_symbols'a girmez
     assert float(pos["unit_price_tl"]) == 0.0
-    assert "TGOLD" in resp.json()["unknown_symbols"]
+    assert "TGOLD" not in resp.json()["unknown_symbols"]
 
 
 @pytest.mark.asyncio
 async def test_linked_tefas_dispatch(client: AsyncClient):
-    """linked=tefas:CODE — TEFAS mock'lanmadigi icin fiyat 0 (dispatch dali calisir)."""
+    """linked=tefas:CODE — TEFAS mock'lanmadigi icin fiyat 0 (dispatch dali calisir).
+    Linked holding unknown_symbols'a GİRMEZ."""
     headers = await make_user(client, "mc_linked_tefas@example.com")
     payload = {
         "exchange": "other",
@@ -651,7 +654,7 @@ async def test_linked_tefas_dispatch(client: AsyncClient):
     resp = await client.get(BASE, headers=headers)
     pos = resp.json()["positions"][0]
     assert float(pos["unit_price_tl"]) == 0.0
-    assert "MYFUND" in resp.json()["unknown_symbols"]
+    assert "MYFUND" not in resp.json()["unknown_symbols"]
 
 
 @pytest.mark.asyncio

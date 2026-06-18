@@ -161,7 +161,10 @@ async def _enrich_positions(
         usd, unit_tl = _resolve_unit_price(h, ctx)
         position, value_tl = _build_position(h, usd, unit_tl)
         total_tl += value_tl
-        if unit_tl <= 0:
+        # unknown_symbols = "Binance USDT paritesi bulunamadı" mesajını besler → yalnız
+        # AUTO kaynaklı semboller. Linked/manual 0-değer buraya girMEZ (linked uyarısı
+        # dashboard'ın _manual_crypto_notes'unda ayrı; auto-mesajıyla karışmasın).
+        if unit_tl <= 0 and h.price_source == "auto":
             unknown.append(h.symbol)
         positions.append(position)
 

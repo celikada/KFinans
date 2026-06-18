@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     wallet_total_timeout: float = 90.0  # tüm cüzdanların toplam deadline'ı
     tefas_timeout: float = 8.0  # TEFAS HTTP isteği (önce 20'ydi)
     tefas_cache_ttl_sec: float = 3600.0  # son-başarılı fiyat cache TTL (1 saat)
+    # CoinGecko Demo API key (opsiyonel, ÜCRETSİZ): boşsa anonim public endpoint
+    # kullanılır (datacenter IP'lerde 429 Too Many Requests sık). Key verilirse
+    # `x-cg-demo-api-key` header ile gönderilir → kararlı ~30 istek/dk (rate-limit ↓).
+    coingecko_api_key: str = ""
 
     # ─── Canlı portföy cache (live_portfolio_cache) ───────────────────
     # Arka planda hesaplanan portföy verisi bu süre içindeyse "taze" sayılır;

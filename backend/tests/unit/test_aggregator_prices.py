@@ -128,6 +128,32 @@ class TestCoinGeckoPricesByIds:
             out = await fetch_coingecko_prices_by_ids(["bitcoin"])
         assert out == {}
 
+    @pytest.mark.asyncio
+    async def test_429_falls_back_to_last_good(self):
+        """Önce başarı (son-iyi'yi doldurur), sonra 429 → son-iyi fiyat korunur (0 DEĞİL)."""
+        # 1) Başarılı çekim — son-iyi'ye yaz
+        with respx.mock(assert_all_called=False) as rsx:
+            rsx.get(_COINGECKO_PRICE_URL).mock(return_value=Response(200, json={"silver-rstock": {"usd": 0.39987}}))
+            ok = await fetch_coingecko_prices_by_ids(["silver-rstock"])
+        assert ok["silver-rstock"] == Decimal("0.39987")
+
+        # 2) 429 (retry de 429) → son-iyi fiyat dönmeli, boş/0 değil
+        with respx.mock(assert_all_called=False) as rsx:
+            rsx.get(_COINGECKO_PRICE_URL).mock(return_value=Response(429))
+            fallback = await fetch_coingecko_prices_by_ids(["silver-rstock"])
+        assert fallback["silver-rstock"] == Decimal("0.39987")
+
+    @pytest.mark.asyncio
+    async def test_429_then_retry_succeeds(self):
+        """İlk 429, retry'da 200 → fiyat döner (backoff'lu tek retry)."""
+        import app.services.aggregator as agg
+
+        agg._CG_RETRY_BACKOFF_SEC = 0  # testte beklemeyi sıfırla
+        with respx.mock(assert_all_called=False) as rsx:
+            rsx.get(_COINGECKO_PRICE_URL).mock(side_effect=[Response(429), Response(200, json={"ripple": {"usd": 0.6}})])
+            out = await fetch_coingecko_prices_by_ids(["ripple"])
+        assert out["ripple"] == Decimal("0.6")
+
 
 # ─── fetch_combined_prices ────────────────────────────────────────────────────
 class TestFetchCombinedPrices:
