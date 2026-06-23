@@ -2,7 +2,7 @@
 
 > **Amaç:** Production altyapısının (DNS, email, K3s, sertifika) kurulum kayıtları, periyodik bakım işleri ve acil durum komutları. Onboarding ve operasyonel referans olarak korunur.
 
-**Son güncelleme:** 2026-06-02
+**Son güncelleme:** 2026-06-23 (Oracle → Hetzner taşıma)
 
 ---
 
@@ -14,7 +14,7 @@ Namecheap "Advanced DNS" panelinde tanımlı kayıtlar (durum: 2026-05-14):
 
 | # | Type | Host | Value | TTL | Eklendi | Amaç |
 |---|------|------|-------|-----|---------|------|
-| 1 | A | `@` | `141.144.243.54` | 5 min | 2026-05-14 | Apex → Oracle Cloud VM |
+| 1 | A | `@` | `91.99.123.163` | 5 min | 2026-05-14 | Apex → Hetzner Cloud VM |
 | 2 | CNAME | `www` | `kfinans.app.` | 5 min | 2026-05-14 | `www` subdomain → apex (IP değişirse otomatik takip) |
 | 3 | TXT | `resend._domainkey` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCrKScSobLvf9cW9/8O7Qj6AKanEvf0SZ9TwV4a/P7UjZ/3L6Vm47mZZ94IhuGLEDBH84dRktAvMqY6mdJpeFqO6PHL2/q8WX1uKDfk+g4AiRu/I3u5ggK/FvViUx25mHFVzcvHGAEYwz1cLzHut+W8C7N9FhHovxXjq+3kjbxbTwIDAQAB` | Auto | 2026-05-14 | Resend DKIM (domain ownership doğrulaması) |
 | 4 | MX | `send` | `feedback-smtp.ap-northeast-1.amazonses.com` (priority `10`) | Auto | 2026-05-14 | Resend bounce/feedback return-path (Tokyo region) |
@@ -34,8 +34,8 @@ nslookup -type=TXT _dmarc.kfinans.app 8.8.8.8
 ```
 
 Beklenen çıktılar:
-- `kfinans.app` → `141.144.243.54`
-- `www.kfinans.app` → CNAME `kfinans.app` → `141.144.243.54`
+- `kfinans.app` → `91.99.123.163`
+- `www.kfinans.app` → CNAME `kfinans.app` → `91.99.123.163`
 - Diğerleri Resend dashboard'unda "Verified ✓" işaretlenmeli (5-15 dk propagasyon)
 
 ### 1.3 Namecheap Hesap Güvenliği
@@ -107,18 +107,20 @@ Backend kod yolu:
 > **‼️ İkinci ders:** `deploy-production` job'u sadece `kubectl set image` yapar — secret/configmap **apply ETMEZ**. Canlı `kubectl patch` ile yaptığın değişiklik kalıcı **değildir**; bir sonraki `kubectl apply -k k8s/` veya GitOps reconcile, `k8s/sealed-secrets.yaml`'daki **eski** değeri geri getirir. Bu yüzden canlı fix'i **her zaman** SealedSecret güncellemesiyle eşle.
 
 **Aşama A — Canlı düzeltme (anlık etki):**
+
+> Hetzner'de barındırma lokal kubectl ile yönetilir — komutlardan önce `export KUBECONFIG=~/.kube/hetzner-kfinans.yaml` (veya her komuta `KUBECONFIG=...` öneki).
+
 ```bash
 # 1. (Rotation ise) Resend dashboard → API Keys → eski "Revoke" → "Create API Key" → re_xxx
 # 2. Lokal: .credentials.local.md §4.1 güncelle
 # 3. SADECE ilgili key'i merge-patch et (diğer key'leri korur):
-ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 "
-  sudo kubectl patch secret kfinans-secrets -n kfinans --type=merge \
-    -p '{\"stringData\":{\"RESEND_API_KEY\":\"re_YENI_KEY\"}}'
-"
+kubectl patch secret kfinans-secrets -n kfinans --type=merge \
+  -p '{"stringData":{"RESEND_API_KEY":"re_YENI_KEY"}}'
 # 4. Backend pod'larını yeniden başlat (secret env'i yeniden okunsun):
-ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-  "sudo kubectl rollout restart deployment/backend -n kfinans"
+kubectl rollout restart deployment/backend -n kfinans
 ```
+
+> **Hetzner ilk-deploy notu:** Sealed-secrets controller henüz kurulmadı; secret düz k8s Secret olarak tutuluyor. Aşağıdaki Aşama B (kubeseal) sealed-secrets devreye alındığında geçerli olacak — şimdilik canlı patch'i `k8s/overlays/hetzner` Secret manifest'ine de yansıt ki re-apply ezme.
 
 **Aşama B — Kalıcılık (GitOps reconcile geri getirmesin):**
 ```bash
@@ -147,22 +149,21 @@ Fernet `FERNET_KEY` — DB'deki şifrelenmiş kolonları (wallet xpub, integrati
    ```
    Yeni key'i `.credentials.local.md` + Bitwarden/USB'ye kaydet (3-2-1 yedekleme).
 
+   > Aşağıdaki komutlar lokal kubectl ile çalışır — önce `export KUBECONFIG=~/.kube/hetzner-kfinans.yaml`.
+
 2. **Secondary key olarak ESKİ primary'yi ekle (read fallback):**
    ```bash
-   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-     "sudo kubectl set env deployment/backend -n kfinans \
-       FERNET_KEYS_SECONDARY='[\"<eski-primary-key>\"]'"
+   kubectl set env deployment/backend -n kfinans \
+     FERNET_KEYS_SECONDARY='["<eski-primary-key>"]'
    # Backend pod restart tetiklenir; eski + yeni key birlikte aktif olur (decrypt için).
    ```
 
 3. **Primary key'i YENİ ile değiştir (write artık yeni key ile):**
    ```bash
    # merge-patch — diğer key'leri (DATABASE_URL, SECRET_KEY ...) ezme! (bkz. §2.4 ders)
-   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 "
-     sudo kubectl patch secret kfinans-secrets -n kfinans --type=merge \
-       -p '{\"stringData\":{\"FERNET_KEY\":\"<yeni-primary-key>\"}}'
-     sudo kubectl rollout restart deployment/backend -n kfinans
-   "
+   kubectl patch secret kfinans-secrets -n kfinans --type=merge \
+     -p '{"stringData":{"FERNET_KEY":"<yeni-primary-key>"}}'
+   kubectl rollout restart deployment/backend -n kfinans
    ```
    Bu noktada **yeni encrypt'ler yeni key ile, eski encrypt'ler hâlâ eski key ile**. Yeni key olmadan eski veriler okunamaz, eski key olmadan yeni veriler okunamaz — `MultiFernet` her ikisini de saklar.
    > Kalıcılık için `FERNET_KEY`'i de `kubeseal --raw --scope strict` ile mühürleyip `k8s/sealed-secrets.yaml`'a yaz (bkz. §2.4 Aşama B) — aksi halde GitOps reconcile eski key'i geri getirir.
@@ -170,18 +171,15 @@ Fernet `FERNET_KEY` — DB'deki şifrelenmiş kolonları (wallet xpub, integrati
 4. **Re-encrypt CLI ile tüm row'ları yeni key'e taşı:**
    ```bash
    # Önce dry-run — decrypt başarısı kontrolü, DB'ye yazma yok:
-   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-     "sudo kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet --dry-run"
+   kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet --dry-run
    # Hata yoksa gerçek rotate:
-   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-     "sudo kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet"
+   kubectl exec -n kfinans deploy/backend -- py -m scripts.rotate_fernet
    ```
    Çıktıda `başarı: N, hata: 0` görmen lazım. Hata varsa: 4. adımdaki secondary key listesinde eksik bir eski key var demektir — geri dön + ekle.
 
 5. **Secondary key'i kaldır (eski key kullanımdan çıkar):**
    ```bash
-   ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-     "sudo kubectl set env deployment/backend -n kfinans FERNET_KEYS_SECONDARY='[]'"
+   kubectl set env deployment/backend -n kfinans FERNET_KEYS_SECONDARY='[]'
    ```
    Eski key artık DB'de hiçbir yerde gerekmiyor — kaldırılabilir. Yedek olarak Bitwarden'da en az 1 yıl daha tut (audit/forensik için).
 
@@ -214,68 +212,81 @@ DKIM private key Resend tarafında saklanır, biz sadece public key'i DNS'e yaz�
 
 ---
 
-## 3. Oracle Cloud VM + K3s
+## 3. Hetzner Cloud VM + k3s
+
+> **Erişim modeli (Hetzner):** Cluster lokal kubectl ile yönetilir — sunucuda `sudo kubectl` yerine kendi makinenden `KUBECONFIG=~/.kube/hetzner-kfinans.yaml kubectl ...`. Bu bölümdeki tüm `kubectl` komutları bu KUBECONFIG ile çalışır (her komuta tekrar yazmaya gerek yok; bir kez `export KUBECONFIG=~/.kube/hetzner-kfinans.yaml`). Sunucuya doğrudan kabuk gerekirse `ssh root@91.99.123.163` (Hetzner firewall: 22/80/443 public, 6443 admin-IP'ye kısıtlı).
 
 ### 3.1 Bağlantı
 
 ```powershell
-ssh -i C:\Users\celik\Projects\oracleCloud\ssh-key-2026-03-24.key ubuntu@141.144.243.54
+# Lokal kubectl (önerilen)
+$env:KUBECONFIG = "$HOME\.kube\hetzner-kfinans.yaml"
+kubectl get nodes
+
+# Sunucuya doğrudan SSH (gerekirse)
+ssh root@91.99.123.163
 ```
 
 | Bilgi | Değer |
 |-------|-------|
-| Sağlayıcı | Oracle Cloud Always Free Tier |
-| VM IP | `141.144.243.54` |
-| SSH User | `ubuntu` |
-| OS | Ubuntu 22.04 LTS ARM (free tier sağlar AMD64'e geçiş yapıldı veya hala ARM kontrol gerekli) |
-| Cluster | K3s |
+| Sağlayıcı | Hetzner Cloud CX23 (2 vCPU / 4 GB / 40 GB SSD) |
+| VM IP | `91.99.123.163` |
+| Lokasyon | Falkenstein (fsn1, DE) |
+| SSH User | `root` |
+| OS | Ubuntu (Hetzner image) |
+| Cluster | k3s v1.35 (tek-node) |
 | Namespace | `kfinans` |
-| Repo path | `~/kfinans` (git clone) |
+| KUBECONFIG | `~/.kube/hetzner-kfinans.yaml` (lokal kubectl) |
+| Swap | 2 GB (eklendi — düşük RAM tamponu) |
 
 ### 3.2 Sık Kullanılan Komutlar
 
 ```bash
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
+
 # Pod durumu
-sudo kubectl get pods -n kfinans -o wide
+kubectl get pods -n kfinans -o wide
 
 # Pod log (canlı)
-sudo kubectl logs -f deployment/backend -n kfinans
-sudo kubectl logs -f deployment/frontend -n kfinans
-sudo kubectl logs -f statefulset/postgres -n kfinans
+kubectl logs -f deployment/backend -n kfinans
+kubectl logs -f deployment/frontend -n kfinans
+kubectl logs -f statefulset/postgres -n kfinans
 
 # Secret listele (içerik göstermez)
-sudo kubectl get secret kfinans-secrets -n kfinans -o jsonpath='{.data}' | jq 'keys'
+kubectl get secret kfinans-secrets -n kfinans -o jsonpath='{.data}' | jq 'keys'
 
 # Configmap incele
-sudo kubectl get configmap kfinans-config -n kfinans -o yaml
+kubectl get configmap kfinans-config -n kfinans -o yaml
 
 # Deployment restart (secret/configmap değişikliği sonrası)
-sudo kubectl rollout restart deployment/backend -n kfinans
+kubectl rollout restart deployment/backend -n kfinans
 
 # Image versiyonu kontrol
-sudo kubectl get pods -n kfinans -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+kubectl get pods -n kfinans -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
 # Ingress + cert durumu
-sudo kubectl get ingress -n kfinans
-sudo kubectl get certificate -n kfinans
-sudo kubectl describe certificate kfinans-tls -n kfinans  # cert-manager log
+kubectl get ingress -n kfinans
+kubectl get certificate -n kfinans
+kubectl describe certificate kfinans-tls -n kfinans  # cert-manager log
 ```
 
 ### 3.3 Cert-Manager (Let's Encrypt)
 
-`kfinans.app` ve `www.kfinans.app` için Let's Encrypt HTTP-01 challenge ile sertifika alır:
+`kfinans.app` ve `www.kfinans.app` için Let's Encrypt HTTP-01 challenge ile sertifika alır (ClusterIssuer `letsencrypt-prod`):
 
 ```bash
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
+
 # Cert listesi
-sudo kubectl get certificate -A
-sudo kubectl get certificaterequest -n kfinans
-sudo kubectl get order -n kfinans  # ACME order durumu
+kubectl get certificate -A
+kubectl get certificaterequest -n kfinans
+kubectl get order -n kfinans  # ACME order durumu
 
 # Cert renewal kontrolü (cert-manager otomatik 30 gün önce yeniler)
-sudo kubectl describe certificate kfinans-tls -n kfinans | grep -A 5 "Renewal Time\|Not After"
+kubectl describe certificate kfinans-tls -n kfinans | grep -A 5 "Renewal Time\|Not After"
 
 # Manuel renewal tetikleme (acil)
-sudo kubectl cert-manager renew kfinans-tls -n kfinans
+kubectl cert-manager renew kfinans-tls -n kfinans
 ```
 
 ---
@@ -297,7 +308,7 @@ sudo kubectl cert-manager renew kfinans-tls -n kfinans
 | **Yıllık** | RESEND_API_KEY rotate | bkz. §2.4 |
 | **Yıllık** | DKIM key rotate | bkz. §2.5 |
 | **Yıllık** | Domain renewal (Namecheap) | Expire 2027-05-06 — auto-renew açık ama 30 gün önce email gelir |
-| **Yıllık** | ORACLE_SSH_KEY rotate | yeni keygen + authorized_keys + GitHub secret update (bkz. `.credentials.local.md` §🚨) |
+| **Yıllık** | Hetzner sunucu SSH key rotate | yeni keygen + `~/.ssh/authorized_keys` (`root@91.99.123.163`) güncelle (bkz. `.credentials.local.md` §🚨) |
 
 ---
 
@@ -306,49 +317,52 @@ sudo kubectl cert-manager renew kfinans-tls -n kfinans
 ### 5.1 Site Down (5xx veya bağlanamıyor)
 
 ```bash
-ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
 
 # 1. Pod sağlık
-sudo kubectl get pods -n kfinans
+kubectl get pods -n kfinans
 # Backend CrashLoopBackOff mı? → log kontrol
-sudo kubectl logs -n kfinans deployment/backend --tail=100
+kubectl logs -n kfinans deployment/backend --tail=100
 
 # 2. Cluster sağlık
-sudo kubectl get nodes
-sudo kubectl top nodes  # CPU/memory
+kubectl get nodes
+kubectl top nodes  # CPU/memory
 
 # 3. Geri alma (en hızlı rollback)
-sudo kubectl rollout undo deployment/backend -n kfinans
-sudo kubectl rollout undo deployment/frontend -n kfinans
+kubectl rollout undo deployment/backend -n kfinans
+kubectl rollout undo deployment/frontend -n kfinans
 
 # 4. Eski versiyona dönüş
-sudo kubectl rollout history deployment/backend -n kfinans
-sudo kubectl rollout undo deployment/backend --to-revision=N -n kfinans
+kubectl rollout history deployment/backend -n kfinans
+kubectl rollout undo deployment/backend --to-revision=N -n kfinans
 ```
 
 ### 5.2 SSL Cert Süresi Doluyor
 
 ```bash
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
 # Cert-manager otomatik yeniler, ama acilse:
-sudo kubectl delete certificate kfinans-tls -n kfinans
-sudo kubectl apply -k ~/kfinans/k8s/  # cert-manager yeniden oluşturur
+kubectl delete certificate kfinans-tls -n kfinans
+# cert-manager yeniden oluşturur (Hetzner overlay'i lokal repodan apply et):
+kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/overlays/hetzner | kubectl apply -f -
 ```
 
 ### 5.3 Database Crash
 
 ```bash
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
 # Postgres pod restart
-sudo kubectl rollout restart statefulset/postgres -n kfinans
+kubectl rollout restart statefulset/postgres -n kfinans
 
 # Pod log
-sudo kubectl logs statefulset/postgres -n kfinans --tail=200
+kubectl logs statefulset/postgres -n kfinans --tail=200
 
 # Disk doldu mu?
-sudo kubectl exec -n kfinans postgres-0 -- df -h /var/lib/postgresql/data
+kubectl exec -n kfinans postgres-0 -- df -h /var/lib/postgresql/data
 
 # Backup'tan restore (acil — kullanıcı verisi kaybı uyarısı):
-# k8s/backup-cronjob.yaml günlük backup alıyor
-sudo kubectl get cronjob -n kfinans
+# ⚠ Hardening TODO: Hetzner'de backup-cronjob henüz uygulanmadı; günlük backup yok.
+kubectl get cronjob -n kfinans
 ```
 
 ### 5.4 DNS Yanlış (yeni IP'ye geçiş)
@@ -358,12 +372,12 @@ Namecheap'e gir, `@` ve gerekirse `www` A kaydını yeni IP'ye güncelle. Propag
 ### 5.5 Email Gitmiyor
 
 ```bash
+export KUBECONFIG=~/.kube/hetzner-kfinans.yaml
 # 1. Resend API key valid mi?
-ssh -i ~/.ssh/oracle.key ubuntu@141.144.243.54 \
-  "sudo kubectl get secret kfinans-secrets -n kfinans -o jsonpath='{.data.RESEND_API_KEY}' | base64 -d | head -c 10"
+kubectl get secret kfinans-secrets -n kfinans -o jsonpath='{.data.RESEND_API_KEY}' | base64 -d | head -c 10
 
 # 2. Backend log
-sudo kubectl logs deployment/backend -n kfinans | grep -i "resend\|email"
+kubectl logs deployment/backend -n kfinans | grep -i "resend\|email"
 
 # 3. Resend dashboard → Logs (son 7 gün gönderim listesi + delivery status)
 
@@ -383,7 +397,8 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 - [`disaster-recovery.md`](disaster-recovery.md) — DR prosedürü + backup inventory
 - `../09-altyapi-test.md` — altyapı + CI/CD stratejisi
 - `k8s/` — Kubernetes manifest'leri (namespace, configmap, secrets.example, **sealed-secrets.yaml**, postgres, postgres-cert, backend, frontend, ingress, backup-cronjob, kustomization)
-- `.gitlab-ci.yml` — **primary CI/CD** (7 stage): lint → test → quality (blocking SonarQube) → build (Kaniko → Docker Hub) → scan (Trivy image HIGH/CRITICAL) → deploy-production (semver tag, `when: manual`) → smoke (curl gate)
+- `.gitlab-ci.yml` — **primary CI/CD** (7 stage): lint → test → quality (blocking SonarQube) → build (Kaniko → Docker Hub) → scan (Trivy image HIGH/CRITICAL) → deploy-production (semver tag, `when: manual`) → smoke (curl gate). **TODO: deploy job hâlâ Oracle K3s'i hedefliyor → Hetzner'e retarget edilecek.** Hetzner'de deploy şimdilik lokal kubectl ile manuel: `kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/overlays/hetzner | kubectl apply -f -` (KUBECONFIG=~/.kube/hetzner-kfinans.yaml).
+- `k8s/overlays/hetzner/` — Hetzner kustomize overlay (deploy hedefi)
 - `.github/workflows/release.yml` — **çalışmıyor** (GitHub flag #4360519); repoda kalıyor ama 0 run
 
 ---
@@ -395,3 +410,4 @@ nslookup -type=TXT resend._domainkey.kfinans.app 8.8.8.8
 | 2026-05-14 | İlk versiyon: DNS (A `@` + CNAME `www` + Resend 4 TXT/MX), Resend domain doğrulama, bakım periyodikleri, acil durum komutları |
 | 2026-06-01 | §2.4 yeniden yazıldı: secret fix `kubectl patch --type=merge` (tek key ezme dersi) + SealedSecret kalıcılık (`kubeseal --raw --scope strict`) iki aşamalı runbook. §2.5 Fernet rotation step 3 patch-merge'e çevrildi. §6 GitLab CI referansları. RESEND_API_KEY canlı fix retrospektifi. |
 | 2026-06-02 | Doğruluk denetimi: §6 bağlantılı dosya yolları operations/ klasörüne düzeltildi (playbook + DR eklendi); GitLab CI 7 stage (scan + smoke) yansıtıldı. Header "Son güncelleme" tarihi düzeltildi. |
+| 2026-06-23 | Oracle Cloud'dan Hetzner Cloud'a taşındı (CX23, k3s v1.35, IP 91.99.123.163). §3 başlık + VM tablosu + tüm kubectl komutları lokal KUBECONFIG'e çevrildi; SSH-prefix kaldırıldı. DNS `@` A kaydı + nslookup beklenenleri 91.99.123.163. §6 deploy job retarget TODO + Hetzner overlay. Hardening TODO: DB TLS disable, NetworkPolicy yok, düz Secret, backup-cronjob yok, 2 GB swap, Hetzner firewall. |

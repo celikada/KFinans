@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kfinans
+
+# Hetzner CX23 single-node k3s ilk-deploy overlay'i (2026-06-23 Oracle->Hetzner migrasyon).
+# Bilerek HARIÇ tutulanlar (ilk bring-up basitligi; sonra hardening):
+#   - postgres-cert.yaml + DB TLS  -> DATABASE_SSL_MODE=disable (tek node, ClusterIP)
+#   - sealed-secrets.yaml          -> secret imperatif `kubectl create secret` ile
+#   - networkpolicies/*            -> sonra (Oracle'da kube-router timing sorunlari)
+#   - backup-cronjob.yaml          -> sonra (off-site storage ayarlaninca)
+resources:
+  - ../../namespace.yaml
+  - ../../configmap.yaml
+  - postgres.yaml          # sadelestirilmis (TLS yok) — base postgres.yaml KULLANILMAZ
+  - ../../backend.yaml     # postgres-ca volume optional:true -> postgres-tls yoksa sorun degil
+  - ../../frontend.yaml
+  - ../../ingress.yaml
+
+patches:
+  - path: configmap-patch.yaml
+  - path: frontend-patch.yaml
+
+images:
+  - name: docker.io/celikada/kfinans-backend
+    newTag: v0.11.4
+  - name: docker.io/celikada/kfinans-frontend
+    newTag: v0.11.4

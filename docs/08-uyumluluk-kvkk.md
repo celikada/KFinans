@@ -304,7 +304,7 @@ KVKK m.12 — veri sorumlusunun (KFinans/Mayotek) kişisel verilerin **hukuka ay
 | Secret yönetimi | ✅ Kubernetes Secret + `.gitignore` + `.gitleaks.toml` allowlist; production'da External Secrets Operator (Faz 3) |
 | Geliştirici onboarding güvenlik eğitimi | ⏳ Faz 3 (CONTRIBUTING.md temel kuralları içerir) |
 | Düzenli sızma testi | ⏳ Faz 4 (yıllık bağımsız) |
-| KVKK Sözleşmesi (Anthropic, Resend, Oracle Cloud) | ⏳ Faz 3 (DPA — Data Processing Agreement imzalanması gerekir) |
+| KVKK Sözleşmesi (Anthropic, Resend, Hetzner Cloud) | ⏳ Faz 3 (DPA — Data Processing Agreement imzalanması gerekir; barındırma 2026-06-23 Oracle Cloud'dan Hetzner Cloud'a/Almanya-AB'ye taşındı) |
 | Audit log review (manuel inceleme) | ⏳ Faz 3 (admin paneli) |
 
 ### 9.2 KVKK m.12 Bildirim Yükümlülüğü
@@ -418,7 +418,7 @@ Production'a çıktıktan sonra yıllık penetration testing önerilir (TÜBİTA
 - [x] 30 gün cayma süresi sonrası hard-delete cron job ✅ (COMP-004, _hard_delete_expired_users_job 04:00)
 - [x] Anthropic için açık rıza akışı (`users.anthropic_consent_at` + `/advice/generate` 403) ✅ (AI-005)
 - [x] Veri İhlali Müdahale Planı operasyonel doküman ✅ ([`legal/incident-response-plan.md`](./legal/incident-response-plan.md), COMP-021)
-- [ ] DPA (Data Processing Agreement) — Anthropic, Resend, Oracle Cloud ile imzalanmalı (**backlog — compliance-notes #6**)
+- [ ] DPA (Data Processing Agreement) — Anthropic, Resend, Hetzner Cloud ile imzalanmalı (**backlog — compliance-notes #6**; barındırma 2026-06-23 Hetzner'e taşındı)
 
 ### Faz 4 (Uluslararası)
 - [ ] GDPR uyum (AB kullanıcıları)

@@ -26,7 +26,7 @@
 - ✅ **quality** — `sonarqube-scan`: **self-hosted SonarQube** (`http://sonar.192.168.3.191.nip.io`, `projectKey=KFinans`). **Gate BLOCKING (2026-06-01):** `-Dsonar.qualitygate.wait=true` + `allow_failure` kaldırıldı → gate kırmızıysa pipeline durur. Gate koşulları: `new_violations=0` + `new_security_hotspots_reviewed=100%` + `new_coverage>=80%`. Sadece protected branch (develop/main) + MR + tag'lerde çalışır (`SONAR_TOKEN` Protected variable).
 - ✅ **build** — `backend-build` + `frontend-build`: **Kaniko** (`gcr.io/kaniko-project/executor:v1.23.2-debug`) → **Docker Hub** (`celikada/kfinans-{backend,frontend}`). Sadece `main`, `develop` ve tag'lerde (feature/hotfix branch'lerinde build yok). Tag → ek olarak `:latest` + `:<tag>` push'lar.
 - ✅ **scan** — `trivy-image-scan` (2026-06-01): **Trivy** (`aquasec/trivy:0.58.0`) Docker Hub'a push edilen tag image'larını tarar. `--severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed` → açık varsa **deploy ÖNCESİ** pipeline durur. `build → scan → deploy` sırası deploy'u gate'ler. Sadece semver tag'lerde. Trivy DB cache'li; Docker Hub auth `TRIVY_USERNAME/PASSWORD`.
-- ✅ **deploy** — `deploy-production`: `when: manual` + **sadece semver tag** (`/^v\d+\.\d+\.\d+/`). SSH → Oracle K3s `kubectl set image deployment/{backend,frontend}` + `rollout status --timeout=5m`. `environment: production` (https://kfinans.app).
+- ✅ **deploy** — `deploy-production`: `when: manual` + **sadece semver tag** (`/^v\d+\.\d+\.\d+/`). SSH → K3s `kubectl set image deployment/{backend,frontend}` + `rollout status --timeout=5m`. `environment: production` (https://kfinans.app). **TODO: deploy job Hetzner'e retarget** — bu job hâlâ eski Oracle K3s'i hedefliyor; 2026-06-23 Hetzner taşımasından sonra deploy lokal `kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/overlays/hetzner | kubectl apply -f -` (KUBECONFIG=`~/.kube/hetzner-kfinans.yaml`) ile elle yapılıyor.
 - ✅ **smoke** — `smoke-test` (2026-06-01): deploy SONRASI (`needs: deploy-production`). DEPLOY-001 4-adımlı curl gate: frontend HTTPS+cert, `/health` `{status:ok}`, bogus login→401, HSTS header. Deploy bozuksa pipeline kırmızı (alarm). Sadece semver tag'lerde.
 
 ### 1.2.2 Manuel Deploy Tetikleme
@@ -275,7 +275,7 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
                                         │
         ┌───────────────────────────────────────────────────────────────┐
         │  STAGE 6: deploy-production   (when: manual — onay gerekir)    │
-        │  SSH → Oracle K3s                                             │
+        │  SSH → K3s  (TODO: Hetzner'e retarget; şu an Oracle hedefli)  │
         │    kubectl set image deployment/{backend,frontend}=:{tag}     │
         │    rollout status --timeout=5m (her ikisi)                    │
         │  ⚠ set image YALNIZCA — configmap/secret APPLY ETMEZ          │
@@ -291,8 +291,8 @@ celikada/kfinans-backend:latest         # SADECE tag build'lerde push edilir
                                         ▼
                           ┌──────────────────────────┐
                           │ https://kfinans.app      │
-                          │ (Oracle Cloud K3s)       │
-                          │ son deploy: v0.1.0-rc16  │
+                          │ (Hetzner Cloud k3s)      │
+                          │ 91.99.123.163  v0.11.4   │
                           └──────────────────────────┘
 ```
 
@@ -579,7 +579,7 @@ git push --tags
 
 ### 8.1 Veritabanı
 - **Logical backup (aktif):** `k8s/backup-cronjob.yaml` — günlük 02:00 Europe/Istanbul `pg_dump | gzip | age` (asimetrik encryption, private key cluster dışında), `postgres-backups` PVC, 30 gün retention.
-- **Off-site sync (BEKLİYOR — DR P0):** rclone + Oracle Object Storage. Şu an tüm backup'lar tek lokasyonda (Oracle VM disk) → 3-2-1 ihlal. Backlog (master audit 2026-05-22).
+- **Off-site sync (BEKLİYOR — DR P0):** rclone + S3-uyumlu object storage (ör. Hetzner Storage Box / Backblaze B2). Şu an tüm backup'lar tek lokasyonda (Hetzner VM disk) → 3-2-1 ihlal. **Not (2026-06-23):** Hetzner taşımasında backup-cronjob henüz uygulanmadı (hardening TODO). Backlog (master audit 2026-05-22; eski plan Oracle Object Storage idi).
 - **PITR (planlı — Sprint 4):** WAL-G ile RPO 24 saat → 15 dk.
 - **Restore drill (BEKLİYOR — DR P0):** production'da hiç test edilmedi; ilk drill cutover öncesi zorunlu.
 

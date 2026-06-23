@@ -1,0 +1,8 @@
+# CX23 (4GB) tek node: frontend tek replica yeter (bellek tasarrufu).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: kfinans
+spec:
+  replicas: 1

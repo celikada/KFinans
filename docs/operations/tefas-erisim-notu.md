@@ -1,5 +1,7 @@
 # TEFAS erişim sorunu — kök neden + dayanıklılık (2026-06-13)
 
+> **⚠️ Not (2026-06-23):** Bu incident yazıldığında barındırma **Oracle Cloud** (`141.144.243.54`) idi. Proje **2026-06-23'te Hetzner Cloud'a taşındı** (CX23, k3s v1.35, IP `91.99.123.163`). Aşağıdaki "Oracle pod/backend/IP" ifadeleri tarihsel; güncel kurulumda aynı dayanıklılık (son-iyi cache + single-flight + canlı portföy cache) geçerlidir. "Alternatifler" bölümündeki TR-proxy ifadeleri host-bağımsızdır (artık Hetzner backend için geçerli).
+
 ## Belirti
 Production (kfinans.app) v0.8.4'te dashboard'da TEFAS fon kartı "yükleniyor"da
 takılıyordu. Backend logu:
@@ -38,13 +40,13 @@ arka planda hesaplanır; kullanıcı isteği TEFAS'a senkron bağımlı değildi
 
 ## Alternatifler (eğer kesinti KALICI hale gelirse)
 Geçici kesinti için ek bir şey yapmaya gerek yok — yukarıdaki dayanıklılık veriyi
-ekranda tutar, TEFAS düzelince otomatik tazelenir. Ama TEFAS Oracle IP'sini
-**kalıcı** bloklamaya başlarsa (loglarda sürekli ConnectTimeout), seçenekler:
+ekranda tutar, TEFAS düzelince otomatik tazelenir. Ama TEFAS prod sunucu IP'sini
+(Hetzner) **kalıcı** bloklamaya başlarsa (loglarda sürekli ConnectTimeout), seçenekler:
 
 1. **TR-tarafı egress proxy (önerilen):** Self-hosted altyapı (GitLab/runner,
-   `192.168.3.x`) bir TR ISP'sinde ve TEFAS'a erişebiliyor. Oracle backend, TEFAS
+   `192.168.3.x`) bir TR ISP'sinde ve TEFAS'a erişebiliyor. Prod backend (Hetzner), TEFAS
    isteklerini bu ağdaki küçük bir HTTP proxy üzerinden geçirir (resmi veri, en
-   güvenilir). Gereken: self-hosted kutuya Oracle'dan erişilebilir bir reverse
+   güvenilir). Gereken: self-hosted kutuya prod backend'den erişilebilir bir reverse
    tünel/ingress (kutu NAT arkasında). `settings`'e opsiyonel `tefas_proxy_url`
    eklenip `httpx.AsyncClient(proxies=...)` ile bağlanır.
 2. **Manuel NAV girişi fallback:** Uygulama zaten manuel birim fiyat destekliyor

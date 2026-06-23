@@ -2,7 +2,7 @@
 
 **Versiyon:** 4.4
 **Tarih:** 2026-06-02
-**Durum:** **Production canlı** (`v0.1.0-rc16`, Oracle K3s, `https://kfinans.app`). Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme + **kredi kartları (kart + ekstre + taksit) + nakit/banka + yıllık nakit akış projeksiyonu (xlsx/pdf rapor) + manuel kripto (linked_source) + recurring income realize + snapshot health/usd_try_rate + audit_logs (FAZ C6) + AI tavsiye motoru aktif (advisor.py — AI-003 + AI-008 SPK uyumlu, kredi tüketimli) + 10 zincir blockchain (Bitcoin/Solana/Cardano/Algorand/Polkadot/Litecoin eklendi) + ERC-20 token discovery + MFA TOTP + i18n (TR/EN)** tamamlandı. Faz I güvenlik audit'i (11/11 kritik fix) kapatıldı. **Hâlâ açık (backlog):** kredi sistemi tam implementasyonu (`credit_transactions` tablosu) + iyzico ödeme entegrasyonu, bazı KVKK placeholder metinleri.
+**Durum:** **Production canlı** (Hetzner Cloud tek-node k3s, `https://kfinans.app`; 2026-06-23'te eski Oracle K3s'ten Hetzner'e taşındı, IP `91.99.123.163`). Faz 1 tamam, Faz 2 tamam (10/10 + 2.5 cleanup); **Faz 3 MVP genişletildi**: harcama takibi + planlı ödemeler + finansal hedef + gelir takibi + bütçe takibi + kıymetli madenler + ayarlar + maliyet bazı + MKK Excel import + modern UI yenileme + **kredi kartları (kart + ekstre + taksit) + nakit/banka + yıllık nakit akış projeksiyonu (xlsx/pdf rapor) + manuel kripto (linked_source) + recurring income realize + snapshot health/usd_try_rate + audit_logs (FAZ C6) + AI tavsiye motoru aktif (advisor.py — AI-003 + AI-008 SPK uyumlu, kredi tüketimli) + 10 zincir blockchain (Bitcoin/Solana/Cardano/Algorand/Polkadot/Litecoin eklendi) + ERC-20 token discovery + MFA TOTP + i18n (TR/EN)** tamamlandı. Faz I güvenlik audit'i (11/11 kritik fix) kapatıldı. **Hâlâ açık (backlog):** kredi sistemi tam implementasyonu (`credit_transactions` tablosu) + iyzico ödeme entegrasyonu, bazı KVKK placeholder metinleri.
 **Üretici:** Mayotek
 
 ---
@@ -110,7 +110,7 @@ KFinans, kişisel finansı tek ekranda yöneten **çok kiracılı (multi-tenant)
 
 ### 3.4 Altyapı
 - Docker + Docker Compose (geliştirme — bilinçli teknik borç)
-- Kubernetes / K3s (production canlı — Oracle Cloud Always Free VM, namespace: `kfinans`)
+- Kubernetes / k3s (production canlı — Hetzner Cloud CX23 tek-node k3s v1.35, Falkenstein fsn1 DE, IP `91.99.123.163`, namespace: `kfinans`; 2026-06-23 eski Oracle Cloud VM'den taşındı)
 - **CI/CD primary = GitLab CI** (`.gitlab-ci.yml`, self-hosted K8s runner + Kaniko): lint → test → quality (self-hosted SonarQube BLOCKING gate) → build (Docker Hub `celikada/kfinans-*`) → scan (Trivy) → deploy → smoke. `.github/workflows/*` dormant (GitHub hesabı flagged — Actions çalışmaz)
 - Kalite: self-hosted SonarQube (`projectKey=KFinans`), SonarCloud DEĞİL
 - Helm (bitnami/postgresql), nginx-ingress, cert-manager (Let's Encrypt)
@@ -228,9 +228,10 @@ Branch protection: `main` PR şart + lineer history + force-push kapalı; `devel
 2026-05-06 yoğun aktivite GitHub anti-spam'i tetikledi (hesap flagged). Çözüm beklenmek yerine **CI/CD ve VCS primary self-hosted GitLab'a taşındı** (`http://gitlab.192.168.3.191.nip.io/root/KFinans`); GitHub yalnızca public mirror. SonarCloud yerine **self-hosted SonarQube** (`projectKey=KFinans`) kullanılıyor. GitHub Actions dormant.
 
 ### ✅ Production Deploy (tamamlandı)
-- Oracle Cloud Always Free VM + K3s (`141.144.243.54` → `kfinans.app`) + nginx-ingress + cert-manager (Let's Encrypt) canlı
-- GitLab CI pipeline: build (Kaniko → Docker Hub `celikada/kfinans-*`) → Trivy image scan → manuel deploy → post-deploy smoke gate
-- Güncel production tag: **`v0.1.0-rc16`** (`/health` → `{"status":"ok"}`)
+- Hetzner Cloud CX23 + tek-node k3s v1.35 (`91.99.123.163` → `kfinans.app`) + Traefik (k3s default ingress) + cert-manager (Let's Encrypt HTTP-01, ClusterIssuer `letsencrypt-prod`) canlı (2026-06-23 eski Oracle Always Free VM `141.144.243.54`'ten taşındı; DB taze başladı — Oracle verisi erişilemediği için taşınmadı)
+- GitLab CI pipeline: build (Kaniko → Docker Hub `celikada/kfinans-*`) → Trivy image scan → deploy → post-deploy smoke gate. **TODO:** deploy job hâlâ Oracle'ı hedefliyor; Hetzner deploy'u şimdilik lokal `kubectl kustomize k8s/overlays/hetzner | kubectl apply` ile elle
+- Güncel production tag: **`v0.11.4`** (`/health` → `{"status":"ok"}`)
+- **Hetzner ilk-deploy sadeleştirmeleri (hardening TODO):** DB TLS kapalı (`DATABASE_SSL_MODE=disable`), NetworkPolicy uygulanmadı, sealed-secrets yerine düz k8s Secret, backup-cronjob yok, 2 GB swap, Hetzner firewall (22/80/443 public, 6443 admin-IP)
 - `kfinans.app` (.app TLD HSTS preload listesinde — tarayıcı zorunlu HTTPS)
 
 ### 📚 Sıradaki — Kullanıcı Dokümanları (FAZ E)

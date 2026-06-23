@@ -1,5 +1,7 @@
 # DevOps Audit Notları — 2026-05-22
 
+> **⚠️ Güncelleme (2026-06-23):** Bu audit notu yazıldığında barındırma **Oracle Cloud Always Free VM** (`141.144.243.54`) idi. Proje **2026-06-23'te Hetzner Cloud'a taşındı** (CX23, 2 vCPU/4 GB, Falkenstein fsn1 DE, tek-node k3s v1.35, IP `91.99.123.163`). Aşağıdaki Oracle referansları **tarihsel** olarak korunmuştur; "multi-cloud taşınabilirlik / Hetzner'e migrate" önerileri kısmen gerçekleşmiştir. Güncel altyapı için CLAUDE.md + docs/operations/infrastructure-runbook.md'ye bakın.
+
 > **Kapsam:** Oracle K3s production + GitLab self-hosted CI/CD + Docker Hub registry + SealedSecrets + cert-manager + 7 NetworkPolicy + age-encrypted backup. Vurgu: **taşınabilirlik** (vendor lock-in azaltma) ve **multi-cloud / cloud-agnostic** deploy hazırlığı.
 >
 > Audit tarihi: 2026-05-22 (post fix turu sonrası snapshot)

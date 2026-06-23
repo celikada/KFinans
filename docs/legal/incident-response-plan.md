@@ -20,7 +20,7 @@ KFinans uygulamasında **kişisel veri ihlali** sayılan olaylara müdahale eder
 - API key/secret sızıntısı (Fernet master key, JWT secret, Anthropic API key)
 - Auth bypass / yetkisiz erişim
 - Saldırı sonucu kullanıcı verisi şifrelenmesi (ransomware)
-- Üçüncü taraf hizmet (Anthropic, Resend, Oracle, GitLab/GitHub, self-hosted SonarQube) ihlali
+- Üçüncü taraf hizmet (Anthropic, Resend, Hetzner Cloud, GitLab/GitHub, self-hosted SonarQube) ihlali
 
 **Kapsam dışı:** Bireysel kullanıcı hesabının kendi sosyal mühendislik ile
 ele geçirilmesi (kullanıcı sorumluluğu).
@@ -51,7 +51,7 @@ süreç eklenmesi Faz I item).
    CodeQL/Trivy CVE kritik, gitleaks pre-commit/CI fail, self-hosted SonarQube hotspot
 2. **Manuel:** Kullanıcı raporu (security@kfinans.app — Faz F SECURITY.md),
    GitHub Discussions, sosyal medya
-3. **Üçüncü taraf:** Anthropic/Resend/GitHub/Oracle güvenlik bildirimi
+3. **Üçüncü taraf:** Anthropic/Resend/GitHub/Hetzner Cloud güvenlik bildirimi
 
 **İlk doğrulama:** IC olayın gerçek mi false-positive mi olduğunu **30 dakika
 içinde** karara bağlar; gerçekse §4 başlatılır.
@@ -71,7 +71,7 @@ içinde** karara bağlar; gerçekse §4 başlatılır.
 ### T+30dk — Containment (Kapsama)
 - **DB sızıntısı şüphesi:** Postgres `REVOKE`/`pg_terminate_backend` ile aktif
   bağlantıları kes. Replica varsa promote'u durdur.
-- **API key sızıntısı:** Anthropic (console.anthropic.com), Resend, Oracle,
+- **API key sızıntısı:** Anthropic (console.anthropic.com), Resend, Hetzner Cloud,
   GitHub PAT, Fernet master key — **derhal rotate**.
 - **JWT sızıntısı:** `SECRET_KEY` rotate edilince **tüm aktif token geçersiz**;
   kullanıcılar yeniden login. revoked_tokens tablosu da sıfırlanır.

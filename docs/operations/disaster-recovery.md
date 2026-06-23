@@ -5,6 +5,10 @@
 
 **Durum:** Taslak — Sprint 2'de ilk DR drill ile 1.0 hedefli. **DR drill production'da hiç test edilmedi** (master audit §1.5 P0).
 
+> **Barındırma (2026-06-23):** Production artık Hetzner Cloud CX23 k3s v1.35 (`91.99.123.163`, Falkenstein/DE). Cluster lokal kubectl ile yönetilir — `export KUBECONFIG=~/.kube/hetzner-kfinans.yaml` sonrası `kubectl ...`; sunucuya doğrudan kabuk gerekirse `ssh root@91.99.123.163`. Aşağıdaki komutlar bu erişim modeline göre yazılmıştır.
+>
+> ⚠ **Hetzner ilk-deploy hardening TODO'ları (DR'ı doğrudan etkiler):** backup-cronjob henüz uygulanmadı (otomatik günlük backup YOK), off-site sync yok, sealed-secrets yerine düz k8s Secret, NetworkPolicy uygulanmadı, DB TLS kapalı. Bu eksikler giderilene kadar veri kaybı riski yüksek.
+
 ## 1. Hedefler
 
 | Metrik | Şu an | Hedef |
@@ -17,12 +21,12 @@
 
 | Bileşen | Yöntem | Lokasyon | Encryption | Retention |
 |---------|--------|----------|------------|-----------|
-| **Postgres logical** | `pg_dump | gzip | age` | PVC `postgres-backups` (Oracle K3s local-path) | age asymmetric (private key offline) | 30 gün |
-| **K8s manifest + SealedSecret** | Git (`k8s/` + `k8s/sealed-secrets.yaml`) | GitLab (primary) + GitHub (mirror) | sealed-secrets ciphertext public-key | sınırsız |
-| **SealedSecret master key** | kubectl get secret | Lokal Temp + Bitwarden + USB | TLS keypair | sınırsız (offline) |
+| **Postgres logical** | `pg_dump \| gzip \| age` | PVC `postgres-backups` (Hetzner k3s local-path) | age asymmetric (private key offline) | 30 gün (⚠ Hetzner'de backup-cronjob henüz uygulanmadı) |
+| **K8s manifest** | Git (`k8s/` + `k8s/overlays/hetzner/`) | GitLab (primary) + GitHub (mirror) | — (Hetzner'de düz Secret; sealed-secrets henüz yok) | sınırsız |
+| **Secret değerleri** | `.credentials.local.md` + Bitwarden + USB | offline | — | sınırsız (offline) |
 | **Off-site backup sync** | **YOK** (master audit P0) | — | — | — |
 
-⚠ **3-2-1 kuralı ihlal:** Tüm backup'lar tek lokasyonda (Oracle VM disk). Node failure → total data loss.
+⚠ **3-2-1 kuralı ihlal:** Tüm backup'lar tek lokasyonda (Hetzner VM disk) + Hetzner'de henüz otomatik backup yok. Node failure → total data loss.
 
 ## 3. Senaryolar
 
@@ -33,9 +37,9 @@ K8s auto-restart. NetworkPolicy + ROFS uyumlu. Manuel müdahale yok.
 ### 3.2 Single Pod Persistent Failure
 
 ```bash
-# Backend
-ssh oracle-portfoy "sudo kubectl -n kfinans rollout restart deployment/backend"
-ssh oracle-portfoy "sudo kubectl -n kfinans rollout status deployment/backend"
+# Backend (KUBECONFIG=~/.kube/hetzner-kfinans.yaml)
+kubectl -n kfinans rollout restart deployment/backend
+kubectl -n kfinans rollout status deployment/backend
 ```
 
 Eğer hâlâ fail: `kubectl logs --previous` ile sebep belirle, rollback'e dön (`kubectl rollout undo`).
@@ -45,7 +49,8 @@ Eğer hâlâ fail: `kubectl logs --previous` ile sebep belirle, rollback'e dön 
 **Adım 1: Onaylanmış backup seç**
 
 ```bash
-ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- ls -la /backups/ | tail -10"
+# (KUBECONFIG=~/.kube/hetzner-kfinans.yaml)
+kubectl -n kfinans exec postgres-0 -- ls -la /backups/ | tail -10
 ```
 
 **Adım 2: Backup'ı lokal'e indir + decrypt**
@@ -53,50 +58,51 @@ ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- ls -la /backups/ 
 Master key Bitwarden'dan veya `C:\Users\celik\AppData\Local\Temp\kfinans-backup-age-key.txt`'den.
 
 ```bash
-ssh oracle-portfoy "sudo kubectl -n kfinans cp postgres-0:/backups/kfinans-<TIMESTAMP>.sql.gz.age /tmp/backup.age"
-scp oracle-portfoy:/tmp/backup.age ./backup.age
+kubectl -n kfinans cp postgres-0:/backups/kfinans-<TIMESTAMP>.sql.gz.age ./backup.age
 age -d -i /path/to/age-key.txt backup.age | gunzip > restore.sql
 ```
 
 **Adım 3: DB sil + yeniden yarat**
 
 ```bash
-ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- dropdb -U kfinans kfinans"
-ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- createdb -U kfinans kfinans"
+kubectl -n kfinans exec postgres-0 -- dropdb -U kfinans kfinans
+kubectl -n kfinans exec postgres-0 -- createdb -U kfinans kfinans
 ```
 
 **Adım 4: Restore**
 
 ```bash
-ssh oracle-portfoy "sudo kubectl cp ./restore.sql kfinans/postgres-0:/tmp/restore.sql"
-ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- psql -U kfinans -d kfinans -f /tmp/restore.sql"
+kubectl cp ./restore.sql kfinans/postgres-0:/tmp/restore.sql
+kubectl -n kfinans exec postgres-0 -- psql -U kfinans -d kfinans -f /tmp/restore.sql
 ```
 
 **Adım 5: Verify**
 
 ```bash
-ssh oracle-portfoy "sudo kubectl -n kfinans exec postgres-0 -- psql -U kfinans -d kfinans -c 'SELECT COUNT(*) FROM users; SELECT MAX(created_at) FROM portfolio_snapshots;'"
+kubectl -n kfinans exec postgres-0 -- psql -U kfinans -d kfinans -c 'SELECT COUNT(*) FROM users; SELECT MAX(created_at) FROM portfolio_snapshots;'
 curl -sk https://kfinans.app/health
 ```
 
-### 3.4 Oracle VM / Cluster Loss (DAHA YOK — off-site backup eksik)
+### 3.4 Hetzner VM / Cluster Loss (off-site backup eksik → veri kurtarma sınırlı)
 
-Şu an mümkün DEĞİL. Sprint 1'de rclone + Oracle Object Storage tamamlanınca:
+Off-site sync + otomatik backup henüz yok (hardening TODO). Bunlar tamamlanınca tam DR mümkün olacak. Genel akış (Hetzner):
 
-1. Yeni Oracle VM provision
-2. K3s + Traefik + cert-manager + sealed-secrets controller kurulum (infrastructure-runbook §3)
-3. **Cluster state'i Git'ten apply et:** `kubectl apply -k k8s/` — namespace, configmap, **sealed-secrets.yaml**, postgres, ingress vb. hepsi repodadır. (Not: GitLab `deploy-production` job'u sadece `set image` yapar, ilk bootstrap'i değil — full cluster'ı **manuel `apply -k`** ile kur.)
-4. SealedSecret controller master key'i Bitwarden/USB'den restore et → `sealed-secrets.yaml` decrypt olur (bkz. §3.5)
-5. Object Storage'dan backup indir + age decrypt + restore (§3.3 adımları)
-6. Doğru image tag'ini canlıya al: `kubectl set image ...=:vX.Y.Z` (son: `v0.1.0-rc16`)
+1. Yeni Hetzner Cloud CX23 VM provision (Falkenstein fsn1) + 2 GB swap + firewall (22/80/443 public, 6443 admin-IP)
+2. k3s v1.35 + Traefik + cert-manager (ClusterIssuer `letsencrypt-prod`) kurulum (infrastructure-runbook §3)
+3. **Cluster state'i Git'ten apply et:** `kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/overlays/hetzner | kubectl apply -f -` — namespace, configmap, Secret, postgres, ingress vb. hepsi repodadır. (Not: GitLab `deploy-production` job'u hâlâ Oracle'ı hedefliyor [retarget TODO] ve sadece `set image` yapar — full cluster'ı **manuel kustomize apply** ile kur.)
+4. Secret değerlerini `.credentials.local.md` / Bitwarden'dan al → `k8s/overlays/hetzner` Secret manifest'ine yaz (sealed-secrets Hetzner'de henüz kurulmadı; kurulduğunda controller master key'i Bitwarden/USB'den restore edilir → §3.5)
+5. Backup indir + age decrypt + restore (§3.3 adımları) — off-site sync kurulunca uzak lokasyondan
+6. Doğru image tag'ini canlıya al: `kubectl set image ...=:vX.Y.Z` (Docker Hub `celikada/kfinans-{backend,frontend}`)
 7. DNS A kaydı yeni VM IP'sine güncelle (infrastructure-runbook §1.4)
 8. Verify (HEALTH 200 + login + DB count)
 
-### 3.5 SealedSecret Master Key Loss
+### 3.5 Secret / SealedSecret Master Key Loss
 
-Recovery imkansız. `.credentials.local.md` §8 talimat:
+> **Hetzner durumu:** Secret'lar şu an düz k8s Secret olarak tutuluyor (sealed-secrets henüz kurulmadı). Secret değerleri kaybolursa `.credentials.local.md` / Bitwarden'dan geri yazılır. Aşağıdaki sealed-secrets akışı, controller Hetzner'de devreye alındığında geçerli olur.
+
+Sealed-secrets kurulu olduğunda master key kaybı recovery'si — `.credentials.local.md` §8 talimat:
 - Bitwarden/USB'den master key restore et
-- Yeni K3s cluster'a apply
+- Yeni k3s cluster'a apply
 - Controller restart
 - Mevcut SealedSecret'lar decrypt olur
 
@@ -109,7 +115,7 @@ Eğer master key TAMAMEN kayboldu:
 
 **Çeyreklik tatbikat:**
 
-1. Staging cluster (yeni Oracle VM veya minikube)
+1. Staging cluster (yeni Hetzner VM veya minikube)
 2. Production backup'tan restore (age decrypt + psql)
 3. Smoke test: HEALTH 200 + login + MFA + DB query
 4. RTO ölçümü
@@ -125,7 +131,7 @@ Detay: [`../legal/incident-response-plan.md`](../legal/incident-response-plan.md
 
 ## 6. Bekleyen İyileştirmeler
 
-- **P0:** Off-site backup (rclone + Oracle Object Storage)
+- **P0:** Hetzner backup-cronjob uygula (otomatik günlük backup) + off-site backup (rclone + Hetzner Storage Box / S3-uyumlu object storage)
 - **P0:** İlk DR drill
 - **P1:** WAL-G PITR (RPO 24 saat → 15 dk)
 - **P1:** CloudNativePG HA (multi-node)
