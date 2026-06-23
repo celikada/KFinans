@@ -584,3 +584,202 @@ async def test_post_refresh_section_invalid_404(client):
 async def test_post_refresh_section_unauthenticated(client):
     resp = await client.post("/api/v1/portfolio/refresh/tefas")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# refresh_one_wallet — tek-cüzdan (per-cüzdan) yenileme
+# ---------------------------------------------------------------------------
+def _wallet_response(wid: str, *, total: str, errors=None, wallet_errors=None) -> WalletResponse:
+    return WalletResponse(
+        positions=[
+            WalletPositionOut(
+                wallet_id=wid,
+                chain="ethereum",
+                address="0xabcabcabcabc",
+                symbol="ETH",
+                liquid_quantity=Decimal("1"),
+                staked_quantity=Decimal("0"),
+                pending_rewards=Decimal("0"),
+                unit_price_usd=Decimal("2000"),
+                unit_price_tl=Decimal("70000"),
+                total_value_tl=Decimal(total),
+            )
+        ],
+        errors=errors or {},
+        wallet_errors=wallet_errors or {},
+    )
+
+
+async def test_refresh_one_wallet_patches_only_that_wallet(monkeypatch):
+    """Tek cüzdan yenileme: yalnız o wallet_id'nin pozisyonları değişir,
+    diğer cüzdanlar + diğer section'lar korunur, total yeniden toplanır."""
+    uid = await _create_user("lc_one_wallet@example.com")
+    _patch_usd_rate(monkeypatch)
+
+    # İki cüzdanlı başlangıç cache'i: w1=140000, w2=10000.
+    initial = WalletResponse(
+        positions=[
+            WalletPositionOut(
+                wallet_id="w1",
+                chain="ethereum",
+                address="0xaaa",
+                symbol="ETH",
+                liquid_quantity=Decimal("2"),
+                staked_quantity=Decimal("0"),
+                pending_rewards=Decimal("0"),
+                unit_price_usd=Decimal("2000"),
+                unit_price_tl=Decimal("70000"),
+                total_value_tl=Decimal("140000"),
+            ),
+            WalletPositionOut(
+                wallet_id="w2",
+                chain="bitcoin",
+                address="bc1qxyz",
+                symbol="BTC",
+                liquid_quantity=Decimal("1"),
+                staked_quantity=Decimal("0"),
+                pending_rewards=Decimal("0"),
+                unit_price_usd=Decimal("0"),
+                unit_price_tl=Decimal("10000"),
+                total_value_tl=Decimal("10000"),
+            ),
+        ],
+        errors={},
+        wallet_errors={},
+    )
+    _patch_all_compute(monkeypatch, wallets=initial)
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    # Şimdi yalnız w1'i farklı değerle yenile (single-wallet compute).
+    async def _single(_uid, _wid, _db):
+        return _wallet_response("w1", total="200000")
+
+    monkeypatch.setattr("app.api.v1.portfolio.compute_single_wallet_positions", _single)
+    await lc.refresh_one_wallet(uid, "w1", session_factory=TestSession)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    positions = {p["wallet_id"]: p for p in row.payload["wallets"]["positions"]}
+    # w1 güncellendi, w2 korundu. (string format mock'a bağlı → Decimal ile kıyas)
+    assert Decimal(positions["w1"]["total_value_tl"]) == Decimal("200000")
+    assert Decimal(positions["w2"]["total_value_tl"]) == Decimal("10000")
+    # total = 200000 + 10000.
+    assert row.total_value_tl == Decimal("210000.00")
+    assert row.status == "ok"
+    assert row.refreshed_at is not None
+
+
+async def test_refresh_one_wallet_sets_and_clears_wallet_errors(monkeypatch):
+    """Yenileme sonrası bu cüzdana hata gelirse wallet_errors[wid] set edilir;
+    sonraki başarılı yenilemede temizlenir."""
+    uid = await _create_user("lc_wallet_err@example.com")
+    _patch_usd_rate(monkeypatch)
+    _patch_all_compute(monkeypatch, wallets=_wallet_response("w1", total="140000"))
+    await lc.refresh_live_cache(uid, session_factory=TestSession, force=True)
+
+    # 1) Hata ile yenile.
+    async def _err(_uid, _wid, _db):
+        return WalletResponse(
+            positions=[],
+            errors={"ethereum:0xabcabcab": "Zaman aşımı (ağ/RPC yavaş)"},
+            wallet_errors={"w1": "Zaman aşımı (ağ/RPC yavaş)"},
+        )
+
+    monkeypatch.setattr("app.api.v1.portfolio.compute_single_wallet_positions", _err)
+    await lc.refresh_one_wallet(uid, "w1", session_factory=TestSession)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    assert row.payload["wallets"]["wallet_errors"].get("w1") == "Zaman aşımı (ağ/RPC yavaş)"
+    # Hatalı cüzdanın pozisyonu çıkarıldı (boş döndü).
+    assert all(p["wallet_id"] != "w1" for p in row.payload["wallets"]["positions"])
+
+    # 2) Başarılı yenileme → wallet_errors temizlenir.
+    async def _ok(_uid, _wid, _db):
+        return _wallet_response("w1", total="150000")
+
+    monkeypatch.setattr("app.api.v1.portfolio.compute_single_wallet_positions", _ok)
+    await lc.refresh_one_wallet(uid, "w1", session_factory=TestSession)
+
+    async with TestSession() as db:
+        row = await lc.get_live_cache(uid, db)
+    assert "w1" not in row.payload["wallets"]["wallet_errors"]
+    positions = {p["wallet_id"]: p for p in row.payload["wallets"]["positions"]}
+    assert Decimal(positions["w1"]["total_value_tl"]) == Decimal("150000")
+
+
+async def test_post_refresh_wallet_returns_202_for_own_wallet(client, monkeypatch):
+    """Kullanıcının kendi aktif cüzdanı → 202 + trigger çağrılır."""
+    triggered = {"wallet_id": None}
+
+    def _fake(_uid, wallet_id):
+        triggered["wallet_id"] = wallet_id
+
+    monkeypatch.setattr("app.api.v1.portfolio.trigger_wallet_refresh", _fake)
+    headers = await make_user(client, "lc_wallet_ep@example.com")
+    add = await client.post(
+        "/api/v1/wallets",
+        json={"chain": "ethereum", "address": "0x1111000000000000000000000000000000000001"},
+        headers=headers,
+    )
+    wid = add.json()["id"]
+
+    resp = await client.post(f"/api/v1/portfolio/refresh/wallet/{wid}", headers=headers)
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "refreshing"
+    assert triggered["wallet_id"] == wid
+
+
+async def test_post_refresh_wallet_404_for_other_user(client, monkeypatch):
+    """Başka kullanıcının cüzdanı → 404 (IDOR), trigger çağrılmaz."""
+    triggered = {"n": 0}
+    monkeypatch.setattr(
+        "app.api.v1.portfolio.trigger_wallet_refresh",
+        lambda *_a, **_k: triggered.__setitem__("n", triggered["n"] + 1),
+    )
+    h1 = await make_user(client, "lc_wallet_idor_a@example.com")
+    h2 = await make_user(client, "lc_wallet_idor_b@example.com")
+    add = await client.post(
+        "/api/v1/wallets",
+        json={"chain": "ethereum", "address": "0x2222000000000000000000000000000000000001"},
+        headers=h1,
+    )
+    wid = add.json()["id"]
+
+    resp = await client.post(f"/api/v1/portfolio/refresh/wallet/{wid}", headers=h2)
+    assert resp.status_code == 404
+    assert triggered["n"] == 0
+
+
+async def test_post_refresh_wallet_404_for_missing_wallet(client, monkeypatch):
+    monkeypatch.setattr("app.api.v1.portfolio.trigger_wallet_refresh", lambda *_a, **_k: None)
+    headers = await make_user(client, "lc_wallet_missing@example.com")
+    resp = await client.post(f"/api/v1/portfolio/refresh/wallet/{uuid.uuid4()}", headers=headers)
+    assert resp.status_code == 404
+
+
+async def test_post_refresh_wallet_unauthenticated(client):
+    resp = await client.post(f"/api/v1/portfolio/refresh/wallet/{uuid.uuid4()}")
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# compute_single_wallet_positions — IDOR + tek-satır sorgu
+# ---------------------------------------------------------------------------
+async def test_compute_single_wallet_positions_idor_returns_empty(client, monkeypatch):
+    """Başka kullanıcının wallet_id'si → boş WalletResponse (sorgu eşleşmez)."""
+    from app.api.v1.portfolio import compute_single_wallet_positions
+
+    h1 = await make_user(client, "csw_idor_a@example.com")
+    add = await client.post(
+        "/api/v1/wallets",
+        json={"chain": "ethereum", "address": "0x3333000000000000000000000000000000000001"},
+        headers=h1,
+    )
+    wid = add.json()["id"]
+
+    other_uid = await _create_user("csw_idor_b@example.com")
+    async with TestSession() as db:
+        res = await compute_single_wallet_positions(other_uid, wid, db)
+    assert res.positions == []
+    assert res.wallet_errors == {}

@@ -214,6 +214,61 @@ async def test_get_goal_with_goal_and_snapshot_full_metrics(client: AsyncClient)
     assert Decimal(data["passive_income_foreign"]) == Decimal("5000.00")
 
 
+# ─── Canlı cache önceliği (2026-06-23 fix) ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_goal_prefers_live_cache_over_snapshot(client: AsyncClient, monkeypatch):
+    """Goal ilerlemesi CANLI portföy toplamını kullanır (son snapshot'a değil).
+
+    Bug fix: kullanıcı yeni snapshot almadıkça goal eski/küçük snapshot'ta takılıyordu.
+    Artık `preview_snapshot_from_cache` (dashboard büyük toplamı) önceliklidir; cache
+    yok/bozuksa snapshot'a fallback (aşağıdaki diğer testler bu fallback'i kanıtlar).
+    """
+    email = "goal_live@example.com"
+    headers = await make_user(client, email)
+    user_id = await _get_user_id(email)
+
+    # Hedef 10.000 TL/ay -> freedom_target = 3.000.000
+    await client.put("/api/v1/user/goal", json={"amount": 10000, "currency": "TRY"}, headers=headers)
+    # Eski/küçük snapshot (300K -> %10) — canlı toplam büyükse KULLANILMAMALI
+    await _add_snapshot(user_id, "300000.00")
+
+    async def _fake_preview(uid, db):
+        return {"total_value_tl": "3000000.00"}
+
+    monkeypatch.setattr("app.services.live_cache.preview_snapshot_from_cache", _fake_preview)
+
+    resp = await client.get("/api/v1/user/goal", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    # Canlı toplam (3.0M) kullanılmalı, snapshot (300K) DEĞİL
+    assert Decimal(data["portfolio_value"]) == Decimal("3000000.00")
+    assert data["progress_pct"] == 100.0  # 3.0M / 3.0M
+
+
+@pytest.mark.asyncio
+async def test_get_goal_falls_back_to_snapshot_when_cache_fails(client: AsyncClient, monkeypatch):
+    """Canlı cache hata verirse goal son snapshot'a düşer (geriye uyumlu)."""
+    email = "goal_fallback@example.com"
+    headers = await make_user(client, email)
+    user_id = await _get_user_id(email)
+
+    await client.put("/api/v1/user/goal", json={"amount": 10000, "currency": "TRY"}, headers=headers)
+    await _add_snapshot(user_id, "1500000.00")
+
+    async def _boom(uid, db):
+        raise ValueError("Live cache bulunamadı")
+
+    monkeypatch.setattr("app.services.live_cache.preview_snapshot_from_cache", _boom)
+
+    resp = await client.get("/api/v1/user/goal", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert Decimal(data["portfolio_value"]) == Decimal("1500000.00")
+    assert data["progress_pct"] == 50.0  # snapshot fallback
+
+
 # ─── _rate_to_tl 503 dalı (satır 28) ────────────────────────────────────────
 
 

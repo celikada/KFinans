@@ -794,7 +794,9 @@ async def _upsert_installments(
 #  - commit: kullanıcının onayladığı/düzelttiği veri kalıcılaştırılır.
 # ---------------------------------------------------------------------------
 @router.post("/import-statement/preview", response_model=ParsedStatementOut)
-@limiter.limit("10/hour")
+# Preview yalnız parse eder (DB yazmaz). 10/saat çok düşüktü: birden çok ay ekstre
+# + önizleme/retry ile kullanıcı 429'a takılıyordu (Mart/Nisan yüklenemedi).
+@limiter.limit("60/hour")
 async def preview_statement_import(
     request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -884,7 +886,8 @@ async def preview_statement_import(
     response_model=CardDetailOut,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit("20/hour")
+# Çok-aylık içe aktarma oturumu için yükseltildi (20→40/saat).
+@limiter.limit("40/hour")
 async def commit_statement_import(
     request: Request,
     payload: StatementImportCommitIn,

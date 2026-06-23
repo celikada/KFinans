@@ -45,9 +45,13 @@ export function SubscriptionBillModal({ sub, mode, billId, onClose, onDone }: Pr
   const [dueDate, setDueDate] = useState(TODAY);
   const [notes, setNotes] = useState("");
 
-  // pay alanları
-  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>("cash");
-  const [creditCardId, setCreditCardId] = useState("");
+  // pay alanları — son kullanılan ödeme şekli/kartı varsayılan ön-seçili gelir
+  const [paymentMethod, setPaymentMethod] = useState<SubscriptionPaymentMethod>(
+    sub.default_payment_method === "credit_card" ? "credit_card" : "cash",
+  );
+  const [creditCardId, setCreditCardId] = useState(
+    sub.default_credit_card_id != null ? String(sub.default_credit_card_id) : "",
+  );
   const [cards, setCards] = useState<CreditCardDTO[]>([]);
 
   const [saving, setSaving] = useState(false);

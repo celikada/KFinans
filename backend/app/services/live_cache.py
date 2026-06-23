@@ -619,6 +619,144 @@ def trigger_section_refresh(user_id, section: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tek-cüzdan (per-cüzdan) yenileme
+# ---------------------------------------------------------------------------
+# Cüzdan satırındaki "yenile" ikonu: yalnız o cüzdanı yeniden hesaplar +
+# wallets section payload'unun o cüzdana ait pozisyonlarını/hatasını yamalar
+# (diğer cüzdanlar/kartlar dokunulmaz). Tek sorunlu cüzdan için hızlı retry.
+
+# Tek-cüzdan single-flight: aynı (user, wallet) için aynı anda tek refresh.
+_WALLET_TASKS: dict[str, asyncio.Task] = {}
+
+
+def _wallet_computer():
+    """compute_single_wallet_positions'ı geç import ile döner (döngü engeli)."""
+    from app.api.v1.portfolio import compute_single_wallet_positions
+
+    return compute_single_wallet_positions
+
+
+async def refresh_one_wallet(user_id, wallet_id, session_factory: async_sessionmaker = AsyncSessionLocal) -> None:
+    """Tek bir cüzdanı yeniden hesaplar ve wallets section payload'unu yamalar.
+
+    `refresh_one_section` desenini izler ama bölüm yerine TEK cüzdan: mevcut
+    wallets section'ından bu cüzdana (wallet_id) ait pozisyonlar çıkarılır,
+    yeni hesaplananlar eklenir; errors/wallet_errors'tan bu cüzdana ait eski
+    kayıt temizlenip yeni hata (varsa) yazılır. Diğer cüzdanlar + diğer
+    section'lar + health_issues korunur. total `_sum_sections_total` ile yeniden
+    toplanır, refreshed_at güncellenir.
+    """
+    wid = str(wallet_id)
+    compute = _wallet_computer()
+
+    # Durumu HEMEN "refreshing" yap (frontend yalnız status=="refreshing" iken
+    # poll eder; bkz. refresh_one_section). refreshed_at korunur.
+    async with session_factory() as db:
+        try:
+            await _set_status_refreshing(db, user_id)
+        except Exception:
+            logger.exception("Live cache: tek cüzdan '%s' status=refreshing yazılamadı user_id=%s", wid, user_id)
+
+    try:
+        async with session_factory() as wallet_db:
+            res = await asyncio.wait_for(compute(user_id, wallet_id, wallet_db), timeout=_REFRESH_TOTAL_TIMEOUT)
+        encoded = jsonable_encoder(res)
+    except Exception as exc:
+        # Best-effort: hesaplama patlarsa cache'i kirletme (eski veri kalsın),
+        # yalnız status'u ok'a çevirip çık. Tek-cüzdan yenilemede section-level
+        # "section_failed" notu eklemiyoruz (diğer cüzdanlar sağlam).
+        logger.error("Live cache: tek cüzdan '%s' yenilenemedi user_id=%s: %r", wid, user_id, exc, exc_info=exc)
+        async with session_factory() as db:
+            existing = await get_live_cache(user_id, db)
+            if existing is None:
+                return
+            try:
+                await _save_result(
+                    db,
+                    user_id,
+                    payload=dict(existing.payload or {}),
+                    total_value_tl=existing.total_value_tl,
+                    rates=existing.rates,
+                    health_issues=existing.health_issues,
+                    status="ok",
+                    error=None,
+                    update_refreshed_at=False,
+                )
+            except Exception:
+                logger.exception("Live cache: tek cüzdan '%s' hata-durumu yazılamadı user_id=%s", wid, user_id)
+        return
+
+    new_positions = encoded.get("positions", []) if isinstance(encoded, dict) else []
+    new_errors = encoded.get("errors", {}) if isinstance(encoded, dict) else {}
+    new_wallet_errors = encoded.get("wallet_errors", {}) if isinstance(encoded, dict) else {}
+
+    async with session_factory() as db:
+        existing = await get_live_cache(user_id, db)
+        payload = dict(existing.payload) if existing and existing.payload else {}
+        wallets_section = dict(payload.get("wallets") or {})
+
+        # Bu cüzdana ait eski pozisyonları çıkar, yenilerini ekle.
+        old_positions = wallets_section.get("positions") or []
+        kept = [p for p in old_positions if str(p.get("wallet_id")) != wid]
+        wallets_section["positions"] = kept + new_positions
+
+        # errors (chain:address[:10] anahtarlı): bu cüzdana ait eski anahtarları
+        # temizle (yeni compute'un anahtarlarını set'le ve overwrite et). Tek
+        # cüzdanlık compute yalnız bu cüzdanın anahtar(lar)ını üretir.
+        old_errors = dict(wallets_section.get("errors") or {})
+        for k in list(new_errors.keys()):
+            old_errors.pop(k, None)
+        old_errors.update(new_errors)
+        wallets_section["errors"] = old_errors
+
+        # wallet_errors (wallet_id anahtarlı): bu cüzdanın eski kaydını sil,
+        # yeni hata varsa yaz.
+        old_we = dict(wallets_section.get("wallet_errors") or {})
+        old_we.pop(wid, None)
+        old_we.update(new_wallet_errors)
+        wallets_section["wallet_errors"] = old_we
+
+        payload["wallets"] = wallets_section
+        total = _sum_sections_total(payload)
+        try:
+            await _save_result(
+                db,
+                user_id,
+                payload=payload,
+                total_value_tl=total,
+                rates=existing.rates if existing else None,
+                health_issues=(existing.health_issues if existing else None),
+                status="ok",
+                error=None,
+                update_refreshed_at=True,
+            )
+        except Exception:
+            logger.exception("Live cache: tek cüzdan '%s' sonucu yazılamadı user_id=%s", wid, user_id)
+
+
+def trigger_wallet_refresh(user_id, wallet_id) -> None:
+    """Best-effort fire-and-forget tek-cüzdan yenileme (per-cüzdan yenile ikonu).
+
+    Aynı (user, wallet) için koşan task varsa yenisini başlatmaz (single-flight)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    key = f"{user_id}:{wallet_id}"
+    existing = _WALLET_TASKS.get(key)
+    if existing is not None and not existing.done():
+        return
+    task = loop.create_task(refresh_one_wallet(user_id, wallet_id))
+    _WALLET_TASKS[key] = task
+
+    def _cleanup(_t: asyncio.Task, k: str = key) -> None:
+        if _WALLET_TASKS.get(k) is _t:
+            _WALLET_TASKS.pop(k, None)
+
+    task.add_done_callback(_cleanup)
+
+
+# ---------------------------------------------------------------------------
 # Cache → Snapshot
 # ---------------------------------------------------------------------------
 def _wallet_assets_from_cache(section: dict[str, Any]) -> list[AssetData]:

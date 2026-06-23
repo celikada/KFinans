@@ -24,6 +24,11 @@ export const portfolioApi = {
   refreshPortfolioSection: (section: string) =>
     request<RefreshPortfolioOut>(`/portfolio/refresh/${section}`, { method: "POST" }),
 
+  // Tek bir cüzdanı yeniden hesaplatır (per-cüzdan yenile ikonu). Yalnız o
+  // cüzdanın pozisyonları + hatası wallets cache section'ında yamalanır.
+  refreshWallet: (walletId: string) =>
+    request<RefreshPortfolioOut>(`/portfolio/refresh/wallet/${walletId}`, { method: "POST" }),
+
   previewSnapshot: () =>
     request<{
       total_value_tl: string;

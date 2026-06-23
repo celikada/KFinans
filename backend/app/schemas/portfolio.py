@@ -136,4 +136,9 @@ class WalletPositionOut(BaseModel):
 
 class WalletResponse(BaseModel):
     positions: list[WalletPositionOut]
+    # Zincir-adres anahtarlı hatalar (`chain:address[:10]`). Snapshot health
+    # (`_cache_issues`) bu formatı parse eder — anahtar formatını DEĞİŞTİRME.
     errors: dict[str, str]
+    # Per-cüzdan hatalar (wallet_id → mesaj). Frontend maskeli adres yüzünden
+    # `chain:address[:10]` anahtarını üretemez; per-cüzdan ⚠ uyarısı bunu kullanır.
+    wallet_errors: dict[str, str] = {}

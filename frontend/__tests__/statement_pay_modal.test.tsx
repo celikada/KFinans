@@ -83,6 +83,21 @@ describe("StatementPayModal", () => {
     expect(await screen.findByText("content.creditCards.pay.amountInvalid")).toBeInTheDocument();
   });
 
+  it("0 tutarlı ekstre → uyarı gösterir, tam/kısmi gizli, paid_amount=0 ile işaretlenir", async () => {
+    const onPaid = vi.fn();
+    payStatement.mockResolvedValueOnce({ ...STATEMENT, statement_amount: "0.00", paid_at: "x", paid_amount: "0.00" });
+    const zeroStmt = { ...STATEMENT, statement_amount: "0.00" } satisfies StatementDTO;
+    render(<StatementPayModal cardId={2} statement={zeroStmt} onClose={vi.fn()} onPaid={onPaid} />);
+    const user = userEvent.setup({ delay: null });
+    // Tam/kısmi seçimi YOK; 0-borç uyarısı görünür
+    expect(screen.getByText("content.creditCards.pay.zeroNote")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("partial")).toBeNull();
+    await user.click(screen.getByText("content.creditCards.pay.submit"));
+    await waitFor(() => expect(payStatement).toHaveBeenCalled());
+    expect(payStatement.mock.calls[0][2].paid_amount).toBe(0);
+    await waitFor(() => expect(onPaid).toHaveBeenCalled());
+  });
+
   it("backend 422 hatası → hata mesajı gösterilir", async () => {
     payStatement.mockRejectedValueOnce(new Error("422 tutar geçersiz"));
     render(<StatementPayModal cardId={2} statement={STATEMENT} onClose={vi.fn()} onPaid={vi.fn()} />);
