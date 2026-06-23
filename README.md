@@ -8,7 +8,7 @@
 [![Code of Conduct](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](./CODE_OF_CONDUCT.md)
 
 > **Türkiye'ye özel kişisel yatırım ve finans takip uygulaması**
-> 🌐 Production: [https://kfinans.app](https://kfinans.app) *(canlı — v0.1.0-rc16, Oracle K3s)*
+> 🌐 Production: [https://kfinans.app](https://kfinans.app) *(canlı — v0.11.4, Hetzner Cloud k3s; 2026-06-23 Oracle K3s'ten taşındı)*
 
 KFinans, dağınık yatırım hesaplarınızı ve günlük finansal yaşamınızı tek ekranda toplar:
 **TEFAS yatırım fonları**, **kripto borsaları** (Binance, iCrypex), **manuel kripto** (API'siz borsalar — BinanceTR, BTCTurk, Paribu vb.), **blockchain cüzdanlar** (10 zincir: Bitcoin, Ethereum, Sonic, Avalanche C/P, Solana, Cardano, Algorand, Polkadot, Litecoin), **BES birikimleri**, **hisse senetleri** (BIST + ABD + UK, Yahoo Finance), **kıymetli madenler** (gram/BiGA/sikke), **nakit/banka hesapları**, **kredi kartı (ekstre + taksit)**, **harcama-gelir-bütçe-nakit akış takibi** ve **AI destekli yatırım tavsiyeleri** (Claude API).

@@ -1,5 +1,7 @@
 # KFinans Mimari Audit — 2026-05-22
 
+> **⚠️ Güncelleme (2026-06-23):** Bu audit notu yazıldığında barındırma **Oracle Cloud Always Free VM** (`141.144.243.54`) idi. Proje **2026-06-23'te Hetzner Cloud'a taşındı** (CX23, 2 vCPU/4 GB, Falkenstein fsn1 DE, tek-node k3s v1.35, IP `91.99.123.163`). Aşağıdaki Oracle referansları **tarihsel** olarak korunmuştur; "multi-cloud taşınabilirlik / Hetzner'e migrate" önerileri kısmen gerçekleşmiştir. Güncel altyapı için CLAUDE.md + docs/operations/infrastructure-runbook.md'ye bakın.
+
 > **Kapsam:** Production rc7 deploy sonrası ilk kapsamlı mimari gözden geçirme.
 > **Bağlam:** 2026-05-21 büyük audit fix turu (PII mask, MultiFernet, zxcvbn+HIBP, DB TLS, age backup, etcd encryption, NetworkPolicy 7 default-deny, MFA TOTP, ROFS, SealedSecrets) tamamlandı; 13 commit `develop`'a push edildi.
 > **Yöntem:** 6 kavram × 3 prensip = 18 mini bölüm + numaralı düzeltme notları (P0/P1/P2/P3 öncelikli).

@@ -1,0 +1,9 @@
+# Hetzner ilk deploy: DB tek node icinde, ClusterIP — TLS'siz baglanti.
+# (Base configmap DATABASE_SSL_MODE=require; burada disable ile ezilir.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kfinans-config
+  namespace: kfinans
+data:
+  DATABASE_SSL_MODE: "disable"

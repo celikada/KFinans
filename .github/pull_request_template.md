@@ -50,4 +50,4 @@
   - [ ] Versiyon bump yapıldı (`pyproject.toml` + `package.json`)
   - [ ] CHANGELOG güncel (varsa)
   - [ ] Tag oluşturulacak: `v?.?.?`
-  - [ ] Production secret değişikliği gerekiyor mu (Oracle K8s)?
+  - [ ] Production secret değişikliği gerekiyor mu (Hetzner k3s)?

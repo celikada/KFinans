@@ -5,29 +5,31 @@
 
 **Durum:** Taslak — Sprint 3'te P1 düşürme hedefli.
 
+> **⚠️ Güncelleme (2026-06-23):** Barındırma **Oracle Cloud'dan Hetzner Cloud'a taşındı** (CX23, k3s v1.35, IP `91.99.123.163`; eski Oracle IP `141.144.243.54` geçersiz). Yani "Oracle K3s → başka cloud" migration senaryosu kısmen **gerçekleşti** (k3s → k3s, tek-node, lokal `kubectl kustomize k8s/overlays/hetzner | kubectl apply` ile). Aşağıdaki tablolarda "Oracle VM IP" / "Oracle K3s" ifadeleri **tarihsel**; güncel node IP `91.99.123.163`. Hard-coded IP/domain lock-in problemi hâlâ geçerli (taşıma elle yapıldı, `.gitlab-ci.yml` deploy job'ı henüz Hetzner'e retarget edilmedi).
+
 ## 1. Vendor Lock-in Heat Map
 
 | Servis | Şu an | Lock-in Risk | Alternatif/abstraction | Effort |
 |--------|-------|--------------|------------------------|--------|
 | **LLM** | Anthropic Claude API | YÜKSEK (SPOF) | `BaseLLMProvider` Protocol → OpenAI/Gemini fallback | 2-3 gün |
 | **E-mail** | Resend (Tokyo) | ORTA | `BaseEmailProvider` → SendGrid/Mailgun | 1-2 gün |
-| **K8s Distro** | K3s Oracle (`svclb-traefik`, `local-path`) | ORTA | Vanilla K8s + Traefik chart + Longhorn/oci-bv | 1 hafta |
+| **K8s Distro** | k3s Hetzner (`svclb-traefik`, `local-path`; 2026-06-23 Oracle'dan taşındı) | ORTA | Vanilla K8s + Traefik chart + Longhorn | 1 hafta |
 | **Registry** | Docker Hub (`celikada/kfinans-*`) | ORTA | Kaniko `--destination` multi-mirror (DH + GHCR + Quay) | 1 gün |
 | **Object Storage** | YOK (planlanan) | DÜŞÜK | S3-compatible adapter (Oracle/AWS/B2/R2 hepsi aynı API) | 2-3 gün |
 | **CI/CD** | GitLab iosrv (LAN) | ORTA (single nokta arıza) | Yedek runner Oracle VM veya GitHub Actions mirror | 2-3 gün |
 | **DB** | PostgreSQL spesifik (`pg_try_advisory_lock`, JSONB) | DÜŞÜK | JSONB SQLAlchemy `sa.JSON` driver-transparent; advisory lock için `services/db_lock.py` abstraction | 1 gün |
 | **Domain** | `kfinans.app` hard-coded 7+ dosyada | YÜKSEK (white-label engeli) | `lib/branding.ts` + env-driven config | 2-3 gün |
-| **Node IP** | `141.144.243.54` 8 yerde | YÜKSEK (multi-node migration blocker) | NetworkPolicy: namespace label selector; CI: ENV variable | 1 gün |
+| **Node IP** | `91.99.123.163` (Hetzner; eski Oracle `141.144.243.54`) çoklu yerde | YÜKSEK (multi-node migration blocker) | NetworkPolicy: namespace label selector; CI: ENV variable | 1 gün |
 
 ## 2. Hard-coded Değerler Listesi
 
-### 2.1 Oracle VM IP (`141.144.243.54`)
+### 2.1 Node IP (Hetzner `91.99.123.163`; eski Oracle `141.144.243.54`)
 
 | Dosya | Satır | Bağlam |
 |-------|-------|--------|
 | `k8s/networkpolicies/02-backend-ingress.yaml` | ipBlock | Probe traffic source |
 | `k8s/networkpolicies/04-frontend-ingress.yaml` | ipBlock | Probe traffic source |
-| `.gitlab-ci.yml` | satır 26 `ORACLE_VM_HOST: "141.144.243.54"` | Deploy job — CI variable (default hard-code) |
+| `.gitlab-ci.yml` | `ORACLE_VM_HOST: "141.144.243.54"` | Deploy job — CI variable (default hard-code). **TODO:** Hetzner'e retarget (`91.99.123.163`) — taşıma sonrası henüz güncellenmedi, deploy şu an lokal kustomize ile elle yapılıyor |
 | `.github/workflows/release.yml` | SİLİNDİ | Dosya artık yok (workflows: ci-backend, ci-frontend, e2e, security, sonar) |
 | ~8 doc dosyası | — | Referans (operations-playbook, infrastructure-runbook, production-deploy-checklist, 01-tasarim, audit'ler) |
 
@@ -98,6 +100,7 @@ Effort: 1-2 sprint (yapısal yapı + KVKK metinleri template).
 | Senaryo | Durum |
 |---------|-------|
 | Oracle K3s → vanilla K8s | TEST EDİLMEDİ |
+| Oracle K3s → Hetzner k3s | ✅ YAPILDI (2026-06-23, lokal `kubectl kustomize k8s/overlays/hetzner | kubectl apply`; DB taze başladı) |
 | Docker Hub → GHCR fallback | TEST EDİLMEDİ |
 | Anthropic → OpenAI fallback | TEST EDİLMEDİ (adapter pattern yok) |
 | `kfinans.app` → başka domain | TEST EDİLMEDİ |

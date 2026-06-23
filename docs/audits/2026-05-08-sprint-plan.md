@@ -1,5 +1,7 @@
 # Sprint Plan — FAZ G Audit Sonrası (2026-05-08)
 
+> **⚠️ Güncelleme (2026-06-23):** Bu audit notu yazıldığında barındırma **Oracle Cloud Always Free VM** (`141.144.243.54`) idi. Proje **2026-06-23'te Hetzner Cloud'a taşındı** (CX23, 2 vCPU/4 GB, Falkenstein fsn1 DE, tek-node k3s v1.35, IP `91.99.123.163`). Aşağıdaki Oracle referansları **tarihsel** olarak korunmuştur; "multi-cloud taşınabilirlik / Hetzner'e migrate" önerileri kısmen gerçekleşmiştir. Güncel altyapı için CLAUDE.md + docs/operations/infrastructure-runbook.md'ye bakın.
+
 > 11 uzman ajan paralel sistem analizinden çıkan **240 bulgu** önceliklendirildi.
 > 63 critical+high GitHub Issue olarak açıldı; 175 medium+low [`audit-2026-05-08-summary.md`](./audit-2026-05-08-summary.md) içinde.
 
@@ -41,7 +43,7 @@ Bu maddeler **production deploy'dan ÖNCE** kapatılmalı. Tahmini süre: **2-3 
 |-------|--------|------|
 | [#11](https://github.com/celikada/KFinans/issues/11) | COMP-001: KVKK Aydınlatma placeholder doldur | 2 saat |
 | [#12](https://github.com/celikada/KFinans/issues/12) | COMP-002: kvkk@ + privacy@ mailbox kur | 1 saat |
-| [#13](https://github.com/celikada/KFinans/issues/13) | COMP-005: DPA imzaları (Anthropic+Resend+Oracle) | 1-2 hafta |
+| [#13](https://github.com/celikada/KFinans/issues/13) | COMP-005: DPA imzaları (Anthropic+Resend+Hetzner) | 1-2 hafta |
 
 ### Doc Güncellemesi (3-4 saat)
 | Issue | Başlık | Süre |

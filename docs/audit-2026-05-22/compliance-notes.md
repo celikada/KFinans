@@ -1,5 +1,7 @@
 # Compliance Audit Notları — 2026-05-22
 
+> **⚠️ Güncelleme (2026-06-23):** Bu audit notu yazıldığında barındırma **Oracle Cloud Always Free VM** (`141.144.243.54`) idi. Proje **2026-06-23'te Hetzner Cloud'a taşındı** (CX23, 2 vCPU/4 GB, Falkenstein fsn1 DE, tek-node k3s v1.35, IP `91.99.123.163`). Aşağıdaki Oracle referansları **tarihsel** olarak korunmuştur; "multi-cloud taşınabilirlik / Hetzner'e migrate" önerileri kısmen gerçekleşmiştir. Güncel altyapı için CLAUDE.md + docs/operations/infrastructure-runbook.md'ye bakın.
+
 **Bağlam:** 2026-05-21 büyük fix turu sonrası rc7 production'da. KVKK + GDPR + SPK uyumluluk durumu.
 **Sahip ajan:** `compliance-expert`
 **Kapsam:** Production hazırlık + KVKK placeholder + data lifecycle + üçüncü taraf aktarım.
@@ -36,7 +38,7 @@
 | 3 | **P0** | `privacy@kfinans.app`, `kvkk@kfinans.app`, `security@kfinans.app` mailbox'ları kurulmadı | KVKK m.11 başvuruları + ihlal raporları ulaşılamaz; SECURITY.md zafiyet bildirimi kanalsız | Cloudflare Email Routing veya Zoho Mail (ücretsiz tier) ile 3 alias kur; SPF/DKIM/DMARC zorunlu |
 | 4 | **P0** | VERBİS kayıt durumu belirsiz — KVKK m.16 eşiği altıyız ama "ana faaliyet finansal veri" yorumu Kurul yorumuna açık | Kurul denetiminde "kayıt yapmadın" cezası riski | Kullanıcı sayısı 100'ü geçince proaktif gönüllü VERBİS kayıt başlat |
 | 5 | **P1** | Cookie consent banner UI yok; `/legal/cookies` dokümante ama sadece `access_token` zorunlu çerez var | Şu an analytics yok → GDPR/ePrivacy ihlali yok; analytics eklenirse 1 gün içinde banner şart | Faz I'da Plausible (cookieless) tercih et; eklenirse `cookie-banner` component'i hazırla (TR+EN dictionary kapsamlı) |
-| 6 | **P1** | DPA (Data Processing Agreement) Anthropic + Resend + Oracle Cloud ile imzalanmadı | Kurul denetiminde "yurt dışı aktarımın yasal zemini" sorulduğunda sadece açık rıza var; SCC eksik | Anthropic DPA self-serve form mevcut; Resend DPA email talep; Oracle Cloud DPA console'dan indirilir — 1 hafta iş |
+| 6 | **P1** | DPA (Data Processing Agreement) Anthropic + Resend + Hetzner Cloud ile imzalanmadı | Kurul denetiminde "yurt dışı aktarımın yasal zemini" sorulduğunda sadece açık rıza var; SCC eksik | Anthropic DPA self-serve form mevcut; Resend DPA email talep; Hetzner Cloud DPA (AVV/GDPR) console'dan indirilir — 1 hafta iş |
 | 7 | **P1** | GDPR Art.33 72 saat bildirim → incident-response-plan §4 `T+2-72 saat` akışı yazılmış AMA AB veri koruma otoritesi (LSA) belirlenmedi | AB kullanıcısı olduğunda hangi otorite? Şu an AB hedefi yok → düşük risk | AB launch öncesi Irish DPC ya da AB temsilcisi (Art.27) atanmalı |
 | 8 | **P1** | `revoke_anthropic_consent` audit log atıyor ama mevcut sohbet geçmişi (`advice_history`) silinmiyor — rıza geri çekildiğinde tarihi tavsiye verileri DB'de kalır | KVKK m.7/2 "rızanın geri çekilmesi → veri silinmesi" yorumuna aykırı | `revoke_anthropic_consent` içinde `DELETE FROM advice_history WHERE user_id = current_user.id` ekle veya kullanıcıya 2 seçenek sun (rıza+veri silme / sadece rıza geri çek) |
 | 9 | **P2** | SPK uyarı banner'ı `/advice` sayfasında sticky değil — kullanıcı scroll edince kaybolur | SPK m.35 "bağlayıcı yatırım tavsiyesi değil" ifadesi sürekli görünür olmalı | `_ensure_disclaimer` zaten footer'a ekliyor; ek olarak frontend'de `position: sticky` üst banner |

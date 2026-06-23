@@ -394,7 +394,7 @@ Frontend (`frontend/next.config.ts` async `headers()`) HTML response'larında ek
 **.app TLD HSTS preload listesinde** — tarayıcı `kfinans.app`'e DNS sorgusu yapmadan zorla HTTPS kullanır. Defence-in-depth için manuel HSTS header da ayarlandı.
 
 ### 8.3 HTTPS Zorunluluğu (FAZ D1'de yapılacak)
-- nginx-ingress + cert-manager (Let's Encrypt) — Oracle Cloud K3s'e provision edilecek
+- Traefik (k3s default ingress) + cert-manager (Let's Encrypt HTTP-01) — Hetzner Cloud k3s'te provision edildi (2026-06-23 eski Oracle K3s'ten taşındı)
 - HTTP → HTTPS redirect (`force-ssl-redirect: true` ingress annotation, mevcut)
 - HSTS preload: `.app` TLD zaten preload listesinde (otomatik)
 
@@ -542,7 +542,7 @@ audit_logs
 | OWASP 2021 | Durum | Not |
 |------------|-------|-----|
 | A01: Broken Access Control | ✅ | User izolasyonu (5 IDOR test); audit log endpoint de IDOR korumalı |
-| A02: Cryptographic Failures | ✅ | bcrypt (şifre) + Fernet (API key + xpub FAZ C1, MultiFernet rotation SEC-012) + DB TLS require (§14) + HTTPS (Oracle ingress + cert-manager) + .app TLD HSTS preload |
+| A02: Cryptographic Failures | ✅ | bcrypt (şifre) + Fernet (API key + xpub FAZ C1, MultiFernet rotation SEC-012) + DB TLS require (§14; ⚠️ Hetzner ilk-deploy'da geçici `DATABASE_SSL_MODE=disable` — hardening TODO) + HTTPS (Traefik ingress + cert-manager, Hetzner k3s) + .app TLD HSTS preload |
 | A03: Injection | ✅ | ORM only; raw SQL yok; migration'da `text()` parametrize |
 | A04: Insecure Design | ✅ | Logout + JWT blacklist + refresh rotation (FAZ C4) |
 | A05: Security Misconfiguration | ✅ | SecurityHeaders + TrustedHost (FAZ C2/C3); env'den allowed_hosts override |
