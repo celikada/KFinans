@@ -43,6 +43,10 @@ export interface UseLivePortfolioResult {
   refreshSection: (section: string) => Promise<void>;
   /** Şu an tek-kart yenilemesi süren bölüm (null = yok) — yalnız o kart spinner gösterir. */
   refreshingSection: string | null;
+  /** Tek bir cüzdanı yeniden hesaplat + poll et (per-cüzdan yenile ikonu). */
+  refreshWallet: (walletId: string) => Promise<void>;
+  /** Şu an tek-cüzdan yenilemesi süren cüzdan id (null = yok) — yalnız o satır spinner gösterir. */
+  refreshingWalletId: string | null;
 }
 
 export function useLivePortfolio(): UseLivePortfolioResult {
@@ -50,6 +54,7 @@ export function useLivePortfolio(): UseLivePortfolioResult {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingSection, setRefreshingSection] = useState<string | null>(null);
+  const [refreshingWalletId, setRefreshingWalletId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   // Cleanup için: aktif poll timer + unmount bayrağı.
@@ -151,5 +156,33 @@ export function useLivePortfolio(): UseLivePortfolioResult {
     inFlightRef.current = false;
   }, [loop]);
 
-  return { data, loading, refreshing, refreshingSection, error, refresh, refreshSection };
+  const refreshWallet = useCallback(async (walletId: string) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setRefreshingWalletId(walletId);
+    setError("");
+    try {
+      await api.refreshWallet(walletId);
+    } catch (err) {
+      if (!cancelledRef.current) {
+        setError(err instanceof Error ? err.message : "Yenileme tetiklenemedi");
+      }
+    }
+    // Cüzdan arka planda hesaplanır → poll ile sonucu yakala, sonra spinner'ı kapat.
+    await loop(MAX_POLLS);
+    if (!cancelledRef.current) setRefreshingWalletId(null);
+    inFlightRef.current = false;
+  }, [loop]);
+
+  return {
+    data,
+    loading,
+    refreshing,
+    refreshingSection,
+    refreshingWalletId,
+    error,
+    refresh,
+    refreshSection,
+    refreshWallet,
+  };
 }

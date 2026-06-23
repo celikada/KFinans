@@ -147,7 +147,7 @@ export interface IntegrationDTO {
 export type LivePortfolioStatus = "ok" | "refreshing" | "error";
 
 export interface LivePortfolioSections {
-  wallets?: { positions?: WalletPositionDTO[]; errors?: Record<string, string> };
+  wallets?: { positions?: WalletPositionDTO[]; errors?: Record<string, string>; wallet_errors?: Record<string, string> };
   crypto?: { positions?: CryptoPositionDTO[]; errors?: Record<string, string> };
   tefas?: { positions?: TefasPosition[] };
   stocks?: { positions?: StockPositionDTO[] };
@@ -1321,6 +1321,9 @@ export interface SubscriptionDTO {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  // Son kullanılan ödeme şekli/kartı — fatura ödeme modalında ön-seçili gelir
+  default_payment_method?: SubscriptionPaymentMethod | null;
+  default_credit_card_id?: number | null;
   // Bu-ay durumu (server-side hesaplanır)
   current_status: SubscriptionStatus;
   current_amount: string;

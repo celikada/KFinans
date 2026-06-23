@@ -53,15 +53,16 @@ async def test_providers_catalog(client: AsyncClient):
     resp = await client.get("/api/v1/subscriptions/providers", headers=headers)
     assert resp.status_code == 200
     codes = {p["code"] for p in resp.json()}
-    assert codes == {"esgaz", "zorlu_enerji", "osmangazi_elektrik", "ttnet", "vodafone"}
+    # zorlu_enerji + osmangazi_elektrik aynı kurum → tek girişe indirildi (2026-06-23)
+    assert codes == {"esgaz", "osmangazi_elektrik", "ttnet", "vodafone"}
 
 
 @pytest.mark.asyncio
 async def test_create_derives_category_and_status(client: AsyncClient):
     headers = await make_user(client, "sub_create@example.com")
-    sub = await _create_sub(client, headers, provider_code="zorlu_enerji", budget_amount=750)
+    sub = await _create_sub(client, headers, provider_code="osmangazi_elektrik", budget_amount=750)
     assert sub["category"] == "electricity"
-    assert sub["provider_name"] == "Zorlu Enerji"
+    assert sub["provider_name"] == "Osmangazi Elektrik (Zorlu Enerji)"
     assert sub["current_status"] == "budget"
     assert float(sub["current_amount"]) == 750.0
 
@@ -191,6 +192,44 @@ async def test_pay_credit_card_excluded_from_total(client: AsyncClient):
     # Gider özeti: kart+ödendi çift sayım filtresi nedeniyle HARİÇ
     summ = await client.get(f"/api/v1/expenses/summary?year={year}&month={month}", headers=headers)
     assert float(summ.json()["total"]) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_pay_credit_card_sets_subscription_default(client: AsyncClient):
+    """Kredi kartıyla ödeme → aboneliğin default_payment_method/default_credit_card_id'si
+    set edilir (sonraki ödemede ön-seçili gelsin)."""
+    headers = await make_user(client, "sub_default_cc@example.com")
+    card = await client.post(
+        "/api/v1/credit-cards",
+        json={"name": "Bonus", "statement_day": 1, "payment_due_day": 10},
+        headers=headers,
+    )
+    card_id = card.json()["id"]
+    sub = await _create_sub(client, headers, budget_amount=500)
+    year, month = _this_month()
+    issue = await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/issue",
+        json={
+            "period_year": year,
+            "period_month": month,
+            "bill_amount": 800,
+            "bill_date": date.today().isoformat(),
+            "due_date": (date.today() + timedelta(days=5)).isoformat(),
+        },
+        headers=headers,
+    )
+    bill_id = issue.json()["id"]
+    pay = await client.post(
+        f"/api/v1/subscriptions/{sub['id']}/bills/{bill_id}/pay",
+        json={"payment_method": "credit_card", "credit_card_id": card_id},
+        headers=headers,
+    )
+    assert pay.status_code == 200, pay.text
+    # Abonelik artık bu kartı varsayılan tutmalı (sonraki ödemede ön-seçili)
+    lst = await client.get("/api/v1/subscriptions", headers=headers)
+    row = next(s for s in lst.json() if s["id"] == sub["id"])
+    assert row["default_payment_method"] == "credit_card"
+    assert row["default_credit_card_id"] == card_id
 
 
 @pytest.mark.asyncio

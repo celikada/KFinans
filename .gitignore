@@ -51,3 +51,4 @@ k8s/secrets.yaml
 
 # Fiyatlandırma / iş planı raporu (kişisel — repoya girmez)
 docs/fiyatlandirma-raporu-*.md
+docker-compose.override.yml

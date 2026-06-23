@@ -592,6 +592,7 @@
         "partial": "Partial payment",
         "amountLabel": "Amount paid",
         "remainderNote": "The remaining {amount} will be added to the card's current-period debt.",
+        "zeroNote": "This statement's balance is 0 — nothing to pay, it will be marked as paid.",
         "submit": "Pay",
         "amountInvalid": "Amount must be between 0 and the statement amount.",
         "failed": "Payment failed",
@@ -1231,6 +1232,8 @@
       "noWallets": "No wallets added yet.",
       "removing": "Removing...",
       "remove": "Remove",
+      "refreshWallet": "Refresh this wallet",
+      "walletProblem": "There was a problem updating this wallet",
       "rewardSuffix": "reward",
       "stakeSuffix": "stake",
       "placeholders": {

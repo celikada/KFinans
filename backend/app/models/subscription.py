@@ -46,7 +46,7 @@ class Subscription(Base):
         nullable=False,
         index=True,
     )
-    # Katalog kodu: esgaz | zorlu_enerji | osmangazi_elektrik | ttnet | vodafone
+    # Katalog kodu: esgaz | osmangazi_elektrik | ttnet | vodafone
     provider_code: Mapped[str] = mapped_column(String(40), nullable=False)
     # gas | electricity | internet | phone (provider'dan türetilir, filtre/ikon için saklanır)
     category: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -65,6 +65,14 @@ class Subscription(Base):
     next_due_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Son kullanılan ödeme şekli/kartı — sonraki fatura ödemesinde ön-seçili gelir.
+    # Ödeme yapıldıkça (pay_bill) güncellenir; kullanıcı kolaylığı (default).
+    default_payment_method: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    default_credit_card_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("credit_cards.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=func.now(),

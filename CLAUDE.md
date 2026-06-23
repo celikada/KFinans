@@ -74,7 +74,7 @@ KFinans/
 │   │   ├── core/                  # security (fernet+jwt+bcrypt+address_fingerprint), deps, limiter, middleware (SecurityHeadersMiddleware)
 │   │   ├── scheduler.py           # APScheduler — 7 cron: Pazar 23:00 snapshot, 03:00 token cleanup, 04:00 hard-delete, 04:30 audit purge, 09:00 push ödeme hatırlatma, 09:05 e-posta ödeme hatırlatma, 16:00 günlük TCMB kuru (daily_rates)
 │   │   └── main.py                # SecurityHeaders + TrustedHost + CORS middleware sırası
-│   ├── alembic/versions/          # 51 migration (head e7f8a9b0c1d2 — bütçe v2 hibrit). Faz 3 ana ekleme'ler:
+│   ├── alembic/versions/          # 52 migration (head f8a9b0c1d2e3 — abonelik varsayılan ödeme). Faz 3 ana ekleme'ler:
 │   │                              # - e0f1a2b3c4d5: credit_cards
 │   │                              # - f1a2b3c4d5e6: credit_card_statements + installments
 │   │                              # - f5a6b7c8d9e0: manual_crypto_holdings
@@ -314,7 +314,7 @@ cd frontend && npm install && npm run dev
 - **Test izolasyonu (TEST-004):** `tests/integration/conftest.py` autouse `_truncate_after_test` her test sonunda tüm tabloları TRUNCATE eder. Testler kümülatif değil; `client` fixture session-per-request commit'leri rollback olmaz ama TRUNCATE temizler.
 - **Test fixture (TEST-002):** `tests/conftest.py::make_user(client, email=None)` ortak helper; her test dosyasında lokal `_make_user` yazma — import et. `age_confirmed=True` zorunlu (COMP-010).
 - **Test sayıları:** ~1196 backend pass (unit + integration; bütçe v2 ile +34: `test_budget_v2_api.py` 26 + `test_personal_debts_api.py` 8) + ~396 frontend (vitest, +3 `budget_monthly_buckets.test.tsx`) pass (i18n-002 + SonarQube temizliği turlarında frontend testleri 202→~396'ya çıktı). SonarQube gate sertleştirme oturumunda (2026-06-01) ~800 test eklendi (blockchain/exchange/servisler/API endpoint'leri + frontend). Backend coverage **%95.83** (greenlet concurrency fix sonrası — bkz. CI/CD bölümü). Sonar `new_coverage` gate eşiği %80; gerçekleşen ≈%96.3.
-- **Migration head:** `e7f8a9b0c1d2` (bütçe v2 hibrit: budget_lines + budget_settings + budget_month_notes + personal_debts; down_revision `d6e7f8a9b0c1`). Kod-only fazlar (v0.5.1/v0.6.x display/USD-fix, v0.8.6-v0.8.15) migration İÇERMEZ. Yeni migration `down_revision = "e7f8a9b0c1d2"`. Zincir: … → `b4c5d6e7f8a9` (subscriptions, v0.9.0) → `c5d6e7f8a9b0` (subscription v2, v0.10.0) → `d6e7f8a9b0c1` (statement paid_amount, v0.10.1) → `e7f8a9b0c1d2` (bütçe v2 hibrit, **head**).
+- **Migration head:** `f8a9b0c1d2e3` (abonelik varsayılan ödeme: subscriptions.default_payment_method + default_credit_card_id; down_revision `e7f8a9b0c1d2`). Kod-only fazlar (v0.5.1/v0.6.x display/USD-fix, v0.8.6-v0.8.15) migration İÇERMEZ. Yeni migration `down_revision = "f8a9b0c1d2e3"`. Zincir: … → `c5d6e7f8a9b0` (subscription v2, v0.10.0) → `d6e7f8a9b0c1` (statement paid_amount, v0.10.1) → `e7f8a9b0c1d2` (bütçe v2 hibrit, v0.11.0) → `f8a9b0c1d2e3` (abonelik varsayılan ödeme, v0.11.5, **head**).
 
 ## Son Audit — 2026-05-22 (Faz I post-fix)
 

@@ -20,8 +20,9 @@ BillStatus = Literal["budget", "issued", "paid"]
 
 PROVIDERS: dict[str, tuple[str, str]] = {
     "esgaz": ("ESGAZ", "gas"),
-    "zorlu_enerji": ("Zorlu Enerji", "electricity"),
-    "osmangazi_elektrik": ("Osmangazi Elektrik", "electricity"),
+    # Zorlu Enerji ve Osmangazi Elektrik aynı kurum (Osmangazi = Zorlu grubu elektrik
+    # perakende). Tek girişe indirildi (2026-06-23); parser da osmangazi_elektrik üretir.
+    "osmangazi_elektrik": ("Osmangazi Elektrik (Zorlu Enerji)", "electricity"),
     "ttnet": ("TTNET", "internet"),
     "vodafone": ("Vodafone", "phone"),
 }
@@ -84,6 +85,9 @@ class SubscriptionOut(BaseModel):
     next_due_date: Optional[date_type] = None
     active: bool
     notes: Optional[str] = None
+    # Son kullanılan ödeme şekli/kartı (fatura ödenirken ön-seçili gelir)
+    default_payment_method: Optional[str] = None
+    default_credit_card_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     # Bu ay (içinde bulunulan dönem) için türetilmiş durum (router doldurur)

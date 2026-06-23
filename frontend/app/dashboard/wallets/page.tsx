@@ -39,6 +39,9 @@ export default function WalletsPage() {
     return keys.map((k) => `${k}: ${errs[k]}`).join(" | ");
   }, [live.data]);
 
+  // Per-cüzdan hatalar (wallet_id → mesaj) — sorunlu cüzdan satırında ⚠ gösterir.
+  const walletErrors = live.data?.sections.wallets?.wallet_errors ?? {};
+
   useEffect(() => {
     api.getWallets().then(setWallets).catch(() => {});
   }, []);
@@ -123,7 +126,14 @@ export default function WalletsPage() {
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-700 mb-4">{t("content.wallets.savedWallets")}</h2>
-          <WalletList wallets={wallets} removing={removing} onRemove={handleRemove} />
+          <WalletList
+            wallets={wallets}
+            removing={removing}
+            onRemove={handleRemove}
+            walletErrors={walletErrors}
+            onRefreshWallet={live.refreshWallet}
+            refreshingWalletId={live.refreshingWalletId}
+          />
           <WalletForm
             hasWallets={wallets.length > 0}
             loadingPositions={loadingPositions}

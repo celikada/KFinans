@@ -10,6 +10,7 @@ from app.core.deps import get_current_user, get_db
 from app.models.portfolio import PortfolioSnapshot
 from app.models.user import User
 from app.services import currency as currency_svc
+from app.services import live_cache as live_cache_svc
 
 router = APIRouter(prefix="/user/goal", tags=["goal"])
 
@@ -62,11 +63,32 @@ async def get_goal(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    snap_q = await db.execute(
-        select(PortfolioSnapshot.total_value_tl).where(PortfolioSnapshot.user_id == current_user.id).order_by(desc(PortfolioSnapshot.snapshot_date)).limit(1)
-    )
-    portfolio = snap_q.scalar_one_or_none()
-    portfolio_dec = Decimal(str(portfolio)) if portfolio is not None else None
+    # Goal ilerlemesi CANLI portföy toplamından hesaplanır (dashboard "Toplam Portföy"
+    # ile birebir: 6 ağır bölüm + BES + Nakit), snapshot beklemeden güncel kalır.
+    # Bug (2026-06-23): eskiden yalnız son SNAPSHOT kullanılıyordu; kullanıcı yeni
+    # snapshot almadıkça goal eski/küçük değerde takılıyordu (ör. canlı %22 iken %5).
+    # `preview_snapshot_from_cache` cache+DB'den dış-çağrısız tam toplamı verir;
+    # cache yok/bozuksa son snapshot'a fallback (eski davranış, geriye uyumlu).
+    portfolio_dec: Decimal | None = None
+    try:
+        preview = await live_cache_svc.preview_snapshot_from_cache(current_user.id, db)
+        total_str = preview.get("total_value_tl")
+        if total_str is not None:
+            val = Decimal(str(total_str))
+            if val > 0:
+                portfolio_dec = val
+    except Exception:
+        portfolio_dec = None
+
+    if portfolio_dec is None:
+        snap_q = await db.execute(
+            select(PortfolioSnapshot.total_value_tl)
+            .where(PortfolioSnapshot.user_id == current_user.id)
+            .order_by(desc(PortfolioSnapshot.snapshot_date))
+            .limit(1)
+        )
+        portfolio = snap_q.scalar_one_or_none()
+        portfolio_dec = Decimal(str(portfolio)) if portfolio is not None else None
 
     amount = current_user.goal_amount
     currency = current_user.goal_currency or "TRY"

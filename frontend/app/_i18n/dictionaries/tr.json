@@ -592,6 +592,7 @@
         "partial": "Kısmi ödeme",
         "amountLabel": "Ödenen tutar",
         "remainderNote": "Kalan {amount} kartın dönem-içi borcuna eklenecek.",
+        "zeroNote": "Bu ekstrenin borcu 0 ₺ — ödenecek tutar yok, ödendi olarak işaretlenecek.",
         "submit": "Öde",
         "amountInvalid": "Tutar 0 ile ekstre tutarı arasında olmalı.",
         "failed": "Ödeme başarısız",
@@ -1231,6 +1232,8 @@
       "noWallets": "Henüz cüzdan eklenmedi.",
       "removing": "Siliniyor...",
       "remove": "Kaldır",
+      "refreshWallet": "Bu cüzdanı yenile",
+      "walletProblem": "Bu cüzdan güncellenirken sorun oluştu",
       "rewardSuffix": "ödül",
       "stakeSuffix": "stake",
       "placeholders": {

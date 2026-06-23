@@ -6,6 +6,38 @@ Versiyon: [Semantic Versioning](https://semver.org/lang/tr/spec/v2.0.0.html).
 
 ---
 
+## [0.11.5] - 2026-06-23
+
+### Eklenenler
+
+- **Abonelik faturası: son kullanılan kredi kartı varsayılan olarak hatırlanıyor.**
+  Bir fatura kredi kartıyla ödendiğinde hangi kart kullanıldıysa aboneliğe varsayılan
+  kaydedilir (`subscriptions.default_payment_method` + `default_credit_card_id`); sonraki
+  fatura ödeme modalında ödeme şekli + kart **ön-seçili** gelir. Migration `f8a9b0c1d2e3`.
+
+### Düzeltmeler
+
+- **Abonelik kurum kataloğunda "Zorlu Enerji" + "Osmangazi Elektrik" çift kayıt:**
+  Aynı kurum (Osmangazi = Zorlu grubu elektrik perakende) iki ayrı seçenek olarak
+  görünüyordu → tek girişe indirildi ("Osmangazi Elektrik (Zorlu Enerji)"). OCR fatura
+  parser'ı (`OsmangaziParser.matches`) artık "zorlu" markalı faturaları da yakalar.
+  (Prod'da bu kodlarla abonelik yoktu → veri taşıma gerekmedi.)
+- **Çok-aylık ekstre PDF içe aktarmada 429 (Mart/Nisan yüklenemiyordu):**
+  `POST /credit-cards/import-statement/preview` rate limit'i 10/saat idi; birden çok ay
+  ekstresi + önizleme/retry ile kullanıcı saatlik limiti aşıp 429 alıyordu (parse/taksit
+  sorunu DEĞİL). Preview parse-only (DB yazmaz) → **60/saat**'e, commit **40/saat**'e yükseltildi.
+- **0 ₺ tutarlı kredi kartı ekstresi "ödendi" işaretlenemiyordu:** `StatementPayModal`
+  tam ödemede `paidAmount = statement_amount = 0` üretiyor, doğrulama ise `> 0` istiyordu
+  → submit her zaman "tutar geçersiz" verip ödeme çağrısı yapılmıyordu (backend `paid_amount`
+  ge=0 kabul etmesine rağmen). Artık 0 tutarda tam/kısmi seçimi gizlenir, "borç 0 ₺ — ödendi
+  işaretlenecek" uyarısı gösterilir ve `paid_amount=0` ile işaretlenir. +1 test (5/5).
+- **Finansal Hedef ilerlemesi son snapshot'ta takılıyordu:** `GET /user/goal` portföy değerini
+  yalnız en son `PortfolioSnapshot`'tan okuyordu → kullanıcı yeni snapshot almadıkça goal
+  yüzdesi/pasif geliri eski (küçük) değerde kalıyordu (ör. canlı portföy ~%22 iken kart %5
+  gösteriyordu). Artık goal, dashboard "Toplam Portföy" ile **aynı canlı toplamı**
+  (`live_cache.preview_snapshot_from_cache` — 6 ağır bölüm + BES + Nakit, dış çağrısız) kullanır;
+  canlı cache yok/bozuksa son snapshot'a fallback eder (geriye uyumlu). +2 test.
+
 ## [0.11.4] - 2026-06-18
 
 ### Düzeltmeler (6 paralel uzman-ajan denetimi bulguları)

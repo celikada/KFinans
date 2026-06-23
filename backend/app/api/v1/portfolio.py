@@ -53,6 +53,7 @@ from app.services.live_cache import (
     save_snapshot_from_cache,
     trigger_background_refresh,
     trigger_section_refresh,
+    trigger_wallet_refresh,
 )
 from app.services.snapshot import compute_and_save_snapshot
 
@@ -187,6 +188,37 @@ async def refresh_one_portfolio_section(
     if section not in VALID_SECTIONS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Geçersiz bölüm")
     trigger_section_refresh(current_user.id, section)
+    row = await get_live_cache(current_user.id, db)
+    return RefreshAcceptedOut(
+        status="refreshing",
+        refreshed_at=row.refreshed_at if row else None,
+    )
+
+
+@router.post("/refresh/wallet/{wallet_id}", response_model=RefreshAcceptedOut, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("60/hour")
+async def refresh_one_wallet_endpoint(
+    request: Request,
+    wallet_id: str,
+    current_user: CurrentUser,
+    db: DbSession,
+):
+    """Tek bir cüzdanı arka planda yeniden hesaplatır (per-cüzdan yenile ikonu).
+
+    Cüzdan kullanıcıya ait + aktif değilse 404 (IDOR koruması). Yalnız o cüzdanın
+    pozisyonları wallets cache section'ında yamalanır; diğer cüzdanlar/kartlar
+    etkilenmez. 202 + mevcut cache durumunu döner (frontend poll ile günceller).
+    """
+    result = await db.execute(
+        select(WalletAddress.id).where(
+            WalletAddress.id == wallet_id,
+            WalletAddress.user_id == current_user.id,
+            WalletAddress.is_active.is_(True),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cüzdan bulunamadı")
+    trigger_wallet_refresh(current_user.id, wallet_id)
     row = await get_live_cache(current_user.id, db)
     return RefreshAcceptedOut(
         status="refreshing",
@@ -540,21 +572,17 @@ async def get_crypto_positions(
     return await compute_crypto_positions(current_user.id, db)
 
 
-async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
-    """Kullanıcının aktif cüzdanları için canlı pozisyonları hesaplar.
+async def _wallet_positions_for(wallets) -> WalletResponse:
+    """Verilen cüzdan listesi için canlı pozisyonları hesaplar (ortak çekirdek).
 
-    Endpoint (`GET /wallets`) + live cache refresh servisi ortak kullanır.
-    Per-wallet + toplam deadline ile bounded (yavaş/ölü RPC kilitlemesin).
+    `compute_wallet_positions` (tüm aktif cüzdanlar) + `compute_single_wallet_positions`
+    (tek cüzdan) ortak kullanır. Per-wallet + toplam deadline ile bounded
+    (yavaş/ölü RPC kilitlemesin). Hatalar HEM `errors[chain:address[:10]]`
+    (snapshot health parse formatı — DEĞİŞTİRME) HEM `wallet_errors[wallet_id]`
+    (frontend per-cüzdan ⚠ uyarısı) altında raporlanır.
     """
-    result = await db.execute(
-        select(WalletAddress).where(
-            WalletAddress.user_id == user_id,
-            WalletAddress.is_active.is_(True),
-        )
-    )
-    wallets = result.scalars().all()
     if not wallets:
-        return WalletResponse(positions=[], errors={})
+        return WalletResponse(positions=[], errors={}, wallet_errors={})
 
     usd_tl, prices = await asyncio.gather(
         fetch_usd_to_tl(),
@@ -578,6 +606,7 @@ async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
 
     all_positions: list[WalletPositionOut] = []
     errors: dict[str, str] = {}
+    wallet_errors: dict[str, str] = {}
 
     def _build_position(wallet: WalletAddress, wid: str, a) -> WalletPositionOut:
         usd = lookup_usd_price(a.symbol, prices)
@@ -615,11 +644,14 @@ async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
             return [_build_position(wallet, wid, a) for a in assets]
         except TimeoutError:
             logger.warning("Cüzdan fetch timeout [%s] (%.0fs)", key, settings.wallet_per_fetch_timeout)
-            errors[key] = "Zaman aşımı (ağ/RPC yavaş)"
+            msg = "Zaman aşımı (ağ/RPC yavaş)"
+            errors[key] = msg
+            wallet_errors[wid] = msg
             return []
         except Exception as e:
             logger.error("Cüzdan fetch hatası [%s]: %s", key, e)
             errors[key] = str(e)
+            wallet_errors[wid] = str(e)
             return []
 
     # Toplam deadline (güvenlik ağı): per-wallet sınırı zaten paralelde ~tek
@@ -630,6 +662,8 @@ async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
     for task in pending:
         task.cancel()
     if pending:
+        # Aggregate timeout yalnız `errors`'a girer (wallet_errors'a DEĞİL):
+        # hangi cüzdanın takıldığı belirsiz, per-cüzdan ⚠ atfedilemez.
         errors["_timeout"] = f"{len(pending)} cüzdan toplam süre sınırını aştı"
     for task in done:
         try:
@@ -637,7 +671,39 @@ async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
         except Exception:  # cancelled/exception — fetch_wallet zaten yutuyor
             pass
 
-    return WalletResponse(positions=all_positions, errors=errors)
+    return WalletResponse(positions=all_positions, errors=errors, wallet_errors=wallet_errors)
+
+
+async def compute_wallet_positions(user_id, db: AsyncSession) -> WalletResponse:
+    """Kullanıcının TÜM aktif cüzdanları için canlı pozisyonları hesaplar.
+
+    Endpoint (`GET /wallets`) + live cache refresh servisi ortak kullanır.
+    """
+    result = await db.execute(
+        select(WalletAddress).where(
+            WalletAddress.user_id == user_id,
+            WalletAddress.is_active.is_(True),
+        )
+    )
+    wallets = result.scalars().all()
+    return await _wallet_positions_for(wallets)
+
+
+async def compute_single_wallet_positions(user_id, wallet_id, db: AsyncSession) -> WalletResponse:
+    """Tek bir aktif cüzdan için canlı pozisyonları hesaplar (per-cüzdan yenile).
+
+    Cüzdan bulunamazsa (yok/başkasının/pasif) boş WalletResponse döner — IDOR
+    güvenli (yalnız user_id + is_active eşleşeni sorgular).
+    """
+    result = await db.execute(
+        select(WalletAddress).where(
+            WalletAddress.id == wallet_id,
+            WalletAddress.user_id == user_id,
+            WalletAddress.is_active.is_(True),
+        )
+    )
+    wallets = result.scalars().all()
+    return await _wallet_positions_for(wallets)
 
 
 @router.get("/wallets", response_model=WalletResponse)

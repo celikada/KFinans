@@ -470,6 +470,9 @@ async def pay_bill(
     bill.payment_method = payload.payment_method
     bill.credit_card_id = payload.credit_card_id if payload.payment_method == "credit_card" else None
     bill.expense_id = expense_id
+    # Son ödeme şeklini aboneliğe varsayılan olarak kaydet → sonraki ödemede ön-seçili gelir.
+    sub.default_payment_method = payload.payment_method
+    sub.default_credit_card_id = payload.credit_card_id if payload.payment_method == "credit_card" else None
     await log_audit(
         db,
         request,

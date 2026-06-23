@@ -30,8 +30,10 @@ class OsmangaziParser:
     provider_code = "osmangazi_elektrik"
 
     def matches(self, text: str) -> bool:
+        # Zorlu Enerji = Osmangazi Elektrik (aynı kurum) → fatura "osmangazi" ya da
+        # "zorlu" markasıyla gelebilir; ikisini de yakala (elektrik faturası, ESGAZ gaz).
         low = text.lower()
-        return "osmangazi" in low and "elektrik" in low
+        return ("osmangazi" in low or "zorlu" in low) and "elektrik" in low
 
     def parse(self, text: str) -> ParsedBill:
         sub_m = _SUBSCRIBER_RE.search(text)
